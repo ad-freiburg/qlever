@@ -9,12 +9,15 @@
 #include <gmock/gmock.h>
 
 #include "./util/IdTableHelpers.h"
+#include "./util/LocalVocabTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "engine/ConstructTripleGenerator.h"
 #include "engine/ConstructTripleInstantiator.h"
 #include "engine/Result.h"
 #include "util/CancellationHandle.h"
 #include "util/ContainersWithAllocator.h"
+
+using ad_utility::testing::makeLocalVocab;
 
 namespace {
 
@@ -82,7 +85,7 @@ class ConstructTripleGeneratorTest : public ::testing::Test {
     return std::make_shared<const Result>(
         std::move(table),
         qlm::vector<ColumnIndex>{ad_utility::testing::makeAllocator()},
-        LocalVocab{ad_utility::testing::makeAllocator()});
+        makeLocalVocab());
   }
 
   // Create a `TableWithRange` referencing the Result's `IdTable`, covering rows
@@ -394,8 +397,8 @@ TEST_F(ConstructTripleGeneratorTest, idCacheIsSharedAcrossBatches) {
 // Zero variables: the `std::max` floor ensures we never create a zero-capacity
 // cache, so the capacity equals exactly `CACHE_ENTRIES_PER_VARIABLE`.
 TEST(MakeIdCache, emptyTemplate) {
-  PreprocessedConstructTemplate tmpl{.localVocabForConstants_ = LocalVocab{
-                                         ad_utility::testing::makeAllocator()}};
+  PreprocessedConstructTemplate tmpl{.localVocabForConstants_ =
+                                         makeLocalVocab()};
   auto cache = ConstructTripleGenerator::makeIdCache(tmpl);
   EXPECT_EQ(cache.capacity(),
             ConstructTripleGenerator::CACHE_ENTRIES_PER_VARIABLE);
@@ -404,8 +407,8 @@ TEST(MakeIdCache, emptyTemplate) {
 // One variable: the floor is not doing work; result is still
 // `CACHE_ENTRIES_PER_VARIABLE`.
 TEST(MakeIdCache, singleVariable) {
-  PreprocessedConstructTemplate tmpl{.localVocabForConstants_ = LocalVocab{
-                                         ad_utility::testing::makeAllocator()}};
+  PreprocessedConstructTemplate tmpl{.localVocabForConstants_ =
+                                         makeLocalVocab()};
   // Note: Assigning an `initializer_list` of size 1 to a `std::vector` here
   // would trigger a false-positive `-Warray-bounds` warning with GCC 12 in
   // optimized builds, hence the explicit `std::vector`.
@@ -418,8 +421,8 @@ TEST(MakeIdCache, singleVariable) {
 // Multiple variables: capacity scales linearly with the number of unique
 // variable columns.
 TEST(MakeIdCache, multipleVariables) {
-  PreprocessedConstructTemplate tmpl{.localVocabForConstants_ = LocalVocab{
-                                         ad_utility::testing::makeAllocator()}};
+  PreprocessedConstructTemplate tmpl{.localVocabForConstants_ =
+                                         makeLocalVocab()};
   tmpl.uniqueVariableColumns_ = {0, 1, 2};
   auto cache = ConstructTripleGenerator::makeIdCache(tmpl);
   EXPECT_EQ(cache.capacity(),

@@ -11,6 +11,7 @@
 #include <gmock/gmock.h>
 
 #include "./util/AllocatorTestHelpers.h"
+#include "./util/LocalVocabTestHelpers.h"
 #include "engine/ConstructBatchEvaluator.h"
 #include "engine/ConstructTemplatePreprocessor.h"
 #include "engine/ConstructTripleInstantiator.h"
@@ -19,6 +20,8 @@
 #include "index/Index.h"
 #include "rdfTypes/Iri.h"
 #include "util/ContainersWithAllocator.h"
+
+using ad_utility::testing::makeLocalVocab;
 
 using namespace std::string_literals;
 using ::testing::Optional;
@@ -35,7 +38,7 @@ struct ContextWrapper {
   Result _resultTable{
       IdTable{ad_utility::testing::makeAllocator()},
       qlm::vector<ColumnIndex>{ad_utility::testing::makeAllocator()},
-      LocalVocab{ad_utility::testing::makeAllocator()}};
+      makeLocalVocab()};
   // TODO<joka921> `VariableToColumnMap`
   VariableToColumnMap _hashMap;
 
@@ -74,7 +77,7 @@ std::optional<std::string> evaluate(
   auto rowIdx = exportCtx._rowOffset + exportCtx.resultTableRowIndex_;
 
   // Backs the `dedupId_` of any constant term; must outlive `preprocessed`.
-  LocalVocab localVocabForConstants{ad_utility::testing::makeAllocator()};
+  LocalVocab localVocabForConstants = makeLocalVocab();
   auto preprocessed = ConstructTemplatePreprocessor::preprocessTerm(
       term, position, exportCtx._variableColumns, exportCtx._qecIndex,
       localVocabForConstants);

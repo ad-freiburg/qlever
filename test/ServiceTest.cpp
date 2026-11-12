@@ -9,6 +9,7 @@
 #include <exception>
 #include <regex>
 
+#include "./util/LocalVocabTestHelpers.h"
 #include "backports/StartsWithAndEndsWith.h"
 #include "engine/Join.h"
 #include "engine/Service.h"
@@ -33,6 +34,8 @@
 #include "util/RuntimeParametersTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
 #include "util/http/HttpUtils.h"
+
+using ad_utility::testing::makeLocalVocab;
 
 using ad_utility::testing::colIndices;
 using ad_utility::testing::iriLocalVocabEntry;
@@ -846,7 +849,7 @@ TEST_F(ServiceTest, blankNodesAcrossResponseChunks) {
 // ____________________________________________________________________________
 TEST_F(ServiceTest, idToValueForValuesClause) {
   auto idToVc = Service::idToValueForValuesClause;
-  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
+  LocalVocab localVocab = makeLocalVocab();
   auto index = ad_utility::testing::makeIndexWithTestSettings();
 
   // blanknode -> nullopt
@@ -973,9 +976,8 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
                             ad_utility::makeUnlimitedAllocator<IdTable>()};
                 for (size_t i = 0; i < clone.size(); ++i) {
                   idt.push_back(clone[i]);
-                  Result::IdTableVocabPair pair{
-                      std::move(idt),
-                      LocalVocab{ad_utility::testing::makeAllocator()}};
+                  Result::IdTableVocabPair pair{std::move(idt),
+                                                makeLocalVocab()};
                   co_yield pair;
                   idt.clear();
                 }

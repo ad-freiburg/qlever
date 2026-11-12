@@ -15,6 +15,7 @@
 
 #include "./GeometryInfoTestHelpers.h"
 #include "./SparqlExpressionTestHelpers.h"
+#include "./util/LocalVocabTestHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "global/Constants.h"
 #include "index/IndexImpl.h"
@@ -44,7 +45,7 @@ struct TestContextWithGivenTTl {
   ad_utility::testing::TestIndexConfig config;
   QueryExecutionContext* qec = ad_utility::testing::getQec(config);
   VariableToColumnMap varToColMap;
-  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
+  LocalVocab localVocab = ad_utility::testing::makeLocalVocab();
   IdTable table{qec->getAllocator()};
   sparqlExpression::EvaluationContext context{
       *qec,
@@ -386,7 +387,7 @@ class ValueGetterTester {
     auto trace = generateLocationTrace(sourceLocation);
     // Empty knowledge graph, so everything needs to be in the local vocab.
     TestContextWithGivenTTl testContext{""};
-    LocalVocab localVocab{ad_utility::testing::makeAllocator()};
+    LocalVocab localVocab = ad_utility::testing::makeLocalVocab();
     auto idx = localVocab.getIndexAndAddIfNotContained(
         localVocabEntryFromStringRepresentation(
             std::move(literal), testContext.qec->getLocalVocabContext()));

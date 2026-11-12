@@ -35,6 +35,7 @@
 #include "../util/IdTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/LocalVocabEntryTestHelpers.h"
+#include "../util/LocalVocabTestHelpers.h"
 #include "../util/RuntimeParametersTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
 #include "backports/filesystem.h"
@@ -55,6 +56,8 @@
 #include "util/File.h"
 #include "util/FilesystemHelpers.h"
 #include "util/SourceLocation.h"
+
+using ad_utility::testing::makeLocalVocab;
 
 using ad_utility::testing::iriLocalVocabEntry;
 using ad_utility::testing::localVocabEntry;
@@ -172,7 +175,7 @@ TEST(IndexRebuilder, materializeLocalVocab) {
   auto k = getId("<k>");
   auto l = makeVocabEntry("<l>");
   auto m = makeVocabEntry("<m>");
-  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
+  LocalVocab localVocab = makeLocalVocab();
   auto add = [&localVocab](const LocalVocabEntry& entry) {
     return localVocab.getIndexAndAddIfNotContained(entry);
   };
@@ -255,7 +258,7 @@ TEST(IndexRebuilder, materializeLocalVocabProgressBatches) {
 
   // `materializeLocalVocab` takes pointers to the entries, which are stored in
   // a `LocalVocab`.
-  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
+  LocalVocab localVocab = makeLocalVocab();
   std::vector<LocalVocabIndex> entries;
   for (size_t i = 0; i < numEntries; ++i) {
     entries.push_back(localVocab.getIndexAndAddIfNotContained(
@@ -651,7 +654,7 @@ TEST(IndexRebuilder, materializeToIndex) {
         // `materializeLocalVocab` (regression test for issue #3172). The
         // triple already exists in the index, so the expected counts below
         // are unchanged.
-        LocalVocab outsideVocab{ad_utility::testing::makeAllocator()};
+        LocalVocab outsideVocab = makeLocalVocab();
         Id localA = Id::makeFromLocalVocabIndex(
             outsideVocab.getIndexAndAddIfNotContained(
                 iriLocalVocabEntry("<a>", index.getLocalVocabContext())));

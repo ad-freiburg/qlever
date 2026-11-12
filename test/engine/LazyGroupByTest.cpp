@@ -5,6 +5,7 @@
 #include <gmock/gmock.h>
 
 #include "../util/IdTableHelpers.h"
+#include "../util/LocalVocabTestHelpers.h"
 #include "engine/GroupBy.h"
 #include "engine/GroupByImpl.h"
 #include "engine/LazyGroupBy.h"
@@ -12,6 +13,8 @@
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
+
+using ad_utility::testing::makeLocalVocab;
 
 namespace {
 auto I = ad_utility::testing::IntId;
@@ -45,7 +48,7 @@ class LazyGroupByTest : public ::testing::Test {
 
   std::vector<GroupByImpl::Aggregate> aggregates_{
       {std::move(sparqlExpression_), 1}};
-  LocalVocab localVocab_{ad_utility::testing::makeAllocator()};
+  LocalVocab localVocab_ = makeLocalVocab();
   LazyGroupBy lazyGroupBy_{
       localVocab_,
       GroupByImpl::computeUnsequentialProcessingMetadata(aggregates_, {yVar_})
@@ -148,7 +151,7 @@ TEST(LazyGroupBy, verifyGroupConcatIsCorrectlyInitialized) {
                std::vector{std::optional{variable}}));
   std::vector<GroupByImpl::Aggregate> aggregates{
       {std::move(sparqlExpression), 0}};
-  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
+  LocalVocab localVocab = makeLocalVocab();
   LazyGroupBy lazyGroupBy{
       localVocab,
       GroupByImpl::computeUnsequentialProcessingMetadata(aggregates, {variable})

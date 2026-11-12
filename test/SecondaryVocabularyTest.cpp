@@ -19,6 +19,7 @@
 
 #include "./util/GTestHelpers.h"
 #include "./util/IndexTestHelpers.h"
+#include "./util/LocalVocabTestHelpers.h"
 #include "backports/algorithm.h"
 #include "engine/ExecuteUpdate.h"
 #include "engine/ExportQueryExecutionTrees.h"
@@ -38,6 +39,8 @@
 #include "util/CompactStringVector.h"
 #include "util/LocalVocabEntryTestHelpers.h"
 #include "util/serializer/ByteBufferSerializer.h"
+
+using ad_utility::testing::makeLocalVocab;
 
 using ad_utility::testing::iriLocalVocabEntry;
 
@@ -651,7 +654,7 @@ TEST(SecondaryVocabIndex, localVocabEntryWithoutSecondaryVocabulary) {
 // _____________________________________________________________________________
 TEST_F(SecondaryVocabIndexTest, exportOfSecondaryVocabIds) {
   const IndexImpl& impl = index_.getImpl();
-  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
+  LocalVocab localVocab = makeLocalVocab();
 
   auto iriId = secondaryVocabId(1);
   auto literalId = secondaryVocabId(0);
@@ -697,8 +700,7 @@ TEST(SecondaryVocabIndex, exportWithoutSecondaryVocabularyThrows) {
   Index index = ad_utility::testing::makeTestIndex(gtestCurrentTestName(),
                                                    "<s> <p> <a> .");
   AD_EXPECT_THROW_WITH_MESSAGE(
-      idToLiteralOrIri(index.getImpl(), secondaryVocabId(0),
-                       LocalVocab{ad_utility::testing::makeAllocator()}),
+      idToLiteralOrIri(index.getImpl(), secondaryVocabId(0), makeLocalVocab()),
       HasSubstr("the index has no secondary vocabulary"));
 }
 
@@ -720,7 +722,7 @@ TEST_F(SecondaryVocabIndexTest, toValueIdUsesAllVocabularies) {
 
   // A word of the secondary vocabulary becomes a bare `Id` of that vocabulary.
   {
-    LocalVocab localVocab{ad_utility::testing::makeAllocator()};
+    LocalVocab localVocab = makeLocalVocab();
     Id id = toId("<b>", localVocab);
     EXPECT_EQ(id.getDatatype(), Datatype::SecondaryVocabIndex);
     EXPECT_EQ(id, secondaryVocabId(1));
@@ -730,7 +732,7 @@ TEST_F(SecondaryVocabIndexTest, toValueIdUsesAllVocabularies) {
   // A word of the vocabulary of the main index becomes a bare `Id` of that
   // vocabulary, as it always did.
   {
-    LocalVocab localVocab{ad_utility::testing::makeAllocator()};
+    LocalVocab localVocab = makeLocalVocab();
     Id id = toId("<c>", localVocab);
     EXPECT_EQ(id.getDatatype(), Datatype::VocabIndex);
     EXPECT_EQ(id, getId_("<c>"));
@@ -742,7 +744,7 @@ TEST_F(SecondaryVocabIndexTest, toValueIdUsesAllVocabularies) {
   // vocabulary. That position has to be the very one that the entry computes
   // for itself, which is what the constructor of `LocalVocabEntry` checks.
   {
-    LocalVocab localVocab{ad_utility::testing::makeAllocator()};
+    LocalVocab localVocab = makeLocalVocab();
     Id id = toId("<e>", localVocab);
     EXPECT_EQ(id.getDatatype(), Datatype::LocalVocabIndex);
     EXPECT_EQ(localVocab.size(), 1);

@@ -13,11 +13,14 @@
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/LocalVocabEntryTestHelpers.h"
+#include "../util/LocalVocabTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
 #include "engine/ExplicitIdTableOperation.h"
 #include "engine/QueryExecutionContext.h"
 #include "global/Id.h"
 #include "parser/TripleComponent.h"
+
+using ad_utility::testing::makeLocalVocab;
 
 using ad_utility::testing::colIndices;
 using ad_utility::testing::localVocabEntryFromStringRepresentation;
@@ -88,7 +91,7 @@ class ExplicitIdTableOperationTest : public ::testing::TestWithParam<bool> {
   std::shared_ptr<IdTable> testTable_;
   VariableToColumnMap testVariables_;
   qlm::vector<ColumnIndex> testSortedColumns_{qec_->getAllocator()};
-  LocalVocab testLocalVocab_{ad_utility::testing::makeAllocator()};
+  LocalVocab testLocalVocab_ = makeLocalVocab();
   std::string testCacheKey_;
 };
 
@@ -151,15 +154,13 @@ TEST_P(ExplicitIdTableOperationTest, isDeterministic) {
 TEST_P(ExplicitIdTableOperationTest, KnownEmptyResult) {
   {
     auto emptyTable = std::make_shared<IdTable>(2, makeAllocator());
-    ExplicitIdTableOperation op(
-        qec_, wrapTable(emptyTable), testVariables_, colIndices({}),
-        LocalVocab{ad_utility::testing::makeAllocator()}, "empty");
+    ExplicitIdTableOperation op(qec_, wrapTable(emptyTable), testVariables_,
+                                colIndices({}), makeLocalVocab(), "empty");
     EXPECT_TRUE(op.knownEmptyResult());
   }
   {
-    ExplicitIdTableOperation op(
-        qec_, wrapTable(testTable_), testVariables_, colIndices({}),
-        LocalVocab{ad_utility::testing::makeAllocator()}, "empty");
+    ExplicitIdTableOperation op(qec_, wrapTable(testTable_), testVariables_,
+                                colIndices({}), makeLocalVocab(), "empty");
     EXPECT_FALSE(op.knownEmptyResult());
   }
 }
@@ -198,7 +199,7 @@ TEST_P(ExplicitIdTableOperationTest, ComputeResultWithLaziness) {
 
 // _____________________________________________________________________________
 TEST_P(ExplicitIdTableOperationTest, ComputeResultWithLocalVocab) {
-  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
+  LocalVocab localVocab = makeLocalVocab();
   LocalVocabEntry testEntry = localVocabEntryFromStringRepresentation(
       "\"test_word\"", qec_->getLocalVocabContext());
   localVocab.getIndexAndAddIfNotContained(testEntry);
@@ -217,7 +218,7 @@ TEST_P(ExplicitIdTableOperationTest, ComputeResultWithLocalVocab) {
 
 // Test cloneImpl functionality
 TEST_P(ExplicitIdTableOperationTest, CloneImpl) {
-  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
+  LocalVocab localVocab = makeLocalVocab();
   LocalVocabEntry testEntry = localVocabEntryFromStringRepresentation(
       "\"clone_test\"", qec_->getLocalVocabContext());
   localVocab.getIndexAndAddIfNotContained(testEntry);
@@ -256,9 +257,8 @@ TEST_P(ExplicitIdTableOperationTest, CloneImpl) {
 
 TEST_P(ExplicitIdTableOperationTest, ConstructionWithSortedColumns) {
   auto sortedCols = colIndices({1, 0});
-  ExplicitIdTableOperation op(
-      qec_, wrapTable(testTable_), testVariables_, sortedCols,
-      LocalVocab{ad_utility::testing::makeAllocator()}, testCacheKey_);
+  ExplicitIdTableOperation op(qec_, wrapTable(testTable_), testVariables_,
+                              sortedCols, makeLocalVocab(), testCacheKey_);
 
   EXPECT_THAT(op.resultSortedOn(), ElementsAre(ColumnIndex{1}, ColumnIndex{0}));
 }

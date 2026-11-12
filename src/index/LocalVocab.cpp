@@ -148,7 +148,7 @@ std::vector<LocalVocabEntry> LocalVocab::getAllWordsForTesting() const {
     }
   };
   copyWords(primaryWordSet());
-  for (const auto& previous : otherWordSets()) {
+  for (const auto& previous : *otherWordSets_) {
     copyWords(*previous);
   }
   return result;
@@ -179,11 +179,11 @@ bool LocalVocab::isBlankNodeIndexContained(
 // _____________________________________________________________________________
 LocalVocab::LifetimeExtender LocalVocab::getLifetimeExtender() const {
   std::vector<std::shared_ptr<const Set>> wordSets;
-  wordSets.reserve(otherWordSets().size() + 1);
+  wordSets.reserve(otherWordSets_->size() + 1);
   if (!primaryWordSet_->empty()) {
     wordSets.emplace_back(primaryWordSet_);
   }
-  ql::ranges::copy(otherWordSets(), std::back_inserter(wordSets));
+  ql::ranges::copy(*otherWordSets_, std::back_inserter(wordSets));
   return LifetimeExtender{std::move(wordSets)};
 }
 
@@ -217,5 +217,5 @@ bool LocalVocab::isLocalVocabIndexContained(LocalVocabIndex lvi) const {
     return ql::ranges::any_of(
         *set, [lvi](const auto& entry) { return &entry == lvi; });
   };
-  return c(primaryWordSet_) || ql::ranges::any_of(otherWordSets(), c);
+  return c(primaryWordSet_) || ql::ranges::any_of(*otherWordSets_, c);
 }

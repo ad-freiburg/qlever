@@ -5,10 +5,13 @@
 #include <gtest/gtest.h>
 
 #include "./util/IdTableHelpers.h"
+#include "./util/LocalVocabTestHelpers.h"
 #include "backports/concepts.h"
 #include "backports/type_traits.h"
 #include "engine/AddCombinedRowToTable.h"
 #include "util/IndexTestHelpers.h"
+
+using ad_utility::testing::makeLocalVocab;
 
 namespace {
 static constexpr auto U = Id::makeUndefined();
@@ -269,7 +272,7 @@ TEST(AddCombinedRowToTable, flushDoesCheckCancellation) {
 namespace {
 struct IdTableWithVocab {
   IdTable idTable_;
-  LocalVocab localVocab_{ad_utility::testing::makeAllocator()};
+  LocalVocab localVocab_ = makeLocalVocab();
 
   const LocalVocab& getLocalVocab() const { return localVocab_; }
 
@@ -288,7 +291,7 @@ Literal fromString(std::string_view string) {
 // _____________________________________________________________________________
 LocalVocab createVocabWithSingleString(std::string_view string,
                                        const LocalVocabContext& context) {
-  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
+  LocalVocab localVocab = makeLocalVocab();
   localVocab.getIndexAndAddIfNotContained(
       LocalVocabEntry{fromString(string), context});
   return localVocab;

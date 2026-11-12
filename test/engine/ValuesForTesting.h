@@ -7,6 +7,7 @@
 #define QLEVER_TEST_ENGINE_VALUESFORTESTING_H
 
 #include "../util/AllocatorTestHelpers.h"
+#include "../util/LocalVocabTestHelpers.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/Result.h"
@@ -43,7 +44,7 @@ class ValuesForTesting : public Operation {
       QueryExecutionContext* ctx, IdTable table,
       std::vector<std::optional<Variable>> variables, bool handlesLimit = false,
       std::vector<ColumnIndex> sortedColumns = {},
-      LocalVocab localVocab = LocalVocab{ad_utility::testing::makeAllocator()},
+      LocalVocab localVocab = ad_utility::testing::makeLocalVocab(),
       std::optional<float> multiplicity = std::nullopt,
       bool forceFullyMaterialized = false)
       : ValuesForTesting{
@@ -61,7 +62,7 @@ class ValuesForTesting : public Operation {
       QueryExecutionContext* ctx, IdTable table,
       std::vector<std::optional<Variable>> variables, bool handlesLimit,
       qlm::vector<ColumnIndex> sortedColumns,
-      LocalVocab localVocab = LocalVocab{ad_utility::testing::makeAllocator()},
+      LocalVocab localVocab = ad_utility::testing::makeLocalVocab(),
       std::optional<float> multiplicity = std::nullopt,
       bool forceFullyMaterialized = false)
       : Operation{ctx},
@@ -125,7 +126,7 @@ class ValuesForTesting : public Operation {
       QueryExecutionContext* ctx, std::vector<IdTable> tables,
       std::vector<std::optional<Variable>> variables,
       bool unlikelyToFitInCache = false, SortColumns sortedColumns = {},
-      LocalVocab localVocab = LocalVocab{ad_utility::testing::makeAllocator()})
+      LocalVocab localVocab = ad_utility::testing::makeLocalVocab())
       : ValuesForTesting{ctx,
                          liftToPairs(std::move(tables), std::move(localVocab)),
                          std::move(variables), unlikelyToFitInCache,

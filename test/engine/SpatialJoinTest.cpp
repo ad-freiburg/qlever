@@ -22,6 +22,7 @@
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/LocalVocabTestHelpers.h"
 #include "../util/RuntimeParametersTestHelpers.h"
 #include "./SpatialJoinTestHelpers.h"
 #include "./ValuesForTesting.h"
@@ -42,6 +43,8 @@
 #include "parser/SparqlParser.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/Variable.h"
+
+using ad_utility::testing::makeLocalVocab;
 
 namespace {  // anonymous namespace to avoid linker problems
 
@@ -1386,7 +1389,7 @@ TEST(SpatialJoin, InvalidGeometriesAreExcludedFromNonEmptyCheck) {
   auto* qec = ad_utility::testing::getQec();
 
   // Build the valid and invalid literals.
-  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
+  LocalVocab localVocab = makeLocalVocab();
   auto wktId = [&](std::string_view wkt) {
     return wktLiteralId(qec, localVocab, wkt);
   };
@@ -1444,7 +1447,7 @@ TEST(SpatialJoin, InvalidGeometriesAreExcludedFromNonEmptyCheck) {
 // algorithm parses first).
 TEST(SpatialJoin, InvalidGeometriesWarningListsLeftSideFirst) {
   auto* qec = ad_utility::testing::getQec();
-  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
+  LocalVocab localVocab = makeLocalVocab();
   auto wktId = [&](std::string_view wkt) {
     return wktLiteralId(qec, localVocab, wkt);
   };
@@ -1501,7 +1504,7 @@ TEST(SpatialJoin, InvalidGeometriesWarningListsLeftSideFirst) {
 // not a valid geometry, each with the number of skipped rows per side.
 TEST(SpatialJoin, SkippedRowsWarning) {
   auto* qec = ad_utility::testing::getQec();
-  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
+  LocalVocab localVocab = makeLocalVocab();
   auto wktId = [&](std::string_view wkt) {
     return wktLiteralId(qec, localVocab, wkt);
   };

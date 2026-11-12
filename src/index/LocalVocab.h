@@ -11,8 +11,6 @@
 #include <boost/version.hpp>
 #if BOOST_VERSION >= 108100
 #include <boost/unordered/unordered_flat_set.hpp>
-#else
-#include <boost/smart_ptr/allocate_unique.hpp>
 #endif
 #if BOOST_VERSION >= 108200
 #include <boost/unordered/unordered_node_set.hpp>
@@ -21,6 +19,7 @@
 #include <boost/unordered_set.hpp>
 #endif
 #include <atomic>
+#include <cstddef>
 #include <cstdlib>
 #include <functional>
 #include <memory>
@@ -67,14 +66,14 @@
 class LocalVocab {
  public:
   // The allocator for the word sets of a `LocalVocab`.
-  using Allocator = ad_utility::AllocatorMemoryResource::Allocator;
+  using Allocator = ad_utility::AllocatorWithLimit<std::byte>;
 
   // A set of words, see above.
   class WordSet : ad_utility::NoCopyNoMove {
    private:
     // The resource from which the arena allocates its memory, via an
     // `Allocator`.
-    ad_utility::AllocatorMemoryResource upstream_;
+    ad_utility::AllocatorMemoryResource<Allocator> upstream_;
 
     // The arena holds the words, their characters, and the internal arrays of
     // `words_` (the arrays that `words_` replaces when it grows remain in the
@@ -161,22 +160,18 @@ class LocalVocab {
   // The primary set of `LocalVocabEntry`s, which can grow dynamically.
   std::shared_ptr<Set> primaryWordSet_ = std::make_shared<Set>(allocator_);
 
-  // The other sets of `LocalVocabEntry`s, which are static. Access them via
-  // `otherWordSets()`.
-#if BOOST_VERSION >= 108100
-  OtherWordSets otherWordSets_{OtherWordSets::allocator_type{allocator_}};
-#else
-  // NOTE: The move assignment of a `boost::unordered_set` is not `noexcept` if
-  // its allocator is not always equal, which would make the move assignment of
-  // a `LocalVocab` (and of the classes that contain one, like `ParsedQuery`)
-  // not `noexcept` either. Moving a `unique_ptr` is always `noexcept`.
-  using OtherWordSetsAllocator = ad_utility::AllocatorWithLimit<OtherWordSets>;
-  std::unique_ptr<OtherWordSets,
-                  boost::alloc_deleter<OtherWordSets, OtherWordSetsAllocator>>
-      otherWordSets_ = boost::allocate_unique<OtherWordSets>(
-          OtherWordSetsAllocator{allocator_},
+  // The other sets of `LocalVocabEntry`s, which are static.
+  //
+  // NOTE: The set is stored behind a pointer, because the move assignment of a
+  // `boost::unordered_set` (see `FlatSet`) is not `noexcept` if its allocator
+  // is not always equal, which would make the move assignment of a
+  // `LocalVocab` (and of the classes that contain one, like `ParsedQuery`) not
+  // `noexcept` either. Only the (small and empty) set object itself is not
+  // allocated with `allocator_`, such that creating a `LocalVocab` never
+  // throws because of the memory limit.
+  std::unique_ptr<OtherWordSets> otherWordSets_ =
+      std::make_unique<OtherWordSets>(
           OtherWordSets::allocator_type{allocator_});
-#endif
 
   // The number of words (so that we can compute `size()` in constant time).
   size_t size_ = 0;
@@ -249,7 +244,7 @@ class LocalVocab {
   size_t size() const {
     if constexpr (ad_utility::areExpensiveChecksEnabled) {
       auto size = primaryWordSet().size();
-      for (const auto& previous : otherWordSets()) {
+      for (const auto& previous : *otherWordSets_) {
         size += previous->size();
       }
       AD_CORRECTNESS_CHECK(size == size_);
@@ -261,7 +256,7 @@ class LocalVocab {
   bool empty() const { return size() == 0; }
 
   // The number of set stores (primary set and other sets).
-  size_t numSets() const { return 1 + otherWordSets().size(); }
+  size_t numSets() const { return 1 + otherWordSets_->size(); }
 
   // Get the `LocalVocabEntry` corresponding to the given `LocalVocabIndex`.
   //
@@ -280,7 +275,7 @@ class LocalVocab {
       if (set == primaryWordSet_) {
         return;
       }
-      bool added = otherWordSets().insert(set).second;
+      bool added = otherWordSets_->insert(set).second;
       size_ += static_cast<size_t>(added) * set->size();
     };
     // Note: Even though the `otherWordsSet_`is a hash set that filters out
@@ -291,7 +286,7 @@ class LocalVocab {
          vocabs | filter(std::not_fn(&LocalVocab::empty))) {
       // Mark vocab as copied
       vocab.copied_->store(true);
-      ql::ranges::for_each(vocab.otherWordSets(), addWordSet);
+      ql::ranges::for_each(*vocab.otherWordSets_, addWordSet);
       addWordSet(vocab.primaryWordSet_);
     }
 
@@ -330,7 +325,7 @@ class LocalVocab {
   std::vector<LocalVocabEntry> getAllWordsForTesting() const;
 
   const Set& primaryWordSet() const { return *primaryWordSet_; }
-  const auto& otherSets() const { return otherWordSets(); }
+  const auto& otherSets() const { return *otherWordSets_; }
 
   // This function returns the required data structure to restore the
   // `LocalBlankNodeManager`, e.g. when UPDATEs or cached queries are serialized
@@ -379,22 +374,6 @@ class LocalVocab {
  private:
   // Accessors for the primary set.
   Set& primaryWordSet() { return *primaryWordSet_; }
-
-  // Accessors for the other sets (see `otherWordSets_`).
-  OtherWordSets& otherWordSets() {
-#if BOOST_VERSION >= 108100
-    return otherWordSets_;
-#else
-    return *otherWordSets_;
-#endif
-  }
-  const OtherWordSets& otherWordSets() const {
-#if BOOST_VERSION >= 108100
-    return otherWordSets_;
-#else
-    return *otherWordSets_;
-#endif
-  }
 
   // Common implementation of the overloads of `getIndexAndAddIfNotContained`
   // and `getIdAndAddIfNotContained` above.

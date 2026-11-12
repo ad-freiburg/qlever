@@ -10,6 +10,7 @@
 
 #include "./util/IdTestHelpers.h"
 #include "./util/IndexTestHelpers.h"
+#include "./util/LocalVocabTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "engine/IndexScan.h"
 #include "engine/QueryExecutionTree.h"
@@ -22,6 +23,8 @@
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
+
+using ad_utility::testing::makeLocalVocab;
 
 using ad_utility::testing::getQec;
 namespace {
@@ -95,8 +98,7 @@ class TransitivePathTest
         std::holds_alternative<IdTable>(sideTable)
             ? ad_utility::makeExecutionTree<ValuesForTesting>(
                   qec, std::move(std::get<IdTable>(sideTable)), sideVars, false,
-                  std::vector<ColumnIndex>{sideTableCol},
-                  LocalVocab{ad_utility::testing::makeAllocator()},
+                  std::vector<ColumnIndex>{sideTableCol}, makeLocalVocab(),
                   std::nullopt, forceFullyMaterialized)
             : ad_utility::makeExecutionTree<ValuesForTesting>(
                   qec, std::move(std::get<std::vector<IdTable>>(sideTable)),
@@ -1079,7 +1081,7 @@ TEST_P(TransitivePathTest, literalsNotInIndexButInDeltaTriples) {
   // s.t. subsequent tests do not read results with a dangling local vocab from
   // the cache (Currently the indexes used for testing are `static` which should
   // be changed in the future).
-  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
+  LocalVocab localVocab = makeLocalVocab();
   auto id = Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
       LocalVocabEntry::literalWithoutQuotes(literal,
                                             qec->getLocalVocabContext())));

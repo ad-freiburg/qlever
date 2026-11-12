@@ -5,6 +5,7 @@
 #include <gmock/gmock.h>
 
 #include "./util/IdTestHelpers.h"
+#include "./util/LocalVocabTestHelpers.h"
 #include "backports/filesystem.h"
 #include "util/GTestHelpers.h"
 #include "util/IndexTestHelpers.h"
@@ -12,12 +13,14 @@
 #include "util/serializer/ByteBufferSerializer.h"
 #include "util/serializer/TripleSerializer.h"
 
+using ad_utility::testing::makeLocalVocab;
+
 namespace {
 auto I = ad_utility::testing::IntId;
 auto V = ad_utility::testing::VocabId;
 TEST(TripleSerializer, simpleExample) {
   auto* qec = ad_utility::testing::getQec();
-  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
+  LocalVocab localVocab = makeLocalVocab();
   std::vector<std::vector<Id>> ids;
 
   ids.emplace_back(std::vector{I(3), I(4), I(7)});
@@ -35,7 +38,7 @@ TEST(TripleSerializer, simpleExample) {
 // _____________________________________________________________________________
 TEST(TripleSerializer, localVocabIsRemapped) {
   auto* qec = ad_utility::testing::getQec();
-  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
+  LocalVocab localVocab = makeLocalVocab();
   auto LV = [&localVocab, qec](std::string_view value) {
     return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
         LocalVocabEntry::literalWithoutQuotes(value,
@@ -63,7 +66,7 @@ TEST(TripleSerializer, localVocabIsRemapped) {
 
 TEST(TripleSerializer, blankNodesRemapper) {
   auto* qec = ad_utility::testing::getQec();
-  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
+  LocalVocab localVocab = makeLocalVocab();
   std::vector<std::vector<Id>> ids;
 
   auto bn = [&]() {
@@ -156,7 +159,7 @@ TEST(TripleSerializer, errorOnWrongHeaderFormat) {
 // _____________________________________________________________________________
 TEST(TripleSerializer, multipleWordSetsInASerializedLocalVocab) {
   auto* qec = ad_utility::testing::getQec();
-  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
+  LocalVocab localVocab = makeLocalVocab();
   auto LV = [&localVocab, qec](std::string_view value) {
     return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
         LocalVocabEntry::literalWithoutQuotes(value,
@@ -199,14 +202,14 @@ TEST(TripleSerializer, multipleWordSetsInASerializedLocalVocab) {
   // Clear the original local vocab, then ensure that the target side of the
   // mapping is still valid, which means that it's being kept alive by the
   // new local vocab.
-  localVocab = LocalVocab{ad_utility::testing::makeAllocator()};
+  localVocab = makeLocalVocab();
   EXPECT_THAT(allWords, ::testing::UnorderedElementsAreArray(fromMapping()));
 }
 
 // _____________________________________________________________________________
 TEST(TripleSerializer, serializeOnlyBlankNodeBlocksFromLocalVocab) {
   auto* qec = ad_utility::testing::getQec();
-  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
+  LocalVocab localVocab = makeLocalVocab();
   auto LV = [&localVocab, qec](std::string_view value) {
     return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
         LocalVocabEntry::literalWithoutQuotes(value,
@@ -263,7 +266,7 @@ TEST(TripleSerializer, serializeOnlyBlankNodeBlocksFromLocalVocab) {
 TEST(TripleSerializer, encodableIrisAreDeserializedAsEncodedIds) {
   // Serialize a local vocab from an index that does not encode any IRIs.
   auto* qecWithoutEncoding = ad_utility::testing::getQec();
-  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
+  LocalVocab localVocab = makeLocalVocab();
   auto LV = [&localVocab, qecWithoutEncoding](std::string_view iri) {
     return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
         ad_utility::testing::iriLocalVocabEntry(
@@ -316,7 +319,7 @@ TEST(TripleSerializer, rethrowsOnInvalidFileAccess) {
     GTEST_SKIP_("File permissions are not set to none");
   }
 
-  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
+  LocalVocab localVocab = makeLocalVocab();
 
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       ad_utility::deserializeIds(tmpFile, qec->getLocalVocabContext(),

@@ -13,6 +13,7 @@
 #include "./ValueIdTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IndexTestHelpers.h"
+#include "./util/LocalVocabTestHelpers.h"
 #include "backports/algorithm.h"
 #include "global/FoldedValueId.h"
 #include "index/LocalVocabEntry.h"
@@ -21,6 +22,8 @@
 #include "util/Random.h"
 #include "util/serializer/ByteBufferSerializer.h"
 #include "util/serializer/Serializer.h"
+
+using ad_utility::testing::makeLocalVocab;
 
 using ad_utility::testing::iriLocalVocabEntry;
 using ad_utility::testing::localVocabEntry;
@@ -478,8 +481,8 @@ TEST_F(ValueIdTest, Hashing) {
     using namespace ad_utility::testing;
     const Index& index = qec_->getIndex();
     auto mkId = makeGetId(index);
-    LocalVocab lv1{ad_utility::testing::makeAllocator()};
-    LocalVocab lv2{ad_utility::testing::makeAllocator()};
+    LocalVocab lv1 = makeLocalVocab();
+    LocalVocab lv2 = makeLocalVocab();
     Iri iri = Iri::fromIriref("<foo>");
     LocalVocabEntry lve1 = localVocabEntry(iri, index.getLocalVocabContext());
     LocalVocabEntry lve2 = localVocabEntry(iri, index.getLocalVocabContext());

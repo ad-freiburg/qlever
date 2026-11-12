@@ -9,6 +9,7 @@
 #include <string>
 
 #include "./util/GTestHelpers.h"
+#include "./util/LocalVocabTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "backports/StartsWithAndEndsWith.h"
 #include "engine/Bind.h"
@@ -35,6 +36,8 @@
 #include "util/IndexTestHelpers.h"
 #include "util/LocalVocabEntryTestHelpers.h"
 #include "util/OperationTestHelpers.h"
+
+using ad_utility::testing::makeLocalVocab;
 
 using ad_utility::testing::colIndices;
 using ad_utility::testing::iriLocalVocabEntry;
@@ -70,7 +73,7 @@ TEST(LocalVocab, constructionAndAccess) {
       getTestCollectionOfWords(1000, qec->getLocalVocabContext());
 
   // Create empty local vocabulary.
-  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
+  LocalVocab localVocab = makeLocalVocab();
   ASSERT_TRUE(localVocab.empty());
 
   // Add the words from our test vocabulary and check that they get the expected
@@ -132,7 +135,7 @@ TEST(LocalVocab, getIdAndAddIfNotContained) {
   config.encodedPrefixesWithoutAngleBrackets = {"http://example.org/"};
   auto* qec = getQec(std::move(config));
   const auto& context = qec->getLocalVocabContext();
-  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
+  LocalVocab localVocab = makeLocalVocab();
 
   // A word in the vocabulary of the index yields the corresponding `VocabIndex`
   // `Id` and is not stored in the local vocab.
@@ -177,7 +180,7 @@ TEST(LocalVocab, clone) {
   auto* qec = ad_utility::testing::getQec();
   // Create a small local vocabulary.
   size_t localVocabSize = 100;
-  LocalVocab localVocabOriginal{ad_utility::testing::makeAllocator()};
+  LocalVocab localVocabOriginal = makeLocalVocab();
   std::vector<LocalVocabIndex> indices;
   auto inputWords =
       getTestCollectionOfWords(localVocabSize, qec->getLocalVocabContext());
@@ -196,7 +199,7 @@ TEST(LocalVocab, clone) {
 
   // Test that the indices are still valid after the original vocabulary was
   // destroyed.
-  localVocabOriginal = LocalVocab{ad_utility::testing::makeAllocator()};
+  localVocabOriginal = makeLocalVocab();
 
   for (size_t i = 0; i < inputWords.size(); ++i) {
     EXPECT_EQ(*indices[i], inputWords[i]);
@@ -205,7 +208,7 @@ TEST(LocalVocab, clone) {
   // Test that a BlankNodeIndex obtained by a `LocalVocab` is also contained
   // in the clone.
   ad_utility::BlankNodeManager bnm;
-  LocalVocab v{ad_utility::testing::makeAllocator()};
+  LocalVocab v = makeLocalVocab();
   auto id = v.getBlankNodeIndex(&bnm);
   LocalVocab vClone = v.clone();
   EXPECT_TRUE(vClone.isBlankNodeIndexContained(id));
@@ -214,8 +217,8 @@ TEST(LocalVocab, clone) {
 TEST(LocalVocab, merge) {
   // Create a small local vocabulary.
   std::vector<LocalVocabIndex> indices;
-  LocalVocab vocA{ad_utility::testing::makeAllocator()};
-  LocalVocab vocB{ad_utility::testing::makeAllocator()};
+  LocalVocab vocA = makeLocalVocab();
+  LocalVocab vocB = makeLocalVocab();
   auto* qec = ad_utility::testing::getQec();
   const auto& localVocabContext = qec->getLocalVocabContext();
   constexpr auto lit = [](std::string_view s) {
@@ -238,8 +241,8 @@ TEST(LocalVocab, merge) {
   ASSERT_THAT(localVocabMerged.getAllWordsForTesting(),
               ::testing::UnorderedElementsAre(lit("oneA"), lit("twoA"),
                                               lit("oneB"), lit("twoB")));
-  vocA = LocalVocab{ad_utility::testing::makeAllocator()};
-  vocB = LocalVocab{ad_utility::testing::makeAllocator()};
+  vocA = makeLocalVocab();
+  vocB = makeLocalVocab();
   EXPECT_EQ(*indices[0], lit("oneA"));
   EXPECT_EQ(*indices[1], lit("twoA"));
   EXPECT_EQ(*indices[2], lit("oneB"));
@@ -247,11 +250,11 @@ TEST(LocalVocab, merge) {
 
   // Test that the `LocalBlankNodeManager` of vocabs is merged correctly.
   ad_utility::BlankNodeManager bnm;
-  LocalVocab localVocabMerged2{ad_utility::testing::makeAllocator()};
+  LocalVocab localVocabMerged2 = makeLocalVocab();
   BlankNodeIndex id;
   {
-    LocalVocab vocC{ad_utility::testing::makeAllocator()};
-    LocalVocab vocD{ad_utility::testing::makeAllocator()};
+    LocalVocab vocC = makeLocalVocab();
+    LocalVocab vocD = makeLocalVocab();
     id = vocC.getBlankNodeIndex(&bnm);
     auto vocabs2 = std::vector{&std::as_const(vocC), &std::as_const(vocD)};
     localVocabMerged2 =
@@ -259,8 +262,8 @@ TEST(LocalVocab, merge) {
   }
   EXPECT_TRUE(localVocabMerged2.isBlankNodeIndexContained(id));
 
-  LocalVocab vocE{ad_utility::testing::makeAllocator()};
-  LocalVocab vocF{ad_utility::testing::makeAllocator()};
+  LocalVocab vocE = makeLocalVocab();
+  LocalVocab vocF = makeLocalVocab();
   auto id2 = vocE.getBlankNodeIndex(&bnm);
   auto vocabs3 =
       std::vector{&std::as_const(localVocabMerged2), &std::as_const(vocF)};
@@ -489,7 +492,7 @@ TEST(LocalVocab, propagation) {
 // _____________________________________________________________________________
 TEST(LocalVocab, getBlankNodeIndex) {
   ad_utility::BlankNodeManager bnm(0);
-  LocalVocab v{ad_utility::testing::makeAllocator()};
+  LocalVocab v = makeLocalVocab();
   BlankNodeIndex a = v.getBlankNodeIndex(&bnm);
   BlankNodeIndex b = v.getBlankNodeIndex(&bnm);
   EXPECT_NE(a, b);
@@ -500,12 +503,12 @@ TEST(LocalVocab, otherWordSetIsTransitivelyPropagated) {
   using ad_utility::triple_component::LiteralOrIri;
   auto* qec = ad_utility::testing::getQec();
   const auto& localVocabContext = qec->getLocalVocabContext();
-  LocalVocab original{ad_utility::testing::makeAllocator()};
+  LocalVocab original = makeLocalVocab();
   original.getIndexAndAddIfNotContained(
       LocalVocabEntry::literalWithoutQuotes("test", localVocabContext));
 
   LocalVocab clone = original.clone();
-  LocalVocab mergeCandidate{ad_utility::testing::makeAllocator()};
+  LocalVocab mergeCandidate = makeLocalVocab();
   mergeCandidate.mergeWith(clone);
 
   EXPECT_EQ(mergeCandidate.size(), 1);
@@ -520,7 +523,7 @@ TEST(LocalVocab, sizeIsProperlyUpdatedOnMerge) {
   using ::testing::UnorderedElementsAre;
   auto* qec = ad_utility::testing::getQec();
   const auto& localVocabContext = qec->getLocalVocabContext();
-  LocalVocab original{ad_utility::testing::makeAllocator()};
+  LocalVocab original = makeLocalVocab();
   original.getIndexAndAddIfNotContained(
       LocalVocabEntry::literalWithoutQuotes("test", localVocabContext));
 
@@ -552,7 +555,7 @@ TEST(LocalVocab, modificationIsBlockedAfterCloneOrMerge) {
   auto literal = LiteralOrIri::literalWithoutQuotes("test");
   auto otherLiteral = LiteralOrIri::literalWithoutQuotes("other");
   {
-    LocalVocab original{ad_utility::testing::makeAllocator()};
+    LocalVocab original = makeLocalVocab();
     original.getIndexAndAddIfNotContained(
         localVocabEntry(literal, localVocabContext));
     (void)original.clone();
@@ -568,8 +571,8 @@ TEST(LocalVocab, modificationIsBlockedAfterCloneOrMerge) {
     EXPECT_EQ(original.size(), 1);
   }
   {
-    LocalVocab original{ad_utility::testing::makeAllocator()};
-    LocalVocab other{ad_utility::testing::makeAllocator()};
+    LocalVocab original = makeLocalVocab();
+    LocalVocab other = makeLocalVocab();
     original.getIndexAndAddIfNotContained(
         localVocabEntry(literal, localVocabContext));
     other.mergeWith(original);
@@ -597,7 +600,7 @@ TEST(LocalVocab, modificationIsNotBlockedAfterAcquiringHolder) {
   LocalVocabIndex encodedTest;
   LocalVocabIndex encodedOther;
   {
-    LocalVocab original{ad_utility::testing::makeAllocator()};
+    LocalVocab original = makeLocalVocab();
     encodedTest = original.getIndexAndAddIfNotContained(
         localVocabEntry(literal, localVocabContext));
     extender = original.getLifetimeExtender();
@@ -624,7 +627,7 @@ TEST(LocalVocab, modificationIsNotBlockedAfterAcquiringHolder) {
 
 // _____________________________________________________________________________
 TEST(LocalVocab, getOwnedLocalBlankNodeBlocks_EmptyCase) {
-  LocalVocab vocab{ad_utility::testing::makeAllocator()};
+  LocalVocab vocab = makeLocalVocab();
   auto blocks = vocab.getOwnedLocalBlankNodeBlocks();
   EXPECT_TRUE(blocks.empty());
 }
@@ -632,7 +635,7 @@ TEST(LocalVocab, getOwnedLocalBlankNodeBlocks_EmptyCase) {
 // _____________________________________________________________________________
 TEST(LocalVocab, getOwnedLocalBlankNodeBlocks_WithBlankNodes) {
   ad_utility::BlankNodeManager bnm;
-  LocalVocab vocab{ad_utility::testing::makeAllocator()};
+  LocalVocab vocab = makeLocalVocab();
 
   // Allocate some blank node IDs.
   auto id1 = vocab.getBlankNodeIndex(&bnm);
@@ -658,7 +661,7 @@ TEST(LocalVocab, getOwnedLocalBlankNodeBlocks_WithBlankNodes) {
 // _____________________________________________________________________________
 TEST(LocalVocab, reserveBlankNodeBlocksFromExplicitIndices_EmptyIndices) {
   ad_utility::BlankNodeManager bnm;
-  LocalVocab vocab{ad_utility::testing::makeAllocator()};
+  LocalVocab vocab = makeLocalVocab();
 
   // Call with empty vector - should not crash and should do nothing.
   std::vector<
@@ -677,7 +680,7 @@ TEST(LocalVocab, reserveBlankNodeBlocksFromExplicitIndices_RestoresBlocks) {
   ad_utility::BlankNodeManager bnm;
 
   // Step 1: Create original vocab with blank nodes.
-  LocalVocab originalVocab{ad_utility::testing::makeAllocator()};
+  LocalVocab originalVocab = makeLocalVocab();
   auto id1 = originalVocab.getBlankNodeIndex(&bnm);
   auto id2 = originalVocab.getBlankNodeIndex(&bnm);
   auto id3 = originalVocab.getBlankNodeIndex(&bnm);
@@ -687,7 +690,7 @@ TEST(LocalVocab, reserveBlankNodeBlocksFromExplicitIndices_RestoresBlocks) {
   ASSERT_FALSE(serializedBlocks.empty());
 
   // Step 3: Create new vocab and restore from serialized data.
-  LocalVocab restoredVocab{ad_utility::testing::makeAllocator()};
+  LocalVocab restoredVocab = makeLocalVocab();
   restoredVocab.reserveBlankNodeBlocksFromExplicitIndices(serializedBlocks,
                                                           &bnm);
 
@@ -709,7 +712,7 @@ TEST(LocalVocab, reserveBlankNodeBlocksFromExplicitIndices_RestoresBlocks) {
 // _____________________________________________________________________________
 TEST(LocalVocab, reserveBlankNodeBlocksFromExplicitIndices_PreconditionCheck) {
   ad_utility::BlankNodeManager bnm;
-  LocalVocab vocab{ad_utility::testing::makeAllocator()};
+  LocalVocab vocab = makeLocalVocab();
 
   // Allocate a blank node, which creates the localBlankNodeManager_.
   [[maybe_unused]] auto id = vocab.getBlankNodeIndex(&bnm);
@@ -735,7 +738,7 @@ TEST(LocalVocab, wordsHaveStableAddresses) {
   // of the arena), such that the arena and the hash table of the words have to
   // grow several times, which must not change the addresses of the words.
   const auto& context = ad_utility::testing::getQec()->getLocalVocabContext();
-  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
+  LocalVocab localVocab = makeLocalVocab();
   std::vector<std::pair<LocalVocabIndex, std::string>> indices;
   auto add = [&](std::string content) {
     auto word = LocalVocabEntry::literalWithoutQuotes(content, context);
@@ -766,7 +769,7 @@ TEST(LocalVocab, addWordsOfOtherLocalVocab) {
   auto* qec = ad_utility::testing::getQec(
       ad_utility::testing::TestIndexConfig{"<a> <b> <c> ."});
   const auto& context = qec->getLocalVocabContext();
-  LocalVocab vocab1{ad_utility::testing::makeAllocator()};
+  LocalVocab vocab1 = makeLocalVocab();
   auto word = ad_utility::testing::iriLocalVocabEntry("<bb>", context);
   LocalVocabIndex index1 = vocab1.getIndexAndAddIfNotContained(word);
   // Compute (and thereby cache) the position of the stored word.
@@ -774,7 +777,7 @@ TEST(LocalVocab, addWordsOfOtherLocalVocab) {
 
   // Adding the stored word to another vocab makes a copy of it (including the
   // cached position), adding it again doesn't.
-  LocalVocab vocab2{ad_utility::testing::makeAllocator()};
+  LocalVocab vocab2 = makeLocalVocab();
   LocalVocabIndex index2 = vocab2.getIndexAndAddIfNotContained(*index1);
   EXPECT_NE(index1, index2);
   EXPECT_NE(index1->toStringRepresentation().data(),
@@ -789,7 +792,7 @@ TEST(LocalVocab, addWordsOfOtherLocalVocab) {
             Id::makeFromLocalVocabIndex(index2));
 
   // The word lives as long as `vocab2`, even if `vocab1` is destroyed.
-  vocab1 = LocalVocab{ad_utility::testing::makeAllocator()};
+  vocab1 = makeLocalVocab();
   EXPECT_EQ(index2->toStringRepresentation(), word.toStringRepresentation());
 }
 
@@ -799,7 +802,7 @@ TEST(LocalVocab, viewsAndOwningEntries) {
   const auto& context = ad_utility::testing::getQec()->getLocalVocabContext();
   auto a = LocalVocabEntry::literalWithoutQuotes("a", context);
   auto b = LocalVocabEntry::literalWithoutQuotes("b", context);
-  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
+  LocalVocab localVocab = makeLocalVocab();
   const LocalVocabEntryView& viewOfA =
       *localVocab.getIndexAndAddIfNotContained(a);
   // A view of an entry that refers to the characters of the entry itself.
@@ -842,7 +845,7 @@ TEST(LocalVocab, wordsAreStoredWithTheirStructure) {
   EXPECT_ANY_THROW(
       LiteralView::fromStringRepresentation(word.toStringRepresentation()));
 
-  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
+  LocalVocab localVocab = makeLocalVocab();
   const LocalVocabEntryView& stored =
       *localVocab.getIndexAndAddIfNotContained(word);
   EXPECT_NE(stored.toStringRepresentation().data(),
@@ -896,7 +899,7 @@ TEST(LocalVocab, memoryIsTracked) {
   clone.mergeWith(others);
   EXPECT_GT(memoryUsed(), usedBeforeMerge);
 
-  clone = LocalVocab{ad_utility::testing::makeAllocator()};
+  clone = makeLocalVocab();
   EXPECT_EQ(memoryUsed(), 0_B);
 }
 

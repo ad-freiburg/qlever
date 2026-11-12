@@ -14,12 +14,15 @@
 #include "../util/IdTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/LocalVocabEntryTestHelpers.h"
+#include "../util/LocalVocabTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
 #include "backports/algorithm.h"
 #include "engine/NamedResultCache.h"
 #include "engine/NamedResultCacheSerializer.h"
 #include "index/LocalVocabEntry.h"
 #include "util/serializer/ByteBufferSerializer.h"
+
+using ad_utility::testing::makeLocalVocab;
 
 using namespace ad_utility::serialization;
 using ad_utility::testing::colIndices;
@@ -66,14 +69,13 @@ class NamedResultCacheSerializerTest : public ::testing::Test {
     VariableToColumnMap varColMap;
     varColMap[Variable{"?x"}] = makeAlwaysDefinedColumn(0);
     varColMap[Variable{"?y"}] = makeAlwaysDefinedColumn(1);
-    return NamedResultCache::Value{
-        std::make_shared<const IdTable>(
-            makeIdTableFromVector({{1, 2}, {3, 4}})),
-        std::move(varColMap),
-        colIndices({0}),
-        LocalVocab{ad_utility::testing::makeAllocator()},
-        std::move(cacheKey),
-        std::nullopt};
+    return NamedResultCache::Value{std::make_shared<const IdTable>(
+                                       makeIdTableFromVector({{1, 2}, {3, 4}})),
+                                   std::move(varColMap),
+                                   colIndices({0}),
+                                   makeLocalVocab(),
+                                   std::move(cacheKey),
+                                   std::nullopt};
   }
 
   // Read a `Value` from the given serialized `data`.
@@ -91,7 +93,7 @@ class NamedResultCacheSerializerTest : public ::testing::Test {
 // Test serialization of a complete `NamedResultCache::Value`.
 TEST_F(NamedResultCacheSerializerTest, ValueSerialization) {
   // Create a test Value
-  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
+  LocalVocab localVocab = makeLocalVocab();
   [[maybe_unused]] auto local =
       localVocab.getIndexAndAddIfNotContained(iriLocalVocabEntry(
           "<http://example.org/test>", qec_->getLocalVocabContext()));
@@ -159,13 +161,12 @@ TEST_F(NamedResultCacheSerializerTest, ValueSerializationZeroCopy) {
   varColMap[Variable{"?x"}] = makeAlwaysDefinedColumn(0);
   varColMap[Variable{"?y"}] = makePossiblyUndefinedColumn(1);
 
-  NamedResultCache::Value value{
-      std::make_shared<const IdTable>(table.clone()),
-      varColMap,
-      colIndices({0, 1}),
-      LocalVocab{ad_utility::testing::makeAllocator()},
-      "test-cache-key",
-      std::nullopt};
+  NamedResultCache::Value value{std::make_shared<const IdTable>(table.clone()),
+                                varColMap,
+                                colIndices({0, 1}),
+                                makeLocalVocab(),
+                                "test-cache-key",
+                                std::nullopt};
 
   AlignedByteBufferWriteSerializer writeSerializer;
   writeSerializer << value;
@@ -207,11 +208,11 @@ TEST_F(NamedResultCacheSerializerTest, CacheSerialization) {
   varColMap2[Variable{"?z"}] = makeAlwaysDefinedColumn(2);
 
   const auto& localVocabContext = qec_->getLocalVocabContext();
-  LocalVocab vocab1{ad_utility::testing::makeAllocator()};
+  LocalVocab vocab1 = makeLocalVocab();
   vocab1.getIndexAndAddIfNotContained(
       iriLocalVocabEntry("<http://example.org/1>", localVocabContext));
 
-  LocalVocab vocab2{ad_utility::testing::makeAllocator()};
+  LocalVocab vocab2 = makeLocalVocab();
   vocab2.getIndexAndAddIfNotContained(
       iriLocalVocabEntry("<http://example.org/2>", localVocabContext));
 
@@ -494,7 +495,7 @@ TEST_F(NamedResultCacheSerializerTest, SerializationIsDeterministic) {
             makeIdTableFromVector({{0, 1, 2, 3}, {4, 5, 6, 7}})),
         std::move(varColMap),
         colIndices({0, 1}),
-        LocalVocab{ad_utility::testing::makeAllocator()},
+        makeLocalVocab(),
         "cache-key",
         std::nullopt};
   };
@@ -536,7 +537,7 @@ TEST_F(NamedResultCacheSerializerTest, WriteValueWithReplacedColumns) {
   VariableToColumnMap varColMap;
   varColMap[Variable{"?x"}] = makeAlwaysDefinedColumn(0);
   varColMap[Variable{"?y"}] = makePossiblyUndefinedColumn(1);
-  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
+  LocalVocab localVocab = makeLocalVocab();
   localVocab.getIndexAndAddIfNotContained(iriLocalVocabEntry(
       "<http://example.org/test>", qec_->getLocalVocabContext()));
   ASSERT_EQ(localVocab.size(), 1);
