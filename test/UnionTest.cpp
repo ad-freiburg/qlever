@@ -91,7 +91,8 @@ using SortedUnionRange = std::vector<Result::IdTableVocabPair>;
 // `table`.
 SortedUnionRange makeSortedUnionRange(IdTable table) {
   SortedUnionRange range;
-  range.emplace_back(std::move(table), LocalVocab{});
+  range.emplace_back(std::move(table),
+                     LocalVocab{ad_utility::testing::makeAllocator()});
   return range;
 }
 
@@ -182,7 +183,8 @@ TEST(Union, computeUnionLazy) {
         IdTable left = makeIdTableFromVector({{V(1)}, {V(2)}, {V(3)}});
         return ad_utility::makeExecutionTree<ValuesForTesting>(
             qec, std::move(left), Vars{Variable{"?x"}}, false, colIndices({}),
-            LocalVocab{}, std::nullopt, nonLazyChildren);
+            LocalVocab{ad_utility::testing::makeAllocator()}, std::nullopt,
+            nonLazyChildren);
       } else {
         // With the `invisibleSubtreeColumns==true` case we test the case, that
         // the input contains variables that are not visible because of a
@@ -191,7 +193,9 @@ TEST(Union, computeUnionLazy) {
             {{V(1), V(3)}, {V(2), V(27)}, {V(3), V(123)}});
         auto tree = ad_utility::makeExecutionTree<ValuesForTesting>(
             qec, std::move(left), Vars{Variable{"?x"}, Variable{"?invisible"}},
-            false, colIndices({}), LocalVocab{}, std::nullopt, nonLazyChildren);
+            false, colIndices({}),
+            LocalVocab{ad_utility::testing::makeAllocator()}, std::nullopt,
+            nonLazyChildren);
         tree->getRootOperation()->setSelectedVariablesForSubquery(
             {Variable{"?x"}});
         return tree;
@@ -201,7 +205,8 @@ TEST(Union, computeUnionLazy) {
     IdTable right = makeIdTableFromVector({{V(4), V(5)}, {V(6), V(7)}});
     auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, std::move(right), Vars{Variable{"?u"}, Variable{"?x"}}, false,
-        colIndices({}), LocalVocab{}, std::nullopt, nonLazyChildren);
+        colIndices({}), LocalVocab{ad_utility::testing::makeAllocator()},
+        std::nullopt, nonLazyChildren);
 
     Union u{qec, std::move(leftT), std::move(rightT)};
     auto resultTable = u.computeResultOnlyForTesting(true);
@@ -561,7 +566,8 @@ TEST(Union, sortedMergeWithOneSideNonLazy) {
 
   auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{2}}), Vars{Var{"?a"}}, false,
-      colIndices({0}), LocalVocab{}, std::nullopt, true);
+      colIndices({0}), LocalVocab{ad_utility::testing::makeAllocator()},
+      std::nullopt, true);
 
   auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{0}, {1}}), Vars{Var{"?a"}}, false,
@@ -597,7 +603,7 @@ TEST(Union, sortedMergeWithLocalVocab) {
   using Var = Variable;
   auto* qec = ad_utility::testing::getQec();
 
-  LocalVocab vocab1;
+  LocalVocab vocab1{ad_utility::testing::makeAllocator()};
   vocab1.getIndexAndAddIfNotContained(localVocabEntryFromStringRepresentation(
       "\"Test1\"", qec->getLocalVocabContext()));
 
@@ -605,7 +611,7 @@ TEST(Union, sortedMergeWithLocalVocab) {
       qec, makeIdTableFromVector({{1}, {2}, {4}}), Vars{Var{"?a"}}, false,
       colIndices({0}), vocab1.clone());
 
-  LocalVocab vocab2;
+  LocalVocab vocab2{ad_utility::testing::makeAllocator()};
   vocab2.getIndexAndAddIfNotContained(localVocabEntryFromStringRepresentation(
       "\"Test2\"", qec->getLocalVocabContext()));
   std::vector<IdTable> tables;

@@ -85,8 +85,10 @@ void readValue(Serializer& serializer, NamedResultCache::Value& arg,
   using namespace ad_utility::serialization;
   // Deserialize the LocalVocab and get the ID mapping.
   AD_CORRECTNESS_CHECK(arg.contextForSerialization_ != nullptr);
+  AD_CORRECTNESS_CHECK(arg.allocatorForSerialization_.has_value());
   auto [localVocab, mapping] = ad_utility::detail::deserializeLocalVocab(
-      serializer, *arg.contextForSerialization_);
+      serializer, *arg.contextForSerialization_,
+      arg.allocatorForSerialization_.value());
 
   // Deserialize the IdTable with ID mapping applied.
   size_t numRows, numColumns;
@@ -212,7 +214,9 @@ void NamedResultCache::readFromSerializer(Serializer& serializer,
 
     // Deserialize the value (a `Value` has no default constructor, because
     // its `resultSortedOn_` needs an allocator).
-    Value value{{}, {}, qlm::vector<ColumnIndex>{allocator}, {}, {}, {}};
+    Value value{
+        {}, {}, qlm::vector<ColumnIndex>{allocator}, LocalVocab{allocator},
+        {}, {}};
     value.allocatorForSerialization_ = allocator;
     value.contextForSerialization_ = &context;
     namedResultCacheSerializer::readValue(serializer, value, readFormatVersion);

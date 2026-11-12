@@ -478,8 +478,8 @@ TEST_F(ValueIdTest, Hashing) {
     using namespace ad_utility::testing;
     const Index& index = qec_->getIndex();
     auto mkId = makeGetId(index);
-    LocalVocab lv1;
-    LocalVocab lv2;
+    LocalVocab lv1{ad_utility::testing::makeAllocator()};
+    LocalVocab lv2{ad_utility::testing::makeAllocator()};
     Iri iri = Iri::fromIriref("<foo>");
     LocalVocabEntry lve1 = localVocabEntry(iri, index.getLocalVocabContext());
     LocalVocabEntry lve2 = localVocabEntry(iri, index.getLocalVocabContext());

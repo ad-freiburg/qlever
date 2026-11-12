@@ -262,7 +262,7 @@ TEST(NamedCacheSecondaryVocabRewriter, localVocabEntriesOfExistingWords) {
 
   // The words are contained in the main vocabulary (`<m>`), in the secondary
   // vocabulary of the index (`<a>`), and in neither of them (`<y>`).
-  LocalVocab localVocab;
+  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
   auto idOf = [&localVocab, &context](std::string_view iriref) {
     return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
         iriLocalVocabEntry(iriref, context)));
@@ -325,7 +325,7 @@ TEST(NamedCacheSecondaryVocabRewriter, canonicalColumnOrder) {
             {{1, 7, 5, 3}, {2, 6, 5, 4}}, ad_utility::testing::IntId)),
         map,
         qlm::vector<ColumnIndex>{sortedOn.begin(), sortedOn.end(), alloc},
-        LocalVocab{},
+        LocalVocab{ad_utility::testing::makeAllocator()},
         "handmade",
         std::nullopt};
   };
@@ -378,7 +378,7 @@ TEST(NamedCacheSecondaryVocabRewriter, canonicalCacheKey) {
                      {{1, 2}, {3, 4}}, ad_utility::testing::IntId)),
                  std::move(map),
                  qlm::vector<ColumnIndex>{alloc},
-                 LocalVocab{},
+                 LocalVocab{ad_utility::testing::makeAllocator()},
                  "handmade",
                  std::nullopt};
   };
@@ -415,7 +415,7 @@ TEST(NamedCacheSecondaryVocabRewriter, canonicalizeWithoutCopy) {
         VariableToColumnMap{{Variable{"?b"}, makeAlwaysDefinedColumn(0)},
                             {Variable{"?a"}, makeAlwaysDefinedColumn(2)}},
         qlm::vector<ColumnIndex>{sortedOn.begin(), sortedOn.end(), alloc},
-        LocalVocab{},
+        LocalVocab{ad_utility::testing::makeAllocator()},
         "handmade",
         std::nullopt};
   };
@@ -454,7 +454,7 @@ TEST(NamedCacheSecondaryVocabRewriter, canonicalizeWithoutCopy) {
   Value zeroColumns{std::make_shared<const IdTable>(std::move(noColumns)),
                     VariableToColumnMap{},
                     qlm::vector<ColumnIndex>{alloc},
-                    LocalVocab{},
+                    LocalVocab{ad_utility::testing::makeAllocator()},
                     "handmade",
                     std::nullopt};
   auto zero = canonicalizeWithPermutation(zeroColumns, secondaryVocab, alloc);

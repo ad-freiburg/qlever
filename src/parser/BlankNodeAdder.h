@@ -44,17 +44,18 @@ struct BlankNodeAdder {
   ad_utility::BlankNodeManager* bnodeManager_;
 
   // Construct from the (global) `bnodeManager` and the `allocator` that
-  // accounts for the memory used by the mapping from labels to IDs. Operations
-  // that resolve blank nodes from an input of unbounded size (`SERVICE` and
-  // `LOAD`) have to pass the allocator of their query, such that the mapping is
-  // part of the memory limit of that query. For blank nodes that come from a
-  // query or update itself, the size of the mapping is bounded by the size of
-  // that query, hence the default of an unlimited allocator.
+  // accounts for the memory used by the mapping from labels to IDs and by the
+  // words that are added to `localVocab_` (e.g. by `LOAD`). Operations that
+  // resolve blank nodes from an input of unbounded size (`SERVICE` and `LOAD`)
+  // have to pass the allocator of their query, such that the mapping and the
+  // words are part of the memory limit of that query. For blank nodes that come
+  // from a query or update itself, the size of the mapping is bounded by the
+  // size of that query, hence the default of an unlimited allocator.
   explicit BlankNodeAdder(
       ad_utility::BlankNodeManager* bnodeManager,
       const Allocator& allocator =
           ad_utility::makeUnlimitedAllocator<Map::value_type>())
-      : map_{allocator}, bnodeManager_{bnodeManager} {}
+      : localVocab_{allocator}, map_{allocator}, bnodeManager_{bnodeManager} {}
 
   // Get an `Id` for the `label`, which has to include the leading `_:` (as
   // blank nodes are written in Turtle and SPARQL). If the same `label` was

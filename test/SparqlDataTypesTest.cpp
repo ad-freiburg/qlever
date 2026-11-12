@@ -35,7 +35,7 @@ struct ContextWrapper {
   Result _resultTable{
       IdTable{ad_utility::testing::makeAllocator()},
       qlm::vector<ColumnIndex>{ad_utility::testing::makeAllocator()},
-      LocalVocab{}};
+      LocalVocab{ad_utility::testing::makeAllocator()}};
   // TODO<joka921> `VariableToColumnMap`
   VariableToColumnMap _hashMap;
 
@@ -74,7 +74,7 @@ std::optional<std::string> evaluate(
   auto rowIdx = exportCtx._rowOffset + exportCtx.resultTableRowIndex_;
 
   // Backs the `dedupId_` of any constant term; must outlive `preprocessed`.
-  LocalVocab localVocabForConstants;
+  LocalVocab localVocabForConstants{ad_utility::testing::makeAllocator()};
   auto preprocessed = ConstructTemplatePreprocessor::preprocessTerm(
       term, position, exportCtx._variableColumns, exportCtx._qecIndex,
       localVocabForConstants);

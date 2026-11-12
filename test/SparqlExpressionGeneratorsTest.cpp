@@ -17,7 +17,7 @@ TEST(SparqlExpressionGenerators, makeStringResultGetter) {
   auto* qec = ad_utility::testing::getQec();
   auto literal = LocalVocabEntry::literalWithoutQuotes(
       "Test String", qec->getLocalVocabContext());
-  LocalVocab localVocab{};
+  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
 
   auto function = makeStringResultGetter(&localVocab);
 
@@ -33,7 +33,7 @@ TEST(SparqlExpressionGenerators, idOrLiteralOrIriToId) {
   auto* qec = ad_utility::testing::getQec();
   auto literal = LocalVocabEntry::literalWithoutQuotes(
       "Test String", qec->getLocalVocabContext());
-  LocalVocab localVocab{};
+  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
 
   auto result = idOrLiteralOrIriToId(literal, &localVocab);
 

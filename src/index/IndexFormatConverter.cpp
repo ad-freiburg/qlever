@@ -245,7 +245,8 @@ std::shared_ptr<LocatedTriplesState> makeEmptyLocatedTriplesState(
   // `Permutation::Type::NORMAL`, including the internal ones, so a scan always
   // looks up its located triples in the array above.
   LocatedTriplesPerBlockAllPermutations<true> emptyInternalLocatedTriples;
-  LocalVocab emptyVocab;
+  // The converter doesn't run as part of a query, so there is no memory limit.
+  LocalVocab emptyVocab{ad_utility::makeUnlimitedAllocator<Id>()};
   return std::make_shared<LocatedTriplesState>(
       LocatedTriplesState{emptyLocatedTriples, emptyInternalLocatedTriples,
                           emptyVocab.getLifetimeExtender(), 0});

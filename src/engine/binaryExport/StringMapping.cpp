@@ -19,6 +19,10 @@
 namespace qlever::binary_export {
 
 // _____________________________________________________________________________
+StringMapping::StringMapping(const Index& index)
+    : index_{&index}, dummyLocalVocab_{index.getImpl().allocator()} {}
+
+// _____________________________________________________________________________
 std::vector<std::string> StringMapping::takeStrings() {
   stringMapping_.clear();
   numBytes_ = 0;

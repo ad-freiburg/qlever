@@ -677,10 +677,12 @@ void testSpecialOptionalJoin(IdNestedBlock a, IdNestedBlock b,
   std::vector<TableWithJoinCols> wrappedA;
   std::vector<TableWithJoinCols> wrappedB;
   for (auto& table : a) {
-    wrappedA.emplace_back(std::move(table), LocalVocab{});
+    wrappedA.emplace_back(std::move(table),
+                          LocalVocab{ad_utility::testing::makeAllocator()});
   }
   for (auto& table : b) {
-    wrappedB.emplace_back(std::move(table), LocalVocab{});
+    wrappedB.emplace_back(std::move(table),
+                          LocalVocab{ad_utility::testing::makeAllocator()});
   }
 
   ad_utility::specialOptionalJoinForBlocks(

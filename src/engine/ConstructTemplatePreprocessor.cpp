@@ -126,8 +126,8 @@ ConstructTemplatePreprocessor::preprocessTriple(
 // _____________________________________________________________________________
 PreprocessedConstructTemplate ConstructTemplatePreprocessor::preprocess(
     const Triples& templateTriples, const VariableToColumnMap& variableColumns,
-    const Index& index) {
-  return ConstructTemplatePreprocessor{variableColumns, index}.run(
+    const Index& index, const LocalVocab::Allocator& allocator) {
+  return ConstructTemplatePreprocessor{variableColumns, index, allocator}.run(
       templateTriples);
 }
 

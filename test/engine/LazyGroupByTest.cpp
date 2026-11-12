@@ -45,7 +45,7 @@ class LazyGroupByTest : public ::testing::Test {
 
   std::vector<GroupByImpl::Aggregate> aggregates_{
       {std::move(sparqlExpression_), 1}};
-  LocalVocab localVocab_{};
+  LocalVocab localVocab_{ad_utility::testing::makeAllocator()};
   LazyGroupBy lazyGroupBy_{
       localVocab_,
       GroupByImpl::computeUnsequentialProcessingMetadata(aggregates_, {yVar_})
@@ -148,7 +148,7 @@ TEST(LazyGroupBy, verifyGroupConcatIsCorrectlyInitialized) {
                std::vector{std::optional{variable}}));
   std::vector<GroupByImpl::Aggregate> aggregates{
       {std::move(sparqlExpression), 0}};
-  LocalVocab localVocab{};
+  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
   LazyGroupBy lazyGroupBy{
       localVocab,
       GroupByImpl::computeUnsequentialProcessingMetadata(aggregates, {variable})

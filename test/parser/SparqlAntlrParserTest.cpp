@@ -120,7 +120,7 @@ TEST(SparqlExpressionParser, First) {
   ad_utility::AllocatorWithLimit<Id> alloc{
       ad_utility::testing::makeAllocator()};
   IdTable table{alloc};
-  LocalVocab localVocab;
+  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
   sparqlExpression::EvaluationContext input{
       *ad_utility::testing::getQec(),
       map,

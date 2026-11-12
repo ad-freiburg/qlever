@@ -419,9 +419,9 @@ TEST(OptionalJoin, computeOptionalJoinIndexNestedLoopJoinOptimization) {
   LocalVocabEntry entryB = localVocabEntryFromStringRepresentation(
       "\"b\"", qec->getLocalVocabContext());
 
-  LocalVocab leftVocab;
+  LocalVocab leftVocab{ad_utility::testing::makeAllocator()};
   leftVocab.getIndexAndAddIfNotContained(entryA);
-  LocalVocab rightVocab;
+  LocalVocab rightVocab{ad_utility::testing::makeAllocator()};
   rightVocab.getIndexAndAddIfNotContained(entryB);
 
   // From this table columns 1 and 2 will be used for the join.
@@ -481,9 +481,9 @@ TEST(OptionalJoin, computeLazyOptionalJoinIndexNestedLoopJoinOptimization) {
   LocalVocabEntry entryB = localVocabEntryFromStringRepresentation(
       "\"b\"", qec->getLocalVocabContext());
 
-  LocalVocab leftVocab;
+  LocalVocab leftVocab{ad_utility::testing::makeAllocator()};
   leftVocab.getIndexAndAddIfNotContained(entryA);
-  LocalVocab rightVocab;
+  LocalVocab rightVocab{ad_utility::testing::makeAllocator()};
   rightVocab.getIndexAndAddIfNotContained(entryB);
 
   // From this table columns 1 and 2 will be used for the join.
@@ -711,7 +711,8 @@ TEST(OptionalJoin, lazyOptionalJoinWithOneMaterializedTable) {
         qec,
         makeIdTableFromVector({{U, V(10)}, {V(1), V(11)}, {2, 12}, {3, 13}}),
         std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}},
-        false, std::vector<ColumnIndex>{0}, LocalVocab{}, std::nullopt, true);
+        false, std::vector<ColumnIndex>{0},
+        LocalVocab{ad_utility::testing::makeAllocator()}, std::nullopt, true);
     auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, std::move(rightTables),
         std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?z"}},
@@ -745,7 +746,8 @@ TEST(OptionalJoin, lazyOptionalJoinWithOneMaterializedTable) {
     auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, makeIdTableFromVector({{U, V(20)}, {V(2), V(22)}}),
         std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?z"}},
-        false, std::vector<ColumnIndex>{0}, LocalVocab{}, std::nullopt, true);
+        false, std::vector<ColumnIndex>{0},
+        LocalVocab{ad_utility::testing::makeAllocator()}, std::nullopt, true);
     OptionalJoin opt{qec, left, right};
 
     qec->getQueryTreeCache().clearAll();
@@ -1196,15 +1198,15 @@ TEST_P(OptionalJoinWithIndexScan, twoColumnsLocalVocabPropagation) {
     return localVocabEntry(iri(absl::StrCat("<local-payload-", i, ">")),
                            qec2->getLocalVocabContext());
   };
-  LocalVocab v;
+  LocalVocab v{ad_utility::testing::makeAllocator()};
   auto l1 = Id::makeFromLocalVocabIndex(v.getIndexAndAddIfNotContained(i(1)));
   tAndV.emplace_back(makeIdTableFromVector({{s1, U, l1}}), std::move(v));
 
-  LocalVocab v2;
+  LocalVocab v2{ad_utility::testing::makeAllocator()};
   auto l2 = Id::makeFromLocalVocabIndex(v2.getIndexAndAddIfNotContained(i(2)));
   tAndV.emplace_back(makeIdTableFromVector({{s1, U, l2}}), std::move(v2));
 
-  LocalVocab v3;
+  LocalVocab v3{ad_utility::testing::makeAllocator()};
   auto l3 = Id::makeFromLocalVocabIndex(v3.getIndexAndAddIfNotContained(i(3)));
   tAndV.emplace_back(makeIdTableFromVector({{s1, o2, l3}}), std::move(v3));
 
@@ -1322,7 +1324,8 @@ TEST(OptionalJoin, rightIsScanWithoutVariables) {
       auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
           qec, leftTable.clone(),
           std::vector<std::optional<Variable>>{Variable{"?g"}}, false,
-          std::vector<ColumnIndex>{0}, LocalVocab{}, std::nullopt,
+          std::vector<ColumnIndex>{0},
+          LocalVocab{ad_utility::testing::makeAllocator()}, std::nullopt,
           materializeLeft);
       // `GRAPH ?g { <a> <b> <c> }`
       auto right = ad_utility::makeExecutionTree<IndexScan>(
@@ -1515,7 +1518,7 @@ TEST(OptionalJoin, indexNestedLoopJoinRequiresCancellationHandle) {
         makeIdTableFromVector({{1}}),
         qlm::vector<ColumnIndex>(
             {0}, ad_utility::makeUnlimitedAllocator<ColumnIndex>()),
-        LocalVocab{});
+        LocalVocab{ad_utility::testing::makeAllocator()});
   };
   auto makeJoin = [&makeResult](ad_utility::SharedCancellationHandle handle) {
     joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin join(
@@ -1538,7 +1541,7 @@ TEST(OptionalJoin, indexNestedLoopJoinProbeLoopChecksCancellation) {
         makeIdTableFromVector({{1}, {2}}),
         qlm::vector<ColumnIndex>(
             {0}, ad_utility::makeUnlimitedAllocator<ColumnIndex>()),
-        LocalVocab{});
+        LocalVocab{ad_utility::testing::makeAllocator()});
   };
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
   handle->cancel(ad_utility::CancellationState::MANUAL);

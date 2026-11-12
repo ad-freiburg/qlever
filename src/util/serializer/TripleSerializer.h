@@ -109,12 +109,14 @@ void serializeOnlyBlankNodeBlocksFromLocalVocab(Serializer& serializer,
   serializer << uint64_t{0};
 }
 
-// Deserialize the local vocabulary from the input stream.
+// Deserialize the local vocabulary from the input stream. The returned
+// `LocalVocab` uses `allocator`.
 CPP_template(typename Serializer)(
     requires serialization::ReadSerializer<Serializer>)
 std::tuple<LocalVocab, absl::flat_hash_map<Id::T, Id>> deserializeLocalVocab(
-    Serializer& serializer, const LocalVocabContext& context) {
-  LocalVocab vocab;
+    Serializer& serializer, const LocalVocabContext& context,
+    const LocalVocab::Allocator& allocator) {
+  LocalVocab vocab{allocator};
   vocab.reserveBlankNodeBlocksFromExplicitIndices(
       readValue<std::vector<
           BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry>>(
@@ -205,13 +207,14 @@ void serializeIds(const ql::filesystem::path& path, const LocalVocab& vocab,
 }
 
 inline std::tuple<LocalVocab, std::vector<std::vector<Id>>> deserializeIds(
-    const ql::filesystem::path& path, const LocalVocabContext& context) {
+    const ql::filesystem::path& path, const LocalVocabContext& context,
+    const LocalVocab::Allocator& allocator) {
   // This is a minor TOCTOU issue, the file might be gone after this check and
   // before the call to `fopen`, done by `FileReadSerializer`, so ideally we'd
   // handle this as a special exception type of our own `File` class, which
   // doesn't exist yet.
   if (!ql::filesystem::exists(path)) {
-    return {};
+    return std::tuple{LocalVocab{allocator}, std::vector<std::vector<Id>>{}};
   }
   auto serializer = [p = path.string()]() {
     try {
@@ -227,7 +230,8 @@ inline std::tuple<LocalVocab, std::vector<std::vector<Id>>> deserializeIds(
   AD_LOG_INFO << "Reading and processing persisted updates from " << path
               << " ..." << std::endl;
   detail::readHeader(serializer);
-  auto [vocab, mapping] = detail::deserializeLocalVocab(serializer, context);
+  auto [vocab, mapping] =
+      detail::deserializeLocalVocab(serializer, context, allocator);
   std::vector<std::vector<Id>> idVectors;
   auto numRanges = detail::readValue<uint64_t>(serializer);
   for ([[maybe_unused]] auto i : ad_utility::integerRange(numRanges)) {

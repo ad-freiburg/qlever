@@ -172,7 +172,7 @@ TEST(IndexRebuilder, materializeLocalVocab) {
   auto k = getId("<k>");
   auto l = makeVocabEntry("<l>");
   auto m = makeVocabEntry("<m>");
-  LocalVocab localVocab;
+  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
   auto add = [&localVocab](const LocalVocabEntry& entry) {
     return localVocab.getIndexAndAddIfNotContained(entry);
   };
@@ -255,7 +255,7 @@ TEST(IndexRebuilder, materializeLocalVocabProgressBatches) {
 
   // `materializeLocalVocab` takes pointers to the entries, which are stored in
   // a `LocalVocab`.
-  LocalVocab localVocab;
+  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
   std::vector<LocalVocabIndex> entries;
   for (size_t i = 0; i < numEntries; ++i) {
     entries.push_back(localVocab.getIndexAndAddIfNotContained(
@@ -651,7 +651,7 @@ TEST(IndexRebuilder, materializeToIndex) {
         // `materializeLocalVocab` (regression test for issue #3172). The
         // triple already exists in the index, so the expected counts below
         // are unchanged.
-        LocalVocab outsideVocab;
+        LocalVocab outsideVocab{ad_utility::testing::makeAllocator()};
         Id localA = Id::makeFromLocalVocabIndex(
             outsideVocab.getIndexAndAddIfNotContained(
                 iriLocalVocabEntry("<a>", index.getLocalVocabContext())));

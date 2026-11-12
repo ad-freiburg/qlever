@@ -262,7 +262,7 @@ TEST_F(IndexFormatConverterTest, convertedIndexHasTheSameContent) {
             absl::StrCat("_:bn", id.getBlankNodeIndex().get()));
         continue;
       }
-      LocalVocab emptyLocalVocab{};
+      LocalVocab emptyLocalVocab{ad_utility::testing::makeAllocator()};
       auto word =
           ql::exportIds::idToLiteralOrIri(index.getImpl(), id, emptyLocalVocab);
       components.push_back(word.has_value()

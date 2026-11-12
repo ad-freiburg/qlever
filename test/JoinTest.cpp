@@ -429,7 +429,8 @@ TEST_P(JoinTestParametrized, joinWithColumnAndScanEmptyInput) {
     auto valuesTree =
         ad_utility::makeExecutionTree<ValuesForTestingNoKnownEmptyResult>(
             qec, IdTable{1, qec->getAllocator()}, Vars{Variable{"?s"}}, false,
-            std::vector<ColumnIndex>{0}, LocalVocab{}, std::nullopt,
+            std::vector<ColumnIndex>{0},
+            LocalVocab{ad_utility::testing::makeAllocator()}, std::nullopt,
             !lazyJoinValues);
     auto join = Join{qec, fullScanPSO, valuesTree, 0, 0, keepJoinCol};
     EXPECT_EQ(join.getDescriptor(), "Join on ?s");
@@ -472,7 +473,8 @@ TEST_P(JoinTestParametrized, joinWithColumnAndScanUndefValues) {
     auto U = Id::makeUndefined();
     auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, makeIdTableFromVector({{U}}), Vars{Variable{"?s"}}, false,
-        std::vector<ColumnIndex>{0}, LocalVocab{}, std::nullopt,
+        std::vector<ColumnIndex>{0},
+        LocalVocab{ad_utility::testing::makeAllocator()}, std::nullopt,
         !lazyJoinValues);
     auto join = Join{qec, fullScanPSO, valuesTree, 0, 0, keepJoinCol};
     EXPECT_EQ(join.getDescriptor(), "Join on ?s");
@@ -826,7 +828,9 @@ TEST_P(JoinTestParametrized,
         auto leftTree =
             ad_utility::makeExecutionTree<ValuesForTestingNoKnownEmptyResult>(
                 qec, std::move(leftTable), Vars{Variable{"?s"}}, false,
-                std::vector<ColumnIndex>{0}, LocalVocab{}, std::nullopt, true);
+                std::vector<ColumnIndex>{0},
+                LocalVocab{ad_utility::testing::makeAllocator()}, std::nullopt,
+                true);
         auto rightTree = ad_utility::makeExecutionTree<ValuesForTesting>(
             qec, std::move(rightTables), Vars{Variable{"?s"}}, false,
             std::vector<ColumnIndex>{0});
@@ -956,7 +960,8 @@ TEST_P(JoinTestParametrized, verifyColumnPermutationsAreAppliedCorrectly) {
     auto leftTree = ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, makeIdTableFromVector({{I(1), I(2), U}}),
         Vars{Variable{"?p"}, Variable{"?q"}, Variable{"?s"}}, false,
-        std::vector<ColumnIndex>{2}, LocalVocab{}, std::nullopt, true);
+        std::vector<ColumnIndex>{2},
+        LocalVocab{ad_utility::testing::makeAllocator()}, std::nullopt, true);
     auto fullScanPSO = ad_utility::makeExecutionTree<IndexScan>(
         qec, PSO, SparqlTripleSimple{Var{"?s"}, iri("<p>"), Var{"?o"}});
     VariableToColumnMap expectedVariables{

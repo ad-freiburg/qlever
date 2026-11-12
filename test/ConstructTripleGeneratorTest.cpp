@@ -82,7 +82,7 @@ class ConstructTripleGeneratorTest : public ::testing::Test {
     return std::make_shared<const Result>(
         std::move(table),
         qlm::vector<ColumnIndex>{ad_utility::testing::makeAllocator()},
-        LocalVocab{});
+        LocalVocab{ad_utility::testing::makeAllocator()});
   }
 
   // Create a `TableWithRange` referencing the Result's `IdTable`, covering rows
@@ -394,7 +394,8 @@ TEST_F(ConstructTripleGeneratorTest, idCacheIsSharedAcrossBatches) {
 // Zero variables: the `std::max` floor ensures we never create a zero-capacity
 // cache, so the capacity equals exactly `CACHE_ENTRIES_PER_VARIABLE`.
 TEST(MakeIdCache, emptyTemplate) {
-  PreprocessedConstructTemplate tmpl;
+  PreprocessedConstructTemplate tmpl{.localVocabForConstants_ = LocalVocab{
+                                         ad_utility::testing::makeAllocator()}};
   auto cache = ConstructTripleGenerator::makeIdCache(tmpl);
   EXPECT_EQ(cache.capacity(),
             ConstructTripleGenerator::CACHE_ENTRIES_PER_VARIABLE);
@@ -403,7 +404,8 @@ TEST(MakeIdCache, emptyTemplate) {
 // One variable: the floor is not doing work; result is still
 // `CACHE_ENTRIES_PER_VARIABLE`.
 TEST(MakeIdCache, singleVariable) {
-  PreprocessedConstructTemplate tmpl;
+  PreprocessedConstructTemplate tmpl{.localVocabForConstants_ = LocalVocab{
+                                         ad_utility::testing::makeAllocator()}};
   // Note: Assigning an `initializer_list` of size 1 to a `std::vector` here
   // would trigger a false-positive `-Warray-bounds` warning with GCC 12 in
   // optimized builds, hence the explicit `std::vector`.
@@ -416,7 +418,8 @@ TEST(MakeIdCache, singleVariable) {
 // Multiple variables: capacity scales linearly with the number of unique
 // variable columns.
 TEST(MakeIdCache, multipleVariables) {
-  PreprocessedConstructTemplate tmpl;
+  PreprocessedConstructTemplate tmpl{.localVocabForConstants_ = LocalVocab{
+                                         ad_utility::testing::makeAllocator()}};
   tmpl.uniqueVariableColumns_ = {0, 1, 2};
   auto cache = ConstructTripleGenerator::makeIdCache(tmpl);
   EXPECT_EQ(cache.capacity(),

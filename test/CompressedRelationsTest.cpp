@@ -1232,7 +1232,8 @@ TEST(CompressedRelationReader, getDistinctCol0IdsWithGraphFilter) {
       [&blocks](ScanSpecification::GraphFilter filter) {
         return CompressedRelationReader::ScanSpecAndBlocks{
             ScanSpecification{std::nullopt, std::nullopt, std::nullopt,
-                              LocalVocab{}, std::move(filter)},
+                              LocalVocab{ad_utility::testing::makeAllocator()},
+                              std::move(filter)},
             getBlockMetadataRangesfromVec(blocks)};
       };
 
@@ -1300,7 +1301,8 @@ TEST(CompressedRelationReader, getDistinctCol0IdsWithUnknownGraphsInBlock) {
       [&blocks](ScanSpecification::GraphFilter filter) {
         return CompressedRelationReader::ScanSpecAndBlocks{
             ScanSpecification{std::nullopt, std::nullopt, std::nullopt,
-                              LocalVocab{}, std::move(filter)},
+                              LocalVocab{ad_utility::testing::makeAllocator()},
+                              std::move(filter)},
             getBlockMetadataRangesfromVec(blocks)};
       };
 
@@ -1360,7 +1362,8 @@ TEST(CompressedRelationReader, getDistinctCol0IdsWithSeveralGraphsInBlock) {
       [&blocks](ScanSpecification::GraphFilter filter) {
         return CompressedRelationReader::ScanSpecAndBlocks{
             ScanSpecification{std::nullopt, std::nullopt, std::nullopt,
-                              LocalVocab{}, std::move(filter)},
+                              LocalVocab{ad_utility::testing::makeAllocator()},
+                              std::move(filter)},
             getBlockMetadataRangesfromVec(blocks)};
       };
 
@@ -1436,7 +1439,8 @@ TEST(CompressedRelationReader, getDistinctCol0IdsWithDeltaTriples) {
                               ScanSpecification::GraphFilter::All()) {
     CompressedRelationReader::ScanSpecAndBlocks scanSpecAndBlocks{
         ScanSpecification{std::nullopt, std::nullopt, std::nullopt,
-                          LocalVocab{}, std::move(graphFilter)},
+                          LocalVocab{ad_utility::testing::makeAllocator()},
+                          std::move(graphFilter)},
         getBlockMetadataRangesfromVec(locatedTriples.getAugmentedMetadata())};
     return getDistinctCol0Ids(*reader, scanSpecAndBlocks, addGraphColumn,
                               std::nullopt, locatedTriples);

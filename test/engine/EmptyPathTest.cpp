@@ -438,7 +438,7 @@ TEST(EmptyPath, theResultOfTheExistenceCheckCanBeFullyMaterialized) {
   // Use a child with two tables and a local vocab, such that the materialized
   // result is the concatenation of several chunks and the local vocabs of
   // those chunks have to be merged.
-  LocalVocab localVocab;
+  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
   localVocab.getIndexAndAddIfNotContained(
       ad_utility::testing::iriLocalVocabEntry("<notInTheIndex>",
                                               qec->getLocalVocabContext()));
@@ -656,8 +656,8 @@ TEST(EmptyPath, fullyMaterializedChildrenAreSupported) {
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
   auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{getId("<a>")}, {getId("<p>")}}),
-      Vars{Variable{"?x"}}, false, std::vector<ColumnIndex>{}, LocalVocab{},
-      std::nullopt, true);
+      Vars{Variable{"?x"}}, false, std::vector<ColumnIndex>{},
+      LocalVocab{ad_utility::testing::makeAllocator()}, std::nullopt, true);
   EmptyPath emptyPath{qec, Variable{"?x"}, Graphs::All(), std::nullopt,
                       EmptyPath::CheckedChild{std::move(child), 0}};
 

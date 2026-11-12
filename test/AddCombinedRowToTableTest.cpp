@@ -269,7 +269,7 @@ TEST(AddCombinedRowToTable, flushDoesCheckCancellation) {
 namespace {
 struct IdTableWithVocab {
   IdTable idTable_;
-  LocalVocab localVocab_;
+  LocalVocab localVocab_{ad_utility::testing::makeAllocator()};
 
   const LocalVocab& getLocalVocab() const { return localVocab_; }
 
@@ -288,7 +288,7 @@ Literal fromString(std::string_view string) {
 // _____________________________________________________________________________
 LocalVocab createVocabWithSingleString(std::string_view string,
                                        const LocalVocabContext& context) {
-  LocalVocab localVocab;
+  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
   localVocab.getIndexAndAddIfNotContained(
       LocalVocabEntry{fromString(string), context});
   return localVocab;

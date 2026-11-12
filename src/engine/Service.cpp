@@ -317,7 +317,7 @@ Result::LazyResult Service::computeResultLazily(
   // into it; the words of the bindings stay in the per-block `localVocab`.
   auto get = [service = this, vars = std::move(vars), singleIdTable,
               inputRange = moveToCachingInputRange(std::move(body)),
-              localVocab = LocalVocab{},
+              localVocab = LocalVocab{allocator()},
               blankNodeAdder =
                   BlankNodeAdder{getIndex().getBlankNodeManager(),
                                  getExecutionContext()->getAllocator()},
@@ -348,7 +348,7 @@ Result::LazyResult Service::computeResultLazily(
         if (!singleIdTable) {
           Result::IdTableVocabPair pair = yieldPair();
           idTable.clear();
-          localVocab = LocalVocab{};
+          localVocab = LocalVocab{service->allocator()};
           rowIdx = 0;
           return LC::yieldValue(std::move(pair));
         }
@@ -496,7 +496,7 @@ Result Service::makeNeutralElementResultForSilentFail() const {
   for (size_t colIdx = 0; colIdx < getResultWidth(); ++colIdx) {
     idTable(0, colIdx) = Id::makeUndefined();
   }
-  return {std::move(idTable), resultSortedOn(), LocalVocab{}};
+  return {std::move(idTable), resultSortedOn(), LocalVocab{allocator()}};
 }
 
 // ____________________________________________________________________________
@@ -738,7 +738,8 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
   // The `siblingResult` has been fully materialized, so it can now be
   // used in both sibling and service.
   Result::IdTableVocabPair siblingPair(
-      IdTable{sibling->getResultWidth(), sibling->allocator()}, LocalVocab{});
+      IdTable{sibling->getResultWidth(), sibling->allocator()},
+      LocalVocab{sibling->allocator()});
   siblingPair.idTable_.reserve(rows);
 
   for (auto& pair : resultPairs) {

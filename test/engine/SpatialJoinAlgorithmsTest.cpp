@@ -1986,7 +1986,8 @@ std::map<std::string, double> computeLibspatialjoinDistances(
       buildIndexScan(qec, {"?s2", std::move(rightPredicate), "?obj2"}));
   auto result = spatialJoinTree->getResult();
   auto toString = [&](Id id) {
-    return ql::exportIds::idToStringAndType(qec->getIndex(), id, {})
+    return ql::exportIds::idToStringAndType(qec->getIndex(), id,
+                                            LocalVocab{qec->getAllocator()})
         .value()
         .first;
   };

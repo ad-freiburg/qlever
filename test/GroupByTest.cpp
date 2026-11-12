@@ -456,7 +456,8 @@ TEST_F(GroupByOptimizations, countStarOptimizationWorksAsExpected) {
         qec,
         makeIdTableFromVector({{Id::makeUndefined()}, {1}, {2}, {2}, {4}, {8}}),
         std::vector<std::optional<Variable>>{Variable{"?a"}}, false,
-        std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt, true);
+        std::vector<ColumnIndex>{},
+        LocalVocab{ad_utility::testing::makeAllocator()}, std::nullopt, true);
     GroupByImpl groupBy{
         qec,
         {},
@@ -2901,7 +2902,7 @@ TEST(GroupBy, localVocabIsProperlyCloned) {
   idTables.push_back(makeIdTableFromVector({{1}, {2}}, &Id::makeFromInt));
   idTables.push_back(makeIdTableFromVector({{2}}, &Id::makeFromInt));
   // This issue occurs only when the vocab contains any actual values.
-  LocalVocab dummy{};
+  LocalVocab dummy{ad_utility::testing::makeAllocator()};
   dummy.getIndexAndAddIfNotContained(localVocabEntryFromStringRepresentation(
       "\"dummy\"", qec->getLocalVocabContext()));
   auto subtree = makeExecutionTree<ValuesForTesting>(

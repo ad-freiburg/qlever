@@ -30,7 +30,7 @@ TEST(NamedResultCache, basicWorkflow) {
   VariableToColumnMap varColMap{{V{"?x"}, makeAlwaysDefinedColumn(0)},
                                 {V{"?y"}, makeAlwaysDefinedColumn(1)}};
 
-  LocalVocab localVocab;
+  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
   auto* qec = ad_utility::testing::getQec();
   localVocab.getIndexAndAddIfNotContained(
       iriLocalVocabEntry("<bliBlaBlubb>", qec->getLocalVocabContext()));
@@ -149,7 +149,7 @@ TEST(NamedResultCache, E2E) {
   auto result = qet->getResult(false);
 
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
-  LocalVocab dummyVocab;
+  LocalVocab dummyVocab{ad_utility::testing::makeAllocator()};
   auto notInVocab =
       Id::makeFromLocalVocabIndex(dummyVocab.getIndexAndAddIfNotContained(
           iriLocalVocabEntry("<notInVocab>", qec->getLocalVocabContext())));

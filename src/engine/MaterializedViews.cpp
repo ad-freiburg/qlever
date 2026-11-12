@@ -853,7 +853,7 @@ MaterializedView::makeEmptyLocatedTriplesState(
   emptyLocatedTriples.at(static_cast<size_t>(permutation_->permutation()))
       .setOriginalMetadata(permutation_->metaData().blockDataShared());
   LocatedTriplesPerBlockAllPermutations<true> emptyInternalLocatedTriples;
-  LocalVocab emptyVocab;
+  LocalVocab emptyVocab{allocator};
 
   return std::allocate_shared<LocatedTriplesState>(
       allocator,

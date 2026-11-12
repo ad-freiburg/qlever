@@ -1789,12 +1789,14 @@ TEST(ExportQueryExecutionTrees, CornerCases) {
   EXPECT_TRUE(resultNoColumns["results"]["bindings"][0].empty());
   auto qec = ad_utility::testing::getQec(kg);
   AD_EXPECT_THROW_WITH_MESSAGE(
-      ql::exportIds::idToStringAndType(qec->getIndex(), Id::max(),
-                                       LocalVocab{}),
+      ql::exportIds::idToStringAndType(
+          qec->getIndex(), Id::max(),
+          LocalVocab{ad_utility::testing::makeAllocator()}),
       ::testing::ContainsRegex("should be unreachable"));
   AD_EXPECT_THROW_WITH_MESSAGE(
-      ql::exportIds::getLiteralOrIriFromVocabIndex(qec->getIndex(), Id::max(),
-                                                   LocalVocab{}),
+      ql::exportIds::getLiteralOrIriFromVocabIndex(
+          qec->getIndex(), Id::max(),
+          LocalVocab{ad_utility::testing::makeAllocator()}),
       ::testing::ContainsRegex("should be unreachable"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       ql::exportIds::idToStringAndTypeForEncodedValue(
@@ -1891,7 +1893,8 @@ INSTANTIATE_TEST_SUITE_P(StreamableMediaTypes, StreamableMediaTypesFixture,
 TEST(ExportQueryExecutionTrees, getIdTablesReturnsSingletonIterator) {
   auto idTable = makeIdTableFromVector({{42}, {1337}});
 
-  Result result{idTable.clone(), noSortedColumns, LocalVocab{}};
+  Result result{idTable.clone(), noSortedColumns,
+                LocalVocab{ad_utility::testing::makeAllocator()}};
   auto generator = ExportQueryExecutionTrees::getIdTables(result);
 
   EXPECT_THAT(convertToVector(std::move(generator)), matchesIdTables(idTable));
@@ -1903,9 +1906,11 @@ TEST(ExportQueryExecutionTrees, getIdTablesMirrorsGenerator) {
   IdTable idTable2 = makeIdTableFromVector({{42}, {1337}});
   auto tableGenerator = [](IdTable idTableA,
                            IdTable idTableB) -> Result::Generator {
-    co_yield {std::move(idTableA), LocalVocab{}};
+    co_yield {std::move(idTableA),
+              LocalVocab{ad_utility::testing::makeAllocator()}};
 
-    co_yield {std::move(idTableB), LocalVocab{}};
+    co_yield {std::move(idTableB),
+              LocalVocab{ad_utility::testing::makeAllocator()}};
   }(idTable1.clone(), idTable2.clone());
 
   Result result{std::move(tableGenerator), noSortedColumns};
@@ -1918,8 +1923,9 @@ TEST(ExportQueryExecutionTrees, getIdTablesMirrorsGenerator) {
 // _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, ensureCorrectSlicingOfSingleIdTable) {
   auto tableGenerator = []() -> Result::Generator {
-    Result::IdTableVocabPair pair1{makeIdTableFromVector({{1}, {2}, {3}}),
-                                   LocalVocab{}};
+    Result::IdTableVocabPair pair1{
+        makeIdTableFromVector({{1}, {2}, {3}}),
+        LocalVocab{ad_utility::testing::makeAllocator()}};
     co_yield pair1;
   }();
 
@@ -1938,12 +1944,14 @@ TEST(ExportQueryExecutionTrees, ensureCorrectSlicingOfSingleIdTable) {
 TEST(ExportQueryExecutionTrees,
      ensureCorrectSlicingOfIdTablesWhenFirstIsSkipped) {
   auto tableGenerator = []() -> Result::Generator {
-    Result::IdTableVocabPair pair1{makeIdTableFromVector({{1}, {2}, {3}}),
-                                   LocalVocab{}};
+    Result::IdTableVocabPair pair1{
+        makeIdTableFromVector({{1}, {2}, {3}}),
+        LocalVocab{ad_utility::testing::makeAllocator()}};
     co_yield pair1;
 
-    Result::IdTableVocabPair pair2{makeIdTableFromVector({{4}, {5}}),
-                                   LocalVocab{}};
+    Result::IdTableVocabPair pair2{
+        makeIdTableFromVector({{4}, {5}}),
+        LocalVocab{ad_utility::testing::makeAllocator()}};
     co_yield pair2;
   }();
 
@@ -1964,12 +1972,14 @@ TEST(ExportQueryExecutionTrees,
 TEST(ExportQueryExecutionTrees,
      ensureCorrectSlicingOfIdTablesWhenLastIsSkipped) {
   auto tableGenerator = []() -> Result::Generator {
-    Result::IdTableVocabPair pair1{makeIdTableFromVector({{1}, {2}, {3}}),
-                                   LocalVocab{}};
+    Result::IdTableVocabPair pair1{
+        makeIdTableFromVector({{1}, {2}, {3}}),
+        LocalVocab{ad_utility::testing::makeAllocator()}};
     co_yield pair1;
 
-    Result::IdTableVocabPair pair2{makeIdTableFromVector({{4}, {5}}),
-                                   LocalVocab{}};
+    Result::IdTableVocabPair pair2{
+        makeIdTableFromVector({{4}, {5}}),
+        LocalVocab{ad_utility::testing::makeAllocator()}};
     co_yield pair2;
   }();
 
@@ -1989,12 +1999,14 @@ TEST(ExportQueryExecutionTrees,
 TEST(ExportQueryExecutionTrees,
      ensureCorrectSlicingOfIdTablesWhenFirstAndSecondArePartial) {
   auto tableGenerator = []() -> Result::Generator {
-    Result::IdTableVocabPair pair1{makeIdTableFromVector({{1}, {2}, {3}}),
-                                   LocalVocab{}};
+    Result::IdTableVocabPair pair1{
+        makeIdTableFromVector({{1}, {2}, {3}}),
+        LocalVocab{ad_utility::testing::makeAllocator()}};
     co_yield pair1;
 
-    Result::IdTableVocabPair pair2{makeIdTableFromVector({{4}, {5}}),
-                                   LocalVocab{}};
+    Result::IdTableVocabPair pair2{
+        makeIdTableFromVector({{4}, {5}}),
+        LocalVocab{ad_utility::testing::makeAllocator()}};
     co_yield pair2;
   }();
 
@@ -2015,16 +2027,19 @@ TEST(ExportQueryExecutionTrees,
 TEST(ExportQueryExecutionTrees,
      ensureCorrectSlicingOfIdTablesWhenFirstAndLastArePartial) {
   auto tableGenerator = []() -> Result::Generator {
-    Result::IdTableVocabPair pair1{makeIdTableFromVector({{1}, {2}, {3}}),
-                                   LocalVocab{}};
+    Result::IdTableVocabPair pair1{
+        makeIdTableFromVector({{1}, {2}, {3}}),
+        LocalVocab{ad_utility::testing::makeAllocator()}};
     co_yield pair1;
 
-    Result::IdTableVocabPair pair2{makeIdTableFromVector({{4}, {5}}),
-                                   LocalVocab{}};
+    Result::IdTableVocabPair pair2{
+        makeIdTableFromVector({{4}, {5}}),
+        LocalVocab{ad_utility::testing::makeAllocator()}};
     co_yield pair2;
 
-    Result::IdTableVocabPair pair3{makeIdTableFromVector({{6}, {7}, {8}, {9}}),
-                                   LocalVocab{}};
+    Result::IdTableVocabPair pair3{
+        makeIdTableFromVector({{6}, {7}, {8}, {9}}),
+        LocalVocab{ad_utility::testing::makeAllocator()}};
     co_yield pair3;
   }();
 
@@ -2061,8 +2076,9 @@ TEST(ExportQueryExecutionTrees, ensureGeneratorIsNotConsumedWhenNotRequired) {
 
   {
     auto throwAfterYieldGenerator = []() -> Result::Generator {
-      Result::IdTableVocabPair pair1{makeIdTableFromVector({{1}}),
-                                     LocalVocab{}};
+      Result::IdTableVocabPair pair1{
+          makeIdTableFromVector({{1}}),
+          LocalVocab{ad_utility::testing::makeAllocator()}};
       co_yield pair1;
 
       std::string message =

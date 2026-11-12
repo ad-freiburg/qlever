@@ -15,6 +15,7 @@
 #include <string_view>
 #include <variant>
 
+#include "./AllocatorTestHelpers.h"
 #include "global/Id.h"
 #include "index/LocalVocab.h"
 #include "index/LocalVocabContext.h"
@@ -73,8 +74,8 @@ inline LocalVocabEntry localVocabEntryFromStringRepresentation(
 // contained in the vocabulary of the index (unlike for
 // `getIdAndAddIfNotContained`).
 inline auto makeGetLocalVocabId() {
-  return [localVocab =
-              std::make_shared<LocalVocab>()](const LocalVocabEntry& entry) {
+  return [localVocab = std::make_shared<LocalVocab>(makeAllocator())](
+             const LocalVocabEntry& entry) {
     return Id::makeFromLocalVocabIndex(
         localVocab->getIndexAndAddIfNotContained(entry));
   };

@@ -143,7 +143,8 @@ TEST(Distinct, nonLazy) {
       qec, std::move(input),
       std::vector<std::optional<Variable>>{
           {V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}}},
-      false, colIndices({1, 2}), LocalVocab{}, std::nullopt, true);
+      false, colIndices({1, 2}),
+      LocalVocab{ad_utility::testing::makeAllocator()}, std::nullopt, true);
 
   Distinct distinct{qec, std::move(values), colIndices({1, 2})};
 

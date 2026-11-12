@@ -846,7 +846,7 @@ TEST_F(ServiceTest, blankNodesAcrossResponseChunks) {
 // ____________________________________________________________________________
 TEST_F(ServiceTest, idToValueForValuesClause) {
   auto idToVc = Service::idToValueForValuesClause;
-  LocalVocab localVocab{};
+  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
   auto index = ad_utility::testing::makeIndexWithTestSettings();
 
   // blanknode -> nullopt
@@ -973,7 +973,9 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
                             ad_utility::makeUnlimitedAllocator<IdTable>()};
                 for (size_t i = 0; i < clone.size(); ++i) {
                   idt.push_back(clone[i]);
-                  Result::IdTableVocabPair pair{std::move(idt), LocalVocab{}};
+                  Result::IdTableVocabPair pair{
+                      std::move(idt),
+                      LocalVocab{ad_utility::testing::makeAllocator()}};
                   co_yield pair;
                   idt.clear();
                 }

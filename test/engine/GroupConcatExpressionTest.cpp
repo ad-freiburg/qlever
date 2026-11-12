@@ -24,7 +24,7 @@ void expectIdsAreConcatenatedTo(
   auto g = generateLocationTrace(location);
 
   Variable var{"?x"};
-  LocalVocab localVocab;
+  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
   ad_utility::SharedCancellationHandle cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
   VariableToColumnMap map{
@@ -50,7 +50,7 @@ void expectLiteralsAreConcatenatedTo(
     const std::vector<tc::Literal>& literals,
     const ad_utility::triple_component::Literal& literal,
     ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) {
-  LocalVocab localVocab;
+  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
   IdTable input{1, ad_utility::makeUnlimitedAllocator<Id>()};
 
   for (const auto& inputLiteral : literals) {
@@ -98,7 +98,7 @@ TEST(GroupConcatExpression, basicConcatenation) {
 // _____________________________________________________________________________
 TEST(GroupConcatExpression, concatenationWithUndefined) {
   auto* qec = ad_utility::testing::getQec();
-  LocalVocab localVocab;
+  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
   expectIdsAreConcatenatedTo(qec, false,
                              makeIdTableFromVector({{Id::makeUndefined()}}),
                              ExpressionResult{Id::makeUndefined()});

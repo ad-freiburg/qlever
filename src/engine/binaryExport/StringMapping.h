@@ -47,7 +47,7 @@ class StringMapping {
   size_t numBytes_ = 0;
 
  public:
-  explicit StringMapping(const Index& index) : index_{&index} {}
+  explicit StringMapping(const Index& index);
 
   // Return the strings of the current batch (ordered by their index) and start
   // a new batch. The indices of the new batch again start at 0, so an index

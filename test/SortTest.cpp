@@ -421,7 +421,7 @@ TEST(Sort, externalSortMaterializedInput) {
                                                Variable{"?2"}};
   auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, std::move(inputTable), vars, false, std::vector<ColumnIndex>{},
-      LocalVocab{}, std::nullopt, true);
+      LocalVocab{ad_utility::testing::makeAllocator()}, std::nullopt, true);
 
   // Create the `Sort` operation and get the result.
   Sort externalSort{qec, subtree, colIndices({0, 1, 2})};
@@ -517,7 +517,7 @@ TEST(Sort, inMemorySortMaterializedInput) {
                                                Variable{"?2"}};
   auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, std::move(inputTable), vars, false, std::vector<ColumnIndex>{},
-      LocalVocab{}, std::nullopt, true);
+      LocalVocab{ad_utility::testing::makeAllocator()}, std::nullopt, true);
 
   // Create the `Sort` operation and get the result.
   Sort inMemorySort{qec, subtree, colIndices({0, 1, 2})};

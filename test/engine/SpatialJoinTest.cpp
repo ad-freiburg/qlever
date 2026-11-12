@@ -404,20 +404,23 @@ class SpatialJoinVarColParamTest
 
         if (tableEntry.getDatatype() == Datatype::VocabIndex) {
           std::string value =
-              ql::exportIds::idToStringAndType(qec->getIndex(), tableEntry, {})
+              ql::exportIds::idToStringAndType(qec->getIndex(), tableEntry,
+                                               LocalVocab{qec->getAllocator()})
                   .value()
                   .first;
           ASSERT_TRUE(value.find(expectedColumns.at(i).second, 0) !=
                       std::string::npos);
         } else if (tableEntry.getDatatype() == Datatype::Int) {
           std::string value =
-              ql::exportIds::idToStringAndType(qec->getIndex(), tableEntry, {})
+              ql::exportIds::idToStringAndType(qec->getIndex(), tableEntry,
+                                               LocalVocab{qec->getAllocator()})
                   .value()
                   .first;
           ASSERT_EQ(value, expectedColumns.at(i).second);
         } else if (tableEntry.getDatatype() == Datatype::GeoPoint) {
           auto [value, type] =
-              ql::exportIds::idToStringAndType(qec->getIndex(), tableEntry, {})
+              ql::exportIds::idToStringAndType(qec->getIndex(), tableEntry,
+                                               LocalVocab{qec->getAllocator()})
                   .value();
           value = absl::StrCat("\"", value, "\"^^<", type, ">");
           ASSERT_TRUE(value.find(expectedColumns.at(i).second, 0) !=
@@ -478,7 +481,8 @@ class SpatialJoinVarColParamTest
         columnEntries.reserve(r->numRows());
         for (const auto& valueId : col) {
           auto [value, type] =
-              ql::exportIds::idToStringAndType(qec->getIndex(), valueId, {})
+              ql::exportIds::idToStringAndType(qec->getIndex(), valueId,
+                                               LocalVocab{qec->getAllocator()})
                   .value();
           if (valueId.getDatatype() == Datatype::GeoPoint) {
             value = absl::StrCat("\"", value, "\"^^<", type, ">");
@@ -1382,7 +1386,7 @@ TEST(SpatialJoin, InvalidGeometriesAreExcludedFromNonEmptyCheck) {
   auto* qec = ad_utility::testing::getQec();
 
   // Build the valid and invalid literals.
-  LocalVocab localVocab;
+  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
   auto wktId = [&](std::string_view wkt) {
     return wktLiteralId(qec, localVocab, wkt);
   };
@@ -1440,7 +1444,7 @@ TEST(SpatialJoin, InvalidGeometriesAreExcludedFromNonEmptyCheck) {
 // algorithm parses first).
 TEST(SpatialJoin, InvalidGeometriesWarningListsLeftSideFirst) {
   auto* qec = ad_utility::testing::getQec();
-  LocalVocab localVocab;
+  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
   auto wktId = [&](std::string_view wkt) {
     return wktLiteralId(qec, localVocab, wkt);
   };
@@ -1497,7 +1501,7 @@ TEST(SpatialJoin, InvalidGeometriesWarningListsLeftSideFirst) {
 // not a valid geometry, each with the number of skipped rows per side.
 TEST(SpatialJoin, SkippedRowsWarning) {
   auto* qec = ad_utility::testing::getQec();
-  LocalVocab localVocab;
+  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
   auto wktId = [&](std::string_view wkt) {
     return wktLiteralId(qec, localVocab, wkt);
   };

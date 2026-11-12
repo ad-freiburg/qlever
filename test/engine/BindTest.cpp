@@ -44,7 +44,8 @@ Bind makeBindForExpression(QueryExecutionContext* qec,
   // This is a dummy value. It is not accessed by any of the tests.
   auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, IdTable{1, qec->getAllocator()}, Vars{Variable{"?a"}}, false,
-      std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt, true);
+      std::vector<ColumnIndex>{},
+      LocalVocab{ad_utility::testing::makeAllocator()}, std::nullopt, true);
   return {qec,
           std::move(valuesTree),
           {SparqlExpressionPimpl{std::move(expression),
@@ -56,7 +57,7 @@ Bind makeBindForExpression(QueryExecutionContext* qec,
 // `strings` as literals.
 std::shared_ptr<QueryExecutionTree> makeIriBind(
     QueryExecutionContext* qec, const std::vector<std::string>& strings) {
-  LocalVocab localVocab;
+  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
   VectorTable rows;
   for (const auto& s : strings) {
     rows.push_back(
@@ -160,7 +161,8 @@ TEST(
   ql::ranges::fill(table, row);
   auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, table.clone(), Vars{Variable{"?a"}}, false,
-      std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt, true);
+      std::vector<ColumnIndex>{},
+      LocalVocab{ad_utility::testing::makeAllocator()}, std::nullopt, true);
   Bind bind{
       qec,
       std::move(valuesTree),
@@ -199,7 +201,8 @@ TEST(Bind, clone) {
   auto* qec = ad_utility::testing::getQec();
   auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, IdTable{1, qec->getAllocator()}, Vars{Variable{"?a"}}, false,
-      std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt, true);
+      std::vector<ColumnIndex>{},
+      LocalVocab{ad_utility::testing::makeAllocator()}, std::nullopt, true);
   Bind bind{
       qec,
       std::move(valuesTree),
@@ -218,8 +221,8 @@ TEST(Bind, limitIsPropagated) {
   auto* qec = ad_utility::testing::getQec();
   auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{0}, {1}, {2}}, &Id::makeFromInt),
-      Vars{Variable{"?a"}}, false, std::vector<ColumnIndex>{}, LocalVocab{},
-      std::nullopt, true);
+      Vars{Variable{"?a"}}, false, std::vector<ColumnIndex>{},
+      LocalVocab{ad_utility::testing::makeAllocator()}, std::nullopt, true);
   Bind bind{
       qec,
       valuesTree,
