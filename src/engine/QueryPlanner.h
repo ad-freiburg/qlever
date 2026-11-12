@@ -773,6 +773,19 @@ class QueryPlanner {
     std::vector<sparqlExpression::SparqlExpressionPimpl>
     extractOptionalJoinCondition(ParsedQuery::GraphPattern& group) const;
 
+    // Apply the parts of the `condition` of an OPTIONAL that only depend on its
+    // group as FILTERs to the `candidates` (the plans for the group) and remove
+    // them from the `condition`. These are the parts for which each variable
+    // of the preceding patterns is never UNDEF in the result of the group. Such
+    // a variable has the same value in the group and in the joined row.
+    // `extractOptionalJoinCondition` already decides this for the triples of
+    // the group, which lets the planner apply the FILTER before the joins of
+    // the group. Here the remaining cases (nested groups, UNION, VALUES,
+    // subqueries) are decided on the finished plans.
+    void applyConditionToOptionalGroup(
+        std::vector<sparqlExpression::SparqlExpressionPimpl>& condition,
+        SubtreePlanVec& candidates) const;
+
     // Helper function for `visitGroupOptionalOrMinus`. SPARQL queries like
     // `SELECT * { OPTIONAL { ?a ?b ?c }}`, `SELECT * { MINUS { ?a ?b ?c }}` or
     // `SELECT * { ?x ?y ?z . OPTIONAL { ?a ?b ?c }}` need special handling.

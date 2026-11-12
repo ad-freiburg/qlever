@@ -773,6 +773,75 @@ TEST(OptionalJoinWithCondition, queryFilterUsesJoinVariableBoundInGroup) {
 }
 
 // _____________________________________________________________________________
+TEST(OptionalJoinWithCondition, queryFilterUsesVariableAlwaysDefinedInGroup) {
+  using ::testing::HasSubstr;
+  using ::testing::Not;
+  // `?a` is not bound by a triple directly in the OPTIONAL group, but it is
+  // never UNDEF in the result of the group. The FILTER is applied to the group
+  // and there is no condition.
+  auto query = [](std::string_view group) {
+    return absl::StrCat("SELECT ?a ?w { ?a <height> ?h OPTIONAL { ", group,
+                        " } } ORDER BY ?a ?w");
+  };
+  // A nested group.
+  auto q = query("{ ?a <weight> ?w } FILTER(?a != <a1>)");
+  EXPECT_THAT(runQuery(q), ElementsAre("<a1>\t", "<a2>\t60", "<a3>\t",
+                                       "<a4>\t50", "<a4>\t55"));
+  EXPECT_THAT(getCacheKey(q), Not(HasSubstr("condition: [")));
+
+  // A UNION that binds `?a` on both sides.
+  q = query("{ ?a <weight> ?w } UNION { ?a <age> ?w } FILTER(?a != <a1>)");
+  EXPECT_THAT(runQuery(q),
+              ElementsAre("<a1>\t", "<a2>\t25", "<a2>\t60", "<a3>\t",
+                          "<a4>\t10", "<a4>\t50", "<a4>\t55"));
+  EXPECT_THAT(getCacheKey(q), Not(HasSubstr("condition: [")));
+
+  // A UNION that binds `?a` on one side only. The rows of the other side take
+  // `?a` from the left, so the FILTER has to be a condition. Inside the group
+  // it would remove these rows.
+  q = query("{ ?a <weight> ?w } UNION { ?x <age> ?w } FILTER(?a != <a1>)");
+  EXPECT_THAT(
+      runQuery(q),
+      ElementsAre("<a1>\t", "<a2>\t10", "<a2>\t25", "<a2>\t30", "<a2>\t60",
+                  "<a3>\t10", "<a3>\t25", "<a3>\t30", "<a4>\t10", "<a4>\t25",
+                  "<a4>\t30", "<a4>\t50", "<a4>\t55"));
+  EXPECT_THAT(getCacheKey(q), HasSubstr("condition: ["));
+
+  // VALUES without and with UNDEF.
+  q = query("VALUES (?a ?w) { (<a1> 1) (<a2> 2) } FILTER(?a != <a1>)");
+  EXPECT_THAT(runQuery(q),
+              ElementsAre("<a1>\t", "<a2>\t2", "<a3>\t", "<a4>\t"));
+  EXPECT_THAT(getCacheKey(q), Not(HasSubstr("condition: [")));
+  q = query("VALUES (?a ?w) { (<a1> 1) (UNDEF 2) } FILTER(?a != <a1>)");
+  EXPECT_THAT(runQuery(q),
+              ElementsAre("<a1>\t", "<a2>\t2", "<a3>\t2", "<a4>\t2"));
+  EXPECT_THAT(getCacheKey(q), HasSubstr("condition: ["));
+
+  // A subquery.
+  q = query(
+      "{ SELECT ?a (MAX(?x) AS ?w) { ?a <weight> ?x } GROUP BY ?a } "
+      "FILTER(?a != <a1>)");
+  EXPECT_THAT(runQuery(q),
+              ElementsAre("<a1>\t", "<a2>\t60", "<a3>\t", "<a4>\t55"));
+  EXPECT_THAT(getCacheKey(q), Not(HasSubstr("condition: [")));
+
+  // Only the conjunct with `?h` is a condition.
+  q = query("{ ?a <weight> ?w } FILTER(?a != <a2> && ?w > ?h - 100)");
+  EXPECT_THAT(runQuery(q),
+              ElementsAre("<a1>\t90", "<a2>\t", "<a3>\t", "<a4>\t"));
+  EXPECT_THAT(getCacheKey(q), HasSubstr("condition: ["));
+
+  // A non-deterministic expression is evaluated for each joined row, also if
+  // `?a` is bound by a triple directly in the group.
+  for (std::string_view group : {"{ ?a <weight> ?w }", "?a <weight> ?w"}) {
+    q = query(absl::StrCat(group, " FILTER(?a != <a1> || RAND() > 2)"));
+    EXPECT_THAT(runQuery(q), ElementsAre("<a1>\t", "<a2>\t60", "<a3>\t",
+                                         "<a4>\t50", "<a4>\t55"));
+    EXPECT_THAT(getCacheKey(q), HasSubstr("condition: ["));
+  }
+}
+
+// _____________________________________________________________________________
 TEST(OptionalJoinWithCondition, queryNestedGroupsAndOptionals) {
   // A FILTER in a nested group (not the outermost level of the OPTIONAL) only
   // sees the variables of this group, `?h` is unbound there, so the FILTER is

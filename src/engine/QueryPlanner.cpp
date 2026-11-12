@@ -3098,20 +3098,42 @@ QueryPlanner::GraphPatternPlanner::getVariablesOfPreviousPatterns() const {
   return variables;
 }
 
+namespace {
+// Return true iff the conjunct `expression` of a FILTER in an OPTIONAL group
+// is part of the condition of the left join, see
+// `extractOptionalJoinCondition` for the arguments.
+bool isPartOfOptionalJoinCondition(
+    const sparqlExpression::SparqlExpressionPimpl& expression,
+    const ad_utility::HashSet<Variable>& previousVariables,
+    const ad_utility::HashSet<Variable>& alwaysBoundInGroup) {
+  // TODO<ninofrey> An `EXISTS` is computed by an `ExistsJoin` below the FILTER
+  // and can't be evaluated for each joined row yet. It stays in the group,
+  // which is wrong if it uses a variable only bound on the left.
+  if (!expression.getExistsExpressions().empty()) {
+    return false;
+  }
+  // A non-deterministic expression (e.g. `RAND()`) has to be evaluated for
+  // each joined row, so for it every variable from the left counts.
+  bool isDeterministic = expression.isDeterministic();
+  return ql::ranges::any_of(
+      expression.containedVariables(), [&](const Variable* var) {
+        return previousVariables.contains(*var) &&
+               !(isDeterministic && alwaysBoundInGroup.contains(*var));
+      });
+}
+}  // namespace
+
 // _____________________________________________________________________________
 std::vector<sparqlExpression::SparqlExpressionPimpl>
 QueryPlanner::GraphPatternPlanner::extractOptionalJoinCondition(
     ParsedQuery::GraphPattern& group) const {
   std::vector<sparqlExpression::SparqlExpressionPimpl> condition;
-  // The variables that are bound on the left side of the left join. If there
-  // are none (e.g. the OPTIONAL is the first pattern of its group), every
-  // FILTER only depends on the group itself.
+  // Without variables on the left side (e.g. the OPTIONAL is the first pattern
+  // of its group), every FILTER only depends on the group itself.
   auto previousVariables = getVariablesOfPreviousPatterns();
   if (previousVariables.empty()) {
     return condition;
   }
-  // Variables of triples directly in the group are never UNDEF there, so they
-  // have the same value in the group as in the joined row.
   ad_utility::HashSet<Variable> alwaysBoundInGroup;
   for (const auto& operation : group._graphPatterns) {
     if (const auto* triples =
@@ -3119,42 +3141,66 @@ QueryPlanner::GraphPatternPlanner::extractOptionalJoinCondition(
       triples->collectAllContainedVariables(alwaysBoundInGroup);
     }
   }
-  // Split the FILTERs into the condition and the ones that stay in the group,
-  // keeping their order. A FILTER `a && b` is equivalent to the two FILTERs
-  // `a` and `b`, so this is decided for each conjunct separately.
+  auto isPartOfCondition = [&](const auto& conjunct) {
+    return isPartOfOptionalJoinCondition(conjunct, previousVariables,
+                                         alwaysBoundInGroup);
+  };
   std::vector<SparqlFilter> remainingFilters;
   for (auto& filter : group._filters) {
-    std::vector<SparqlFilter> remainingConjuncts;
-    bool isPartOfCondition = false;
-    for (auto& expression : filter.expression_.splitConjunction()) {
-      // TODO: An `EXISTS` is computed by an `ExistsJoin` below the FILTER and
-      // can't be evaluated for each joined row yet. It stays in the group,
-      // which is wrong if it uses a variable only bound on the left.
-      bool hasExists = !expression.getExistsExpressions().empty();
-      // Otherwise the conjunct can be applied early in the group.
-      bool needsLeftSide = ql::ranges::any_of(
-          expression.containedVariables(),
-          [&previousVariables, &alwaysBoundInGroup](const Variable* var) {
-            return previousVariables.contains(*var) &&
-                   !alwaysBoundInGroup.contains(*var);
-          });
-      if (!hasExists && needsLeftSide) {
-        condition.push_back(std::move(expression));
-        isPartOfCondition = true;
+    decltype(condition) conditionConjuncts;
+    decltype(condition) remainingConjuncts;
+    for (auto& conjunct : filter.expression_.splitConjunction()) {
+      if (isPartOfCondition(conjunct)) {
+        conditionConjuncts.push_back(std::move(conjunct));
       } else {
-        remainingConjuncts.push_back(SparqlFilter{std::move(expression)});
+        remainingConjuncts.push_back(std::move(conjunct));
       }
     }
-    // A FILTER that stays in the group completely is not split.
-    if (isPartOfCondition) {
-      ql::ranges::move(remainingConjuncts,
-                       std::back_inserter(remainingFilters));
-    } else {
+    // If no conjunct is part of the condition, keep the FILTER unchanged.
+    if (conditionConjuncts.empty()) {
       remainingFilters.push_back(std::move(filter));
+      continue;
+    }
+    ad_utility::appendVector(condition, std::move(conditionConjuncts));
+    for (auto& conjunct : remainingConjuncts) {
+      remainingFilters.push_back(SparqlFilter{std::move(conjunct)});
     }
   }
   group._filters = std::move(remainingFilters);
   return condition;
+}
+
+// _____________________________________________________________________________
+void QueryPlanner::GraphPatternPlanner::applyConditionToOptionalGroup(
+    std::vector<sparqlExpression::SparqlExpressionPimpl>& condition,
+    SubtreePlanVec& candidates) const {
+  if (condition.empty()) {
+    return;
+  }
+  auto previousVariables = getVariablesOfPreviousPatterns();
+  // A variable has the same value in the group and in the joined row if the
+  // previous patterns don't bind it or if the group always binds it. All
+  // candidates get the same condition, so this has to hold for each of them.
+  auto hasSameValueAfterJoin = [&](const Variable* var) {
+    return !previousVariables.contains(*var) ||
+           ql::ranges::all_of(candidates, [var](const SubtreePlan& plan) {
+             return plan._qet->getRootOperation()->isVariableAlwaysDefined(
+                 *var);
+           });
+  };
+  std::vector<sparqlExpression::SparqlExpressionPimpl> remainingCondition;
+  for (auto& expression : condition) {
+    if (!expression.isDeterministic() ||
+        !ql::ranges::all_of(expression.containedVariables(),
+                            hasSameValueAfterJoin)) {
+      remainingCondition.push_back(std::move(expression));
+      continue;
+    }
+    for (auto& plan : candidates) {
+      plan._qet = makeExecutionTree<Filter>(qec_, plan._qet, expression);
+    }
+  }
+  condition = std::move(remainingCondition);
 }
 
 // _____________________________________________________________________________
@@ -3333,6 +3379,7 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
   if constexpr (std::is_same_v<T, p::Optional>) {
     auto condition = extractOptionalJoinCondition(arg._child);
     auto candidates = planner_.optimize(&arg._child);
+    applyConditionToOptionalGroup(condition, candidates);
     for (auto& c : candidates) {
       c.type = SubtreePlan::OPTIONAL;
       c.optionalJoinCondition_ = condition;
