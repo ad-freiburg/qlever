@@ -24,6 +24,7 @@
 #endif
 #include "./util/FileTestHelpers.h"
 #include "./util/HttpRequestHelpers.h"
+#include "./util/OperationTestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "engine/GroupByImpl.h"
@@ -2573,8 +2574,7 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
         bindUnion->getRootOperation()->makeTreeWithBindColumn(bind));
     expectPush(unionOf(view(), sharesS()), std::nullopt);
     expectPush(unionOf(sharesSAndO(), view()), std::nullopt);
-    expectPush(makeExecutionTree<Union>(qec, view(), view(),
-                                        std::vector<ColumnIndex>{0}),
+    expectPush(makeExecutionTree<Union>(qec, view(), view(), colIndices({0})),
                std::nullopt);
 
     // `NeutralOptional` refuses: for an empty child it fabricates an

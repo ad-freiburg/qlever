@@ -25,6 +25,7 @@
 #include "index/LocalVocabEntry.h"
 #include "libqlever/CanonicalRowOrder.h"
 #include "util/CompactStringVector.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
 
@@ -191,7 +192,7 @@ CanonicalizedValue canonicalizeWithPermutation(
   }
   // The rows are still sorted by the prefix of `resultSortedOn` that consists
   // only of columns that were not dropped.
-  std::vector<ColumnIndex> resultSortedOn;
+  qlm::vector<ColumnIndex> resultSortedOn{allocator};
   for (ColumnIndex column : value.resultSortedOn_) {
     if (newColumnOfOldColumn[column] == droppedColumn) {
       break;
