@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "backports/span.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/NoCopyNoMove.h"
 #include "util/Serializer/Serializer.h"
 #include "util/TypeTraits.h"
@@ -20,6 +21,7 @@
 namespace ad_utility::serialization {
 AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
     (ad_utility::similarToInstantiation<T, std::vector> ||
+     ad_utility::similarToInstantiation<T, qlm::vector> ||
      ad_utility::similarToInstantiation<T, std::basic_string>)) {
   using V = typename std::decay_t<T>::value_type;
   auto size = arg.size();  // The value is ignored for `ReadSerializer`s.
