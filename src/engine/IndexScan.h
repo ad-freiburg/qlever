@@ -55,8 +55,9 @@ class IndexScan final : public Operation {
   //
   // NOTE: These columns come after the additional columns. A column that is not
   // needed is removed instead of stripped (see `makeTreeWithStrippedColumns`).
-  // The `Id` is never a `LocalVocabIndex` (which the result would have to keep
-  // alive).
+  // The `Id` is never undefined, a `LocalVocabIndex`, or a `BlankNodeIndex`
+  // (the latter two might have to be kept alive by a `LocalVocab`, which the
+  // result doesn't have).
   ConstantColumns constantColumns_;
 
   // If set, then only the specified variables will be part of the result.

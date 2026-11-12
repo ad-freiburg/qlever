@@ -35,6 +35,15 @@ static size_t getNumberOfVariables(const TripleComponent& subject,
          static_cast<size_t>(object.isVariable());
 }
 
+// Return true iff `id` can be the `Id` of a constant column (see
+// `IndexScan::constantColumns_`).
+static bool isValidConstantColumnId(Id id) {
+  return !ad_utility::contains(
+      std::array{Datatype::Undefined, Datatype::LocalVocabIndex,
+                 Datatype::BlankNodeIndex},
+      id.getDatatype());
+}
+
 // _____________________________________________________________________________
 IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
                      LocatedTriplesSharedState locatedTriplesSharedState,
@@ -118,6 +127,8 @@ IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
   AD_CONTRACT_CHECK(qec != nullptr);
   AD_CONTRACT_CHECK(permutation_ != nullptr);
   AD_CONTRACT_CHECK(locatedTriplesSharedState_ != nullptr);
+  AD_CONTRACT_CHECK(ql::ranges::all_of(constantColumns_ | ql::views::keys,
+                                       &isValidConstantColumnId));
   // NOTE: The multiplicities are determined lazily (see `getMultiplicity`),
   // because they may depend on the size estimate, which some callers only set
   // after construction (see `makeCopyWithPrefilteredScanSpecAndBlocks`).
@@ -1207,7 +1218,9 @@ IndexScan::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   //
   // NOTE: `QueryExecutionTree::makeTreeWithBindColumn` only refuses targets
   // that are hidden. A stripped variable is not contained in this `IndexScan`
-  // at all, but adding it to `varsToKeep_` would bring its column back.
+  // at all, but adding it to `varsToKeep_` would bring its column back (e.g.
+  // `?o` in `{ SELECT ?s { ?s <p> ?o } } BIND(<p> AS ?o)` when the column of
+  // `?o` is stripped).
   auto isTarget = [&bind](const auto& var) { return var == bind._target; };
   if (ql::ranges::any_of(getPermutedTriple(),
                          [&isTarget](const TripleComponent* component) {
@@ -1328,12 +1341,11 @@ IndexScan::makeTreeWithConstantBindColumn(const parsedQuery::Bind& bind) const {
 
   // Return `std::nullopt` if no fixed component of the scan triple has the
   // `Id` of the constant (the components that are not fixed are
-  // `std::nullopt`). A constant that is not in the vocabulary is not supported
-  // (its `Id` would have to be kept alive by a `LocalVocab`).
+  // `std::nullopt`). A constant that is not in the vocabulary or a blank node
+  // is not supported (its `Id` might have to be kept alive by a `LocalVocab`).
   auto constantId = toValueId(constant.value(), getIndex());
   const auto& scanSpec = scanSpecAndBlocks_.scanSpec_;
-  if (!constantId.has_value() ||
-      constantId.value().getDatatype() == Datatype::LocalVocabIndex ||
+  if (!constantId.has_value() || !isValidConstantColumnId(constantId.value()) ||
       !ad_utility::contains(
           std::array{scanSpec.col0Id(), scanSpec.col1Id(), scanSpec.col2Id()},
           constantId)) {
