@@ -350,7 +350,7 @@ class QueryPlanner {
    */
   struct PlansAndFilters {
     SubtreePlanVec plans_;
-    std::vector<SparqlFilter> filters_;
+    qlm::vector<SparqlFilter> filters_;
   };
 
   PlansAndFilters seedWithScansAndText(const TripleGraph& tg,
@@ -361,14 +361,14 @@ class QueryPlanner {
   // filters with the corresponding substitute subtree plan. This is currently
   // used to translate GeoSPARQL filters to spatial join operations.
   virtual FiltersAndOptionalSubstitutes seedFilterSubstitutes(
-      const std::vector<SparqlFilter>& filters);
+      ql::span<const SparqlFilter> filters);
 
   // Wrap `filters` as `FiltersAndOptionalSubstitutes` without computing any
   // substitutes. This is sufficient for the filter modes that never apply
   // substitutes and avoids constructing throwaway substitute plans (which
   // would also consume internal variable names).
   FiltersAndOptionalSubstitutes wrapFiltersWithoutSubstitutes(
-      const std::vector<SparqlFilter>& filters) const;
+      ql::span<const SparqlFilter> filters) const;
 
   // TODO<RobinTF> Extract to dedicated module, this has little to do with
   // actual query planning.
@@ -404,7 +404,7 @@ class QueryPlanner {
   ParsedQuery::GraphPattern seedFromNegated(
       const TripleComponent& left, const std::vector<PropertyPath>& paths,
       const TripleComponent& right);
-  static ParsedQuery::GraphPattern seedFromVarOrIri(
+  ParsedQuery::GraphPattern seedFromVarOrIri(
       const TripleComponent& left,
       const ad_utility::sparql_types::VarOrIri& varOrIri,
       const TripleComponent& right);
@@ -412,7 +412,7 @@ class QueryPlanner {
   Variable generateUniqueVarName();
 
   // Creates a tree of unions with the given patterns as the trees leaves
-  static ParsedQuery::GraphPattern uniteGraphPatterns(
+  ParsedQuery::GraphPattern uniteGraphPatterns(
       std::vector<ParsedQuery::GraphPattern>&& patterns);
 
   /**
@@ -634,7 +634,7 @@ class QueryPlanner {
    * it as a filter later on).
    */
   SubtreePlanMatrix fillDpTab(const TripleGraph& graph,
-                              std::vector<SparqlFilter> fs,
+                              qlm::vector<SparqlFilter> fs,
                               TextLimitMap& textLimits,
                               const SubtreePlanMatrix& children,
                               ReplacementPlans replacementPlans);
@@ -664,8 +664,7 @@ class QueryPlanner {
   // Note: We also need the added filters, because they behave like additional
   // graph nodes wrt the performance of the DP based query planner.
   size_t countSubgraphs(std::vector<const SubtreePlan*> graph,
-                        const std::vector<SparqlFilter>& filters,
-                        size_t budget);
+                        ql::span<const SparqlFilter> filters, size_t budget);
 
   // Creates a SubtreePlan for the given text leaf node in the triple graph.
   // While doing this the TextLimitMetaObjects are created and updated according
@@ -702,7 +701,7 @@ class QueryPlanner {
 
     // Triples from BasicGraphPatterns that can be joined arbitrarily
     // with each other and with the contents of  `candidatePlans_`
-    parsedQuery::BasicGraphPattern candidateTriples_{};
+    parsedQuery::BasicGraphPattern candidateTriples_;
 
     // The variables that have been used by the children of the `rootPattern_`
     // which we have dealt with so far. They must not be the target of a later
@@ -726,6 +725,7 @@ class QueryPlanner {
           rootPattern_{rootPattern},
           qec_{planner._qec},
           candidatePlans_{allocator()},
+          candidateTriples_{qlm::vector<SparqlTriple>{allocator()}},
           filtersAndSubst_{
               planner.wrapFiltersWithoutSubstitutes(rootPattern->_filters)} {}
 

@@ -6,10 +6,12 @@
 
 #include <gmock/gmock.h>
 
+#include "../util/AllocatorTestHelpers.h"
 #include "parser/GraphPatternAnalysis.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/SparqlTriple.h"
 #include "parser/VariableCounter.h"
+#include "util/ContainersWithAllocator.h"
 
 using namespace graphPatternAnalysis;
 using parsedQuery::VariableCounter;
@@ -92,9 +94,11 @@ TEST(BasicGraphPatternsInvariantToTest, NotInvariant) {
 
   SparqlTripleSimple example{Variable{"?s"}, Variable{"?p"}, Variable{"?o"}};
   auto triple = SparqlTriple::fromSimple(example);
-  parsedQuery::BasicGraphPattern bgp{{triple}};
+  auto allocator = ad_utility::testing::makeAllocator();
+  parsedQuery::BasicGraphPattern bgp{
+      qlm::vector<SparqlTriple>{{triple}, allocator}};
   EXPECT_FALSE(invariantTo(bgp));
 
-  parsedQuery::Optional optional{parsedQuery::GraphPattern{}};
+  parsedQuery::Optional optional{parsedQuery::GraphPattern{allocator}};
   EXPECT_FALSE(invariantTo(optional));
 }

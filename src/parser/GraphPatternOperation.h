@@ -25,6 +25,7 @@
 #include "parser/TextSearchQuery.h"
 #include "parser/TripleComponent.h"
 #include "rdfTypes/Variable.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/TransparentFunctors.h"
 #include "util/VisitMixin.h"
 
@@ -79,7 +80,7 @@ struct Load {
 
 /// A `BasicGraphPattern` represents a consecutive block of triples.
 struct BasicGraphPattern {
-  std::vector<SparqlTriple> _triples;
+  qlm::vector<SparqlTriple> _triples;
   /// Append the triples from `other` to this `BasicGraphPattern`
   void appendTriples(BasicGraphPattern other);
 

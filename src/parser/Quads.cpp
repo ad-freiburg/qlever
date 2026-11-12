@@ -57,25 +57,30 @@ updateClause::GraphUpdate::Triples Quads::toTriplesWithGraph(
 }
 
 // ____________________________________________________________________________________
-std::vector<parsedQuery::GraphPatternOperation>
-Quads::toGraphPatternOperations() const {
+qlm::vector<parsedQuery::GraphPatternOperation> Quads::toGraphPatternOperations(
+    const qlever::Allocator<Id>& allocator) const {
   auto toSparqlTriple = [](const std::array<GraphTerm, 3>& triple) {
     return SparqlTriple::fromSimple(SparqlTripleSimple(
         triple[0].toTripleComponent(), triple[1].toTripleComponent(),
         triple[2].toTripleComponent()));
   };
+  auto toBasicGraphPattern =
+      [&toSparqlTriple,
+       &allocator](const ad_utility::sparql_types::Triples& triples) {
+        auto sparqlTriples = triples | ql::views::transform(toSparqlTriple);
+        return parsedQuery::BasicGraphPattern{qlm::vector<SparqlTriple>{
+            sparqlTriples.begin(), sparqlTriples.end(), allocator}};
+      };
 
   using namespace parsedQuery;
-  std::vector<GraphPatternOperation> operations;
-  operations.emplace_back(
-      BasicGraphPattern{ad_utility::transform(freeTriples_, toSparqlTriple)});
+  qlm::vector<GraphPatternOperation> operations{allocator};
+  operations.emplace_back(toBasicGraphPattern(freeTriples_));
 
   for (const auto& [graph, triples] : graphTriples_) {
     // We need a `GroupGraphPattern` where the graph is set. This contains the
     // triples inside another `GraphPattern`.
-    GraphPattern tripleSubPattern;
-    tripleSubPattern._graphPatterns.emplace_back(
-        BasicGraphPattern{ad_utility::transform(triples, toSparqlTriple)});
+    GraphPattern tripleSubPattern{allocator};
+    tripleSubPattern._graphPatterns.emplace_back(toBasicGraphPattern(triples));
     operations.emplace_back(std::visit(
         [&tripleSubPattern](auto graphValue) mutable {
           if constexpr (ad_utility::isSimilar<decltype(graphValue), Variable>) {
