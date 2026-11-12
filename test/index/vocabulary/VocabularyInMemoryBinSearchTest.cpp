@@ -9,10 +9,11 @@
 #include "backports/algorithm.h"
 #include "index/vocabulary/VocabularyInMemoryBinSearch.h"
 #include "util/Forward.h"
-#include "util/Serializer/ByteBufferSerializer.h"
+#include "util/serializer/ByteBufferSerializer.h"
 
 namespace {
 using namespace vocabulary_test;
+using namespace std::string_view_literals;
 
 // A common suffix for all files to reduce the probability of colliding file
 // names, when other tests are run in parallel.
@@ -248,7 +249,7 @@ TEST(VocabularyInMemoryBinSearch, endIndexAndGetPositionOfWord) {
   // In an empty vocabulary, every word yields the empty range at index 0.
   auto emptyVocab = createVocabularyWithIndices(filename, {}, {});
   EXPECT_EQ(emptyVocab.endIndex(), 0);
-  EXPECT_EQ(emptyVocab.getPositionOfWord("alpha", ql::ranges::less{}),
+  EXPECT_EQ(emptyVocab.getPositionOfWord("alpha"sv, ql::ranges::less{}),
             (std::pair<uint64_t, uint64_t>{0, 0}));
 }
 
@@ -296,6 +297,16 @@ TEST(VocabularyInMemoryBinSearch, lookupBatch) {
   EXPECT_EQ((*result)[1],
             ad_utility::vocabulary::placeholderForMissingVocabIndex(5));
   EXPECT_EQ((*result)[2], "gamma");
+  // The contained words are views into the vocabulary (no copy).
+  EXPECT_EQ((*result)[0].data(), vocab[0].value().data());
+
+  // The result shares the ownership of the words, so it stays valid after the
+  // vocabulary is closed; the empty batch is rejected.
+  vocab.close();
+  EXPECT_EQ((*result)[0], "alpha");
+  EXPECT_EQ((*result)[2], "gamma");
+  AD_EXPECT_THROW_WITH_MESSAGE(vocab.lookupBatch(ql::span<const size_t>{}),
+                               ::testing::HasSubstr("!indices.empty()"));
 }
 
 // _____________________________________________________________________________
@@ -337,7 +348,7 @@ TEST(VocabularyInMemoryBinSearch, zeroCopyDeserialization) {
   auto view =
       VocabularyInMemoryBinSearch::fromZeroCopyDeserializer(readSerializer);
   expectVocabulariesAreEqual(vocab, view);
-  EXPECT_EQ(view[3], std::optional{std::string_view{"beta"}});
+  EXPECT_EQ(view[3], std::optional{"beta"sv});
   EXPECT_EQ(view[5], std::nullopt);
 }
 

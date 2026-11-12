@@ -4,20 +4,21 @@
 
 #include "engine/TextLimit.h"
 
+#include "index/IdTableUtils.h"
 #include "util/ChunkedForLoop.h"
 
 // _____________________________________________________________________________
 TextLimit::TextLimit(QueryExecutionContext* qec, const size_t limit,
                      std::shared_ptr<QueryExecutionTree> child,
                      const ColumnIndex& textRecordColumn,
-                     const std::vector<ColumnIndex>& entityColumns,
-                     const std::vector<ColumnIndex>& scoreColumns)
+                     ql::span<const ColumnIndex> entityColumns,
+                     ql::span<const ColumnIndex> scoreColumns)
     : Operation(qec),
       limit_(limit),
       child_(std::move(child)),
       textRecordColumn_(textRecordColumn),
-      entityColumns_(entityColumns),
-      scoreColumns_(scoreColumns) {
+      entityColumns_(entityColumns.begin(), entityColumns.end(), allocator()),
+      scoreColumns_(scoreColumns.begin(), scoreColumns.end(), allocator()) {
   AD_CONTRACT_CHECK(child_);
 }
 
@@ -68,14 +69,16 @@ Result TextLimit::computeResult([[maybe_unused]] bool requestLaziness) {
     return 0;
   };
 
-  ql::ranges::sort(idTable, [this, compareScores, compareEntities](
-                                const auto& lhs, const auto& rhs) {
-    return compareEntities(lhs, rhs) == 1 ||
-           (compareEntities(lhs, rhs) == 0 &&
-            (compareScores(lhs, rhs) == 1 ||
-             (compareScores(lhs, rhs) == 0 &&
-              (lhs[textRecordColumn_] > rhs[textRecordColumn_]))));
-  });
+  IdTableUtils::sort<0>(
+      &idTable,
+      [this, compareScores, compareEntities](const auto& lhs, const auto& rhs) {
+        return compareEntities(lhs, rhs) == 1 ||
+               (compareEntities(lhs, rhs) == 0 &&
+                (compareScores(lhs, rhs) == 1 ||
+                 (compareScores(lhs, rhs) == 0 &&
+                  (lhs[textRecordColumn_] > rhs[textRecordColumn_]))));
+      },
+      sortConfig());
 
   // Go through the table and add the first n texts for each
   // entity to a new empty table (where n is the limit).
@@ -172,7 +175,7 @@ uint64_t TextLimit::getSizeEstimateBeforeLimit() {
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> TextLimit::resultSortedOn() const {
+qlm::vector<ColumnIndex> TextLimit::resultSortedOn() const {
   return entityColumns_;
 }
 

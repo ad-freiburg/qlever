@@ -10,6 +10,8 @@
 
 #include "engine/CartesianProductJoin.h"
 
+#include <iterator>
+
 #include "engine/CallFixedSize.h"
 #include "util/Views.h"
 
@@ -438,7 +440,7 @@ Result::LazyResult CartesianProductJoin::createLazyConsumer(
 // _____________________________________________________________________________
 std::vector<std::vector<ColumnIndex>>
 CartesianProductJoin::perChildDistinctIndices(
-    const std::vector<ColumnIndex>& distinctIndices) const {
+    ql::span<const ColumnIndex> distinctIndices) const {
   std::vector<std::vector<ColumnIndex>> result;
   result.reserve(children_.size());
   size_t offset = 0;
@@ -458,7 +460,7 @@ CartesianProductJoin::perChildDistinctIndices(
 
 // _____________________________________________________________________________
 bool CartesianProductJoin::isDistinctByImpl(
-    const std::vector<ColumnIndex>& distinctIndices) const {
+    ql::span<const ColumnIndex> distinctIndices) const {
   return ql::ranges::all_of(
       ::ranges::views::zip(children_, perChildDistinctIndices(distinctIndices)),
       [](const auto& childAndIndices) {
@@ -470,7 +472,7 @@ bool CartesianProductJoin::isDistinctByImpl(
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 CartesianProductJoin::makeDistinctTree(
-    const std::vector<ColumnIndex>& distinctIndices) const {
+    ql::span<const ColumnIndex> distinctIndices) const {
   // Applying `DISTINCT` on `distinctIndices` to the Cartesian product is
   // equivalent to first making each child distinct on the subset of
   // `distinctIndices` that falls into its columns, and then forming the
@@ -480,18 +482,21 @@ CartesianProductJoin::makeDistinctTree(
   // product, reducing the sizes of the children before the product (which can
   // be huge) is formed.
   //
-  // Note: A child without any `distinctIndices` column is made distinct on the
+  // NOTE: A child without any `distinctIndices` column is made distinct on the
   // empty set of columns, which reduces it to (at most) a single row. This is
   // correct, because such a child does not contribute to `distinctIndices` and
   // only multiplies the number of rows in the Cartesian product.
-  auto newChildren =
+  auto distinctChildren =
       ::ranges::views::zip(children_,
                            perChildDistinctIndices(distinctIndices)) |
       ql::views::transform([](const auto& childAndIndices) {
         const auto& [child, childIndices] = childAndIndices;
         return QueryExecutionTree::createDistinctTree(child, childIndices);
-      }) |
-      ::ranges::to<Children>();
+      });
+  // TODO<joka921>: Use `::ranges::to<Children>(allocator())` once supported.
+  Children newChildren{allocator()};
+  newChildren.reserve(children_.size());
+  ql::ranges::copy(distinctChildren, std::back_inserter(newChildren));
   return ad_utility::makeExecutionTree<CartesianProductJoin>(
       _executionContext, std::move(newChildren));
 }
@@ -499,7 +504,7 @@ CartesianProductJoin::makeDistinctTree(
 // _____________________________________________________________________________
 std::unique_ptr<Operation> CartesianProductJoin::cloneImpl() const {
   AD_CONTRACT_CHECK(!forbiddenToRecompute_, recomputeMessage);
-  Children copy;
+  Children copy{allocator()};
   copy.reserve(children_.size());
   for (const auto& operation : children_) {
     copy.push_back(operation->clone());

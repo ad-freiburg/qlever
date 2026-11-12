@@ -16,7 +16,7 @@
 #include "engine/StripColumns.h"
 #include "engine/Values.h"
 #include "engine/ValuesForTesting.h"
-#include "engine/binary_export/BinaryExport.h"
+#include "engine/binaryExport/BinaryExport.h"
 #include "global/Constants.h"
 #include "global/IndexTypes.h"
 #include "global/RuntimeParameters.h"
@@ -29,10 +29,14 @@
 #include "util/HttpClientTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
+#include "util/LocalVocabEntryTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 #include "util/RuntimeParametersTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
 #include "util/http/HttpUtils.h"
+
+using ad_utility::testing::colIndices;
+using ad_utility::testing::iriLocalVocabEntry;
 
 // Fixture that sets up a test index and a factory for producing mocks for the
 // `getResultFunction` needed by the `Service` operation.
@@ -224,9 +228,8 @@ TEST_F(ServiceTest, computeResult) {
           auto get = [this, &localVocabs](
                          std::string_view s) -> std::optional<LocalVocabIndex> {
             for (const LocalVocab& localVocab : localVocabs) {
-              auto index =
-                  localVocab.getIndexOrNullopt(LocalVocabEntry::fromIriref(
-                      s, testQec->getLocalVocabContext()));
+              auto index = localVocab.getIndexOrNullopt(
+                  iriLocalVocabEntry(s, testQec->getLocalVocabContext()));
               if (index.has_value()) {
                 return index;
               }
@@ -397,7 +400,7 @@ TEST_F(ServiceTest, computeResult) {
     const auto& localVocabContext = testQec->getLocalVocabContext();
     auto get = [&localVocab, &localVocabContext](std::string_view s) {
       return localVocab.getIndexOrNullopt(
-          LocalVocabEntry::fromIriref(s, localVocabContext));
+          iriLocalVocabEntry(s, localVocabContext));
     };
     std::optional<LocalVocabIndex> idxBla = get("<bla>");
     std::optional<LocalVocabIndex> idxBli = get("<bli>");
@@ -868,10 +871,10 @@ TEST_F(ServiceTest, idToValueForValuesClause) {
   EXPECT_EQ(idToVc(index, Id::makeFromBool(true), localVocab), "true");
 
   // Escape Quotes within literals.
+  auto getLocalVocabId = ad_utility::testing::makeGetLocalVocabId();
   auto str = LocalVocabEntry::literalWithoutQuotes(
       "a\"b\"c", index.getLocalVocabContext());
-  EXPECT_EQ(idToVc(index, Id::makeFromLocalVocabIndex(&str), localVocab),
-            "\"a\\\"b\\\"c\"");
+  EXPECT_EQ(idToVc(index, getLocalVocabId(str), localVocab), "\"a\\\"b\\\"c\"");
 
   // value with xsd-type
   EXPECT_EQ(
@@ -996,7 +999,7 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
                                           {TC(iri("<z>")), TC(iri("<a>"))}}});
   auto sibling = std::make_shared<Sort>(
       testQec, std::make_shared<QueryExecutionTree>(testQec, siblingOperation),
-      std::vector<ColumnIndex>{});
+      colIndices({}));
 
   // Reset the computed results, to reuse the mock-operations.
   auto reset = [&]() {
@@ -1134,7 +1137,7 @@ TEST_F(ServiceTest, precomputeSiblingResultWithStripColumns) {
       strip->applyLimitOffset(limitForStripColumns.value(), false);
     }
     return std::make_shared<Sort>(testQec, makeTree(std::move(strip)),
-                                  std::vector<ColumnIndex>{0});
+                                  colIndices({0}));
   };
   // The `VALUES` clause that is expected when only `?x` is pushed down.
   const std::string valuesClauseX = "VALUES (?x) { (<x>) } ";
@@ -1200,11 +1203,11 @@ TEST_F(ServiceTest, precomputeSiblingResultWithStripColumns) {
   {
     auto service = makeService();
     auto sibling = makeValues();
-    auto innerSort = std::make_shared<Sort>(testQec, makeTree(service),
-                                            std::vector<ColumnIndex>{0});
+    auto innerSort =
+        std::make_shared<Sort>(testQec, makeTree(service), colIndices({0}));
     innerSort->applyLimitOffset(LimitOffsetClause{1}, false);
-    auto outerSort = std::make_shared<Sort>(testQec, makeTree(innerSort),
-                                            std::vector<ColumnIndex>{0});
+    auto outerSort =
+        std::make_shared<Sort>(testQec, makeTree(innerSort), colIndices({0}));
     Service::precomputeSiblingResult(sibling, outerSort, true, false);
     EXPECT_FALSE(service->siblingInfo_.has_value());
     EXPECT_FALSE(

@@ -11,23 +11,23 @@
 
 #include "backports/span.h"
 #include "util/GTestHelpers.h"
-#include "util/MemorySize/MemorySize.h"
 #include "util/Random.h"
-#include "util/Serializer/AllocationLimitedReadSerializer.h"
-#include "util/Serializer/BufferedSerializer.h"
-#include "util/Serializer/ByteBufferSerializer.h"
-#include "util/Serializer/ChunkedReadSerializer.h"
-#include "util/Serializer/CompressedSerializer.h"
-#include "util/Serializer/FileSerializer.h"
-#include "util/Serializer/FromCallableSerializer.h"
-#include "util/Serializer/SerializeArrayOrTuple.h"
-#include "util/Serializer/SerializeHashMap.h"
-#include "util/Serializer/SerializeOptional.h"
-#include "util/Serializer/SerializePair.h"
-#include "util/Serializer/SerializeString.h"
-#include "util/Serializer/SerializeVariant.h"
-#include "util/Serializer/SerializeVector.h"
-#include "util/Serializer/Serializer.h"
+#include "util/memorySize/MemorySize.h"
+#include "util/serializer/AllocationLimitedReadSerializer.h"
+#include "util/serializer/BufferedSerializer.h"
+#include "util/serializer/ByteBufferSerializer.h"
+#include "util/serializer/ChunkedReadSerializer.h"
+#include "util/serializer/CompressedSerializer.h"
+#include "util/serializer/FileSerializer.h"
+#include "util/serializer/FromCallableSerializer.h"
+#include "util/serializer/SerializeArrayOrTuple.h"
+#include "util/serializer/SerializeHashMap.h"
+#include "util/serializer/SerializeOptional.h"
+#include "util/serializer/SerializePair.h"
+#include "util/serializer/SerializeString.h"
+#include "util/serializer/SerializeVariant.h"
+#include "util/serializer/SerializeVector.h"
+#include "util/serializer/Serializer.h"
 
 using namespace ad_utility;
 using namespace memory_literals;
@@ -1740,7 +1740,7 @@ std::vector<ql::span<const std::byte>> splitIntoChunks(
 }
 }  // namespace
 
-// _____________________________________________________________________________
+// Test that `read<T>` reads consecutive values of different types.
 TEST(Serializer, read) {
   ByteBufferReadSerializer reader{
       serializeToBytes(42, std::string{"abc"}, 3.5)};
@@ -1749,7 +1749,8 @@ TEST(Serializer, read) {
   EXPECT_EQ(serialization::read<double>(reader), 3.5);
 }
 
-// _____________________________________________________________________________
+// Test that a `ChunkedReadSerializer` reads values that are split across
+// chunks, skips empty chunks, and throws when the range ends within a value.
 TEST(ChunkedReadSerializer, readAcrossChunks) {
   using Chunks = std::vector<ql::span<const std::byte>>;
   using serialization::ChunkedReadSerializer;
@@ -1760,10 +1761,13 @@ TEST(ChunkedReadSerializer, readAcrossChunks) {
       serialization::RangeOfByteChunks<std::vector<ql::span<std::byte>>>);
   static_assert(!serialization::RangeOfByteChunks<std::vector<int>>);
 
+  // The 8-byte value is split across three chunks (3 + 2 + 3 bytes) with empty
+  // chunks in between, the `'x'` ends the chunk of 4 bytes, and the `'y'` is a
+  // chunk of its own.
   uint64_t value = 0x0123456789ABCDEF;
   auto bytes = serializeToBytes(value, 'x', 'y');
-  // The value is split across two chunks, and there are empty chunks.
-  auto chunks = splitIntoChunks({bytes.data(), bytes.size()}, {0, 3, 0, 5, 0});
+  auto chunks =
+      splitIntoChunks({bytes.data(), bytes.size()}, {0, 3, 0, 2, 0, 4});
   ChunkedReadSerializer reader{chunks};
   EXPECT_FALSE(reader.isExhausted());
   EXPECT_EQ(serialization::read<uint64_t>(reader), value);
@@ -1785,13 +1789,15 @@ TEST(ChunkedReadSerializer, readAcrossChunks) {
   EXPECT_TRUE(ChunkedReadSerializer{noChunks}.isExhausted());
 }
 
-// _____________________________________________________________________________
+// Test that `readWithAllocationLimit` throws before a vector, string, or hash
+// map would allocate more than the given number of bytes in total.
 TEST(AllocationLimitedReadSerializer, readWithAllocationLimit) {
   using serialization::readWithAllocationLimit;
-  static_assert(serialization::ChecksAllocation<
+  static_assert(serialization::AllocationCheckingReadSerializer<
                 serialization::AllocationLimitedReadSerializer<
                     ByteBufferReadSerializer>>);
-  static_assert(!serialization::ChecksAllocation<ByteBufferReadSerializer>);
+  static_assert(!serialization::AllocationCheckingReadSerializer<
+                ByteBufferReadSerializer>);
 
   std::vector<std::string> strings{"foo", "", "barbaz"};
   auto bytes = serializeToBytes(strings);
@@ -1821,6 +1827,22 @@ TEST(AllocationLimitedReadSerializer, readWithAllocationLimit) {
         serializeToBytes(std::vector<uint32_t>{1, 2, 3})};
     AD_EXPECT_THROW_WITH_MESSAGE(
         readWithAllocationLimit<std::vector<uint32_t>>(reader, 11), tooLarge);
+  }
+
+  // The limit also applies to hash maps.
+  {
+    using Map = ad_utility::HashMap<uint64_t, std::string>;
+    Map map{{1, "a"}, {2, "bc"}};
+    auto mapBytes = serializeToBytes(map);
+    auto readMap = [&mapBytes](size_t maxNumBytes) {
+      ByteBufferReadSerializer reader{mapBytes};
+      return readWithAllocationLimit<Map>(reader, maxNumBytes);
+    };
+    size_t numMapBytes = 2 * sizeof(std::pair<uint64_t, std::string>) + 3;
+    EXPECT_EQ(readMap(numMapBytes), map);
+    AD_EXPECT_THROW_WITH_MESSAGE(readMap(numMapBytes - 1), tooLarge);
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        readMap(sizeof(std::pair<uint64_t, std::string>)), tooLarge);
   }
 
   // No memory is allocated for the size of an invalid string, and the size

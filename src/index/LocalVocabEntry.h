@@ -8,8 +8,11 @@
 #include <gtest/gtest_prod.h>
 
 #include <atomic>
+#include <string_view>
+#include <type_traits>
 
 #include "backports/algorithm.h"
+#include "backports/concepts.h"
 #include "backports/keywords.h"
 #include "backports/three_way_comparison.h"
 #include "global/TypedIndex.h"
@@ -18,16 +21,47 @@
 #include "parser/LiteralOrIri.h"
 #include "util/CopyableSynchronization.h"
 #include "util/Exception.h"
+#include "util/TypeTraits.h"
 
 // The interface that this class needs from the index it belongs to. Only
 // forward-declared here, because its definition requires `global/Id.h`, which
 // in turn requires this header (see the note on `IdProxy` below).
 class LocalVocabContext;
 
-// This is the type we use to store literals and IRIs in the `LocalVocab`.
-// It consists of a `LiteralOrIri` and a cache to store the position, where
-// the entry would be in the global vocabulary of the Index. This position is
-// used for efficient comparisons between entries in the local and global
+// The only class that may call the private constructors of `LocalVocabEntry`
+// (see there). It is defined in `index/TripleComponentConversions.cpp` and must
+// not be used anywhere else.
+namespace localVocabEntryDetail::onlyForTripleComponentConversions {
+class LocalVocabEntryFactory;
+}
+
+class LocalVocabEntry;
+class LocalVocabEntryView;
+
+namespace localVocabEntryDetail {
+// Note: The values here actually are `Id`s, but we cannot store the `Id` type
+// directly because of cyclic dependencies. This is defined outside of
+// `BasicLocalVocabEntry`, so that both instantiations of it use the same type.
+inline constexpr ad_utility::IndexTag proxyTag = "LveIdProxy";
+using IdProxy = ad_utility::TypedIndex<IdBitRepresentation, proxyTag>;
+
+// The position of a word in the vocabulary, see
+// `BasicLocalVocabEntry::positionInVocab` below. Also defined outside of the
+// template for the same reason as `IdProxy`.
+struct PositionInVocab {
+  IdProxy lowerBound_;
+  IdProxy upperBound_;
+
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(PositionInVocab, lowerBound_,
+                                              upperBound_)
+};
+
+// The common implementation of `LocalVocabEntry` (which owns its string) and
+// `LocalVocabEntryView` (which doesn't, and is the type of the words that are
+// stored in a `LocalVocab`, see below). It consists of a `LiteralOrIriT` (a
+// `LiteralOrIri` or a `LiteralOrIriView`) and a cache to store the position,
+// where the entry would be in the global vocabulary of the Index. This position
+// is used for efficient comparisons between entries in the local and global
 // vocabulary because we only have to look up the position once per
 // `LocalVocabEntry`, and all subsequent comparisons are cheap.
 //
@@ -36,10 +70,10 @@ class LocalVocabContext;
 // *internal* order, see `ValueId::compareThreeWay`). Without a secondary
 // vocabulary (see `index/vocabulary/SecondaryVocabulary.h`) that order
 // coincides with the semantic (that is, by string value) order, except for the
-// encoded IRIs
-// (see `LocalVocabContext::encodeAsId`), which are ordered by their encoding
-// (a pre-existing deviation that is tracked separately, see the note at
-// `compareThreeWay` below). As soon as an index has such a vocabulary, the two
+// encoded IRIs (see `LocalVocabContext::encodeAsId`), which are ordered by
+// their encoding (a pre-existing deviation that is tracked separately, see the
+// note at `valueIdComparators::detail::compareIdsImpl`). As soon as an index
+// has such a vocabulary, the two
 // orders differ much more fundamentally: a word of the secondary vocabulary is
 // positioned after *all* words of the main vocabulary, no matter what it is. An
 // entry whose word is stored in the secondary vocabulary therefore compares
@@ -61,21 +95,21 @@ class LocalVocabContext;
 // orders as two explicitly named comparisons instead of a single
 // `compareThreeWay`.
 // TODO<joka921> Do that in a follow-up PR.
-class alignas(16) LocalVocabEntry
-    : public ad_utility::triple_component::LiteralOrIri {
+template <typename LiteralOrIriT>
+class alignas(16) BasicLocalVocabEntry : public LiteralOrIriT {
  public:
-  using Base = ad_utility::triple_component::LiteralOrIri;
-
-  // Note: The values here actually are `Id`s, but we cannot store the `Id` type
-  // directly because of cyclic dependencies.
-  static constexpr ad_utility::IndexTag proxyTag = "LveIdProxy";
-  using IdProxy = ad_utility::TypedIndex<IdBitRepresentation, proxyTag>;
-
-  FRIEND_TEST(TripleComponent, toValueId);
+  using Base = LiteralOrIriT;
+  using IdProxy = localVocabEntryDetail::IdProxy;
 
  private:
+  // The owning and the non-owning entries copy each other's caches.
+  template <typename>
+  friend class BasicLocalVocabEntry;
+
   // Pointer to keep this object assignable.
   const LocalVocabContext* context_;
+
+ protected:
   // The cache for the position in the vocabulary. As usual, the `lowerBound` is
   // inclusive, the `upperBound` is not, so if `lowerBound == upperBound`, then
   // the entry is not part of the globalVocabulary, and `lowerBound` points to
@@ -96,16 +130,8 @@ class alignas(16) LocalVocabEntry
   mutable ad_utility::CopyableAtomic<IdProxy> upperBoundInVocab_;
   mutable ad_utility::CopyableAtomic<bool> positionInVocabKnown_ = false;
 
- public:
-  LocalVocabEntry(LiteralT literal, const LocalVocabContext& context)
-      : Base{std::move(literal)}, context_{&context} {}
-  LocalVocabEntry(IriT iri, const LocalVocabContext& context) noexcept
-      : Base{std::move(iri)}, context_{&context} {}
-
-  // Deliberately allow implicit conversion from `LiteralOrIri`.
-  LocalVocabEntry(const Base& base, const LocalVocabContext& context)
-      : Base{base}, context_{&context} {}
-  LocalVocabEntry(Base&& base, const LocalVocabContext& context) noexcept
+ protected:
+  BasicLocalVocabEntry(Base base, const LocalVocabContext& context) noexcept
       : Base{std::move(base)}, context_{&context} {}
 
   // Constructor for when the position in the vocab is already known. Note that
@@ -124,8 +150,8 @@ class alignas(16) LocalVocabEntry
   // is hence a tautology for that caller, and it is kept for the tests, which
   // may pass arbitrary bounds.
   template <typename Lower, typename Upper>
-  LocalVocabEntry(Base&& base, Lower lower, Upper upper,
-                  const LocalVocabContext& context)
+  BasicLocalVocabEntry(Base&& base, Lower lower, Upper upper,
+                       const LocalVocabContext& context)
       : Base{std::move(base)},
         context_{&context},
         lowerBoundInVocab_(IdProxy::make(lower.getBits())),
@@ -139,36 +165,25 @@ class alignas(16) LocalVocabEntry
                                         IdProxy::make(upper.getBits())}));
   }
 
-  LocalVocabEntry(const LocalVocabEntry&) = default;
-  LocalVocabEntry(LocalVocabEntry&&) noexcept = default;
-  LocalVocabEntry& operator=(const LocalVocabEntry&) = default;
-  LocalVocabEntry& operator=(LocalVocabEntry&&) noexcept = default;
+  // Construct from `base`, which must be equal to `other` (e.g. a copy or a
+  // view of it), and take over the context and the cached position in the
+  // vocabulary of `other`.
+  template <typename Other>
+  BasicLocalVocabEntry(Base base, const BasicLocalVocabEntry<Other>& other)
+      : Base{std::move(base)},
+        context_{other.context_},
+        lowerBoundInVocab_{other.lowerBoundInVocab_},
+        upperBoundInVocab_{other.upperBoundInVocab_},
+        positionInVocabKnown_{other.positionInVocabKnown_} {}
 
-  // Convenience functions that delegate to the corresponding static functions
-  // of `IriT` and `LiteralT`.
-  static LocalVocabEntry fromStringRepresentation(std::string s,
-                                                  const LocalVocabContext& ctx);
+ public:
+  BasicLocalVocabEntry(const BasicLocalVocabEntry&) = default;
+  BasicLocalVocabEntry(BasicLocalVocabEntry&&) noexcept = default;
+  BasicLocalVocabEntry& operator=(const BasicLocalVocabEntry&) = default;
+  BasicLocalVocabEntry& operator=(BasicLocalVocabEntry&&) noexcept = default;
 
-  static LocalVocabEntry fromIriref(std::string_view view,
-                                    const LocalVocabContext& ctx);
-
-  static LocalVocabEntry literalWithoutQuotes(std::string_view view,
-                                              const LocalVocabContext& ctx);
-
-  static LocalVocabEntry literalWithNormalizedContent(
-      std::string_view view, const LocalVocabContext& ctx);
-
-  // Return a copy of this entry that is anchored to `newContext`, with an empty
-  // cache for the position in the vocabulary. This is used when an index is
-  // replaced by a rebuilt one, which encodes exactly the same IRIs directly in
-  // an `Id` (see `toIdOrLocalVocabEntry`), so an entry that was not encodable
-  // before stays not encodable.
-  LocalVocabEntry reanchoredTo(const LocalVocabContext& newContext) const;
-
-  // Slice to base class `LiteralOrIri`.
-  const ad_utility::triple_component::LiteralOrIri& asLiteralOrIri() const {
-    return *this;
-  }
+  // Slice to base class `LiteralOrIriT`.
+  const Base& asLiteralOrIri() const { return *this; }
 
   // Return the position in the vocabulary. If it is not already cached, then
   // the call to `positionInVocab()` first computes the position and then
@@ -177,21 +192,17 @@ class alignas(16) LocalVocabEntry
   // settings there might be a range of words that are considered equal for the
   // purposes of comparing and sorting them.
   //
-  // The bounds are `Id`s of type `VocabIndex`, `EncodedVal`, or
-  // `SecondaryVocabIndex` (the latter only if the index has a secondary
-  // vocabulary that contains this word, see the warning in the class comment
-  // above), and this entry compares exactly like an `Id` at that position.
+  // The bounds are `Id`s of type `VocabIndex` or `SecondaryVocabIndex` (the
+  // latter only if the index has a secondary vocabulary that contains this
+  // word, see the warning in the class comment above), and this entry compares
+  // exactly like an `Id` at that position. They are never of type `EncodedVal`,
+  // because an IRI that is encoded directly in an `Id` is never stored in a
+  // `LocalVocabEntry` (see `toIdOrLocalVocabEntry`).
   // NOTE: An `Id` of an unrelated datatype (like `Int` or `Date`) is
   // deliberately *not* compared to this position, but to the datatype bits of
-  // the `LocalVocabIndex`, which yields the same result unless the bounds are
-  // of type `EncodedVal`, see the note at `ValueId::compareThreeWay`.
-  struct PositionInVocab {
-    IdProxy lowerBound_;
-    IdProxy upperBound_;
-
-    QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(PositionInVocab, lowerBound_,
-                                                upperBound_)
-  };
+  // the `LocalVocabIndex`, which yields the same result, see the note at
+  // `ValueId::compareThreeWay`.
+  using PositionInVocab = localVocabEntryDetail::PositionInVocab;
   PositionInVocab positionInVocab() const {
     // Immediately return if we have previously computed and cached the
     // position.
@@ -202,11 +213,15 @@ class alignas(16) LocalVocabEntry
     return positionInVocabExpensiveCase();
   }
 
-  // It suffices to hash the base class `LiteralOrIri` as the position in the
+  // It suffices to hash the base class `LiteralOrIriT` as the position in the
   // vocab is redundant for those purposes.
+  //
+  // NOTE: The hashes of a `LocalVocabEntry` and a `LocalVocabEntryView` of the
+  // same word are equal.
   template <typename H, typename V>
   friend auto AbslHashValue(H h, const V& entry)
-      -> CPP_ret(H)(requires ranges::same_as<V, LocalVocabEntry>) {
+      -> CPP_ret(H)(
+          requires ql::concepts::derived_from<V, BasicLocalVocabEntry>) {
     return H::combine(std::move(h), static_cast<const Base&>(entry));
   }
 
@@ -232,43 +247,220 @@ class alignas(16) LocalVocabEntry
   // `LocalVocab` to each other, and never to an `Id` of the index (which needs
   // the position anyway).
   //
-  // NOTE: This shortcut also means that an entry whose word is an encoded IRI
-  // (see `LocalVocabContext::encodeAsId`) is compared by its string value here,
-  // but by its encoding when the corresponding `Id`s are compared. That
-  // inconsistency is pre-existing and tracked separately, see the note at
-  // `valueIdComparators::detail::compareIdsImpl`. Note also that `operator==`
-  // below never looks up the position, no matter which vocabularies exist.
-  ql::strong_ordering compareThreeWay(const LocalVocabEntry& rhs) const;
-  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(LocalVocabEntry)
+  // NOTE: `operator==` below never looks up the position, no matter which
+  // vocabularies exist. Owning entries and views can be compared with each
+  // other.
+  template <typename Other>
+  ql::strong_ordering compareThreeWay(
+      const BasicLocalVocabEntry<Other>& rhs) const;
 
   // Two entries are equal if and only if their string representations are, so
-  // forward to the base class instead of going through `compareThreeWay`, which
-  // would use the much more expensive collation of the vocabulary, and which
-  // would additionally look up the position in the vocabulary if the index has
-  // a secondary vocabulary (see the note above). This is what
-  // happens implicitly anyway (the operators defined by the macro above do not
+  // compare those instead of going through `compareThreeWay`, which would use
+  // the much more expensive collation of the vocabulary, and which would
+  // additionally look up the position in the vocabulary if the index has a
+  // secondary vocabulary (see the note above). This is what happens implicitly
+  // anyway (the operators defined by the macro in the derived classes do not
   // include `operator==`), but state it explicitly so that it doesn't silently
-  // change when `compareThreeWay` does.
-  bool operator==(const LocalVocabEntry& rhs) const {
-    return static_cast<const Base&>(*this) == static_cast<const Base&>(rhs);
+  // change when `compareThreeWay` does. Owning entries and views can be
+  // compared with each other.
+  template <typename Other>
+  bool operator==(const BasicLocalVocabEntry<Other>& rhs) const {
+    return std::string_view{this->toStringRepresentation()} ==
+           std::string_view{rhs.toStringRepresentation()};
   }
-  bool operator!=(const LocalVocabEntry& rhs) const { return !(*this == rhs); }
-  // Declaring the operators above hides the ones inherited from `Base`, which
-  // would otherwise make comparisons against a plain `LiteralOrIri` ill-formed.
-  // NOTE: `Base` has an `operator!=` only in C++17 mode (in C++20 mode it is
-  // synthesized from its `operator==`), so it cannot be pulled in via a
-  // `using` declaration, but only be forwarded to explicitly.
-  using Base::operator==;
-  bool operator!=(const Base& rhs) const {
-    return static_cast<const Base&>(*this) != rhs;
+  template <typename Other>
+  bool operator!=(const BasicLocalVocabEntry<Other>& rhs) const {
+    return !(*this == rhs);
+  }
+  // Declaring the operators above hides the ones inherited from `Base`, so
+  // also allow comparisons against a plain `LiteralOrIri` or
+  // `LiteralOrIriView`, which are equal if their string representations are.
+  template <bool isOwning>
+  bool operator==(
+      const ad_utility::triple_component::BasicLiteralOrIri<isOwning>& rhs)
+      const {
+    return std::string_view{this->toStringRepresentation()} ==
+           std::string_view{rhs.toStringRepresentation()};
+  }
+  template <bool isOwning>
+  bool operator!=(
+      const ad_utility::triple_component::BasicLiteralOrIri<isOwning>& rhs)
+      const {
+    return !(*this == rhs);
   }
 
   // Expose `context_` for testing.
   const LocalVocabContext& getContextForTesting() const { return *context_; }
 
+  // The derived class (`LocalVocabEntry` or `LocalVocabEntryView`) that
+  // corresponds to `LiteralOrIriT`.
+  using Derived = std::conditional_t<
+      std::is_same_v<LiteralOrIriT, ad_utility::triple_component::LiteralOrIri>,
+      LocalVocabEntry, LocalVocabEntryView>;
+
+  // Return a copy of this entry that is anchored to `newContext`, with an empty
+  // cache for the position in the vocabulary. This is used when an index is
+  // replaced by a rebuilt one, which encodes exactly the same IRIs directly in
+  // an `Id` (see `toIdOrLocalVocabEntry`), so an entry that was not encodable
+  // before stays not encodable.
+  //
+  // NOTE: For a `LocalVocabEntry`, the characters are copied. For a
+  // `LocalVocabEntryView` they are not, so the result is only valid as long as
+  // the characters this view refers to are.
+  Derived reanchoredTo(const LocalVocabContext& newContext) const;
+
  private:
   // The expensive case of looking up the position in vocab.
   PositionInVocab positionInVocabExpensiveCase() const;
 };
+}  // namespace localVocabEntryDetail
+
+// An owning entry, which is used for words that are not (yet) stored in a
+// `LocalVocab`, for example the results of string expressions or constants of a
+// query. See `BasicLocalVocabEntry` above for the details.
+class alignas(16) LocalVocabEntry
+    : public localVocabEntryDetail::BasicLocalVocabEntry<
+          ad_utility::triple_component::LiteralOrIri> {
+ private:
+  using EntryBase = localVocabEntryDetail::BasicLocalVocabEntry<
+      ad_utility::triple_component::LiteralOrIri>;
+
+ public:
+  using Base = EntryBase::Base;
+  using IdProxy = EntryBase::IdProxy;
+  using PositionInVocab = EntryBase::PositionInVocab;
+
+  LocalVocabEntry(LiteralT literal, const LocalVocabContext& context)
+      : EntryBase{Base{std::move(literal)}, context} {}
+
+ private:
+  // The constructors that can store an IRI are private, because an IRI that can
+  // be encoded directly in an `Id` (see `LocalVocabContext::encodeAsId`) must
+  // never be stored in a `LocalVocabEntry`. Create such entries via
+  // `toIdOrLocalVocabEntry` (see `index/TripleComponentConversions.h`), which
+  // checks this and then calls them via `LocalVocabEntryFactory`.
+  friend class localVocabEntryDetail::onlyForTripleComponentConversions::
+      LocalVocabEntryFactory;
+  // Creates entries from existing entries (which already satisfy the above).
+  template <typename>
+  friend class localVocabEntryDetail::BasicLocalVocabEntry;
+  friend class LocalVocabEntryView;
+
+  // Deliberately allow implicit conversion from `LiteralOrIri`.
+  LocalVocabEntry(const Base& base, const LocalVocabContext& context)
+      : EntryBase{base, context} {}
+  LocalVocabEntry(Base&& base, const LocalVocabContext& context) noexcept
+      : EntryBase{std::move(base), context} {}
+
+  // See the corresponding constructor of `BasicLocalVocabEntry`.
+  template <typename Lower, typename Upper>
+  LocalVocabEntry(Base&& base, Lower lower, Upper upper,
+                  const LocalVocabContext& context)
+      : EntryBase{std::move(base), lower, upper, context} {}
+
+  // See the corresponding constructor of `BasicLocalVocabEntry`.
+  template <typename Other>
+  LocalVocabEntry(
+      Base base,
+      const localVocabEntryDetail::BasicLocalVocabEntry<Other>& other)
+      : EntryBase{std::move(base), other} {}
+
+ public:
+  LocalVocabEntry(const LocalVocabEntry&) = default;
+  LocalVocabEntry(LocalVocabEntry&&) noexcept = default;
+  LocalVocabEntry& operator=(const LocalVocabEntry&) = default;
+  LocalVocabEntry& operator=(LocalVocabEntry&&) noexcept = default;
+
+  // Convenience functions that delegate to the corresponding static functions
+  // of `LiteralT`. Unlike the private constructors above, they are public,
+  // because they can only create literals, never IRIs.
+  static LocalVocabEntry literalWithoutQuotes(std::string_view view,
+                                              const LocalVocabContext& ctx);
+
+  static LocalVocabEntry literalWithNormalizedContent(
+      std::string_view view, const LocalVocabContext& ctx);
+
+  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(LocalVocabEntry)
+};
+
+// A non-owning entry. This is the type of the words that are stored in a
+// `LocalVocab`, the characters of which are owned by the `LocalVocab` (see
+// there), and `LocalVocabIndex` is a pointer to it. It can't be modified, and
+// can only be created from a `LocalVocabEntry` (so an IRI that has to be
+// encoded directly in an `Id` can't be stored in it either). See
+// `BasicLocalVocabEntry` above for the details.
+class alignas(16) LocalVocabEntryView
+    : public localVocabEntryDetail::BasicLocalVocabEntry<
+          ad_utility::triple_component::LiteralOrIriView> {
+ private:
+  using EntryBase = localVocabEntryDetail::BasicLocalVocabEntry<
+      ad_utility::triple_component::LiteralOrIriView>;
+
+ public:
+  using Base = EntryBase::Base;
+  using IdProxy = EntryBase::IdProxy;
+  using PositionInVocab = EntryBase::PositionInVocab;
+
+  // The test inspects the cached position of the words of a `LocalVocab`.
+  FRIEND_TEST(TripleComponent, toValueId);
+
+ private:
+  // `LocalVocab` stores the characters of its words separately, and creates
+  // the views of them via the private constructor below.
+  friend class LocalVocab;
+  // Creates views via the private constructors (see `reanchoredTo`).
+  template <typename>
+  friend class localVocabEntryDetail::BasicLocalVocabEntry;
+
+  // Create a view of `entry` (a `LocalVocabEntry` or another view), the
+  // characters of which are stored in `storage`, which must have exactly the
+  // contents of `entry.toStringRepresentation()`.
+  // The context and the cached position in the vocabulary of `entry` are
+  // copied. The view is valid as long as `storage` is.
+  template <typename Other>
+  LocalVocabEntryView(
+      const localVocabEntryDetail::BasicLocalVocabEntry<Other>& entry,
+      std::string_view storage)
+      : EntryBase{Base{entry.asLiteralOrIri(), storage}, entry} {}
+
+  // Create a view of `base` that is anchored to `context`, see `reanchoredTo`.
+  LocalVocabEntryView(Base base, const LocalVocabContext& context) noexcept
+      : EntryBase{base, context} {}
+
+ public:
+  // Create a view of `entry` itself, which is only valid as long as `entry` is
+  // neither destroyed, nor moved or modified. This is useful for temporarily
+  // representing a `LocalVocabEntry` as an `Id`, see
+  // `Id::makeFromLocalVocabIndex`.
+  explicit LocalVocabEntryView(const LocalVocabEntry& entry)
+      : LocalVocabEntryView{entry, entry.toStringRepresentation()} {}
+
+  LocalVocabEntryView(const LocalVocabEntryView&) = default;
+  LocalVocabEntryView(LocalVocabEntryView&&) noexcept = default;
+  LocalVocabEntryView& operator=(const LocalVocabEntryView&) = default;
+  LocalVocabEntryView& operator=(LocalVocabEntryView&&) noexcept = default;
+
+  // Return an owning copy of this entry (including the cached position in the
+  // vocabulary).
+  LocalVocabEntry toOwned() const;
+
+  QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(LocalVocabEntryView)
+};
+
+// The words of a `LocalVocab` are stored in memory that is never freed
+// individually, so the views must not need a destructor.
+static_assert(std::is_trivially_destructible_v<LocalVocabEntryView>);
+
+// The defaulted copy and move operations above are silently deleted if a member
+// can't be copied or moved, so check that they exist (and that the moves don't
+// throw).
+static_assert(std::is_copy_constructible_v<LocalVocabEntry> &&
+              std::is_copy_assignable_v<LocalVocabEntry> &&
+              std::is_nothrow_move_constructible_v<LocalVocabEntry> &&
+              std::is_nothrow_move_assignable_v<LocalVocabEntry>);
+static_assert(std::is_copy_constructible_v<LocalVocabEntryView> &&
+              std::is_copy_assignable_v<LocalVocabEntryView> &&
+              std::is_nothrow_move_constructible_v<LocalVocabEntryView> &&
+              std::is_nothrow_move_assignable_v<LocalVocabEntryView>);
 
 #endif  // QLEVER_SRC_INDEX_LOCALVOCABENTRY_H

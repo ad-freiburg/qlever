@@ -12,8 +12,8 @@
 #include "util/Algorithm.h"
 #include "util/ContainersWithAllocator.h"
 #include "util/Exception.h"
-#include "util/JoinAlgorithms/IndexNestedLoopJoin.h"
-#include "util/JoinAlgorithms/JoinAlgorithms.h"
+#include "util/joinAlgorithms/IndexNestedLoopJoin.h"
+#include "util/joinAlgorithms/JoinAlgorithms.h"
 
 using std::endl;
 using std::string;
@@ -89,7 +89,7 @@ VariableToColumnMap Minus::computeVariableToColumnMap() const {
 size_t Minus::getResultWidth() const { return _left->getResultWidth(); }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> Minus::resultSortedOn() const {
+qlm::vector<ColumnIndex> Minus::resultSortedOn() const {
   if (rightIndexNestedLoopJoinIsPossible()) {
     return _left->getRootOperation()->getChildren().at(0)->resultSortedOn();
   }
@@ -101,12 +101,12 @@ std::optional<std::shared_ptr<QueryExecutionTree>>
 Minus::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   // The `BIND` can only be pushed into the left child, as only its columns are
   // part of the result.
-  return pushDownBindToChild(bind, {_left, _right}, 0);
+  return pushDownBindToChild(bind, {{_left, _right}, allocator()}, 0);
 }
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Minus::cloneWithNewChildren(
-    std::vector<std::shared_ptr<QueryExecutionTree>> children) const {
+    qlm::vector<std::shared_ptr<QueryExecutionTree>> children) const {
   return std::make_unique<Minus>(_executionContext, std::move(children.at(0)),
                                  std::move(children.at(1)));
 }
@@ -185,7 +185,7 @@ IdTable Minus::copyMatchingRows(
 // _____________________________________________________________________________
 IdTable Minus::computeMinus(
     const IdTableView<0>& left, const IdTableView<0>& right,
-    const std::vector<std::array<ColumnIndex, 2>>& joinColumns) const {
+    ql::span<const std::array<ColumnIndex, 2>> joinColumns) const {
   if (left.empty()) {
     return IdTable{getResultWidth(), getExecutionContext()->getAllocator()};
   }
@@ -272,7 +272,8 @@ std::optional<Result> Minus::tryLeftIndexNestedLoopJoinIfSuitable() {
   const IdTableView<0>& leftTable = leftRes->idTableView();
   LocalVocab localVocab = leftRes->getCopyOfLocalVocab();
   joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{
-      _matchedColumns, std::move(leftRes), std::move(rightRes)};
+      _matchedColumns, std::move(leftRes), std::move(rightRes),
+      cancellationHandle()};
 
   auto nonMatchingEntries = nestedLoopJoin.computeLeftExistance();
   return std::optional{Result{
@@ -296,7 +297,8 @@ std::optional<Result> Minus::tryRightIndexNestedLoopJoinIfSuitable(
   auto rightRes = _right->getResult(false);
 
   joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{
-      _matchedColumns, std::move(leftRes), std::move(rightRes)};
+      _matchedColumns, std::move(leftRes), std::move(rightRes),
+      cancellationHandle()};
   auto result = nestedLoopJoin.computeRightExistance(
       [this](const auto& idTable, LocalVocab localVocab,
              const ad_utility::VectorWithMemoryLimit<bool>& matchingTracker) {

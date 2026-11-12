@@ -24,11 +24,11 @@
 #include "backports/three_way_comparison.h"
 #include "global/Id.h"
 #include "util/Exception.h"
-#include "util/Serializer/SerializeArrayOrTuple.h"
-#include "util/Serializer/SerializeOptional.h"
-#include "util/Serializer/SerializeVector.h"
-#include "util/Serializer/Serializer.h"
 #include "util/StringUtils.h"
+#include "util/serializer/SerializeArrayOrTuple.h"
+#include "util/serializer/SerializeOptional.h"
+#include "util/serializer/SerializeVector.h"
+#include "util/serializer/Serializer.h"
 
 // The metadata of a compressed block of ID triples in an index permutation.
 struct CompressedBlockMetadataNoBlockIndex {
@@ -88,6 +88,9 @@ struct CompressedBlockMetadataNoBlockIndex {
     // Helper function to make `PermutedTriple` easier to compare without
     // `graphId_`.
     auto tieWithoutGraph() const { return std::tie(col0Id_, col1Id_, col2Id_); }
+
+    // Return the `Id` in the column with the given index (0, 1, or 2).
+    Id getId(size_t columnIndex) const;
   };
   PermutedTriple firstTriple_;
   PermutedTriple lastTriple_;

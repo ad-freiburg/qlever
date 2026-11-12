@@ -15,7 +15,7 @@
 #include "engine/Sort.h"
 #include "engine/StripColumns.h"
 #include "engine/VariableToColumnMap.h"
-#include "engine/binary_export/BinaryImport.h"
+#include "engine/binaryExport/BinaryImport.h"
 #include "global/RuntimeParameters.h"
 #include "index/ExportIds.h"
 #include "index/TripleComponentConversions.h"

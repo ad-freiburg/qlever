@@ -160,9 +160,9 @@ TEST(LibQlever, buildIndexWithAnExistingGlobalThreadPool) {
   EXPECT_NO_THROW(Qlever::buildIndex(config));
   EXPECT_THAT(
       logStream.str(),
-      HasSubstr(absl::StrCat("The global thread pool already exists with ",
-                             numThreadsOfPool, " threads, so the ",
-                             numThreadsOfPool + 1, " threads")));
+      ifLogLevelIsCompiledIn<LogLevel::Enum::WARN>(HasSubstr(absl::StrCat(
+          "The global thread pool already exists with ", numThreadsOfPool,
+          " threads, so the ", numThreadsOfPool + 1, " threads"))));
   EXPECT_EQ(ad_utility::globalExecutorNumThreads(), numThreadsOfPool);
 }
 
@@ -245,6 +245,12 @@ TEST(IndexBuilderConfig, validate) {
   AD_EXPECT_THROW_WITH_MESSAGE(c.validate(), HasSubstr("must be between"));
   c.bScoringParam_ = 1.1;
   AD_EXPECT_THROW_WITH_MESSAGE(c.validate(), HasSubstr("must be between"));
+
+  c = IndexBuilderConfig{};
+  c.hasWordRestrictPredicates_ = {"<p>"};
+  AD_EXPECT_THROW_WITH_MESSAGE(c.validate(), HasSubstr("require the option"));
+  c.addHasWordTriples_ = true;
+  EXPECT_NO_THROW(c.validate());
 
   c = IndexBuilderConfig{};
   c.numThreads_ = 0;
@@ -405,6 +411,44 @@ TEST(LibQlever, disableCaching) {
   }
 }
 
+// Test that the cache of an engine follows the runtime parameters, and that
+// the destructor of the engine removes the actions that bind the parameters to
+// it. Without that, changing the parameters after the engine is destroyed
+// would access the destroyed engine (which AddressSanitizer reports).
+TEST(LibQlever, destructorUnbindsRuntimeParameters) {
+  using namespace ad_utility::memory_literals;
+
+  // While the engine lives, its cache follows the parameters.
+  {
+    Qlever engine{buildTestEngineConfig("<s> <p> <o> .")};
+    auto cleanupMaxSize =
+        setRuntimeParameterForTest<&RuntimeParameters::cacheMaxSize_>(3_MB);
+    auto cleanupMaxSizeSingleEntry = setRuntimeParameterForTest<
+        &RuntimeParameters::cacheMaxSizeSingleEntry_>(2_MB);
+    EXPECT_EQ(engine.cache().getMaxSize(), 3_MB);
+    EXPECT_EQ(engine.cache().getMaxSizeSingleEntry(), 2_MB);
+  }
+
+  // After the engine is destroyed, changing the parameters must not touch it
+  // (the cleanups restore the default values at the end of the test).
+  auto cleanupMaxNumEntries =
+      setRuntimeParameterForTest<&RuntimeParameters::cacheMaxNumEntries_>(42);
+  auto cleanupMaxSize =
+      setRuntimeParameterForTest<&RuntimeParameters::cacheMaxSize_>(4_MB);
+  auto cleanupMaxSizeSingleEntry =
+      setRuntimeParameterForTest<&RuntimeParameters::cacheMaxSizeSingleEntry_>(
+          1_MB);
+  auto cleanupMemoryForQueries =
+      setRuntimeParameterForTest<&RuntimeParameters::memoryForQueries_>(1_GB);
+}
+
+namespace {
+// The memory that `numIds` `Id`s occupy.
+ad_utility::MemorySize memoryOfIds(size_t numIds) {
+  return ad_utility::MemorySize::bytes(numIds * sizeof(Id));
+}
+}  // namespace
+
 // Test that the runtime parameter `memory-for-queries` mirrors and controls
 // the memory limit of the engine's allocator.
 TEST(LibQlever, memoryForQueriesRuntimeParameter) {
@@ -430,7 +474,7 @@ TEST(LibQlever, memoryForQueriesRuntimeParameter) {
   EXPECT_EQ(engine.allocator().amountMemoryLeft(), initialMemoryLeft + 50_MB);
 
   // Decreasing works as long as the freed part is currently unused, i.e. not
-  // below the 32 MB allocated here (plus what the engine itself has
+  // below the `Id`s allocated here (plus what the engine itself has
   // allocated).
   Id* chunk = engine.allocator().allocate(4'000'000);
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -440,7 +484,7 @@ TEST(LibQlever, memoryForQueriesRuntimeParameter) {
   EXPECT_EQ(getRuntimeParameter<&RuntimeParameters::memoryForQueries_>(),
             100_MB);
   EXPECT_EQ(engine.allocator().amountMemoryLeft(),
-            initialMemoryLeft + 50_MB - 32_MB);
+            initialMemoryLeft + 50_MB - memoryOfIds(4'000'000));
 
   engine.allocator().deallocate(chunk, 4'000'000);
   setRuntimeParameter<&RuntimeParameters::memoryForQueries_>(20_MB);
@@ -955,9 +999,8 @@ TEST(LibQlever, allocatorGetter) {
   const auto memoryLeftBefore = constEngine.allocator().amountMemoryLeft();
   constexpr size_t numIds = 16;
   Id* ptr = allocator.allocate(numIds);
-  EXPECT_EQ(
-      constEngine.allocator().amountMemoryLeft(),
-      memoryLeftBefore - ad_utility::MemorySize::bytes(numIds * sizeof(Id)));
+  EXPECT_EQ(constEngine.allocator().amountMemoryLeft(),
+            memoryLeftBefore - memoryOfIds(numIds));
   allocator.deallocate(ptr, numIds);
   EXPECT_EQ(constEngine.allocator().amountMemoryLeft(), memoryLeftBefore);
 }
@@ -969,6 +1012,9 @@ TEST(LibQlever, allocatorGetter) {
 TEST(LibQlever, allocatorMakesRoomByClearingTheCache) {
   EngineConfig config = buildTestEngineConfig("<s> <p> <o> . <s2> <p> <o2> .");
   config.memoryLimit_ = ad_utility::MemorySize::megabytes(1);
+  // The engine sets `memory-for-queries` to its memory limit.
+  auto restoreMemoryForQueries = restoreRuntimeParameterOnScopeExit<
+      &RuntimeParameters::memoryForQueries_>();
   Qlever engine{config};
 
   // Run a query, the result of which is then stored in the cache as an unpinned
@@ -1053,4 +1099,104 @@ TEST(LibQlever, plannedQueryRequiresQueryExecutionTree) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       PlannedQuery(std::move(parsedQuery), nullptr, *qec),
       HasSubstr("Assertion `queryExecutionTree_ != nullptr` failed."));
+}
+
+// Test that a `Qlever` instance with `EngineConfig::compressedBlobFilename_`
+// set is populated from that blob file instead of from the on-disk index, and
+// that it rejects the options and operations that it does not support.
+TEST(LibQlever, loadFromCompressedBlobFile) {
+  std::string filename = gtestCurrentTestName() + ".blob";
+  ad_utility::testing::writeTestBlobFile(filename);
+  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
+
+  // The index basename deliberately does not exist, to verify that nothing is
+  // loaded from disk.
+  EngineConfig config;
+  config.baseName_ = "nonExistingIndexBasename";
+  config.compressedBlobFilename_ = filename;
+
+  // `persistUpdates_` is true by default, but not supported for a blob.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      Qlever{config},
+      HasSubstr("(`persistUpdates_`, which is true by default, or "
+                "`--persist-updates`)"));
+  config.persistUpdates_ = false;
+
+  // The other unsupported options.
+  auto expectUnsupported = [&config](auto setOption, std::string_view option,
+                                     ad_utility::source_location l =
+                                         AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    auto invalidConfig = config;
+    setOption(invalidConfig);
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        Qlever{invalidConfig},
+        AllOf(HasSubstr("loaded from a blob"), HasSubstr(option)));
+  };
+  expectUnsupported([](EngineConfig& c) { c.loadTextIndex_ = true; },
+                    "`loadTextIndex_`");
+  expectUnsupported(
+      [](EngineConfig& c) {
+        c.rebuildIndexStrategy_ =
+            RebuildIndexStrategy::parse("automatic:1:2:0.5");
+      },
+      "`rebuildIndexStrategy_`");
+  expectUnsupported(
+      [](EngineConfig& c) { c.preloadMaterializedViews_ = {"someView"}; },
+      "`preloadMaterializedViews_`");
+
+  // The index description is applied also for an index loaded from a blob.
+  config.indexDescription_ = "blob index";
+  Qlever qlever{config};
+  EXPECT_TRUE(qlever.isLoadedFromBlob());
+  EXPECT_EQ(qlever.query(std::string{ad_utility::testing::testBlobFileQuery},
+                         ad_utility::MediaType::tsv),
+            ad_utility::testing::testBlobFileQueryResult);
+  EXPECT_EQ(qlever.indexAndViewsSnapshot()->index_.getKbName(), "blob index");
+
+  // A query that needs a permutation fails with a readable message (the
+  // permutations of such an instance are never loaded).
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      qlever.query("SELECT * { ?s <p> ?o }", ad_utility::MediaType::tsv),
+      AllOf(HasSubstr("This query requires the permutation"),
+            HasSubstr("which was not loaded")));
+
+  // Updates, materialized views, and index rebuilds are not supported.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      ad_utility::testing::applyUpdateToEngine(qlever,
+                                               "INSERT DATA { <a> <b> <c> }"),
+      HasSubstr("An update is not supported for an index that is loaded from "
+                "a blob"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      qlever.vacuumDeltaTriples(
+          std::make_shared<ad_utility::CancellationHandle<>>()),
+      HasSubstr("Vacuuming the delta triples is not supported"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      qlever.writeMaterializedView("someView", "SELECT * { ?s ?p ?o }"),
+      HasSubstr("Writing a materialized view is not supported"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      qlever.loadMaterializedView("someView"),
+      HasSubstr("Loading a materialized view is not supported"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      qlever.deleteMaterializedView("someView"),
+      HasSubstr("Deleting a materialized view is not supported"));
+  auto snapshot = qlever.indexAndViewsSnapshot();
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      (void)qlever.rebuildIndexToDisk(
+          snapshot->index_,
+          IndexSwapConfig{"oldSource", "newSource", "oldTarget", "newTarget"},
+          std::make_shared<ad_utility::CancellationHandle<>>()),
+      HasSubstr("An index rebuild is not supported"));
+
+  // A blob file that does not exist, or that is a directory, is reported
+  // with a readable error message.
+  config.compressedBlobFilename_ = "nonExistingBlobFile";
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      Qlever{config},
+      HasSubstr("\"nonExistingBlobFile\" does not exist or is not a regular "
+                "file"));
+  config.compressedBlobFilename_ = ".";
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      Qlever{config},
+      HasSubstr("\".\" does not exist or is not a regular file"));
 }

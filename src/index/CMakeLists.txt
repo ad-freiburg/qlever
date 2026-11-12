@@ -21,7 +21,11 @@ add_library(index
         LocatedTriples.cpp Permutation.cpp TextMetaData.cpp
         DocsDB.cpp FTSAlgorithms.cpp
         CompressedRelationMetadata.cpp CompressedRelationReader.cpp
-        CompressedRelationReaderBlockSelection.cpp CompressedRelationWriter.cpp
+        CompressedRelationReaderBlockSelection.cpp compressedRelationWriter/CompressedRelationWriter.cpp
+        chunkwisePermutationWriter/BoundaryConsolidator.cpp
+        chunkwisePermutationWriter/ChunkWriter.cpp
+        chunkwisePermutationWriter/ConcurrentCallbackDispatcher.cpp
+        chunkwisePermutationWriter/Statistics.cpp
         DistinctCol0Ids.cpp
         PatternCreator.cpp ScanSpecification.cpp
         DeltaTriples.cpp TextScoring.cpp TextScoringEnum.cpp TextIndexReadWrite.cpp

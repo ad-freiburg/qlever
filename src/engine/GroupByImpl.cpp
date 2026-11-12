@@ -321,20 +321,21 @@ GroupByImpl::GroupByImpl(QueryExecutionContext* qec, bool isImplicitGroupBy,
   // used in any of the aggregate aliases. Note that a `COUNT(DISTINCT *)`
   // implicitly uses all the visible columns without mentioning any variable
   // explicitly, so in that case no column may be stripped.
-  if (getRuntimeParameter<&RuntimeParameters::stripColumns_>() &&
-      !ql::ranges::any_of(
-          _aliases,
-          &sparqlExpression::SparqlExpressionPimpl::readsAllVisibleColumns,
-          &Alias::_expression)) {
-    std::set<Variable> usedVariables{_groupByVariables.begin(),
-                                     _groupByVariables.end()};
-    for (const auto& alias : _aliases) {
-      for (const auto* var : alias._expression.containedVariables()) {
-        usedVariables.insert(*var);
-      }
+  if (getRuntimeParameter<&RuntimeParameters::stripColumns_>()) {
+    using AddVarsResult =
+        columnStrippingHelpers::VarsRequiredFromSubtree::AddVarsResult;
+    std::set<Variable> groupByVariables{_groupByVariables.begin(),
+                                        _groupByVariables.end()};
+    columnStrippingHelpers::VarsRequiredFromSubtree usedVariables(
+        &groupByVariables);
+    bool allVarsNeeded =
+        ql::ranges::any_of(_aliases, [&usedVariables](const auto& alias) {
+          return usedVariables.addVarsFromExpression(alias._expression) ==
+                 AddVarsResult::NeedAllVarsFromSubtree;
+        });
+    if (!allVarsNeeded) {
+      subtree = usedVariables.stripSubtree(std::move(subtree));
     }
-    subtree = QueryExecutionTree::makeTreeWithStrippedColumns(
-        std::move(subtree), usedVariables);
   }
 
   // Sort `groupByVariables` to ensure that the cache key is order invariant.
@@ -409,9 +410,9 @@ size_t GroupByImpl::getResultWidth() const {
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> GroupByImpl::resultSortedOn() const {
+qlm::vector<ColumnIndex> GroupByImpl::resultSortedOn() const {
   auto varCols = getInternallyVisibleVariableColumns();
-  vector<ColumnIndex> sortedOn;
+  qlm::vector<ColumnIndex> sortedOn{allocator()};
   sortedOn.reserve(_groupByVariables.size());
   for (const auto& var : _groupByVariables) {
     sortedOn.push_back(varCols[var].columnIndex_);
@@ -482,6 +483,8 @@ float GroupByImpl::getMultiplicity([[maybe_unused]] size_t col) {
 std::optional<std::shared_ptr<QueryExecutionTree>>
 GroupByImpl::makeTreeWithStrippedColumns(
     const std::set<Variable>& requestedVariables) const {
+  using AddVarsResult =
+      columnStrippingHelpers::VarsRequiredFromSubtree::AddVarsResult;
   // Keep the aliases whose target is requested, and the aliases whose target
   // is read by a kept alias. The subtree must provide the requested variables,
   // the variables read by the kept aliases, and the variables that the
@@ -498,13 +501,12 @@ GroupByImpl::makeTreeWithStrippedColumns(
     }
     // A `COUNT(DISTINCT *)` reads all columns of the subtree, so nothing may
     // be stripped below it (the caller then adds a `StripColumns` on top).
-    if (alias._expression.readsAllVisibleColumns()) {
+    auto addVarsResult =
+        varsRequiredFromSubtree.addVarsFromExpression(alias._expression);
+    if (addVarsResult == AddVarsResult::NeedAllVarsFromSubtree) {
       return std::nullopt;
     }
     keptAliases.push_back(alias);
-    for (const Variable* aliasVar : alias._expression.containedVariables()) {
-      varsRequiredFromSubtree.add(*aliasVar);
-    }
   }
   ql::ranges::reverse(keptAliases);
   for (const Variable& groupByVar : _groupByVariables) {
@@ -514,8 +516,7 @@ GroupByImpl::makeTreeWithStrippedColumns(
   // Strip the subtree and build the new `GroupByImpl` with the private
   // constructor, which keeps `isImplicitGroupBy_` (like `cloneImpl`, because
   // `_groupByVariables` is already reduced to the variables of the subtree).
-  auto subtree = QueryExecutionTree::makeTreeWithStrippedColumns(
-      _subtree, varsRequiredFromSubtree.get());
+  auto subtree = varsRequiredFromSubtree.stripSubtree(_subtree);
   auto impl = std::unique_ptr<GroupByImpl>(
       new GroupByImpl{_executionContext, isImplicitGroupBy_, _groupByVariables,
                       std::move(keptAliases), std::move(subtree)});
@@ -1217,12 +1218,12 @@ std::optional<IdTable> GroupByImpl::computeGroupByForJoinWithFullScan() const {
       threeVarSubtree.getRootOperation());
   AD_CORRECTNESS_CHECK(indexScan != nullptr);
 
-  auto getExactCardinality = [&indexScan, &permutation](Id id) {
+  auto getExactCardinality = [this, &indexScan, &permutation](Id id) {
     return permutation.getResultSizeOfScan(
         permutation.getScanSpecAndBlocks(
             ScanSpecification{id, std::nullopt, std::nullopt},
             indexScan->locatedTriplesState()),
-        indexScan->locatedTriplesState());
+        indexScan->locatedTriplesState(), cancellationHandle());
   };
 
   // TODO<joka921, C++23> Simplify the following pattern by using
@@ -1672,8 +1673,8 @@ GroupByImpl::HashMapAggregationData<NUM_GROUP_COLUMNS>::getHashEntries(
 template <size_t NUM_GROUP_COLUMNS>
 [[nodiscard]] GroupByImpl::HashMapAggregationData<
     NUM_GROUP_COLUMNS>::ArrayOrVector<std::vector<Id>>
-GroupByImpl::HashMapAggregationData<NUM_GROUP_COLUMNS>::getSortedGroupColumns()
-    const {
+GroupByImpl::HashMapAggregationData<NUM_GROUP_COLUMNS>::getSortedGroupColumns(
+    const SortConfig& sortConfig) const {
   // Get data in a row-wise manner.
   std::vector<ArrayOrVector<Id>> sortedKeys;
   for (const auto& val : map_) {
@@ -1681,7 +1682,7 @@ GroupByImpl::HashMapAggregationData<NUM_GROUP_COLUMNS>::getSortedGroupColumns()
   }
 
   // Sort data.
-  ql::ranges::sort(sortedKeys.begin(), sortedKeys.end());
+  sortConfig.sort(sortedKeys, std::less<>{});
 
   // Get data in a column-wise manner.
   ArrayOrVector<std::vector<Id>> result;
@@ -1877,7 +1878,7 @@ IdTable GroupByImpl::createResultFromHashMap(
   // Create result table, filling in the group values, since they might be
   // required in evaluation
   ad_utility::Timer sortingTimer{ad_utility::Timer::Started};
-  auto sortedKeys = aggregationData.getSortedGroupColumns();
+  auto sortedKeys = aggregationData.getSortedGroupColumns(sortConfig());
   runtimeInfo().addDetail("timeResultSorting", sortingTimer.msecs());
 
   size_t numberOfGroups = aggregationData.getNumberOfGroups();

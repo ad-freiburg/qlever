@@ -15,6 +15,7 @@
 #include "../util/IdTableHelpers.h"
 #include "../util/IdTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/LocalVocabEntryTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
 #include "./LazyJoinTestHelpers.h"
@@ -28,6 +29,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/idTable/IdTable.h"
 #include "index/TripleComponentConversions.h"
+#include "util/joinAlgorithms/IndexNestedLoopJoin.h"
 
 using ad_utility::testing::makeAllocator;
 using namespace ad_utility::testing;
@@ -412,9 +414,9 @@ TEST(OptionalJoin, gallopingJoin) {
 // _____________________________________________________________________________
 TEST(OptionalJoin, computeOptionalJoinIndexNestedLoopJoinOptimization) {
   auto* qec = ad_utility::testing::getQec();
-  LocalVocabEntry entryA = LocalVocabEntry::fromStringRepresentation(
+  LocalVocabEntry entryA = localVocabEntryFromStringRepresentation(
       "\"a\"", qec->getLocalVocabContext());
-  LocalVocabEntry entryB = LocalVocabEntry::fromStringRepresentation(
+  LocalVocabEntry entryB = localVocabEntryFromStringRepresentation(
       "\"b\"", qec->getLocalVocabContext());
 
   LocalVocab leftVocab;
@@ -474,9 +476,9 @@ TEST(OptionalJoin, computeOptionalJoinIndexNestedLoopJoinOptimization) {
 // _____________________________________________________________________________
 TEST(OptionalJoin, computeLazyOptionalJoinIndexNestedLoopJoinOptimization) {
   auto* qec = ad_utility::testing::getQec();
-  LocalVocabEntry entryA = LocalVocabEntry::fromStringRepresentation(
+  LocalVocabEntry entryA = localVocabEntryFromStringRepresentation(
       "\"a\"", qec->getLocalVocabContext());
-  LocalVocabEntry entryB = LocalVocabEntry::fromStringRepresentation(
+  LocalVocabEntry entryB = localVocabEntryFromStringRepresentation(
       "\"b\"", qec->getLocalVocabContext());
 
   LocalVocab leftVocab;
@@ -1191,8 +1193,8 @@ TEST_P(OptionalJoinWithIndexScan, twoColumnsLocalVocabPropagation) {
   std::vector<Result::IdTableVocabPair> tAndV;
 
   auto i = [&qec2](int i) {
-    return LocalVocabEntry{iri(absl::StrCat("<local-payload-", i, ">")),
-                           qec2->getLocalVocabContext()};
+    return localVocabEntry(iri(absl::StrCat("<local-payload-", i, ">")),
+                           qec2->getLocalVocabContext());
   };
   LocalVocab v;
   auto l1 = Id::makeFromLocalVocabIndex(v.getIndexAndAddIfNotContained(i(1)));
@@ -1375,10 +1377,34 @@ std::shared_ptr<QueryExecutionTree> makeOptionalJoinThatIsResortedOnLimit(
       qec, std::move(left), std::move(right));
   // Without a limit the left input is the larger one, so the sort order is
   // preserved.
-  EXPECT_TRUE(result->getRootOperation()->isSortedBy({0}));
+  EXPECT_TRUE(
+      result->getRootOperation()->isSortedBy(std::vector<ColumnIndex>{0}));
   return result;
 }
 }  // namespace
+
+// Test that an `OptionalJoin` that drops its join columns is not sorted by any
+// column, while one that keeps them is sorted by the join column.
+TEST(OptionalJoin, resultSortedOnDependsOnKeepJoinColumns) {
+  // Two inputs that share the variable `?a` in their first column and are
+  // sorted by it.
+  using Vars = std::vector<std::optional<Variable>>;
+  auto* qec = ad_utility::testing::getQec();
+  auto makeInput = [&](const Variable& otherVariable) {
+    return ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, makeIdTableFromVector({{0, 1}, {1, 2}}),
+        Vars{Variable{"?a"}, otherVariable}, false,
+        std::vector<ColumnIndex>{0});
+  };
+  auto left = makeInput(Variable{"?b"});
+  auto right = makeInput(Variable{"?c"});
+
+  // The join on `?a` is sorted by `?a` only if the join column is kept.
+  OptionalJoin keepJoinColumns{qec, left, right};
+  EXPECT_THAT(keepJoinColumns.resultSortedOn(), ::testing::ElementsAre(0));
+  OptionalJoin dropJoinColumns{qec, left, right, false};
+  EXPECT_THAT(dropJoinColumns.resultSortedOn(), ::testing::IsEmpty());
+}
 
 // _____________________________________________________________________________
 // Pushing a `LIMIT` into the left input can change the algorithm and with it
@@ -1411,8 +1437,8 @@ TEST(OptionalJoin, limitPushdownRestoresSortOrderOfLeftInput) {
   // `OptionalJoin` smaller than its right input.
   optionalJoin.applyLimitOffset({3}, false);
 
-  EXPECT_TRUE(
-      optionalJoin.getChildren().at(0)->getRootOperation()->isSortedBy({0}));
+  EXPECT_TRUE(optionalJoin.getChildren().at(0)->getRootOperation()->isSortedBy(
+      std::vector<ColumnIndex>{0}));
 
   qec->getQueryTreeCache().clearAll();
   // Required because the children apply their `LIMIT` externally, which updates
@@ -1466,8 +1492,8 @@ TEST(OptionalJoin, limitPushdownRestoresSortOrderOfLeftInputThroughBind) {
   // `OptionalJoin` smaller than its right input.
   optionalJoin.applyLimitOffset({3}, false);
 
-  EXPECT_TRUE(
-      optionalJoin.getChildren().at(0)->getRootOperation()->isSortedBy({0}));
+  EXPECT_TRUE(optionalJoin.getChildren().at(0)->getRootOperation()->isSortedBy(
+      std::vector<ColumnIndex>{0}));
 
   qec->getQueryTreeCache().clearAll();
   // Required because the children apply their `LIMIT` externally, which updates
@@ -1480,4 +1506,43 @@ TEST(OptionalJoin, limitPushdownRestoresSortOrderOfLeftInputThroughBind) {
       EXPECT_NE(id, Id::makeUndefined());
     }
   }
+}
+
+// Test that `IndexNestedLoopJoin` requires a cancellation handle.
+TEST(OptionalJoin, indexNestedLoopJoinRequiresCancellationHandle) {
+  auto makeResult = []() {
+    return std::make_shared<const Result>(
+        makeIdTableFromVector({{1}}),
+        qlm::vector<ColumnIndex>(
+            {0}, ad_utility::makeUnlimitedAllocator<ColumnIndex>()),
+        LocalVocab{});
+  };
+  auto makeJoin = [&makeResult](ad_utility::SharedCancellationHandle handle) {
+    joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin join(
+        {{{0, 0}}, makeAllocator()}, makeResult(), makeResult(),
+        std::move(handle));
+  };
+  EXPECT_NO_THROW(
+      makeJoin(std::make_shared<ad_utility::CancellationHandle<>>()));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      makeJoin(nullptr),
+      ::testing::HasSubstr("cancellationHandle_ != nullptr"));
+}
+
+// Test that the probe loop of the index nested loop join checks the
+// cancellation handle: with a cancelled handle, `computeLeftExistance` throws
+// instead of finishing the loop.
+TEST(OptionalJoin, indexNestedLoopJoinProbeLoopChecksCancellation) {
+  auto makeResult = []() {
+    return std::make_shared<const Result>(
+        makeIdTableFromVector({{1}, {2}}),
+        qlm::vector<ColumnIndex>(
+            {0}, ad_utility::makeUnlimitedAllocator<ColumnIndex>()),
+        LocalVocab{});
+  };
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+  handle->cancel(ad_utility::CancellationState::MANUAL);
+  joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin join(
+      {{{0, 0}}, makeAllocator()}, makeResult(), makeResult(), handle);
+  EXPECT_THROW(join.computeLeftExistance(), ad_utility::CancellationException);
 }

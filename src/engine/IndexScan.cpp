@@ -194,8 +194,8 @@ size_t IndexScan::getResultWidth() const {
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> IndexScan::variableAndGraphColumns() const {
-  std::vector<ColumnIndex> result;
+qlm::vector<ColumnIndex> IndexScan::variableAndGraphColumns() const {
+  qlm::vector<ColumnIndex> result{allocator()};
   for (auto i : ad_utility::integerRange(ColumnIndex{numVariables_})) {
     result.push_back(i);
   }
@@ -208,7 +208,7 @@ std::vector<ColumnIndex> IndexScan::variableAndGraphColumns() const {
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> IndexScan::resultSortedOn() const {
+qlm::vector<ColumnIndex> IndexScan::resultSortedOn() const {
   auto result = variableAndGraphColumns();
 
   if (varsToKeep_.has_value()) {
@@ -225,7 +225,7 @@ std::vector<ColumnIndex> IndexScan::resultSortedOn() const {
 
 // _____________________________________________________________________________
 bool IndexScan::isDistinctByImpl(
-    const std::vector<ColumnIndex>& distinctIndices) const {
+    ql::span<const ColumnIndex> distinctIndices) const {
   // Duplicate triples are removed during scanning, so the result contains every
   // matching triple (or quad, if a graph column is present) exactly once. Its
   // rows are therefore uniquely identified by the triple's variable columns
@@ -273,19 +273,10 @@ bool IndexScan::isDistinctByImpl(
 std::optional<std::shared_ptr<QueryExecutionTree>>
 IndexScan::getUpdatedQueryExecutionTreeWithPrefilterApplied(
     const std::vector<PrefilterVariablePair>& prefilterVariablePairs) const {
-  // If there is a LIMIT or OFFSET clause that constrains the scan, we cannot
-  // apply prefiltering. Also, if there is no block metadata, there is nothing
-  // to prefilter.
-  if (!getLimitOffset().isUnconstrained() ||
-      scanSpecAndBlocks_.sizeBlockMetadata_ == 0) {
-    return std::nullopt;
-  }
-
   // Get the variable by which this `IndexScan` is sorted, and its
-  // corresponding column index. If there is no variable, we cannot apply
-  // prefiltering (and there typically is no need to).
+  // corresponding column index, if prefiltering is possible at all.
   auto sortedVarAndColIndex =
-      getSortedVariableAndMetadataColumnIndexForPrefiltering();
+      getSortedVariableAndMetadataColumnIndexIfBlocksCanBeRestricted();
   if (!sortedVarAndColIndex.has_value()) {
     return std::nullopt;
   }
@@ -318,25 +309,81 @@ VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
   auto isContained = [&](const Variable& var) {
     return !varsToKeep_.has_value() || varsToKeep_.value().contains(var);
   };
-  auto addCol = [&isContained, &variableToColumnMap,
-                 nextColIdx = ColumnIndex{0},
-                 permutationColIdx = ColumnIndex{0},
-                 this](const Variable& var) mutable {
+  // Add each variable at the next result column, with the undef status of the
+  // permutation column it is read from.
+  ColumnIndex nextColIdx = 0;
+  forEachVariableAndPermutationColumn([&](const Variable& var,
+                                          ColumnIndex permutationColIdx) {
     if (isContained(var)) {
       variableToColumnMap[var] = {
           nextColIdx, permutation().getColumnUndefStatus(permutationColIdx)};
       ++nextColIdx;
     }
-    ++permutationColIdx;
-  };
+  });
+  return variableToColumnMap;
+}
 
-  for (const TripleComponent* const ptr : getPermutedTriple()) {
-    if (ptr->isVariable()) {
-      addCol(ptr->getVariable());
+// Turn the sorted, unique `indices` into `blocks` into ranges, merging
+// adjacent blocks.
+static BlockMetadataRanges getRangesOfSelectedBlocks(
+    const std::vector<BlockMetadataIt>& blocks,
+    const std::vector<size_t>& indices) {
+  AD_CONTRACT_CHECK(ql::ranges::is_sorted(indices) &&
+                    ql::ranges::adjacent_find(indices) == indices.end());
+  BlockMetadataRanges ranges;
+  for (size_t index : indices) {
+    AD_CONTRACT_CHECK(index < blocks.size());
+    auto it = blocks[index];
+    if (!ranges.empty() && ranges.back().end() == it) {
+      ranges.back() = BlockMetadataRange{ranges.back().begin(), it + 1};
+    } else {
+      ranges.emplace_back(it, it + 1);
     }
   }
-  ql::ranges::for_each(additionalVariables_, addCol);
-  return variableToColumnMap;
+  return ranges;
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+IndexScan::makeCopyWithSelectedBlocks(BlockSelector selectBlocks) const {
+  auto sortedVarAndColIndex =
+      getSortedVariableAndMetadataColumnIndexIfBlocksCanBeRestricted();
+  if (!sortedVarAndColIndex.has_value()) {
+    return std::nullopt;
+  }
+  const size_t colIdx = sortedVarAndColIndex.value().second;
+  // The bounds of the scan result, which also tell whether it is empty.
+  auto metadataAndBlocks = getMetadataForScan();
+  if (!metadataAndBlocks.has_value()) {
+    return std::nullopt;
+  }
+
+  // Describe each block for the selector, and keep its iterator to turn the
+  // selection back into ranges.
+  const auto& scanSpec = scanSpecAndBlocks_.scanSpec_;
+  const auto& locatedTriples =
+      permutation().getLocatedTriplesForPermutation(locatedTriplesState());
+  const auto& bounds = metadataAndBlocks.value().firstAndLastTriple_;
+  BlocksOfSortedVariable blocksOfSortedVariable{
+      bounds.firstTriple_.getId(colIdx), bounds.lastTriple_.getId(colIdx), {}};
+  std::vector<BlockMetadataIt> iterators;
+  for (const auto& range : scanSpecAndBlocks_.blockMetadata_) {
+    for (auto it = range.begin(); it != range.end(); ++it) {
+      blocksOfSortedVariable.blocks_.push_back(
+          {it->firstTriple_.getId(colIdx), it->lastTriple_.getId(colIdx),
+           CompressedRelationReader::getNumRowsLowerBound(scanSpec, *it,
+                                                          locatedTriples),
+           CompressedRelationReader::isBlockCompletelyInScan(scanSpec, *it)});
+      iterators.push_back(it);
+    }
+  }
+
+  auto selected = selectBlocks(blocksOfSortedVariable);
+  if (!selected.has_value()) {
+    return std::nullopt;
+  }
+  return makeCopyWithPrefilteredScanSpecAndBlocks(
+      {scanSpec, getRangesOfSelectedBlocks(iterators, selected.value())});
 }
 
 //______________________________________________________________________________
@@ -460,8 +507,8 @@ std::pair<bool, size_t> IndexScan::computeSizeEstimate() const {
 // _____________________________________________________________________________
 size_t IndexScan::getExactSize() const {
   AD_CORRECTNESS_CHECK(_executionContext);
-  return permutation().getResultSizeOfScan(scanSpecAndBlocks_,
-                                           locatedTriplesState());
+  return permutation().getResultSizeOfScan(
+      scanSpecAndBlocks_, locatedTriplesState(), cancellationHandle());
 }
 
 // _____________________________________________________________________________
@@ -600,6 +647,17 @@ IndexScan::getSortedVariableAndMetadataColumnIndexForPrefiltering() const {
   const auto& tripleComp = permutedTriple.at(colIdx);
   AD_CORRECTNESS_CHECK(tripleComp->isVariable());
   return std::make_pair(tripleComp->getVariable(), colIdx);
+}
+
+// _____________________________________________________________________________
+std::optional<std::pair<Variable, ColumnIndex>>
+IndexScan::getSortedVariableAndMetadataColumnIndexIfBlocksCanBeRestricted()
+    const {
+  if (!getLimitOffset().isUnconstrained() ||
+      scanSpecAndBlocks_.sizeBlockMetadata_ == 0) {
+    return std::nullopt;
+  }
+  return getSortedVariableAndMetadataColumnIndexForPrefiltering();
 }
 
 // ___________________________________________________________________________
@@ -1243,35 +1301,35 @@ VariableToColumnMap IndexScan::computePermutationColumnIndices() const {
   // hidden if this scan is the root of a subquery.
   const auto& varToColInResult = getInternallyVisibleVariableColumns();
 
-  auto addVar = [this, &varToColInResult, &map](const Variable& var,
-                                                ColumnIndex col) {
-    // Skip variables that are stripped away as they are not available in the
-    // result.
-    if (varsToKeep_.has_value() && !varsToKeep_.value().contains(var)) {
-      return;
-    }
+  forEachVariableAndPermutationColumn(
+      [this, &varToColInResult, &map](const Variable& var, ColumnIndex col) {
+        // Skip variables that are stripped away as they are not available in
+        // the result.
+        if (varsToKeep_.has_value() && !varsToKeep_.value().contains(var)) {
+          return;
+        }
 
-    // Deal with potentially undef columns: inherit undef status from main
-    // `VariableToColumnMap`.
-    map[var] = {col, varToColInResult.at(var).mightContainUndef_};
-  };
+        // Deal with potentially undef columns: inherit undef status from main
+        // `VariableToColumnMap`.
+        map[var] = {col, varToColInResult.at(var).mightContainUndef_};
+      });
+  return map;
+}
 
-  // Add those of the first three columns which are read into variables. The
-  // permutation column index is given by `enumerate` (0, 1, 2 for the segments
-  // of the permuted triple). For example, if only the last segment contains a
-  // variable it is still assigned 2 not 0.
+// _____________________________________________________________________________
+void IndexScan::forEachVariableAndPermutationColumn(
+    absl::FunctionRef<void(const Variable&, ColumnIndex)> f) const {
+  // The permutation column of a triple variable is its position in the
+  // permuted triple (0, 1, 2), so a variable only in the last position gets
+  // column 2, not 0.
   auto spo = getPermutedTriple();
   for (const auto [index, component] : ::ranges::views::enumerate(spo)) {
     if (component->isVariable()) {
-      addVar(component->getVariable(), index);
+      f(component->getVariable(), index);
     }
   }
-
-  // Add all additional columns.
   for (const auto& [index, var] :
        ::ranges::views::zip(additionalColumns_, additionalVariables_)) {
-    addVar(var, index);
+    f(var, index);
   }
-
-  return map;
 }

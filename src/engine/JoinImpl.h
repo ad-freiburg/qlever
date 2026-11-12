@@ -12,14 +12,16 @@
 #ifndef QLEVER_SRC_ENGINE_JOINIMPL_H
 #define QLEVER_SRC_ENGINE_JOINIMPL_H
 
+#include <absl/functional/function_ref.h>
+
 #include "backports/concepts.h"
 #include "engine/AddCombinedRowToTable.h"
 #include "engine/IndexScan.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 #include "util/ContainersWithAllocator.h"
-#include "util/JoinAlgorithms/JoinColumnMapping.h"
 #include "util/TypeTraits.h"
+#include "util/joinAlgorithms/JoinColumnMapping.h"
 
 class JoinImpl : public Operation {
  private:
@@ -52,7 +54,7 @@ class JoinImpl : public Operation {
 
   size_t getResultWidth() const override;
 
-  std::vector<ColumnIndex> resultSortedOn() const override;
+  qlm::vector<ColumnIndex> resultSortedOn() const override;
 
   uint64_t getSizeEstimateBeforeLimit() override {
     if (!sizeEstimateComputed_) {
@@ -63,6 +65,8 @@ class JoinImpl : public Operation {
   }
 
   size_t getCostEstimate() override;
+
+  std::vector<size_t> getCostEstimatesChargedForChildren() override;
 
   bool knownEmptyResult() override {
     return left_->knownEmptyResult() || right_->knownEmptyResult();
@@ -136,7 +140,7 @@ class JoinImpl : public Operation {
   std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
       const parsedQuery::Bind& bind) const override;
   std::unique_ptr<Operation> cloneWithNewChildren(
-      std::vector<std::shared_ptr<QueryExecutionTree>> children) const override;
+      qlm::vector<std::shared_ptr<QueryExecutionTree>> children) const override;
 
  private:
   // A special implementation that is called when both children are
@@ -192,8 +196,20 @@ class JoinImpl : public Operation {
                            const IdTable& dynB, ColumnIndex jc2,
                            IdTable* dynRes);
 
+  // For each child (in the order of `getChildren()`), the result of `fallback`
+  // for the child, bounded by the number of rows that the join reads of it if
+  // it is an index scan that the join reads only partially.
+  std::vector<size_t> getNumRowsReadOfChildrenOr(
+      absl::FunctionRef<size_t(QueryExecutionTree&)> fallback) const;
+
   // Commonly used code for the various known-to-be-empty cases.
   Result createEmptyResult() const;
+
+  // The pair of join columns as a range of pairs, as expected by the functions
+  // that are written for joins on several columns.
+  std::array<std::array<ColumnIndex, 2>, 1> joinColumns() const {
+    return {{{leftJoinCol_, rightJoinCol_}}};
+  }
 
   // Get permutation of input and output columns to apply before and after
   // joining. This is required because the join algorithms expect the join

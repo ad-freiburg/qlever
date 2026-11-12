@@ -9,8 +9,8 @@
 #include "../util/IdTestHelpers.h"
 #include "global/SpecialIds.h"
 #include "index/PatternCreator.h"
-#include "util/Serializer/ByteBufferSerializer.h"
-#include "util/Serializer/Serializer.h"
+#include "util/serializer/ByteBufferSerializer.h"
+#include "util/serializer/Serializer.h"
 
 namespace {
 auto V = ad_utility::testing::VocabId;
@@ -166,6 +166,7 @@ TEST(PatternCreator, writeAndReadWithFinish) {
 // reduced precision. Check that this is done without changing the state of the
 // global log stream, which would also affect everything that is logged later.
 TEST(PatternCreator, printStatisticsFloatFormat) {
+  ENFORCE_LOG_LEVEL_OR_SKIP(INFO);
   std::string filename = gtestCurrentTestName();
   absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
   auto [logCleanup, logStream] = setGlobalLoggingStreamToStringStream();

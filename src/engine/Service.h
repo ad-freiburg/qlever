@@ -72,7 +72,9 @@ class Service : public Operation {
   // Methods inherited from base class `Operation`.
   std::string getDescriptor() const override;
   size_t getResultWidth() const override;
-  std::vector<ColumnIndex> resultSortedOn() const override { return {}; }
+  qlm::vector<ColumnIndex> resultSortedOn() const override {
+    return qlm::vector<ColumnIndex>{allocator()};
+  }
   float getMultiplicity(size_t col) override;
 
  private:
@@ -141,7 +143,7 @@ class Service : public Operation {
   Result computeResult(bool requestLaziness) override;
 
   // Read the result from the `response`, which is in QLever's binary format
-  // (see `engine/binary_export/BinaryExport.h`). This is the counterpart of the
+  // (see `engine/binaryExport/BinaryExport.h`). This is the counterpart of the
   // JSON handling in `computeResultImpl`.
   Result computeBinaryResult(bool requestLaziness,
                              HttpOrHttpsResponse response);

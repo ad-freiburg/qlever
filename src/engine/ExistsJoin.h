@@ -18,7 +18,7 @@ class ExistsJoin : public Operation {
   // The left and right child.
   std::shared_ptr<QueryExecutionTree> left_;
   std::shared_ptr<QueryExecutionTree> right_;
-  std::vector<std::array<ColumnIndex, 2>> joinColumns_;
+  qlm::vector<std::array<ColumnIndex, 2>> joinColumns_;
 
   // The variable of the added (Boolean) result column.
   Variable existsVariable_;
@@ -61,7 +61,7 @@ class ExistsJoin : public Operation {
 
   size_t getResultWidth() const override;
 
-  std::vector<ColumnIndex> resultSortedOn() const override;
+  qlm::vector<ColumnIndex> resultSortedOn() const override;
 
   bool knownEmptyResult() override { return left_->knownEmptyResult(); }
 
@@ -126,7 +126,7 @@ class ExistsJoin : public Operation {
   std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
       const parsedQuery::Bind& bind) const override;
   std::unique_ptr<Operation> cloneWithNewChildren(
-      std::vector<std::shared_ptr<QueryExecutionTree>> children) const override;
+      qlm::vector<std::shared_ptr<QueryExecutionTree>> children) const override;
 
   // Helper function to modify the `IdTable` such that it gains a column
   // signaling if the values exist on the right or not.

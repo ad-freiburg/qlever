@@ -13,13 +13,17 @@
 #include "../util/IdTableHelpers.h"
 #include "../util/IdTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/LocalVocabEntryTestHelpers.h"
+#include "../util/OperationTestHelpers.h"
 #include "backports/algorithm.h"
 #include "engine/NamedResultCache.h"
 #include "engine/NamedResultCacheSerializer.h"
 #include "index/LocalVocabEntry.h"
-#include "util/Serializer/ByteBufferSerializer.h"
+#include "util/serializer/ByteBufferSerializer.h"
 
 using namespace ad_utility::serialization;
+using ad_utility::testing::colIndices;
+using ad_utility::testing::iriLocalVocabEntry;
 using ::testing::ElementsAre;
 using ::testing::UnorderedElementsAreArray;
 
@@ -42,7 +46,8 @@ class NamedResultCacheSerializerTest : public ::testing::Test {
     ByteBufferWriteSerializer writeSerializer;
     writeSerializer << value;
     ByteBufferReadSerializer readSerializer{std::move(writeSerializer).data()};
-    NamedResultCache::Value result;
+    NamedResultCache::Value result{{}, {}, colIndices({}, allocator),
+                                   {}, {}, {}};
     result.allocatorForSerialization_ = std::move(allocator);
     result.contextForSerialization_ = &qec_->getIndex().getLocalVocabContext();
     readSerializer >> result;
@@ -64,7 +69,7 @@ class NamedResultCacheSerializerTest : public ::testing::Test {
     return NamedResultCache::Value{std::make_shared<const IdTable>(
                                        makeIdTableFromVector({{1, 2}, {3, 4}})),
                                    std::move(varColMap),
-                                   {0},
+                                   colIndices({0}),
                                    LocalVocab{},
                                    std::move(cacheKey),
                                    std::nullopt};
@@ -73,8 +78,8 @@ class NamedResultCacheSerializerTest : public ::testing::Test {
   // Read a `Value` from the given serialized `data`.
   NamedResultCache::Value deserializeValue(std::vector<char> data) const {
     ByteBufferReadSerializer readSerializer{std::move(data)};
-    NamedResultCache::Value value;
-    value.allocatorForSerialization_ = ad_utility::makeUnlimitedAllocator<Id>();
+    NamedResultCache::Value value{{}, {}, colIndices({}, alloc_), {}, {}, {}};
+    value.allocatorForSerialization_ = alloc_;
     value.contextForSerialization_ = &qec_->getIndex().getLocalVocabContext();
     readSerializer >> value;
     return value;
@@ -86,7 +91,7 @@ TEST_F(NamedResultCacheSerializerTest, ValueSerialization) {
   // Create a test Value
   LocalVocab localVocab;
   [[maybe_unused]] auto local =
-      localVocab.getIndexAndAddIfNotContained(LocalVocabEntry::fromIriref(
+      localVocab.getIndexAndAddIfNotContained(iriLocalVocabEntry(
           "<http://example.org/test>", qec_->getLocalVocabContext()));
 
   // Note: Currently the serialization throws if we pass a `LocalVocabIndex`
@@ -99,7 +104,7 @@ TEST_F(NamedResultCacheSerializerTest, ValueSerialization) {
   varColMap[Variable{"?x"}] = makeAlwaysDefinedColumn(0);
   varColMap[Variable{"?y"}] = makePossiblyUndefinedColumn(1);
 
-  std::vector<ColumnIndex> sortedOn = {0, 1};
+  auto sortedOn = colIndices({0, 1});
 
   std::string cacheKey = "test-cache-key";
 
@@ -154,7 +159,7 @@ TEST_F(NamedResultCacheSerializerTest, ValueSerializationZeroCopy) {
 
   NamedResultCache::Value value{std::make_shared<const IdTable>(table.clone()),
                                 varColMap,
-                                {0, 1},
+                                colIndices({0, 1}),
                                 LocalVocab{},
                                 "test-cache-key",
                                 std::nullopt};
@@ -164,7 +169,8 @@ TEST_F(NamedResultCacheSerializerTest, ValueSerializationZeroCopy) {
   AlignedByteBufferReadSerializer readSerializer{
       std::move(writeSerializer).data()};
 
-  NamedResultCache::Value deserializedValue;
+  NamedResultCache::Value deserializedValue{{}, {}, colIndices({}, alloc_),
+                                            {}, {}, {}};
   deserializedValue.allocatorForSerialization_ = alloc_;
   deserializedValue.contextForSerialization_ =
       &qec_->getIndex().getLocalVocabContext();
@@ -200,27 +206,21 @@ TEST_F(NamedResultCacheSerializerTest, CacheSerialization) {
   const auto& localVocabContext = qec_->getLocalVocabContext();
   LocalVocab vocab1;
   vocab1.getIndexAndAddIfNotContained(
-      LocalVocabEntry::fromIriref("<http://example.org/1>", localVocabContext));
+      iriLocalVocabEntry("<http://example.org/1>", localVocabContext));
 
   LocalVocab vocab2;
   vocab2.getIndexAndAddIfNotContained(
-      LocalVocabEntry::fromIriref("<http://example.org/2>", localVocabContext));
+      iriLocalVocabEntry("<http://example.org/2>", localVocabContext));
 
-  cache.store("query-1", NamedResultCache::Value{
-                             std::make_shared<const IdTable>(table1.clone()),
-                             varColMap1,
-                             {0},
-                             std::move(vocab1),
-                             "key1",
-                             std::nullopt});
+  cache.store("query-1",
+              NamedResultCache::Value{
+                  std::make_shared<const IdTable>(table1.clone()), varColMap1,
+                  colIndices({0}), std::move(vocab1), "key1", std::nullopt});
 
-  cache.store("query-2", NamedResultCache::Value{
-                             std::make_shared<const IdTable>(table2.clone()),
-                             varColMap2,
-                             {1, 0},
-                             std::move(vocab2),
-                             "key2",
-                             std::nullopt});
+  cache.store("query-2",
+              NamedResultCache::Value{
+                  std::make_shared<const IdTable>(table2.clone()), varColMap2,
+                  colIndices({1, 0}), std::move(vocab2), "key2", std::nullopt});
 
   EXPECT_EQ(cache.numEntries(), 2);
 
@@ -490,7 +490,7 @@ TEST_F(NamedResultCacheSerializerTest, SerializationIsDeterministic) {
         std::make_shared<const IdTable>(
             makeIdTableFromVector({{0, 1, 2, 3}, {4, 5, 6, 7}})),
         std::move(varColMap),
-        {0, 1},
+        colIndices({0, 1}),
         LocalVocab{},
         "cache-key",
         std::nullopt};
@@ -534,13 +534,13 @@ TEST_F(NamedResultCacheSerializerTest, WriteValueWithReplacedColumns) {
   varColMap[Variable{"?x"}] = makeAlwaysDefinedColumn(0);
   varColMap[Variable{"?y"}] = makePossiblyUndefinedColumn(1);
   LocalVocab localVocab;
-  localVocab.getIndexAndAddIfNotContained(LocalVocabEntry::fromIriref(
+  localVocab.getIndexAndAddIfNotContained(iriLocalVocabEntry(
       "<http://example.org/test>", qec_->getLocalVocabContext()));
   ASSERT_EQ(localVocab.size(), 1);
 
   NamedResultCache::Value value{std::make_shared<const IdTable>(table.clone()),
                                 std::move(varColMap),
-                                {0, 1},
+                                colIndices({0, 1}),
                                 std::move(localVocab),
                                 "test-cache-key",
                                 std::nullopt};

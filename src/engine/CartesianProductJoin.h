@@ -20,7 +20,7 @@
 // operations.
 class CartesianProductJoin : public Operation {
  public:
-  using Children = std::vector<std::shared_ptr<QueryExecutionTree>>;
+  using Children = qlm::vector<std::shared_ptr<QueryExecutionTree>>;
 
  private:
   Children children_;
@@ -92,21 +92,21 @@ class CartesianProductJoin : public Operation {
   std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
       const parsedQuery::Bind& bind) const override;
   std::unique_ptr<Operation> cloneWithNewChildren(
-      std::vector<std::shared_ptr<QueryExecutionTree>> children) const override;
+      qlm::vector<std::shared_ptr<QueryExecutionTree>> children) const override;
 
   // The Cartesian product is distinct wrt `distinctIndices` iff every child is
   // distinct wrt the subset of `distinctIndices` that falls into its columns
   // (because the children have disjoint columns). A child without any such
   // column must have at most one row.
   bool isDistinctByImpl(
-      const std::vector<ColumnIndex>& distinctIndices) const override;
+      ql::span<const ColumnIndex> distinctIndices) const override;
 
   // Push a `DISTINCT` over `distinctIndices` down into the children. Because
   // the children have disjoint sets of columns, making each child distinct on
   // its slice of `distinctIndices` and then forming the Cartesian product
   // yields a result that is already distinct wrt `distinctIndices`.
   std::optional<std::shared_ptr<QueryExecutionTree>> makeDistinctTree(
-      const std::vector<ColumnIndex>& distinctIndices) const override;
+      ql::span<const ColumnIndex> distinctIndices) const override;
 
  protected:
   // Don't promise any sorting of the result.
@@ -119,7 +119,9 @@ class CartesianProductJoin : public Operation {
   // result is already being computed, at which point an invalidated sort order
   // could no longer be repaired (see the caution note on
   // `Operation::applyLimitOffset`).
-  std::vector<ColumnIndex> resultSortedOn() const override { return {}; }
+  qlm::vector<ColumnIndex> resultSortedOn() const override {
+    return qlm::vector<ColumnIndex>{allocator()};
+  }
 
  private:
   //! Compute the result of the query-subtree rooted at this element..
@@ -128,7 +130,7 @@ class CartesianProductJoin : public Operation {
   // For each child, compute the subset of `distinctIndices` that falls into
   // that child's columns, translated into the child's local column indices.
   std::vector<std::vector<ColumnIndex>> perChildDistinctIndices(
-      const std::vector<ColumnIndex>& distinctIndices) const;
+      ql::span<const ColumnIndex> distinctIndices) const;
 
   // Copy each element from the `inputColumn` `groupSize` times to the
   // `targetColumn`. Repeat until the `targetColumn` is completely filled. Skip

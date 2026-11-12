@@ -261,6 +261,14 @@ class CancellationHandle : public NoCopy {
     }
   }
 
+  // Return a function that calls `throwIfCancelled` (with the location of the
+  // caller of this function), e.g. as the `chunkOperation` of
+  // `ad_utility::chunkedForEach`. This handle must outlive the function.
+  auto cancellationChecker(
+      ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) {
+    return [this, location]() { throwIfCancelled(location); };
+  }
+
   // Return true if this cancellation handle has been cancelled, false
   // otherwise. If the watchdog is enabled, this will please it and print
   // a warning with the filename and line of the caller.
@@ -303,6 +311,7 @@ class CancellationHandle : public NoCopy {
   FRIEND_TEST(CancellationHandle,
               verifyPleaseWatchDogDoesNotAcceptInvalidState);
   FRIEND_TEST(CancellationHandle, verifyWatchDogEndsEarlyIfCancelled);
+  FRIEND_TEST(CancellationHandle, cancellationCheckerCallsThrowIfCancelled);
 };
 
 using SharedCancellationHandle = std::shared_ptr<CancellationHandle<>>;

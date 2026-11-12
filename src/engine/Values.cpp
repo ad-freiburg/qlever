@@ -51,7 +51,9 @@ size_t Values::getResultWidth() const {
 }
 
 // ____________________________________________________________________________
-std::vector<ColumnIndex> Values::resultSortedOn() const { return {}; }
+qlm::vector<ColumnIndex> Values::resultSortedOn() const {
+  return qlm::vector<ColumnIndex>{allocator()};
+}
 
 // ____________________________________________________________________________
 VariableToColumnMap Values::computeVariableToColumnMap() const {
@@ -101,6 +103,12 @@ void Values::computeMultiplicities() {
     // If there are no variables (and hence no columns), still add one entry to
     // the multiplicities to mark them as computed.
     multiplicities_.resize(1, 1);
+    return;
+  }
+  if (parsedValues_._values.empty()) {
+    // If there are variables but no rows, every column gets multiplicity 1 (the
+    // general formula below would divide zero rows by zero distinct values).
+    multiplicities_.resize(parsedValues_._variables.size(), 1);
     return;
   }
   multiplicities_.resize(parsedValues_._variables.size());

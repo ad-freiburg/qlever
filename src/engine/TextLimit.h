@@ -21,15 +21,15 @@ class TextLimit : public Operation {
   const size_t limit_;
   std::shared_ptr<QueryExecutionTree> child_;
   const ColumnIndex textRecordColumn_;
-  const std::vector<ColumnIndex> entityColumns_;
-  const std::vector<ColumnIndex> scoreColumns_;
+  const qlm::vector<ColumnIndex> entityColumns_;
+  const qlm::vector<ColumnIndex> scoreColumns_;
 
  public:
   TextLimit(QueryExecutionContext* qec, const size_t limit,
             std::shared_ptr<QueryExecutionTree> child,
             const ColumnIndex& textRecordColumn,
-            const std::vector<ColumnIndex>& entityColumns,
-            const std::vector<ColumnIndex>& scoreColumns);
+            ql::span<const ColumnIndex> entityColumns,
+            ql::span<const ColumnIndex> scoreColumns);
 
   ~TextLimit() override = default;
 
@@ -59,7 +59,7 @@ class TextLimit : public Operation {
     return limit_ == 0 || child_->knownEmptyResult();
   }
 
-  std::vector<ColumnIndex> resultSortedOn() const override;
+  qlm::vector<ColumnIndex> resultSortedOn() const override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 

@@ -8,8 +8,9 @@
 #include "backports/filesystem.h"
 #include "util/GTestHelpers.h"
 #include "util/IndexTestHelpers.h"
-#include "util/Serializer/ByteBufferSerializer.h"
-#include "util/Serializer/TripleSerializer.h"
+#include "util/LocalVocabEntryTestHelpers.h"
+#include "util/serializer/ByteBufferSerializer.h"
+#include "util/serializer/TripleSerializer.h"
 
 namespace {
 auto I = ad_utility::testing::IntId;
@@ -259,8 +260,8 @@ TEST(TripleSerializer, encodableIrisAreDeserializedAsEncodedIds) {
   auto* qecWithoutEncoding = ad_utility::testing::getQec();
   LocalVocab localVocab;
   auto LV = [&localVocab, qecWithoutEncoding](std::string_view iri) {
-    return Id::makeFromLocalVocabIndex(
-        localVocab.getIndexAndAddIfNotContained(LocalVocabEntry::fromIriref(
+    return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
+        ad_utility::testing::iriLocalVocabEntry(
             iri, qecWithoutEncoding->getLocalVocabContext())));
   };
   Id encodable = LV("<http://example.org/42>");

@@ -10,9 +10,12 @@
 #include "global/VocabIndex.h"
 #include "index/LocalVocabContext.h"
 
+namespace localVocabEntryDetail {
 // ___________________________________________________________________________
-ql::strong_ordering LocalVocabEntry::compareThreeWay(
-    const LocalVocabEntry& rhs) const {
+template <typename LiteralOrIriT>
+template <typename Other>
+ql::strong_ordering BasicLocalVocabEntry<LiteralOrIriT>::compareThreeWay(
+    const BasicLocalVocabEntry<Other>& rhs) const {
   AD_EXPENSIVE_CHECK(
       context_ == rhs.context_,
       "Contexts of LocalVocabEntries have to be identical. If this is not the "
@@ -42,7 +45,7 @@ ql::strong_ordering LocalVocabEntry::compareThreeWay(
                          : ql::strong_ordering::less;
     }
   }
-  int i = context_->compareWords(toStringRepresentation(),
+  int i = context_->compareWords(this->toStringRepresentation(),
                                  rhs.toStringRepresentation());
   if (i < 0) {
     return ql::strong_ordering::less;
@@ -54,27 +57,31 @@ ql::strong_ordering LocalVocabEntry::compareThreeWay(
 }
 
 // ___________________________________________________________________________
-auto LocalVocabEntry::positionInVocabExpensiveCase() const -> PositionInVocab {
+template <typename LiteralOrIriT>
+auto BasicLocalVocabEntry<LiteralOrIriT>::positionInVocabExpensiveCase() const
+    -> PositionInVocab {
   // Lookup the lower and upper bound from the vocabulary of the index,
   // cache and return them. This represents the place in the vocabulary where
   // this word would be stored if it were present.
   PositionInVocab positionInVocab;
 
-  // NOTE: For encoded IRIs, the only purpose of the returned `std::pair` is to
-  // give us a consistent ordering, which is important for determining equality
-  // and for operations like `Join`, `Distinct`, `GroupBy`, etc.
+  // An IRI that is encoded directly in an `Id` is never stored in a
+  // `LocalVocabEntry` (the constructors that can store an IRI are private, see
+  // `toIdOrLocalVocabEntry`), so the position is always a position in the
+  // vocabularies.
+  AD_EXPENSIVE_CHECK(
+      !this->isIri() ||
+          !context_->encodeAsId(this->toStringRepresentation()).has_value(),
+      "An IRI that is encoded directly in an `Id` must not be stored in a "
+      "`LocalVocabEntry`.");
   auto [lower, upper] = [&]() -> std::pair<Id, Id> {
-    if (auto opt = context_->encodeAsId(toStringRepresentation());
-        opt.has_value()) {
-      return {opt.value(), opt.value().incremented()};
-    }
     // Look up the word in the vocabularies of the index. A word that is
     // contained in one of them is positioned exactly at its `Id`, so its range
     // is that single `Id`. A word that is contained in none of them is
     // positioned at the empty range at which it would be sorted into the
     // vocabulary of the main index.
     auto idOrBounds =
-        context_->lookupWordInVocabularies(toStringRepresentation());
+        context_->lookupWordInVocabularies(this->toStringRepresentation());
     if (const auto* id = std::get_if<Id>(&idOrBounds)) {
       return {*id, id->incremented()};
     }
@@ -93,15 +100,39 @@ auto LocalVocabEntry::positionInVocabExpensiveCase() const -> PositionInVocab {
 }
 
 // _____________________________________________________________________________
-LocalVocabEntry LocalVocabEntry::fromStringRepresentation(
-    std::string s, const LocalVocabContext& ctx) {
-  return LocalVocabEntry{Base::fromStringRepresentation(std::move(s)), ctx};
+template <typename LiteralOrIriT>
+auto BasicLocalVocabEntry<LiteralOrIriT>::reanchoredTo(
+    const LocalVocabContext& newContext) const -> Derived {
+  AD_EXPENSIVE_CHECK(
+      !this->isIri() ||
+          !newContext.encodeAsId(this->toStringRepresentation()).has_value(),
+      "An IRI that the new index encodes directly in an `Id` must not be "
+      "stored in a `LocalVocabEntry`.");
+  return Derived{asLiteralOrIri(), newContext};
 }
 
+// Explicit instantiations.
+using ad_utility::triple_component::LiteralOrIri;
+using ad_utility::triple_component::LiteralOrIriView;
+template class BasicLocalVocabEntry<LiteralOrIri>;
+template class BasicLocalVocabEntry<LiteralOrIriView>;
+template ql::strong_ordering
+BasicLocalVocabEntry<LiteralOrIri>::compareThreeWay(
+    const BasicLocalVocabEntry<LiteralOrIri>&) const;
+template ql::strong_ordering
+BasicLocalVocabEntry<LiteralOrIri>::compareThreeWay(
+    const BasicLocalVocabEntry<LiteralOrIriView>&) const;
+template ql::strong_ordering
+BasicLocalVocabEntry<LiteralOrIriView>::compareThreeWay(
+    const BasicLocalVocabEntry<LiteralOrIri>&) const;
+template ql::strong_ordering
+BasicLocalVocabEntry<LiteralOrIriView>::compareThreeWay(
+    const BasicLocalVocabEntry<LiteralOrIriView>&) const;
+}  // namespace localVocabEntryDetail
+
 // _____________________________________________________________________________
-LocalVocabEntry LocalVocabEntry::fromIriref(std::string_view view,
-                                            const LocalVocabContext& ctx) {
-  return LocalVocabEntry{IriT::fromIriref(view), ctx};
+LocalVocabEntry LocalVocabEntryView::toOwned() const {
+  return LocalVocabEntry{asLiteralOrIri().toOwned(), *this};
 }
 
 // _____________________________________________________________________________
@@ -114,14 +145,4 @@ LocalVocabEntry LocalVocabEntry::literalWithoutQuotes(
 LocalVocabEntry LocalVocabEntry::literalWithNormalizedContent(
     std::string_view view, const LocalVocabContext& ctx) {
   return LocalVocabEntry{LiteralT::literalWithNormalizedContent(view), ctx};
-}
-
-// _____________________________________________________________________________
-LocalVocabEntry LocalVocabEntry::reanchoredTo(
-    const LocalVocabContext& newContext) const {
-  AD_EXPENSIVE_CHECK(
-      !isIri() || !newContext.encodeAsId(toStringRepresentation()).has_value(),
-      "An IRI that the new index encodes directly in an `Id` must not be "
-      "stored in a `LocalVocabEntry`.");
-  return LocalVocabEntry{asLiteralOrIri(), newContext};
 }

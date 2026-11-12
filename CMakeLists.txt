@@ -317,7 +317,7 @@ FetchContent_Declare(
         GIT_REPOSITORY https://github.com/joka921/range-v3
         # This branch removes some differences in the interface between `range-v3` and `std::ranges` s.t.
         # the former can be used as an (almost) drop-in replacement for the latter.
-        GIT_TAG 9814a99e4458936acdf012eb0bed4fbcd569a181 # branch fork-for-qlever
+        GIT_TAG 4122bfa82917bd644a47318aa3abc1a989a59416 # branch fork-for-qlever
         SYSTEM
         EXCLUDE_FROM_ALL
 )
@@ -328,7 +328,7 @@ FetchContent_Declare(
 FetchContent_Declare(
         spatialjoin
         GIT_REPOSITORY https://github.com/ad-freiburg/spatialjoin
-        GIT_TAG 1177c1bee6203908b39c4e2dda4765aec5f59dee
+        GIT_TAG 74f526a2f06a107d5c151bcf076802505c1a28ce
         SYSTEM
         EXCLUDE_FROM_ALL
 )
@@ -499,6 +499,21 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND
     add_compile_options(-Wno-maybe-uninitialized)
     # Unreliable on large translation units; formatting is enforced by clang-format anyway.
     add_compile_options(-Wno-misleading-indentation)
+endif()
+# Enable C++26 static reflection (P2996) if the compiler supports it. QLever
+# doesn't require reflection, but uses it (see `backports/reflection.h`) to
+# check some invariants that the C++17/C++20 code has to state redundantly.
+# Currently, only GCC 16 in C++26 mode supports reflection (behind the
+# `-freflection` flag).
+option(QLEVER_USE_REFLECTION "Use C++26 reflection for additional compile-time checks if the compiler supports it" ON)
+if (QLEVER_USE_REFLECTION AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND
+    CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "16" AND
+    CMAKE_CXX_STANDARD GREATER_EQUAL 26)
+    MESSAGE(STATUS "C++26 reflection is enabled via `-freflection`")
+    # GCC rejects `-freflection` for C++ standards before C++26, which some of
+    # the dependencies explicitly set for their targets.
+    add_compile_options(
+        "$<$<AND:$<COMPILE_LANGUAGE:CXX>,$<VERSION_GREATER_EQUAL:$<TARGET_PROPERTY:CXX_STANDARD>,26>>:-freflection>")
 endif()
 # Enable the specification of additional compiler flags manually from the commandline
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ADDITIONAL_COMPILER_FLAGS}")
@@ -811,6 +826,19 @@ target_compile_options(s2 PRIVATE -Wno-sign-compare -Wno-unused-parameter -Wno-c
 target_compile_options(re2 PRIVATE -Wno-unused-parameter -Wno-deprecated-declarations)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_compile_options(gtest PRIVATE -Wno-maybe-uninitialized)
+    # Disable `-Wuninitialized` for all targets that use `gmock`, only for
+    # GCC 16 and newer in C++26 mode.
+    #
+    # NOTE: In that mode, GCC wrongly reports the temporary that is bound to the
+    # `const&` in `PropertyMatcher::MatchAndExplainImpl` (`gmock-matchers.h`)
+    # as used uninitialized, for every use of `::testing::Property`. The
+    # warning is emitted in the translation units of the tests, not of `gmock`
+    # itself. This is a bug in GCC, not in `googletest`, see
+    # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=124380.
+    if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "16" AND
+        CMAKE_CXX_STANDARD GREATER_EQUAL 26)
+        target_compile_options(gmock INTERFACE -Wno-uninitialized)
+    endif ()
 endif ()
 include_directories(SYSTEM ${ctre_SOURCE_DIR}/single-header)
 target_compile_options(fsst PRIVATE -Wno-extra -Wno-all -Wno-error)

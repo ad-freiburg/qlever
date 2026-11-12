@@ -45,6 +45,24 @@ class ValuesForTesting : public Operation {
                             LocalVocab localVocab = LocalVocab{},
                             std::optional<float> multiplicity = std::nullopt,
                             bool forceFullyMaterialized = false)
+      : ValuesForTesting{
+            ctx,
+            std::move(table),
+            std::move(variables),
+            handlesLimit,
+            qlm::vector<ColumnIndex>{sortedColumns.begin(), sortedColumns.end(),
+                                     ctx->getAllocator()},
+            std::move(localVocab),
+            multiplicity,
+            forceFullyMaterialized} {}
+
+  explicit ValuesForTesting(QueryExecutionContext* ctx, IdTable table,
+                            std::vector<std::optional<Variable>> variables,
+                            bool handlesLimit,
+                            qlm::vector<ColumnIndex> sortedColumns,
+                            LocalVocab localVocab = LocalVocab{},
+                            std::optional<float> multiplicity = std::nullopt,
+                            bool forceFullyMaterialized = false)
       : Operation{ctx},
         tables_{},
         variables_{std::move(variables)},
@@ -70,6 +88,16 @@ class ValuesForTesting : public Operation {
                             std::vector<std::optional<Variable>> variables,
                             bool unlikelyToFitInCache = false,
                             std::vector<ColumnIndex> sortedColumns = {})
+      : ValuesForTesting{
+            ctx, std::move(tables), std::move(variables), unlikelyToFitInCache,
+            qlm::vector<ColumnIndex>{sortedColumns.begin(), sortedColumns.end(),
+                                     ctx->getAllocator()}} {}
+
+  explicit ValuesForTesting(QueryExecutionContext* ctx,
+                            std::vector<Result::IdTableVocabPair> tables,
+                            std::vector<std::optional<Variable>> variables,
+                            bool unlikelyToFitInCache,
+                            qlm::vector<ColumnIndex> sortedColumns)
       : Operation{ctx},
         tables_{std::move(tables)},
         variables_{std::move(variables)},
@@ -91,11 +119,12 @@ class ValuesForTesting : public Operation {
     costEstimate_ = totalRows;
   }
 
+  template <typename SortColumns = std::vector<ColumnIndex>>
   explicit ValuesForTesting(QueryExecutionContext* ctx,
                             std::vector<IdTable> tables,
                             std::vector<std::optional<Variable>> variables,
                             bool unlikelyToFitInCache = false,
-                            std::vector<ColumnIndex> sortedColumns = {},
+                            SortColumns sortedColumns = {},
                             LocalVocab localVocab = LocalVocab{})
       : ValuesForTesting{ctx,
                          liftToPairs(std::move(tables), std::move(localVocab)),
@@ -187,7 +216,7 @@ class ValuesForTesting : public Operation {
     return tables_.empty() ? 1 : tables()[0].numColumns();
   }
 
-  std::vector<ColumnIndex> resultSortedOn() const override {
+  qlm::vector<ColumnIndex> resultSortedOn() const override {
     return resultSortedColumns_;
   }
 
@@ -258,7 +287,7 @@ class ValuesForTesting : public Operation {
     return std::make_unique<ValuesForTesting>(ValuesForTesting{*this});
   }
 
-  std::vector<ColumnIndex> resultSortedColumns_;
+  qlm::vector<ColumnIndex> resultSortedColumns_;
   std::optional<float> multiplicity_;
   bool forceFullyMaterialized_ = false;
 };
