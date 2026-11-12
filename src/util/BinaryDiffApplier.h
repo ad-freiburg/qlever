@@ -26,6 +26,7 @@
 #include "backports/span.h"
 #include "backports/three_way_comparison.h"
 #include "util/Exception.h"
+#include "util/OnDiskLayout.h"
 #include "util/Serializer/SerializeArrayOrTuple.h"
 #include "util/Serializer/SerializeVariant.h"
 #include "util/Serializer/SerializeVector.h"
@@ -245,6 +246,20 @@ class BinaryDiffApplier {
   void applyToCheckedTarget(ql::span<const char> base,
                             ql::span<char> target) const;
 };
+
+// The `Copy` and `Align` instructions are serialized by copying their bytes
+// (see `allowTrivialSerialization` above).
+#define QL_ASSERT_DIFF_FORMAT_LAYOUT(Type, expectedLayout)                   \
+  QL_ASSERT_ON_DISK_LAYOUT(                                                  \
+      Type, expectedLayout,                                                  \
+      "The bytes of this class are part of the serialization of a "          \
+      "`BinaryDiffApplier`. If the change is intended, increase the "        \
+      "`formatVersion` in the `BinaryDiffApplierSerializer`, and then also " \
+      "update the layout that is asserted for this class")
+QL_ASSERT_DIFF_FORMAT_LAYOUT(BinaryDiffApplier::Copy,
+                             "baseOffset_:u64, length_:u64");
+QL_ASSERT_DIFF_FORMAT_LAYOUT(BinaryDiffApplier::Align, "alignment_:u64");
+#undef QL_ASSERT_DIFF_FORMAT_LAYOUT
 
 // The serialization format of a `BinaryDiffApplier`: a header of magic bytes, a
 // format version, and the identification of the base, followed by the

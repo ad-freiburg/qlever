@@ -48,6 +48,12 @@ struct IndexFormatVersion {
 // longer be converted, but only be rebuilt. The same holds for
 // `indexFormatVersionWithLatMajorGeoPoints`: an index in that format is loaded
 // without conversion only as long as your change does not affect it.
+//
+// NOTE: For the classes whose bytes are written to the index files as they
+// are, the macro `QL_ASSERT_INDEX_FORMAT_LAYOUT` (see
+// `index/IndexFormatLayout.h`) makes the build with C++26 reflection fail
+// when their layout changes without the asserted layout being updated. Such a
+// failure is a reminder to change the version here.
 inline const IndexFormatVersion& indexFormatVersion{
     3470, DateYearOrDuration{Date{2026, 9, 26}}};
 

@@ -20,6 +20,7 @@
 #include <type_traits>
 
 #include "backports/three_way_comparison.h"
+#include "index/IndexFormatLayout.h"
 #include "util/BitUtils.h"
 
 namespace columnBasedIdTable::splitLayout {
@@ -146,6 +147,8 @@ static_assert(offsetof(SplitLayoutIdBitRepresentation, datatype_) ==
 static_assert(sizeof(SplitLayoutIdBitRepresentation) == 16);
 static_assert(
     std::has_unique_object_representations_v<SplitLayoutIdBitRepresentation>);
+QL_ASSERT_INDEX_FORMAT_LAYOUT(SplitLayoutIdBitRepresentation,
+                              "payload_:u64, datatype_:u8, padding_:[7]u8");
 }  // namespace columnBasedIdTable::splitLayout
 
 // Make `SplitLayoutIdBitRepresentation` usable as a key of `std` hash

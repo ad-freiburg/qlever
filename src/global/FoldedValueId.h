@@ -19,6 +19,7 @@
 #include "global/Constants.h"
 #include "global/Datatype.h"
 #include "global/IndexTypes.h"
+#include "index/IndexFormatLayout.h"
 #include "rdfTypes/GeoPoint.h"
 #include "util/Algorithm.h"
 #include "util/BitUtils.h"
@@ -627,6 +628,10 @@ class ValueId {
     return fromBits(type, id);
   }
 };
+
+// The bytes of a `ValueId` are part of the index format, for example inside of
+// the metadata of the blocks of a permutation.
+QL_ASSERT_INDEX_FORMAT_LAYOUT(ValueId, "_bits:u64");
 
 }  // namespace foldedValueId
 
