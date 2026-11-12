@@ -6,9 +6,11 @@
 
 #include "parser/UpdateClause.h"
 
-// Transform the triples and sets the graph on all triples.
-static std::vector<SparqlTripleSimpleWithGraph> transformTriplesTemplate(
-    ad_utility::sparql_types::Triples triples,
+// Transform the triples, set the graph on all of them, and append them to
+// `result`.
+static void appendTriplesTemplate(
+    qlm::vector<SparqlTripleSimpleWithGraph>& result,
+    const ad_utility::sparql_types::Triples& triples,
     const SparqlTripleSimpleWithGraph::Graph& graph,
     BlankNodeAdder& blankNodeAdder) {
   auto toTc = [&blankNodeAdder](const GraphTerm& t) -> TripleComponent {
@@ -18,12 +20,10 @@ static std::vector<SparqlTripleSimpleWithGraph> transformTriplesTemplate(
       return t.toTripleComponent();
     }
   };
-  auto convertTriple = [&graph, &toTc](const std::array<GraphTerm, 3>& triple)
-      -> SparqlTripleSimpleWithGraph {
-    return {toTc(triple[0]), toTc(triple[1]), toTc(triple[2]), graph};
-  };
-
-  return ad_utility::transform(triples, convertTriple);
+  for (const auto& triple : triples) {
+    result.push_back(SparqlTripleSimpleWithGraph{
+        toTc(triple[0]), toTc(triple[1]), toTc(triple[2]), graph});
+  }
 }
 
 // Re-wraps the value into a variant `T` which has additional values.
@@ -35,23 +35,21 @@ static T expandVariant(const ad_utility::sparql_types::VarOrIri& graph) {
 // ____________________________________________________________________________________
 updateClause::GraphUpdate::Triples Quads::toTriplesWithGraph(
     const SparqlTripleSimpleWithGraph::Graph& defaultGraph,
-    BlankNodeAdder& blankNodeAdder) const {
-  std::vector<SparqlTripleSimpleWithGraph> quads;
+    BlankNodeAdder& blankNodeAdder,
+    const qlever::Allocator<Id>& allocator) const {
+  qlm::vector<SparqlTripleSimpleWithGraph> quads{allocator};
   size_t numTriplesInGraphs = std::accumulate(
       graphTriples_.begin(), graphTriples_.end(), 0,
       [](size_t acc, const GraphBlock& block) {
         return acc + std::get<ad_utility::sparql_types::Triples>(block).size();
       });
   quads.reserve(numTriplesInGraphs + freeTriples_.size());
-  ad_utility::appendVector(
-      quads,
-      transformTriplesTemplate(freeTriples_, defaultGraph, blankNodeAdder));
+  appendTriplesTemplate(quads, freeTriples_, defaultGraph, blankNodeAdder);
   for (const auto& [graph, triples] : graphTriples_) {
-    ad_utility::appendVector(
-        quads,
-        transformTriplesTemplate(
-            triples, expandVariant<SparqlTripleSimpleWithGraph::Graph>(graph),
-            blankNodeAdder));
+    appendTriplesTemplate(
+        quads, triples,
+        expandVariant<SparqlTripleSimpleWithGraph::Graph>(graph),
+        blankNodeAdder);
   }
   return {std::move(quads), blankNodeAdder.localVocab_.clone()};
 }

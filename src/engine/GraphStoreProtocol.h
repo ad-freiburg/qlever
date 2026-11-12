@@ -90,10 +90,10 @@ class GraphStoreProtocol {
   FRIEND_TEST(GraphStoreProtocolTest, parseTriples);
 
   // Transforms the triples from `TurtleTriple` to `SparqlTripleSimpleWithGraph`
-  // and sets the correct graph.
+  // and sets the correct graph. The `allocator` is used for the result.
   static updateClause::GraphUpdate::Triples convertTriples(
       const GraphOrDefault& graph, std::vector<TurtleTriple>&& triples,
-      BlankNodeAdder& blankNodeAdder);
+      BlankNodeAdder& blankNodeAdder, const qlever::Allocator<Id>& allocator);
   FRIEND_TEST(GraphStoreProtocolTest, convertTriples);
 
   // Creates a `ResponseMiddleware` that sets the `Location` of the response to
@@ -143,8 +143,9 @@ class GraphStoreProtocol {
     const GraphOrDefault effectiveGraph =
         insertIntoNewGraph ? generateNewGraphIri() : graph;
     auto convertedTriples =
-        convertTriples(effectiveGraph, std::move(triples), bn);
-    updateClause::GraphUpdate up{std::move(convertedTriples), {}};
+        convertTriples(effectiveGraph, std::move(triples), bn, allocator);
+    updateClause::GraphUpdate up{std::move(convertedTriples),
+                                 updateClause::UpdateTriples{allocator}};
     ParsedQuery res;
     res._clause = parsedQuery::UpdateClause{std::move(up)};
     if (insertIntoNewGraph) {
@@ -173,8 +174,10 @@ class GraphStoreProtocol {
     auto triples =
         parseTriples(rawRequest.body(), extractMediatype(rawRequest));
     BlankNodeAdder bn{index.getBlankNodeManager()};
-    auto convertedTriples = convertTriples(graph, std::move(triples), bn);
-    updateClause::GraphUpdate up{{}, std::move(convertedTriples)};
+    auto convertedTriples =
+        convertTriples(graph, std::move(triples), bn, allocator);
+    updateClause::GraphUpdate up{updateClause::UpdateTriples{allocator},
+                                 std::move(convertedTriples)};
     ParsedQuery res;
     res._clause = parsedQuery::UpdateClause{std::move(up)};
     res._originalString = truncatedStringRepresentation("TSOP", rawRequest);
@@ -222,8 +225,10 @@ class GraphStoreProtocol {
     auto triples =
         parseTriples(rawRequest.body(), extractMediatype(rawRequest));
     BlankNodeAdder bn{index.getBlankNodeManager()};
-    auto convertedTriples = convertTriples(graph, std::move(triples), bn);
-    updateClause::GraphUpdate up{std::move(convertedTriples), {}};
+    auto convertedTriples =
+        convertTriples(graph, std::move(triples), bn, allocator);
+    updateClause::GraphUpdate up{std::move(convertedTriples),
+                                 updateClause::UpdateTriples{allocator}};
     ParsedQuery insertData;
     // Interpretation of the very vague GSP 5.3:
     // - 201 Created if a new graph is created

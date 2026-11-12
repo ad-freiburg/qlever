@@ -54,7 +54,7 @@ UpdateMetadata ExecuteUpdate::executeUpdate(
 std::pair<std::vector<ExecuteUpdate::TransformedTriple>, LocalVocab>
 ExecuteUpdate::transformTriplesTemplate(
     const IndexImpl& index, const VariableToColumnMap& variableColumns,
-    const std::vector<SparqlTripleSimpleWithGraph>& triples) {
+    ql::span<const SparqlTripleSimpleWithGraph> triples) {
   const auto& encodedIriManager = index.encodedIriManager();
   // We collect all `TripleComponent`s from `triples` in a hash set.
   ad_utility::HashSet<TripleComponent> lookupItems;
@@ -234,8 +234,8 @@ ExecuteUpdate::computeGraphUpdateQuads(
   tracer.beginTrace("computeIds");
 
   auto prepareTemplateAndResultContainer =
-      [&index, &variableColumns, &result](
-          const std::vector<SparqlTripleSimpleWithGraph>& tripleTemplates) {
+      [&index, &variableColumns,
+       &result](ql::span<const SparqlTripleSimpleWithGraph> tripleTemplates) {
         auto [transformedTripleTemplates, localVocab] =
             transformTriplesTemplate(index, variableColumns, tripleTemplates);
         std::vector<IdTriple<>> updateTriples;
