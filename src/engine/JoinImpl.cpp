@@ -12,6 +12,8 @@
 
 #include "engine/JoinImpl.h"
 
+#include <absl/hash/hash.h>
+
 #include <algorithm>
 #include <sstream>
 #include <vector>
@@ -31,7 +33,6 @@
 #include "util/Algorithm.h"
 #include "util/Exception.h"
 #include "util/Generators.h"
-#include "util/HashMap.h"
 #include "util/Iterators.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 #include "util/Math.h"
@@ -510,16 +511,21 @@ void JoinImpl::hashJoinImpl(const IdTable& dynA, ColumnIndex jc1,
   }
 
   IdTableStatic<OUT_WIDTH> result = std::move(*dynRes).toStatic<OUT_WIDTH>();
+  auto allocator = result.getAllocator();
 
   // Puts the rows of the given table into a hash map, with the value of
   // the join column of a row as the key, and returns the hash map.
-  auto idTableToHashMap = [](const auto& table, const ColumnIndex jc) {
+  auto idTableToHashMap = [&allocator](const auto& table,
+                                       const ColumnIndex jc) {
     // This declaration works, because generic lambdas are just syntactic sugar
     // for templates.
     using Table = std::decay_t<decltype(table)>;
-    ad_utility::HashMap<Id, std::vector<typename Table::row_type>> map;
+    using Rows = qlm::vector<typename Table::row_type>;
+    // Not an `ad_utility::HashMap`, it cannot use a memory-limited allocator.
+    qlm::unordered_map<Id, Rows, absl::Hash<Id>> map{allocator};
     for (const auto& row : table) {
-      map[row[jc]].push_back(row);
+      // `operator[]` would need a default-constructible allocator.
+      map.try_emplace(row[jc], allocator).first->second.push_back(row);
     }
     return map;
   };
