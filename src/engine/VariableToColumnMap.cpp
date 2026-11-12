@@ -20,7 +20,7 @@ copySortedByColumnIndex(VariableToColumnMap map) {
 // ______________________________________________________________________________
 VariableToColumnMap makeVarToColMapForJoinOperation(
     const VariableToColumnMap& leftVars, const VariableToColumnMap& rightVars,
-    std::vector<std::array<ColumnIndex, 2>> joinColumns, BinOpType binOpType,
+    ql::span<const std::array<ColumnIndex, 2>> joinColumns, BinOpType binOpType,
     size_t leftResultWidth, bool keepJoinColumns) {
   // First come all the variables from the left input. Variables that only
   // appear in the left input always have the same definedness as in the input.

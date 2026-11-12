@@ -216,8 +216,11 @@ TEST(FilterFactsRecognizers, DistanceBound) {
     EXPECT_EQ(result.conjuncts_.size(), 1u) << filter;
     return recognizeDistanceBound(result.conjuncts_.at(0));
   };
-  auto point = std::string{
-      "\"POINT(7.8 48.0)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"};
+  auto wkt = [](std::string_view point) {
+    return absl::StrCat(
+        "\"", point, "\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
+  };
+  auto point = wkt("POINT(7.8 48.0)");
   Distance distance{V{"?ga"}, V{"?gb"}};
 
   // `<=` and `<` (where the maximum distance is the largest `double` below
@@ -230,12 +233,17 @@ TEST(FilterFactsRecognizers, DistanceBound) {
           distance,
           std::nextafter(500.0, -std::numeric_limits<double>::infinity())}));
 
-  // A constant geometry on one side.
+  // A constant geometry on either side.
   EXPECT_THAT(
       recognize(absl::StrCat("geof:metricDistance(?ga, ", point, ") <= 500")),
       ::testing::Optional(::testing::Field(
           &DistanceBound::distance_,
           ::testing::Field(&Distance::a_, TripleComponent{V{"?ga"}}))));
+  EXPECT_THAT(
+      recognize(absl::StrCat("geof:metricDistance(", point, ", ?gb) <= 500")),
+      ::testing::Optional(::testing::Field(
+          &DistanceBound::distance_,
+          ::testing::Field(&Distance::b_, TripleComponent{V{"?gb"}}))));
 
   // A negative, infinite (also after the conversion to meters) or NaN maximum
   // distance, the same variable or two constants, or no `DistanceComparison` at
@@ -249,7 +257,8 @@ TEST(FilterFactsRecognizers, DistanceBound) {
         std::string{"geof:distance(?ga, ?gb) < 1e306"},
         absl::StrCat("geof:metricDistance(?ga, ?gb) <= \"NaN\"", xsdDouble),
         std::string{"geof:metricDistance(?ga, ?ga) <= 500"},
-        absl::StrCat("geof:metricDistance(", point, ", ", point, ") <= 500"),
+        absl::StrCat("geof:metricDistance(", point, ", ",
+                     wkt("POINT(7.9 48.1)"), ") <= 500"),
         std::string{"BOUND(?a)"}}) {
     EXPECT_EQ(recognize(filter), std::nullopt) << filter;
   }
