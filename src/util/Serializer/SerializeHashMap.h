@@ -12,8 +12,21 @@
 
 namespace ad_utility::serialization {
 
+namespace detail {
+// The class template that `ad_utility::HashMap` is an alias for. We cannot
+// directly use `ad_utility::HashMap` in `similarToInstantiation`, because it is
+// not a variadic alias when the Boost hash maps are used.
+#ifdef QLEVER_HAS_BOOST_UNORDERED
+template <typename... Ts>
+using HashMapTemplate = boost::unordered_flat_map<Ts...>;
+#else
+template <typename... Ts>
+using HashMapTemplate = absl::flat_hash_map<Ts...>;
+#endif
+}  // namespace detail
+
 AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
-    (ad_utility::similarToInstantiation<T, ad_utility::HashMap>)) {
+    (ad_utility::similarToInstantiation<T, detail::HashMapTemplate>)) {
   using K = typename std::decay_t<T>::key_type;
   using M = typename std::decay_t<T>::mapped_type;
   if constexpr (WriteSerializer<S>) {

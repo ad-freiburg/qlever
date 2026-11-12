@@ -206,8 +206,14 @@ struct ItemMapAndBuffer : public ad_utility::NoCopyNoMove {
   // deallocates the backing array for all but very small maps (see
   // `ClearBackingArray` in `absl/container/internal/raw_hash_set.cc`).
   void clear() {
-    // The above holds for the Abseil hash maps only.
+    // The above holds for the Abseil hash maps only. The
+    // `boost::unordered_flat_map` keeps its memory for both functions.
+#ifdef QLEVER_HAS_BOOST_UNORDERED
+    static_assert(
+        ad_utility::isInstantiation<ItemMap, boost::unordered_flat_map>);
+#else
     static_assert(ad_utility::isInstantiation<ItemMap, absl::flat_hash_map>);
+#endif
     map_.erase(map_.begin(), map_.end());
     buffer_.clear();
   }

@@ -422,9 +422,10 @@ void QueryPatternCache::removeView(ViewPtr view) {
     ql::erase_if(views, [&view](ViewPtr pView) { return pView == view; });
   }
 
-  // Remove `view` from cache key hash map. We use `absl::erase_if` here as it
-  // works natively with our hash map unlike `ql::erase_if`.
-  absl::erase_if(byCacheKey_, [&view](const auto& pair) {
+  // Remove `view` from cache key hash map. We use the `erase_if` of the hash
+  // map's library (`absl` or `boost`, found via ADL) here as it works natively
+  // with our hash map unlike `ql::erase_if`.
+  erase_if(byCacheKey_, [&view](const auto& pair) {
     AD_CORRECTNESS_CHECK(pair.second != nullptr);
     return pair.second->view_ == view;
   });

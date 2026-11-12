@@ -272,6 +272,8 @@ addLinkAndDiscoverTestNoLibs(StringPairHashMapTest)
 
 addLinkAndDiscoverTest(HashSetTest)
 
+addLinkAndDiscoverTest(HashContainersWithAllocatorTest)
+
 addLinkAndDiscoverTest(GroupByTest engine)
 
 addLinkAndDiscoverTest(VocabularyGeneratorTest index)

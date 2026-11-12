@@ -8,6 +8,8 @@
 #ifndef QLEVER_SRC_UTIL_CONTAINERSWITHALLOCATOR_H
 #define QLEVER_SRC_UTIL_CONTAINERSWITHALLOCATOR_H
 
+#include <absl/container/hash_container_defaults.h>
+
 #include <deque>
 #include <list>
 #include <map>
@@ -18,12 +20,13 @@
 #include <utility>
 #include <vector>
 
+#include "backports/unordered.h"
 #include "util/Allocator.h"
 
 // This file contains, in the `qlm` namespace (roughly `QLever memory`),
-// aliases for containers from the standard library with their allocator rebound
-// to `qlever::Allocator`. This is similar to the `std::pmr` namespace for
-// polymorphic allocators.
+// aliases for containers from the standard library (and for hash containers
+// from Boost, see NOTE 3) with their allocator rebound to `qlever::Allocator`.
+// This is similar to the `std::pmr` namespace for polymorphic allocators.
 //
 // NOTE 1: The namespace name `qlm` intentionally has three letters, same as
 // `std`, so e.g. changing a `std::vector` to a `qlm::vector` will not trigger a
@@ -37,6 +40,15 @@
 // `util/VectorWithMemoryLimit.h`). The same caveat applies to `qlm::vector`,
 // so prefer `VectorWithMemoryLimit` for a vector that is passed to `ql::ranges`
 // algorithms or views.
+//
+// NOTE 3: The hash containers `flat_hash_map`, `flat_hash_set`,
+// `node_hash_map`, and `node_hash_set` are the `boost::unordered_flat_...` and
+// `boost::unordered_node_...` containers if available (see
+// `backports/unordered.h`), and `std::unordered_map` and `std::unordered_set`
+// else (the `absl` containers are not exception safe, but `qlever::Allocator`
+// throws when the memory limit is exceeded). The `node_...` containers
+// guarantee pointer stability of their elements, the `flat_...` containers
+// don't. In all cases, the hash function defaults to `absl::Hash`.
 namespace qlm {
 
 template <typename T>
@@ -62,14 +74,50 @@ using set = std::set<T, Compare, Allocator<T>>;
 template <typename Key, typename T, typename Compare = std::less<Key>>
 using map = std::map<Key, T, Compare, Allocator<std::pair<const Key, T>>>;
 
-template <typename T, typename Hash = std::hash<T>,
-          typename KeyEqual = std::equal_to<T>>
-using unordered_set = std::unordered_set<T, Hash, KeyEqual, Allocator<T>>;
+#ifdef QLEVER_HAS_BOOST_UNORDERED
+template <typename T, typename Hash = absl::DefaultHashContainerHash<T>,
+          typename KeyEqual = absl::DefaultHashContainerEq<T>>
+using flat_hash_set =
+    boost::unordered_flat_set<T, Hash, KeyEqual, Allocator<T>>;
 
-template <typename Key, typename T, typename Hash = std::hash<Key>,
-          typename KeyEqual = std::equal_to<Key>>
-using unordered_map = std::unordered_map<Key, T, Hash, KeyEqual,
+template <typename Key, typename T,
+          typename Hash = absl::DefaultHashContainerHash<Key>,
+          typename KeyEqual = absl::DefaultHashContainerEq<Key>>
+using flat_hash_map =
+    boost::unordered_flat_map<Key, T, Hash, KeyEqual,
+                              Allocator<std::pair<const Key, T>>>;
+
+template <typename T, typename Hash = absl::DefaultHashContainerHash<T>,
+          typename KeyEqual = absl::DefaultHashContainerEq<T>>
+using node_hash_set =
+    boost::unordered_node_set<T, Hash, KeyEqual, Allocator<T>>;
+
+template <typename Key, typename T,
+          typename Hash = absl::DefaultHashContainerHash<Key>,
+          typename KeyEqual = absl::DefaultHashContainerEq<Key>>
+using node_hash_map =
+    boost::unordered_node_map<Key, T, Hash, KeyEqual,
+                              Allocator<std::pair<const Key, T>>>;
+#else
+template <typename T, typename Hash = absl::DefaultHashContainerHash<T>,
+          typename KeyEqual = absl::DefaultHashContainerEq<T>>
+using flat_hash_set = std::unordered_set<T, Hash, KeyEqual, Allocator<T>>;
+
+template <typename Key, typename T,
+          typename Hash = absl::DefaultHashContainerHash<Key>,
+          typename KeyEqual = absl::DefaultHashContainerEq<Key>>
+using flat_hash_map = std::unordered_map<Key, T, Hash, KeyEqual,
                                          Allocator<std::pair<const Key, T>>>;
+
+template <typename T, typename Hash = absl::DefaultHashContainerHash<T>,
+          typename KeyEqual = absl::DefaultHashContainerEq<T>>
+using node_hash_set = flat_hash_set<T, Hash, KeyEqual>;
+
+template <typename Key, typename T,
+          typename Hash = absl::DefaultHashContainerHash<Key>,
+          typename KeyEqual = absl::DefaultHashContainerEq<Key>>
+using node_hash_map = flat_hash_map<Key, T, Hash, KeyEqual>;
+#endif
 
 }  // namespace qlm
 
