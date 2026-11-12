@@ -11,6 +11,7 @@
 #include <gtest/gtest.h>
 
 #include <range/v3/range/conversion.hpp>
+#include <string>
 #include <type_traits>
 #include <vector>
 
@@ -50,4 +51,28 @@ TEST(ContainersWithAllocator, rangesToDeducesElementType) {
   auto w = ::ranges::to<qlm::vector>(strings, alloc);
   static_assert(std::is_same_v<decltype(w), qlm::vector<std::string>>);
   EXPECT_THAT(w, ::testing::ElementsAre("a", "b"));
+}
+
+// Test all branches of `qlm::detail::isConstructibleWithAllocator`. The checks
+// are `static_assert`s because the helper is `consteval`.
+TEST(ContainersWithAllocator, isConstructibleWithAllocator) {
+  using Alloc = qlm::Allocator<int>;
+  using Base = std::vector<int, Alloc>;
+  using qlm::detail::isConstructibleWithAllocator;
+  // No arguments.
+  static_assert(!isConstructibleWithAllocator<Base, Alloc>);
+  // The last argument is not an allocator. In particular, checking an iterator
+  // pair must not instantiate the default allocator argument of `Base`.
+  static_assert(!isConstructibleWithAllocator<Base, Alloc, int*, int*>);
+  static_assert(!isConstructibleWithAllocator<Base, Alloc, size_t>);
+  // The last argument is an allocator (possibly for a different element type)
+  // and `Base` is constructible from the arguments.
+  static_assert(isConstructibleWithAllocator<Base, Alloc, const Alloc&>);
+  static_assert(isConstructibleWithAllocator<Base, Alloc, size_t, Alloc>);
+  static_assert(isConstructibleWithAllocator<Base, Alloc, int*, int*, Alloc>);
+  static_assert(isConstructibleWithAllocator<Base, Alloc, int*, int*,
+                                             qlm::Allocator<char>>);
+  // The last argument is an allocator, but `Base` is not constructible from
+  // the arguments.
+  static_assert(!isConstructibleWithAllocator<Base, Alloc, std::string, Alloc>);
 }

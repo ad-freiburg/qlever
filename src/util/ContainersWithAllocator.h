@@ -68,7 +68,7 @@ namespace detail {
 // constructors of `std::vector`, which is a hard error for an allocator that
 // is not default-constructible.
 template <typename Base, typename Alloc, typename... Args>
-constexpr bool isConstructibleWithAllocatorImpl() {
+QL_CONSTEVAL bool isConstructibleWithAllocatorImpl() {
   if constexpr (sizeof...(Args) == 0) {
     return false;
   } else if constexpr (!std::is_convertible_v<ad_utility::Last<Args...>,
