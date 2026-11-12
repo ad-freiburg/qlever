@@ -25,8 +25,14 @@ LazyJsonParser::Generator LazyJsonParser::parse(
     if (details.first100_.size() < 100) {
       details.first100_ += chunk.substr(0, 100);
     }
-    details.last100_ =
-        chunk.substr(std::max(0, static_cast<int>(chunk.size() - 100)), 100);
+    // Keep the last 100 characters of the complete input, not only of the
+    // last chunk, which might be very short or even empty (for example, the
+    // last chunk of an HTTP response often is).
+    details.last100_.append(
+        chunk.substr(chunk.size() - std::min<size_t>(chunk.size(), 100)));
+    if (details.last100_.size() > 100) {
+      details.last100_.erase(0, details.last100_.size() - 100);
+    }
 
     if (auto res = p.parseChunk(chunk); res.has_value()) {
       co_yield res;
@@ -34,6 +40,19 @@ LazyJsonParser::Generator LazyJsonParser::parse(
         co_return;
       }
     }
+  }
+  // If the input ends after the `arrayPath` has been reached, but before the
+  // JSON object is complete, then the input was truncated (for example, by an
+  // endpoint that aborts the sending of its result because of a timeout). The
+  // incomplete rest of the input can't be parsed, so silently returning would
+  // drop it. NOTE: If the `arrayPath` was never reached, nothing has been
+  // yielded, which the caller has to handle anyway.
+  if (!std::holds_alternative<BeforeArrayPath>(p.state_) &&
+      !p.isParsingCompletelyDone()) {
+    throw Error(
+        "The JSON input ended before it was complete. This typically means "
+        "that the sender aborted the transmission of the result, for example "
+        "because of a timeout");
   }
 }
 
@@ -248,6 +267,12 @@ std::optional<size_t> LazyJsonParser::parseAfterArrayPath(size_t& idx) {
 }
 
 // ____________________________________________________________________________
+bool LazyJsonParser::isParsingCompletelyDone() const {
+  const auto* afterArrayPath = std::get_if<AfterArrayPath>(&state_);
+  return afterArrayPath != nullptr && afterArrayPath->remainingBraces_ == 0;
+}
+
+// ____________________________________________________________________________
 std::optional<nlohmann::json> LazyJsonParser::constructResultFromParsedChunk(
     size_t materializeEnd) {
   size_t nextChunkStart =
@@ -266,9 +291,7 @@ std::optional<nlohmann::json> LazyJsonParser::constructResultFromParsedChunk(
   std::string resStr = yieldCount_ > 0 ? prefixInArray_ : "";
   ++yieldCount_;
 
-  bool parsingCompletelyDone =
-      std::holds_alternative<AfterArrayPath>(state_) &&
-      (std::get<AfterArrayPath>(state_).remainingBraces_ == 0);
+  bool parsingCompletelyDone = isParsingCompletelyDone();
   bool endsWithComma =
       materializeEnd < input_.size() && input_[materializeEnd] == ',';
 
