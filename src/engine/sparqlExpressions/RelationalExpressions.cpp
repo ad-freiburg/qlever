@@ -626,6 +626,26 @@ bool isExpressionOfType(const SparqlExpression& expr) {
 }  // namespace
 
 // _____________________________________________________________________________
+std::optional<valueIdComparators::Comparison> getComparison(
+    const SparqlExpression& expression) {
+  using enum valueIdComparators::Comparison;
+  if (isExpressionOfType<LessThanExpression>(expression)) {
+    return LT;
+  } else if (isExpressionOfType<LessEqualExpression>(expression)) {
+    return LE;
+  } else if (isExpressionOfType<EqualExpression>(expression)) {
+    return EQ;
+  } else if (isExpressionOfType<NotEqualExpression>(expression)) {
+    return NE;
+  } else if (isExpressionOfType<GreaterThanExpression>(expression)) {
+    return GT;
+  } else if (isExpressionOfType<GreaterEqualExpression>(expression)) {
+    return GE;
+  }
+  return std::nullopt;
+}
+
+// _____________________________________________________________________________
 std::optional<std::pair<sparqlExpression::GeoFunctionCall, double>>
 getGeoDistanceFilter(const SparqlExpression& expr) {
   // TODO<ullingerc> Add support for more optimizable filters:

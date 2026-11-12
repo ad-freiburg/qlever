@@ -47,6 +47,10 @@ class Filter : public Operation {
 
   std::shared_ptr<QueryExecutionTree> getSubtree() const { return _subtree; }
 
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithStrippedColumns(
+      const std::set<Variable>& requestedVariables) const override;
+
  private:
   qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
     return {{_subtree.get()}, allocator()};
