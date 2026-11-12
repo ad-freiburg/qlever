@@ -66,9 +66,10 @@ updateClause::GraphUpdate::Triples GraphStoreProtocol::convertTriples(
   };
   auto transformTurtleTriple = [&tripleGraph,
                                 &transformTc](TurtleTriple&& triple) {
-    AD_CORRECTNESS_CHECK(triple.graphIri_.isId() &&
-                         triple.graphIri_.getId() ==
-                             qlever::specialIds().at(DEFAULT_GRAPH_IRI));
+    AD_CORRECTNESS_CHECK(
+        triple.graphIri_.isId() &&
+        triple.graphIri_.getId() ==
+            ql::unordered::at(qlever::specialIds(), DEFAULT_GRAPH_IRI));
 
     return SparqlTripleSimpleWithGraph(
         transformTc(std::move(triple.subject_)),

@@ -11,10 +11,10 @@ using namespace ad_utility::url_parser;
 // _____________________________________________________________________________
 std::optional<std::string> ad_utility::url_parser::getParameterCheckAtMostOnce(
     const ParamValueMap& map, std::string_view key) {
-  if (!map.contains(key)) {
+  if (!ql::unordered::contains(map, key)) {
     return std::nullopt;
   }
-  auto& value = map.at(key);
+  auto& value = ql::unordered::at(map, key);
   if (value.size() != 1) {
     throw std::runtime_error(
         absl::StrCat("Parameter \"", key,

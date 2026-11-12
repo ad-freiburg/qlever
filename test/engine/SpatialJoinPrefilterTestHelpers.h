@@ -152,7 +152,7 @@ struct ValIdTable {
 
 // Retrieve the `ValueId` for a given `name` from a `GeomNameToValId`.
 inline ValueId getValId(const GeomNameToValId& nMap, std::string_view name) {
-  auto valId = nMap.at(name);
+  auto valId = ql::unordered::at(nMap, name);
   EXPECT_EQ(valId.getDatatype(), Datatype::VocabIndex);
   return valId;
 }

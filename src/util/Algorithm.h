@@ -13,11 +13,13 @@
 #include <numeric>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 
 #include "backports/algorithm.h"
 #include "backports/iterator.h"
 #include "backports/shift.h"
+#include "backports/unordered.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
 #include "util/HashSet.h"
@@ -34,6 +36,16 @@ CPP_requires(HasMemberContains,
              requires(const T& t, const U& u)(t.contains(u)));
 template <typename T, typename U>
 CPP_requires(HasMemberFind, requires(const T& t, const U& u)(t.find(u)));
+
+// True iff `Container` is a hash container, the `key_type` of which can be
+// constructed from a `T`.
+template <typename Container, typename T, typename = void>
+struct IsHashContainerWithKey : std::false_type {};
+template <typename Container, typename T>
+struct IsHashContainerWithKey<
+    Container, T,
+    std::void_t<typename Container::hasher, typename Container::key_type>>
+    : std::is_constructible<typename Container::key_type, const T&> {};
 }  // namespace algorithm::detail
 
 /**
@@ -42,6 +54,9 @@ CPP_requires(HasMemberFind, requires(const T& t, const U& u)(t.find(u)));
  *  1.  `std::string_[view]`, where you also can find substrings.
  *  2. containers that either have a member function `contains` that returns a
  *     bool, or alternatively a member function `find` that returns an iterator.
+ *     For a hash container, the `contains` member function is used if it can
+ *     be called with the `element` directly, else `ql::unordered::contains`
+ *     (which converts the `element` to the `key_type`).
  *  3. For all other containers, the generic `ql::ranges::find` algorithm is
  * used.
  *
@@ -58,6 +73,9 @@ constexpr bool contains(Container&& container, const T& element) {
   } else if constexpr (CPP_requires_ref(algorithm::detail::HasMemberContains,
                                         const Container&, T)) {
     return container.contains(element);
+  } else if constexpr (algorithm::detail::IsHashContainerWithKey<
+                           std::decay_t<Container>, T>::value) {
+    return ql::unordered::contains(container, element);
   } else if constexpr (CPP_requires_ref(algorithm::detail::HasMemberFind,
                                         const Container&, T)) {
     return container.find(element) != container.end();
@@ -83,7 +101,7 @@ constexpr bool contains(Container&& container, const T& element) {
 template <typename Map, typename Key>
 auto findOptional(const Map& map, const Key& key)
     -> boost::optional<const typename Map::mapped_type&> {
-  auto it = map.find(key);
+  auto it = ql::unordered::find(map, key);
   if (it != map.end()) {
     return it->second;
   }

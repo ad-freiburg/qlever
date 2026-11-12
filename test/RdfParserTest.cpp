@@ -1828,7 +1828,7 @@ TEST(RdfParserTest, nQuadParser) {
     std::vector<TurtleTriple> expected;
     expected.emplace_back(iri("<x>"), iri("<y>"), iri("<z>"), iri("<g>"));
     auto internalGraphId =
-        qlever::specialIds().at(std::string{DEFAULT_GRAPH_IRI});
+        ql::unordered::at(qlever::specialIds(), std::string{DEFAULT_GRAPH_IRI});
     // Blank node labels include the parser prefix (42) for cross-file
     // uniqueness.
     expected.emplace_back(iri("<x2>"), iri("<y2>"), "_:u_42_blank",
@@ -1933,7 +1933,8 @@ TEST(RdfParserTest, multifileParserIgnoresRequestForParallelParsing) {
     ad_utility::deleteFile(file1);
     ad_utility::deleteFile(file2);
   }};
-  auto defaultGraph = qlever::specialIds().at(DEFAULT_GRAPH_IRI);
+  auto defaultGraph =
+      ql::unordered::at(qlever::specialIds(), DEFAULT_GRAPH_IRI);
   std::vector<TurtleTriple> expected{
       {iri("<x>"), iri("<y>"), iri("<z>"), defaultGraph},
       {iri("<a>"), iri("<b>"), iri("<c>"), defaultGraph}};
@@ -1999,7 +2000,7 @@ TEST(RdfParserTest, multifileParserSelectsTokenizer) {
   EXPECT_THAT(parse(false),
               ::testing::ElementsAre(TurtleTriple{
                   iri("<www.wikidata.org/esc,aped>"), iri("<y>"), iri("<z>"),
-                  qlever::specialIds().at(DEFAULT_GRAPH_IRI)}));
+                  ql::unordered::at(qlever::specialIds(), DEFAULT_GRAPH_IRI)}));
 
   // The relaxed tokenizer does not support escape sequences in prefixed names.
   EXPECT_ANY_THROW(parse(true));
@@ -2297,7 +2298,7 @@ TEST(RdfParserTest, asyncMultifileParserSelectsTokenizer) {
   EXPECT_THAT(parse(false),
               ::testing::ElementsAre(TurtleTriple{
                   iri("<www.wikidata.org/esc,aped>"), iri("<y>"), iri("<z>"),
-                  qlever::specialIds().at(DEFAULT_GRAPH_IRI)}));
+                  ql::unordered::at(qlever::specialIds(), DEFAULT_GRAPH_IRI)}));
 
   // The relaxed tokenizer does not support escape sequences in prefixed names.
   EXPECT_ANY_THROW(parse(true));

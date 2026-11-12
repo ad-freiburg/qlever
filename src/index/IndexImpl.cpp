@@ -652,9 +652,9 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
   }();
   AD_LOG_DEBUG << "Finished merging partial vocabularies" << std::endl;
   idOfHasPatternDuringIndexBuilding_ =
-      mergeRes.specialIdMapping().at(HAS_PATTERN_PREDICATE);
+      ql::unordered::at(mergeRes.specialIdMapping(), HAS_PATTERN_PREDICATE);
   idOfInternalGraphDuringIndexBuilding_ =
-      mergeRes.specialIdMapping().at(QLEVER_INTERNAL_GRAPH_IRI);
+      ql::unordered::at(mergeRes.specialIdMapping(), QLEVER_INTERNAL_GRAPH_IRI);
   AD_LOG_INFO << "Number of words in external vocabulary: "
               << mergeRes.numWordsTotal() - sizeInternalVocabulary << std::endl;
 

@@ -620,8 +620,7 @@ VariableToColumnMap getSiblingVariables(const Operation& sibling,
   auto variables = sibling.getExternallyVisibleVariableColumns();
   const auto& visibleLeft = outerLeft.getExternallyVisibleVariableColumns();
   const auto& visibleRight = outerRight.getExternallyVisibleVariableColumns();
-  // Use the `erase_if` of the hash map's library (found via ADL).
-  erase_if(variables, [&visibleLeft, &visibleRight](const auto& varAndCol) {
+  ql::erase_if(variables, [&visibleLeft, &visibleRight](const auto& varAndCol) {
     const auto& var = varAndCol.first;
     return !visibleLeft.contains(var) || !visibleRight.contains(var);
   });

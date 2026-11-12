@@ -1319,7 +1319,7 @@ TripleComponent defaultGraphFromSpec(
     return TripleComponent::Iri::fromIrirefWithoutBrackets(
         spec.defaultGraph_.value());
   }
-  return qlever::specialIds().at(DEFAULT_GRAPH_IRI);
+  return ql::unordered::at(qlever::specialIds(), DEFAULT_GRAPH_IRI);
 }
 
 // Create an `RdfStreamParser` for a single file of an

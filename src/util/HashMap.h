@@ -6,10 +6,9 @@
 #ifndef QLEVER_SRC_UTIL_HASHMAP_H
 #define QLEVER_SRC_UTIL_HASHMAP_H
 
-#include <absl/container/flat_hash_map.h>
+#include <absl/container/hash_container_defaults.h>
 
 #include <memory>
-#include <unordered_map>
 #include <utility>
 
 #include "backports/unordered.h"
@@ -18,34 +17,23 @@
 namespace ad_utility {
 // Wrapper for HashMaps to be used everywhere throughout code for the semantic
 // search. This wrapper interface is not designed to be complete from the
-// beginning. Feel free to extend it at need. If available, use
-// `boost::unordered_flat_map` (see `backports/unordered.h`), else
-// `absl::flat_hash_map`. In both cases, the hash function defaults to
-// `absl::Hash`.
-#ifdef QLEVER_HAS_BOOST_UNORDERED
+// beginning. Feel free to extend it at need. The underlying hash map is
+// `boost::unordered_flat_map` if available, and `std::unordered_map` else (see
+// `backports/unordered.h`). The hash function defaults to `absl::Hash`.
 template <class K, class V, class HashFct = absl::DefaultHashContainerHash<K>,
           class EqualElem = absl::DefaultHashContainerEq<K>,
           class Alloc = std::allocator<std::pair<const K, V>>>
-using HashMap = boost::unordered_flat_map<K, V, HashFct, EqualElem, Alloc>;
-#else
-template <typename... Ts>
-using HashMap = absl::flat_hash_map<Ts...>;
-#endif
+using HashMap = ql::FlatHashMapTemplate<K, V, HashFct, EqualElem, Alloc>;
 
 // A HashMap with a memory limit. Note: We cannot use `absl::flat_hash_map`
 // here, because it is inherently not exception safe, and the
-// `AllocatorWithLimit` uses exceptions. `boost::unordered_flat_map` is
-// exception safe, so we use it if available, and `std::unordered_map` else.
+// `AllocatorWithLimit` uses exceptions. Both `boost::unordered_flat_map` and
+// `std::unordered_map` are exception safe.
 template <class K, class V, class HashFct = absl::DefaultHashContainerHash<K>,
           class EqualElem = absl::DefaultHashContainerEq<K>,
           class Alloc = ad_utility::AllocatorWithLimit<std::pair<const K, V>>>
-#ifdef QLEVER_HAS_BOOST_UNORDERED
 using HashMapWithMemoryLimit =
-    boost::unordered_flat_map<K, V, HashFct, EqualElem, Alloc>;
-#else
-using HashMapWithMemoryLimit =
-    std::unordered_map<K, V, HashFct, EqualElem, Alloc>;
-#endif
+    ql::FlatHashMapTemplate<K, V, HashFct, EqualElem, Alloc>;
 
 }  // namespace ad_utility
 

@@ -107,7 +107,8 @@ struct TurtleTriple {
   // The predicate can an IRI which can also be directly folded into the ID.
   TripleComponent predicate_;
   TripleComponent object_;
-  TripleComponent graphIri_ = qlever::specialIds().at(DEFAULT_GRAPH_IRI);
+  TripleComponent graphIri_ =
+      ql::unordered::at(qlever::specialIds(), DEFAULT_GRAPH_IRI);
 
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(TurtleTriple, subject_,
                                               predicate_, object_, graphIri_)
@@ -290,7 +291,8 @@ class TurtleParser : public RdfParserBase {
   std::string activePrefix_;
   TripleComponent activeSubject_;
   TripleComponent activePredicate_;
-  TripleComponent defaultGraphIri_ = qlever::specialIds().at(DEFAULT_GRAPH_IRI);
+  TripleComponent defaultGraphIri_ =
+      ql::unordered::at(qlever::specialIds(), DEFAULT_GRAPH_IRI);
   size_t numBlankNodes_ = 0;
 
   bool currentTripleIgnoredBecauseOfInvalidLiteral_ = false;
@@ -495,7 +497,8 @@ class TurtleParser : public RdfParserBase {
 
 template <class Tokenizer_T>
 class NQuadParser : public TurtleParser<Tokenizer_T> {
-  TripleComponent defaultGraphId_ = qlever::specialIds().at(DEFAULT_GRAPH_IRI);
+  TripleComponent defaultGraphId_ =
+      ql::unordered::at(qlever::specialIds(), DEFAULT_GRAPH_IRI);
   TripleComponent activeObject_;
   TripleComponent activeGraphLabel_;
   using Base = TurtleParser<Tokenizer_T>;
@@ -664,8 +667,8 @@ class RdfStreamParser : public Parser {
   explicit RdfStreamParser(const qlever::InputFileSpecification& spec,
                            ad_utility::MemorySize blocksize,
                            const EncodedIriManager* ev,
-                           TripleComponent defaultGraphIri =
-                               qlever::specialIds().at(DEFAULT_GRAPH_IRI),
+                           TripleComponent defaultGraphIri = ql::unordered::at(
+                               qlever::specialIds(), DEFAULT_GRAPH_IRI),
                            RdfParserSettings settings = {})
       : Parser{ev, std::move(defaultGraphIri), settings} {
     initialize(spec, blocksize);
