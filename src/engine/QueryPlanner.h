@@ -188,7 +188,10 @@ class QueryPlanner {
     std::optional<SubtreePlan> substitute_;
 
     // Enforce filter substitution. Replace the existing plan by the filtered
-    // one instead of adding the filtered plan as a candidate.
+    // one instead of adding the filtered plan as a candidate. In the
+    // `KeepUnfiltered` mode of the dynamic programming, the unfiltered plan is
+    // kept as a candidate nevertheless, and the substitute is enforced on the
+    // final plans of the component, see `applyFiltersIfPossible`.
     //
     // NOTE: This may not be used for a `SpatialJoin` that has no child yet, as
     // it will otherwise never have its second child attached.
