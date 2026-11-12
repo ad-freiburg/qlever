@@ -23,7 +23,8 @@ TEST(QuadTest, getQuads) {
         ad_utility::BlankNodeManager manager;
         BlankNodeAdder bn{&manager};
         const Quads quads{std::move(triples), std::move(graphs)};
-        auto res = quads.toTriplesWithGraph(std::monostate{}, bn);
+        auto res = quads.toTriplesWithGraph(
+            std::monostate{}, bn, ad_utility::testing::makeAllocator());
         EXPECT_THAT(res.triples_, testing::UnorderedElementsAreArray(expected));
         EXPECT_EQ(manager.numBlocksUsed(), 0);
       };
@@ -59,7 +60,8 @@ TEST(QuadTest, getQuadsWithBlankNodes) {
   ad_utility::BlankNodeManager manager;
   BlankNodeAdder adder{&manager};
   const Quads quads{{tr}, {}};
-  auto res = quads.toTriplesWithGraph(std::monostate{}, adder);
+  auto res = quads.toTriplesWithGraph(std::monostate{}, adder,
+                                      ad_utility::testing::makeAllocator());
   EXPECT_EQ(res.triples_.size(), 1ul);
   const auto& triple = res.triples_.at(0);
   EXPECT_EQ(triple.s_, triple.o_);

@@ -56,7 +56,7 @@ std::vector<TurtleTriple> GraphStoreProtocol::parseTriples(
 // ____________________________________________________________________________
 updateClause::GraphUpdate::Triples GraphStoreProtocol::convertTriples(
     const GraphOrDefault& graph, std::vector<TurtleTriple>&& triples,
-    BlankNodeAdder& blankNodeAdder) {
+    BlankNodeAdder& blankNodeAdder, const qlever::Allocator<Id>& allocator) {
   SparqlTripleSimpleWithGraph::Graph tripleGraph{std::monostate{}};
   if (std::holds_alternative<GraphRef>(graph)) {
     tripleGraph = std::get<GraphRef>(graph);
@@ -75,8 +75,12 @@ updateClause::GraphUpdate::Triples GraphStoreProtocol::convertTriples(
         transformTc(std::move(triple.predicate_)),
         transformTc(std::move(triple.object_)), tripleGraph);
   };
-  return {ad_utility::transform(std::move(triples), transformTurtleTriple),
-          blankNodeAdder.localVocab_.clone()};
+  qlm::vector<SparqlTripleSimpleWithGraph> convertedTriples{allocator};
+  convertedTriples.reserve(triples.size());
+  for (auto& triple : triples) {
+    convertedTriples.push_back(transformTurtleTriple(std::move(triple)));
+  }
+  return {std::move(convertedTriples), blankNodeAdder.localVocab_.clone()};
 }
 
 // ____________________________________________________________________________

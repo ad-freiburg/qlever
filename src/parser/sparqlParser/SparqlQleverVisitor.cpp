@@ -866,12 +866,14 @@ ParsedQuery Visitor::visit(Parser::LoadContext* ctx) {
   parsedQuery_.registerVariablesVisibleInQueryBody(visibleVariables_);
   visibleVariables_.clear();
   using Quad = SparqlTripleSimpleWithGraph;
-  std::vector<Quad> toInsert{
-      Quad{Variable("?s"), Variable("?p"), Variable("?o"),
-           ctx->graphRef() ? Quad::Graph(visit(ctx->graphRef()))
-                           : Quad::Graph(std::monostate{})}};
-  parsedQuery_._clause = parsedQuery::UpdateClause{GraphUpdate{
-      {toInsert, LocalVocab{ad_utility::makeUnlimitedAllocator<Id>()}}, {}}};
+  qlm::vector<Quad> toInsert{
+      {Quad{Variable("?s"), Variable("?p"), Variable("?o"),
+            ctx->graphRef() ? Quad::Graph(visit(ctx->graphRef()))
+                            : Quad::Graph(std::monostate{})}},
+      allocator()};
+  parsedQuery_._clause = parsedQuery::UpdateClause{
+      allocator(), GraphUpdate{{std::move(toInsert), LocalVocab{}},
+                               updateClause::UpdateTriples{allocator()}}};
   return parsedQuery_;
 }
 
@@ -913,11 +915,17 @@ GraphPatternOperation makeAllTripleGraphPattern(
 }
 
 // ____________________________________________________________________________________
-// Make a `SparqlTripleSimpleWithGraph` that templates all triples in the graph.
-SparqlTripleSimpleWithGraph makeAllTripleTemplate(
+// Make `UpdateTriples` that consist of a single triple that templates all
+// triples in the graph.
+updateClause::UpdateTriples makeAllTripleTemplate(
+    const qlever::Allocator<Id>& allocator,
     SparqlTripleSimpleWithGraph::Graph graph) {
-  return {
-      {Variable("?s")}, {Variable("?p")}, {Variable("?o")}, std::move(graph)};
+  return {qlm::vector<SparqlTripleSimpleWithGraph>{{{{Variable("?s")},
+                                                     {Variable("?p")},
+                                                     {Variable("?o")},
+                                                     std::move(graph)}},
+                                                   allocator},
+          LocalVocab{}};
 }
 }  // namespace
 
@@ -955,9 +963,9 @@ ParsedQuery Visitor::makeClear(const GraphRefAll& graph) {
   parsedQuery_._rootGraphPattern._graphPatterns.push_back(
       std::move(graphPattern));
   parsedQuery_._clause = parsedQuery::UpdateClause{
-      GraphUpdate{{},
-                  {{makeAllTripleTemplate(std::move(updatePattern))},
-                   LocalVocab{ad_utility::makeUnlimitedAllocator<Id>()}}}};
+      allocator(), GraphUpdate{updateClause::UpdateTriples{allocator()},
+                               makeAllTripleTemplate(
+                                   allocator(), std::move(updatePattern))}};
   parsedQuery_.datasetClauses_ = activeDatasetClauses_;
   return parsedQuery_;
 }
@@ -968,9 +976,9 @@ ParsedQuery Visitor::makeAdd(const GraphOrDefault& source,
   parsedQuery_._rootGraphPattern._graphPatterns.push_back(
       makeAllTripleGraphPattern(transformGraph(source)));
   parsedQuery_._clause = parsedQuery::UpdateClause{
-      GraphUpdate{{{makeAllTripleTemplate(transformGraph(target))},
-                   LocalVocab{ad_utility::makeUnlimitedAllocator<Id>()}},
-                  {}}};
+      allocator(),
+      GraphUpdate{makeAllTripleTemplate(allocator(), transformGraph(target)),
+                  updateClause::UpdateTriples{allocator()}}};
   parsedQuery_.datasetClauses_ = activeDatasetClauses_;
   return parsedQuery_;
 }
@@ -1046,7 +1054,9 @@ std::vector<ParsedQuery> Visitor::visit(Parser::CopyContext* ctx) {
 // ____________________________________________________________________________________
 GraphUpdate Visitor::visit(Parser::InsertDataContext* ctx) {
   BlankNodeAdder bn{blankNodeManager_};
-  return {visit(ctx->quadData()).toTriplesWithGraph(std::monostate{}, bn), {}};
+  return {visit(ctx->quadData())
+              .toTriplesWithGraph(std::monostate{}, bn, allocator()),
+          updateClause::UpdateTriples{allocator()}};
 }
 
 // ____________________________________________________________________________________
@@ -1054,7 +1064,8 @@ GraphUpdate Visitor::visit(Parser::DeleteDataContext* ctx) {
   BlankNodeAdder bn{blankNodeManager_};
   auto cleanup = setBlankNodeTreatmentForScope(TreatBlankNodesAs::Illegal);
   auto quads = visit(ctx->quadData());
-  return {{}, quads.toTriplesWithGraph(std::monostate{}, bn)};
+  return {updateClause::UpdateTriples{allocator()},
+          quads.toTriplesWithGraph(std::monostate{}, bn, allocator())};
 }
 
 // ____________________________________________________________________________________
@@ -1073,7 +1084,9 @@ ParsedQuery Visitor::visit(Parser::DeleteWhereContext* ctx) {
   visibleVariables_.clear();
   BlankNodeAdder bn{blankNodeManager_};
   parsedQuery_._clause = parsedQuery::UpdateClause{
-      GraphUpdate{{}, triples.toTriplesWithGraph(std::monostate{}, bn)}};
+      allocator(), GraphUpdate{updateClause::UpdateTriples{allocator()},
+                               triples.toTriplesWithGraph(std::monostate{}, bn,
+                                                          allocator())}};
   return parsedQuery_;
 }
 
@@ -1092,7 +1105,7 @@ ParsedQuery Visitor::visit(Parser::ModifyContext* ctx) {
       auto quads = this->visit(ctx);
       quads.forAllVariables(ensureVariableIsVisible);
       BlankNodeAdder bn{blankNodeManager_};
-      *target = quads.toTriplesWithGraph(defaultGraph, bn);
+      *target = quads.toTriplesWithGraph(defaultGraph, bn, allocator());
     }
   };
 
@@ -1131,7 +1144,7 @@ ParsedQuery Visitor::visit(Parser::ModifyContext* ctx) {
   parsedQuery_._rootGraphPattern = std::move(graphPattern);
   parsedQuery_.registerVariablesVisibleInQueryBody(visibleVariables_);
   visibleVariables_.clear();
-  auto op = GraphUpdate{};
+  auto op = GraphUpdate{allocator()};
 
   // If there was a `WITH` clause, then the specified graph is used for all
   // triples inside the INSERT/DELETE templates that are outside explicit `GRAPH
