@@ -335,11 +335,12 @@ std::optional<RasterFile::Impl::PixelWindow> RasterFile::Impl::pixelWindow(
     return std::nullopt;
   }
 
-  // Widen to whole pixels, then clip to the grid.
+  // Widen to whole pixels, then clip to the grid. The end is one past the
+  // pixel that contains the maximum, also if it lies exactly on a border.
   double columnStart = std::fmax(std::floor(minColumn), 0.0);
-  double columnEnd = std::fmin(std::ceil(maxColumn), width_);
+  double columnEnd = std::fmin(std::floor(maxColumn) + 1, width_);
   double rowStart = std::fmax(std::floor(minRow), 0.0);
-  double rowEnd = std::fmin(std::ceil(maxRow), height_);
+  double rowEnd = std::fmin(std::floor(maxRow) + 1, height_);
   if (columnStart >= columnEnd || rowStart >= rowEnd) {
     return std::nullopt;
   }
