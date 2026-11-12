@@ -40,14 +40,14 @@ TEST(ChunkwisePermutationWriterStatistics, progressAndSummary) {
   EXPECT_EQ(logStream.str(), "");
 
   // Two full batches at once (which the chunks can process between two
-  // reports), the progress is reported.
+  // reports), the progress is reported once, with the count of both batches.
   context.numRowsProcessed_ = 2 * DEFAULT_PROGRESS_BAR_BATCH_SIZE;
   statistics.reportProgress();
-  EXPECT_THAT(logStream.str(), HasSubstr("Triples sorted: "));
+  EXPECT_THAT(logStream.str(), HasSubstr("Triples sorted: 20,000,000 "));
 
   logStream.str("");
   statistics.logSummary();
-  EXPECT_THAT(logStream.str(), HasSubstr("Triples sorted: "));
+  EXPECT_THAT(logStream.str(), HasSubstr("Triples sorted: 20,000,000 "));
   // The duplicates are not removed, so their numbers are not logged.
   EXPECT_THAT(logStream.str(), Not(HasSubstr("uniqueView")));
   writers.finish();

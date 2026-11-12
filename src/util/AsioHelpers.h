@@ -21,13 +21,19 @@ namespace ad_utility {
 
 namespace net = boost::asio;
 
-// Run the coroutine `awaitable` on the `executor` (via `co_spawn`). As soon as
-// it has completed, the completion handler which is obtained from the
-// `completionToken` is posted to its associated executor (or to the `executor`
-// if it has none), with the exception that the coroutine threw (or `nullptr`)
-// and, unless `T` is `void`, its result (a default-constructed `T` if it
-// threw). Unlike a plain `co_spawn`, the handler is therefore never invoked
-// inline from inside the coroutine machinery, but always via a `post`.
+// Like `net::co_spawn(executor, awaitable, completionToken)`, but the
+// completion handler is never invoked inline. Instead, once the coroutine has
+// completed, the handler is posted to its associated executor (default:
+// `executor`).
+//
+// The completion signature is `void(std::exception_ptr)` if `T` is `void`, and
+// `void(std::exception_ptr, T)` otherwise. If the coroutine threw, the
+// `exception_ptr` holds the exception, and the `T` is default-constructed.
+//
+// This matters if the caller holds a resource (e.g. a strand or a lock) that
+// the handler must not run under: a plain `co_spawn` (or `net::dispatch`)
+// runs the handler inline when the current thread already belongs to the
+// handler's executor.
 template <typename T, typename Executor, typename CompletionToken>
 auto coSpawnWithPostedCompletion(Executor executor, net::awaitable<T> awaitable,
                                  CompletionToken&& completionToken) {
@@ -38,6 +44,9 @@ auto coSpawnWithPostedCompletion(Executor executor, net::awaitable<T> awaitable,
   auto initiatingFunction = [executor, awaitable = std::move(awaitable)](
                                 auto handler) mutable {
     auto handlerExecutor = net::get_associated_executor(handler, executor);
+    // NOTE: The pack `result` lets the same lambda serve both completion
+    // signatures of `co_spawn`: it is empty if `T` is `void`, and holds
+    // exactly one element (the result of the coroutine) otherwise.
     net::co_spawn(
         executor, std::move(awaitable),
         [handlerExecutor, handler = std::move(handler)](

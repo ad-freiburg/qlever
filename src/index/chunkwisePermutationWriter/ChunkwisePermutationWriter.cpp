@@ -144,23 +144,33 @@ net::awaitable<bool> ChunkwisePermutationWriter::finishChunkImpl(
       storeException(std::current_exception());
     }
   }
-  chunkResults_.deliver(chunkIndex, std::move(result));
+  // NOTE: A chunk without a result doesn't deliver anything. In that case a
+  // stop has been requested (by `storeException` above, or before), which
+  // also wakes up the consumer in `consolidate`.
+  if (result.has_value()) {
+    chunkResults_.deliver(chunkIndex, std::move(result).value());
+  }
   co_return !stopRequested();
 }
 
 // _____________________________________________________________________________
 void ChunkwisePermutationWriter::consolidate() {
-  for (size_t chunkIndex = 0; chunkIndex < numChunks_; ++chunkIndex) {
+  size_t chunkIndex = 0;
+  while (true) {
     statistics_.consolidationWaitTimer_.cont();
     // Wake up regularly to report the progress of the chunks.
-    ChunkResult chunk =
-        chunkResults_.take(chunkIndex, std::chrono::seconds(1),
-                           [this]() { statistics_.reportProgress(); });
+    std::optional<ChunkResult> chunk = chunkResults_.takeNext(
+        std::chrono::seconds(1), [this]() { statistics_.reportProgress(); });
     statistics_.consolidationWaitTimer_.stop();
+    if (!chunk.has_value()) {
+      break;
+    }
     statistics_.consolidationWorkTimer_.cont();
-    consolidator_.addChunkResult(chunkIndex, std::move(chunk));
+    consolidator_.addChunkResult(chunkIndex, std::move(chunk).value());
     statistics_.consolidationWorkTimer_.stop();
+    ++chunkIndex;
   }
+  AD_CORRECTNESS_CHECK(chunkIndex == numChunks_);
 }
 
 // _____________________________________________________________________________

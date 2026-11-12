@@ -113,7 +113,9 @@ TEST(AsioHelpers, runFunctionOnExecutorStrands) {
   EXPECT_EQ(sanityCounter, 2);
 }
 
-// _________________________________________________________________________
+// Test that `coSpawnWithPostedCompletion` passes the result or the exception
+// of the coroutine to the handler (for a coroutine with and without a result),
+// and that the handler runs on its associated executor.
 TEST(AsioHelpers, coSpawnWithPostedCompletion) {
   net::io_context ctx;
   auto workGuard = makeWorkGuard(ctx);
@@ -170,6 +172,75 @@ TEST(AsioHelpers, coSpawnWithPostedCompletion) {
       }));
   ctx.poll();
   EXPECT_TRUE(handlerRanOnStrand);
+}
+
+// Test that the completion handler of `coSpawnWithPostedCompletion` is really
+// posted (and not dispatched, i.e. invoked inline): compared to a plain
+// `co_spawn` with the same coroutine and a handler on the same executor, it
+// takes exactly one more handler of the `io_context` until the completion
+// handler has run.
+TEST(AsioHelpers, coSpawnWithPostedCompletionReallyPosts) {
+  auto returnValue = []() -> net::awaitable<int> { co_return 42; };
+  // Return the number of handlers that the `io_context` runs until the
+  // completion handler has run, when the `spawn` function is used.
+  auto numStepsUntilHandlerRan = [&returnValue](auto spawn) {
+    net::io_context ctx;
+    bool handlerRan = false;
+    spawn(ctx.get_executor(), returnValue(),
+          [&handlerRan](std::exception_ptr, int) { handlerRan = true; });
+    // NOTE: The loop also ends when the `io_context` runs out of work, so that
+    // a handler that never runs fails the test instead of hanging it.
+    size_t numSteps = 0;
+    while (!handlerRan && ctx.poll_one() == 1) {
+      ++numSteps;
+    }
+    EXPECT_TRUE(handlerRan);
+    return numSteps;
+  };
+  size_t numStepsPlain =
+      numStepsUntilHandlerRan([](auto executor, auto awaitable, auto handler) {
+        net::co_spawn(executor, std::move(awaitable), std::move(handler));
+      });
+  size_t numStepsPosted =
+      numStepsUntilHandlerRan([](auto executor, auto awaitable, auto handler) {
+        coSpawnWithPostedCompletion(executor, std::move(awaitable),
+                                    std::move(handler));
+      });
+  EXPECT_EQ(numStepsPosted, numStepsPlain + 1);
+}
+
+// Test that an exception which the coroutine throws on a thread of a pool
+// reaches a handler that runs on another thread, many times in a row (the
+// hand-over of an exception between threads is what ThreadSanitizer flags if
+// it happens from inside the `catch` block, see `CallFunctionAndPassToHandler`
+// in `RunFunctionOnExecutor.h`).
+TEST(AsioHelpers, coSpawnWithPostedCompletionAcrossThreads) {
+  net::thread_pool pool{4};
+  net::io_context ctx;
+  auto workGuard = makeWorkGuard(ctx);
+  auto throwing = []() -> net::awaitable<int> {
+    throw std::runtime_error{"blim"};
+    co_return 0;
+  };
+
+  // The coroutines run on the pool, the handlers on the `io_context` that the
+  // main thread runs, each handler drops its reference to the exception.
+  constexpr size_t numRuns = 100;
+  size_t numExceptions = 0;
+  for (size_t i = 0; i < numRuns; ++i) {
+    coSpawnWithPostedCompletion(
+        pool.get_executor(), throwing(),
+        net::bind_executor(ctx.get_executor(), [&](std::exception_ptr e, int) {
+          EXPECT_THROW(std::rethrow_exception(std::move(e)),
+                       std::runtime_error);
+          ++numExceptions;
+        }));
+  }
+  for (size_t i = 0; i < numRuns; ++i) {
+    ctx.run_one();
+  }
+  pool.join();
+  EXPECT_EQ(numExceptions, numRuns);
 }
 
 // _________________________________________________________________________

@@ -28,7 +28,7 @@
 #include "index/compressedRelationWriter/CompressedRelationWriter.h"
 #include "util/AsioHelpers.h"
 #include "util/NoCopyNoMove.h"
-#include "util/OrderedResultMailbox.h"
+#include "util/ThreadSafeReorderBuffer.h"
 
 // Write a pair of twin permutations (e.g. PSO and POS) directly from the
 // chunks of the parallel merge of an external sorter, see
@@ -92,7 +92,7 @@ namespace net = boost::asio;
 // The work is split among the following components, which this class owns and
 // drives:
 // * A `ChunkWriter` per chunk writes everything that lies inside the chunk.
-// * The `OrderedResultMailbox` hands the results of the chunks over to the
+// * The `ThreadSafeReorderBuffer` hands the results of the chunks over to the
 //   driving thread, in the order of the chunks, and holds the first exception
 //   and the stop state that the chunks, the callbacks, and the driving thread
 //   share.
@@ -119,7 +119,7 @@ class ChunkwisePermutationWriter
   // result here, which only holds a few blocks of rows in memory (the twin
   // rows of the boundary parts are on disk, see `BoundaryPart::twinRuns_`), so
   // the results may safely pile up while the consolidation is busy.
-  ad_utility::OrderedResultMailbox<ChunkResult> chunkResults_;
+  ad_utility::ThreadSafeReorderBuffer<ChunkResult> chunkResults_;
   ConcurrentCallbackDispatcher callbackDispatcher_;
 
   // The writers of the chunks, which are created on demand (see
