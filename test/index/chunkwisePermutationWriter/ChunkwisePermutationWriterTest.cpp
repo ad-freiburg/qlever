@@ -33,15 +33,14 @@ void writeAndCheckChunkwise(const TestRows& rows, const Config& config,
 }
 }  // namespace
 
-// _____________________________________________________________________________
+// Test random rows that are split into many chunks.
 TEST(ChunkwisePermutationWriter, randomRowsManyChunks) {
   writeAndCheckChunkwise(randomRows(300'000, 4, 42), Config{});
 }
 
-// _____________________________________________________________________________
+// Test a few small relations, then one relation that is much larger than a
+// chunk, then a few small relations again.
 TEST(ChunkwisePermutationWriter, relationSpanningManyChunks) {
-  // A few small relations, then one relation that is much larger than a
-  // chunk, then a few small relations again.
   TestRows rows;
   for (int64_t i = 0; i < 20; ++i) {
     rows.push_back({i, i, i, 0});
@@ -55,12 +54,11 @@ TEST(ChunkwisePermutationWriter, relationSpanningManyChunks) {
   writeAndCheckChunkwise(rows, Config{});
 }
 
-// _____________________________________________________________________________
+// Test two relations that span several chunks each, separated by a single
+// tiny relation, so that the boundary between the two large ones falls into a
+// chunk that contains the end of the first, the tiny one, and the beginning of
+// the second.
 TEST(ChunkwisePermutationWriter, twoSpanningRelationsAndTinyRelationsBetween) {
-  // Two relations that span several chunks each, separated by a single tiny
-  // relation, so that the boundary between the two large ones falls into a
-  // chunk that contains the end of the first, the tiny one, and the beginning
-  // of the second.
   TestRows rows;
   for (int64_t i = 0; i < 150'000; ++i) {
     rows.push_back({1, i % 500, i % 333, i % 2});
@@ -72,14 +70,15 @@ TEST(ChunkwisePermutationWriter, twoSpanningRelationsAndTinyRelationsBetween) {
   writeAndCheckChunkwise(rows, Config{});
 }
 
-// _____________________________________________________________________________
+// Test a merge with a parallelism of one, which merges serially.
 TEST(ChunkwisePermutationWriter, serialMergeParallelismOne) {
   Config config;
   config.parallelism_ = 1;
   writeAndCheckChunkwise(randomRows(50'000, 4, 47), config);
 }
 
-// _____________________________________________________________________________
+// Test that the exception of a failing callback is propagated, both if it is
+// reported via `done` and if the callback throws.
 TEST(ChunkwisePermutationWriter, failingCallbackPropagates) {
   for (bool throws : {false, true}) {
     Config config;

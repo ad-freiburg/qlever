@@ -54,12 +54,12 @@ TEST_P(PermutationPairWriter, emptyInput) {
   check({}, config);
 }
 
-// _____________________________________________________________________________
+// Test a single small relation with duplicates and two graphs.
 TEST_P(PermutationPairWriter, singleSmallRelation) {
   check({{1, 2, 3, 0}, {1, 2, 3, 0}, {1, 2, 4, 0}, {1, 2, 4, 1}}, Config{});
 }
 
-// _____________________________________________________________________________
+// Test a few small relations that fit into a single block.
 TEST_P(PermutationPairWriter, fewSmallRelationsInSingleBlock) {
   TestRows rows;
   for (int64_t i = 0; i < 30; ++i) {
@@ -68,7 +68,7 @@ TEST_P(PermutationPairWriter, fewSmallRelationsInSingleBlock) {
   check(rows, Config{});
 }
 
-// _____________________________________________________________________________
+// Test a single large relation.
 TEST_P(PermutationPairWriter, singleLargeRelation) {
   TestRows rows;
   for (int64_t i = 0; i < 1'000; ++i) {
@@ -77,12 +77,12 @@ TEST_P(PermutationPairWriter, singleLargeRelation) {
   check(rows, Config{});
 }
 
-// _____________________________________________________________________________
+// Test random rows with relations of skewed sizes and many duplicates.
 TEST_P(PermutationPairWriter, randomRows) {
   check(randomRows(100'000, 4, 42), Config{});
 }
 
-// _____________________________________________________________________________
+// Test random rows without duplicates, which are not removed.
 TEST_P(PermutationPairWriter, randomRowsWithoutDuplicateRemoval) {
   auto rows = randomRows(100'000, 4, 43);
   ql::ranges::sort(rows);
@@ -92,27 +92,26 @@ TEST_P(PermutationPairWriter, randomRowsWithoutDuplicateRemoval) {
   check(rows, config);
 }
 
-// _____________________________________________________________________________
+// Test random rows with two payload columns.
 TEST_P(PermutationPairWriter, randomRowsWithPayloadColumns) {
   Config config;
   config.numColumns_ = 6;
   check(randomRows(100'000, 6, 44), config);
 }
 
-// _____________________________________________________________________________
+// Test random rows for a permutation that is not the identity. The sorter has
+// to sort by the permutation, which the comparator `SortTriple<1, 0, 2>` does
+// (it also compares the graph column).
 TEST_P(PermutationPairWriter, randomRowsWithNonIdentityPermutation) {
   Config config;
   config.permutation_ = qlever::KeyOrder{1, 0, 2, 3};
-  // The sorter has to sort by the permutation, which the comparator
-  // `SortTriple<1, 0, 2>` does (it also compares the graph column).
   check<SortTriple<1, 0, 2>>(randomRows(100'000, 4, 45), config);
 }
 
-// _____________________________________________________________________________
+// Test relations whose size is around the `0.8 * blocksize` threshold and
+// around the blocksize, so that some of them are small and others large (and
+// for the chunkwise writer, so are the parts at the boundaries of the chunks).
 TEST_P(PermutationPairWriter, mediumRelationsAroundTheLargeThreshold) {
-  // Relations whose size is around the `0.8 * blocksize` threshold and around
-  // the blocksize, so that some of them are small and others large (and for
-  // the chunkwise writer, so are the parts at the boundaries of the chunks).
   TestRows rows;
   std::mt19937_64 engine{46};
   for (int64_t col0 = 0; col0 < 3'000; ++col0) {

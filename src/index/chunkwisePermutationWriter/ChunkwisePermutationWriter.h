@@ -65,20 +65,12 @@
 //   those blocks in memory, together with its twin sorter. A relation may also
 //   span several complete chunks, each of which then consists of a single such
 //   part.
-// * The twin of a relation has to be sorted by `col0`, `col2`, `col1`, which
-//   for a relation that crosses the boundaries of chunks needs the rows of all
-//   its parts. So the twin sorter of a large part is not merged by its chunk:
-//   the chunk only writes the sorted runs of the sorter to disk and hands them
-//   over as part of the `BoundaryPart` (see `BoundaryPart::twinRuns_`), which
-//   keeps the memory of a finished chunk small. The consolidation then sorts
-//   the complete twin with a single parallel merge over the runs of all the
-//   parts (see `ad_utility::parallelBlockMerge::CombinedRunsInput`). The twin
-//   sorter of a large part holds all the rows of that part (also the ones that
-//   are kept in memory for the first permutation), but a small part has no
-//   twin sorter, so the rows of all the small parts are pushed to one more
-//   sorter, whose runs join the merge. The twin rows of a boundary relation
-//   therefore always go through an external sorter, even if the relation is
-//   small (see `BoundaryConsolidator::writeTwinOfBoundaryRelation`).
+// * The twin of a relation that crosses the boundaries of chunks needs the
+//   rows of all its parts, so a chunk doesn't merge the twin sorter of such a
+//   part, but only hands over its sorted runs on disk (see
+//   `BoundaryPart::twinRuns_`). The consolidation then sorts the complete twin
+//   with a single parallel merge over the runs of all the parts (see
+//   `BoundaryConsolidator::writeTwinOfBoundaryRelation`).
 // * The consolidation on the driving thread concatenates the parts of a
 //   relation in chunk order: the rows that two adjacent parts keep in memory
 //   are written as blocks (such that triples which are equal when disregarding
@@ -305,15 +297,16 @@ PermutationPairResult createPermutationPair(
   // writer is created by the sink factory, which the merge calls exactly once
   // (also for an empty input, see `parallelBlockMerge::SinkFactoryConcept`).
   std::shared_ptr<ChunkwisePermutationWriter> writer;
+  auto chunkwisePermutationWriterFactory = [&](size_t numChunks) {
+    AD_CORRECTNESS_CHECK(writer == nullptr);
+    writer = ChunkwisePermutationWriter::create(
+        numChunks, basename, std::move(writerAndCallback1),
+        std::move(writerAndCallback2), permutation, std::move(callbacks),
+        options, std::move(executor));
+    return writer;
+  };
   auto mergeCompletion =
-      sortedInput.template mergeToSink<0>([&](size_t numChunks) {
-        AD_CORRECTNESS_CHECK(writer == nullptr);
-        writer = ChunkwisePermutationWriter::create(
-            numChunks, basename, std::move(writerAndCallback1),
-            std::move(writerAndCallback2), permutation, std::move(callbacks),
-            options, std::move(executor));
-        return writer;
-      });
+      sortedInput.template mergeToSink<0>(chunkwisePermutationWriterFactory);
   AD_CORRECTNESS_CHECK(writer != nullptr);
   auto result = writer->finish(std::move(mergeCompletion));
   AD_CORRECTNESS_CHECK(writer->numInputRows() == numRowsInSorter,
