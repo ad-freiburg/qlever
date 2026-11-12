@@ -1976,7 +1976,7 @@ SubtreePlanMatrix QueryPlanner::fillDpTab(const QueryPlanner::TripleGraph& tg,
   // More than one connected component, set up a Cartesian product.
   SubtreePlanMatrix result{allocator()};
   result.emplace_back(allocator());
-  std::vector<std::shared_ptr<QueryExecutionTree>> subtrees;
+  CartesianProductJoin::Children subtrees{allocator()};
   // We need to manually inform the cartesian produce about
   // its included nodes and filters and text limits to make the
   // `applyTextLimitsIfPossible` call below work correctly.
@@ -2326,7 +2326,8 @@ SubtreePlanVec QueryPlanner::createJoinCandidatesAllowEmpty(
     const JoinColumns& jcs) const {
   if (jcs.empty()) {
     return singlePlanVec(makeSubtreePlan<CartesianProductJoin>(
-        _qec, std::vector{ain._qet, bin._qet}));
+        _qec,
+        CartesianProductJoin::Children{{ain._qet, bin._qet}, allocator()}));
   }
   return createJoinCandidates(ain, bin, jcs);
 }
@@ -3241,8 +3242,8 @@ void QueryPlanner::GraphPatternPlanner::bindGraphVariableIfUnbound(
   for (auto& innerCand : candidates) {
     if (!innerCand._qet->getVariableColumns().contains(graphVar)) {
       innerCand = makeSubtreePlan<CartesianProductJoin>(
-          planner_._qec, std::vector<std::shared_ptr<QueryExecutionTree>>{
-                             graphsCand._qet, innerCand._qet});
+          planner_._qec, CartesianProductJoin::Children{
+                             {graphsCand._qet, innerCand._qet}, allocator()});
     }
     // TODO<metetolga> queries of the form SELECT * { GRAPH ?g { VALUES ?g
     // { <doesnotexist> } } } are not correctly handled.

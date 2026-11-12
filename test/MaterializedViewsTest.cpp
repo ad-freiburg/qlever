@@ -55,6 +55,7 @@
 #include "util/AllocatorWithLimit.h"
 #include "util/CancellationHandle.h"
 #include "util/CompilerWarnings.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 
@@ -2217,7 +2218,8 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
   {
     auto plan = qlv().parseAndPlanQuery("SELECT * { ?s <p1> ?o }");
     AD_EXPECT_THROW_WITH_MESSAGE(
-        plan.queryExecutionTree().getRootOperation()->cloneWithNewChildren({}),
+        plan.queryExecutionTree().getRootOperation()->cloneWithNewChildren(
+            {{}, plan.queryExecutionContext().getAllocator()}),
         ::testing::HasSubstr("`cloneWithNewChildren` is not implemented"));
   }
 
@@ -2511,8 +2513,9 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
       return makeExecutionTree<Union>(qec, left, right);
     };
     auto cartesian = [qec](auto left, auto right) {
-      return makeExecutionTree<CartesianProductJoin>(qec,
-                                                     std::vector{left, right});
+      return makeExecutionTree<CartesianProductJoin>(
+          qec,
+          CartesianProductJoin::Children{{left, right}, qec->getAllocator()});
     };
 
     // Push the `BIND` into `tree` (like the query planner does) and check the

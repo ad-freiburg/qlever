@@ -429,7 +429,7 @@ std::unique_ptr<Operation> Union::cloneImpl() const {
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Union::cloneWithNewChildren(
-    std::vector<std::shared_ptr<QueryExecutionTree>> children) const {
+    qlm::vector<std::shared_ptr<QueryExecutionTree>> children) const {
   return std::make_unique<Union>(_executionContext, std::move(children.at(0)),
                                  std::move(children.at(1)), targetOrder_);
 }
@@ -455,7 +455,7 @@ Union::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   //
   // NOTE 2: `UNION` doesn't change any values, so (unlike for joins) it doesn't
   // matter whether the variables might be `UNDEF` in a child.
-  std::vector<std::shared_ptr<QueryExecutionTree>> children;
+  qlm::vector<std::shared_ptr<QueryExecutionTree>> children{allocator()};
   for (const auto& subtree : _subtrees) {
     auto result = subtree->makeTreeWithBindColumn(bind);
     if (!result.has_value()) {
