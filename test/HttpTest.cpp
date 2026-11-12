@@ -1110,3 +1110,15 @@ TEST(HttpProxy, connectTunnelWithUnexpectedTrailingBytes) {
       ::testing::AllOf(HasSubstr("sent 8 unexpected byte(s)"),
                        HasSubstr("cannot forward into the TLS session")));
 }
+
+// Test that a second server on a port that is already in use fails
+// synchronously in its constructor, which binds *and* listens on the socket.
+// The first server does not even have to be running for this (a second bind to
+// a socket that is bound but not yet listening would succeed).
+TEST(HttpServer, PortAlreadyInUseThrowsInConstructor) {
+  auto handler = makeEchoHandler();
+  using Server = TestHttpServer<decltype(handler)>;
+  Server first{handler};
+  EXPECT_THROW(Server(handler, 100u, first.getPort()),
+               boost::system::system_error);
+}

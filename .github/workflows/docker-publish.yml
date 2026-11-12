@@ -46,8 +46,15 @@ jobs:
         include:
           - platform: linux/amd64
             runner: ubuntu-24.04
+          # The runner's kernel must contain the Linux fix
+          # https://github.com/torvalds/linux/commit/478a1c3abebfc717db0d1281a9cdd7befafee542
+          # (the kernel of `ubuntu-24.04-arm` doesn't, the one of
+          # `ubuntu-26.04-arm` does). Without it, page tables that the kernel
+          # frees when `jemalloc` returns memory via `madvise` stay in the TLB
+          # on arm64, which causes random stalls, crashes, and corrupt data in
+          # the tests.
           - platform: linux/arm64
-            runner: ubuntu-24.04-arm
+            runner: ubuntu-26.04-arm
     runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout

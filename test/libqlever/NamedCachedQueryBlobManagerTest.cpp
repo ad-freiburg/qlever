@@ -1932,7 +1932,8 @@ TEST(NamedCachedQueryBlobManager, blobEntriesAreInCanonicalOrder) {
     auto trace = generateLocationTrace(loc);
     auto entry = qlever.namedResultCache().get(name);
     ASSERT_NE(entry, nullptr) << name;
-    EXPECT_EQ(entry->resultSortedOn_, sortedOn) << name;
+    EXPECT_THAT(entry->resultSortedOn_, ::testing::ElementsAreArray(sortedOn))
+        << name;
     EXPECT_TRUE(canonicalRowOrder::isInCanonicalOrder(
         ExplicitIdTableOperation::viewOf(entry->result_),
         entry->resultSortedOn_))

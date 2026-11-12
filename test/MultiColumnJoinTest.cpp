@@ -11,6 +11,7 @@
 #include "engine/IndexScan.h"
 #include "engine/MultiColumnJoin.h"
 #include "engine/NeutralOptional.h"
+#include "global/Constants.h"
 #include "util/AllocatorTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IdTestHelpers.h"
@@ -20,7 +21,22 @@
 using ad_utility::testing::makeAllocator;
 namespace {
 auto V = ad_utility::testing::VocabId;
+
+// Join `left` and `right` on the `joinColumns` via
+// `MultiColumnJoin::computeMultiColumnJoin` and return the result.
+IdTable computeJoin(
+    const IdTable& left, const IdTable& right,
+    const std::vector<std::array<ColumnIndex, 2>>& joinColumns) {
+  auto* qec = ad_utility::testing::getQec();
+  IdTable result(left.numColumns() + right.numColumns() - joinColumns.size(),
+                 makeAllocator());
+  MultiColumnJoin{qec, idTableToExecutionTree(qec, left),
+                  idTableToExecutionTree(qec, right)}
+      .computeMultiColumnJoin(left.asStaticView<0>(), right.asStaticView<0>(),
+                              joinColumns, &result);
+  return result;
 }
+}  // namespace
 
 TEST(EngineTest, multiColumnJoinTest) {
   using std::array;
@@ -89,18 +105,11 @@ TEST(EngineTest, multiColumnJoinTest) {
 // (see `isCheap` there), which requires that no join column contains UNDEF.
 TEST(MultiColumnJoin, undefInJoinColumns) {
   constexpr auto U = Id::makeUndefined();
-  auto* qec = ad_utility::testing::getQec();
   std::vector<std::array<ColumnIndex, 2>> jcls;
   jcls.push_back(std::array<ColumnIndex, 2>{{0, 0}});
   jcls.push_back(std::array<ColumnIndex, 2>{{1, 1}});
-
-  auto join = [&](const IdTable& left, const IdTable& right) {
-    IdTable result(3, makeAllocator());
-    MultiColumnJoin{qec, idTableToExecutionTree(qec, left),
-                    idTableToExecutionTree(qec, right)}
-        .computeMultiColumnJoin(left.asStaticView<0>(), right.asStaticView<0>(),
-                                jcls, &result);
-    return result;
+  auto join = [&jcls](const IdTable& left, const IdTable& right) {
+    return computeJoin(left, right, jcls);
   };
 
   // UNDEF only in a join column of the right input.
@@ -125,6 +134,66 @@ TEST(MultiColumnJoin, undefInJoinColumns) {
         makeIdTableFromVector({{1, 10, 100}, {2, 10, 200}, {2, 20, 200}});
     EXPECT_EQ(expected, join(left, right));
   }
+}
+
+// Test the join when one input is much smaller than the other, s.t. the
+// galloping join is used (see `GALLOP_THRESHOLD`), once with the smaller input
+// on the left and once with the smaller input on the right. Also test that an
+// UNDEF value in the smaller input still matches every value of the larger
+// input, and the join on three columns.
+TEST(MultiColumnJoin, galloping) {
+  constexpr auto U = Id::makeUndefined();
+  std::vector<std::array<ColumnIndex, 2>> jcls{{0, 0}, {1, 1}};
+
+  // Each pair `(k, k + 1)` with `k` in `[0, 2500)` occurs twice in `large`.
+  VectorTable largeInput;
+  for (int64_t i = 0; i < 5000; ++i) {
+    largeInput.push_back({i / 2, i / 2 + 1, i});
+  }
+  auto large = makeIdTableFromVector(largeInput);
+  // The second row matches `large` only in the first join column, and the last
+  // row is larger than all rows of `large`.
+  auto small = makeIdTableFromVector(
+      {{3, 4, 10}, {500, 0, 12}, {500, 501, 11}, {2500, 2501, 13}});
+  ASSERT_GT(large.size() / small.size(), GALLOP_THRESHOLD);
+
+  // The smaller input on the left.
+  EXPECT_EQ(computeJoin(small, large, jcls),
+            makeIdTableFromVector({{3, 4, 10, 6},
+                                   {3, 4, 10, 7},
+                                   {500, 501, 11, 1000},
+                                   {500, 501, 11, 1001}}));
+  // The smaller input on the right.
+  EXPECT_EQ(computeJoin(large, small, jcls),
+            makeIdTableFromVector({{3, 4, 6, 10},
+                                   {3, 4, 7, 10},
+                                   {500, 501, 1000, 11},
+                                   {500, 501, 1001, 11}}));
+
+  // An UNDEF value in a join column of the smaller input must match every
+  // value of `large` (the galloping join cannot handle UNDEF values, so the
+  // generic join must be used despite the size ratio).
+  auto smallUndef = makeIdTableFromVector({{U, 2500, 14}, {3, 4, 10}});
+  EXPECT_EQ(computeJoin(smallUndef, large, jcls),
+            makeIdTableFromVector({{3, 4, 10, 6},
+                                   {3, 4, 10, 7},
+                                   {2499, 2500, 14, 4998},
+                                   {2499, 2500, 14, 4999}}));
+  EXPECT_EQ(computeJoin(large, smallUndef, jcls),
+            makeIdTableFromVector({{3, 4, 6, 10},
+                                   {3, 4, 7, 10},
+                                   {2499, 2500, 4998, 14},
+                                   {2499, 2500, 4999, 14}}));
+
+  // Three join columns, where the second row of the smaller input matches
+  // `large` in the first two join columns but not in the third.
+  std::vector<std::array<ColumnIndex, 2>> jcls3{{0, 0}, {1, 1}, {2, 2}};
+  auto small3 = makeIdTableFromVector(
+      {{3, 4, 6, 50}, {3, 4, 8, 51}, {500, 501, 1001, 52}});
+  EXPECT_EQ(computeJoin(small3, large, jcls3),
+            makeIdTableFromVector({{3, 4, 6, 50}, {500, 501, 1001, 52}}));
+  EXPECT_EQ(computeJoin(large, small3, jcls3),
+            makeIdTableFromVector({{3, 4, 6, 50}, {500, 501, 1001, 52}}));
 }
 
 // _____________________________________________________________________________

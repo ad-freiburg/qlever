@@ -10,6 +10,8 @@
 
 #include "engine/CartesianProductJoin.h"
 
+#include <iterator>
+
 #include "engine/CallFixedSize.h"
 #include "util/Views.h"
 
@@ -477,7 +479,7 @@ CartesianProductJoin::makeDistinctTree(
   // product, reducing the sizes of the children before the product (which can
   // be huge) is formed.
   //
-  // Note: A child without any `distinctIndices` column is made distinct on the
+  // NOTE: A child without any `distinctIndices` column is made distinct on the
   // empty set of columns, which reduces it to (at most) a single row. This is
   // correct, because such a child does not contribute to `distinctIndices` and
   // only multiplies the number of rows in the Cartesian product.
@@ -488,7 +490,7 @@ CartesianProductJoin::makeDistinctTree(
         const auto& [child, childIndices] = childAndIndices;
         return QueryExecutionTree::createDistinctTree(child, childIndices);
       }) |
-      ::ranges::to_vector;
+      ::ranges::to<qlm::vector>(allocator());
   return ad_utility::makeExecutionTree<CartesianProductJoin>(
       _executionContext, std::move(newChildren));
 }
@@ -496,7 +498,7 @@ CartesianProductJoin::makeDistinctTree(
 // _____________________________________________________________________________
 std::unique_ptr<Operation> CartesianProductJoin::cloneImpl() const {
   AD_CONTRACT_CHECK(!forbiddenToRecompute_, recomputeMessage);
-  Children copy;
+  Children copy{allocator()};
   copy.reserve(children_.size());
   for (const auto& operation : children_) {
     copy.push_back(operation->clone());
