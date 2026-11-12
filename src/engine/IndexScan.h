@@ -415,6 +415,16 @@ class IndexScan final : public Operation {
   // index 5. Then the regular column index for the additional column is 3 but
   // the permutation column index is 5.
   VariableToColumnMap computePermutationColumnIndices() const;
+
+  // Call `f(variable, column)` for each variable read by this `IndexScan`
+  // (also those stripped from the result or hidden by a subquery), first for
+  // the variables of the permuted triple, then for the additional variables.
+  // `column` is the index of the column of the `Permutation` that the variable
+  // is read from (its position in the permuted triple, or its entry in
+  // `additionalColumns_`), which for a materialized view is the index of the
+  // view column.
+  void forEachVariableAndPermutationColumn(
+      absl::FunctionRef<void(const Variable&, ColumnIndex)> f) const;
 };
 
 #endif  // QLEVER_SRC_ENGINE_INDEXSCAN_H
