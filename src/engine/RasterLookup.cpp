@@ -10,6 +10,7 @@
 #include "engine/RasterLookup.h"
 
 #include <absl/strings/str_cat.h>
+#include <absl/strings/str_format.h>
 
 #include "engine/QueryExecutionTree.h"
 #include "engine/raster/RasterFile.h"
@@ -28,13 +29,18 @@ namespace {
 // The pixels of `band` under the geometry in `geometry`: a point stored in the
 // `Id`, or a WKT literal from the vocabulary or `localVocab`. Like
 // `GeoPointOrWktValueGetter`. Other `Id`s (UNDEF, numbers, IRIs, ...) give no
-// pixels.
+// pixels. With a `radius` in metres, the geometry is first widened by it.
 std::vector<qlever::raster::Pixel> lookupPixels(
-    qlever::raster::RasterFile& rasterFile, int band, Id geometry,
-    const Index& index, const LocalVocab& localVocab) {
+    qlever::raster::RasterFile& rasterFile, int band,
+    std::optional<double> radius, Id geometry, const Index& index,
+    const LocalVocab& localVocab) {
   using enum Datatype;
   switch (geometry.getDatatype()) {
     case GeoPoint: {
+      if (radius.has_value()) {
+        return rasterFile.lookupCircle(geometry.getGeoPoint(), band,
+                                       radius.value());
+      }
       auto pixel = rasterFile.lookupPoint(geometry.getGeoPoint(), band);
       if (!pixel.has_value()) {
         return {};
@@ -49,7 +55,7 @@ std::vector<qlever::raster::Pixel> lookupPixels(
       if (literalOrIri.isLiteral() && literalOrIri.hasDatatype() &&
           literalOrIri.getDatatype() == GEO_WKT_LITERAL) {
         return rasterFile.lookupGeometry(literalOrIri.toStringRepresentation(),
-                                         band);
+                                         band, radius);
       }
       return {};
     }
@@ -159,18 +165,26 @@ qlm::vector<QueryExecutionTree*> RasterLookup::getChildrenImpl() const {
 // _____________________________________________________________________________
 std::string RasterLookup::getDescriptor() const {
   return absl::StrCat("RasterLookup ", config_.dataset_, " band ",
-                      config_.band_);
+                      config_.band_,
+                      config_.radius_.has_value()
+                          ? absl::StrCat(" radius ", config_.radius_.value())
+                          : "");
 }
 
 // _____________________________________________________________________________
 std::string RasterLookup::getCacheKeyImpl() const {
   // Column numbers instead of variable names, so that renaming a variable
   // keeps the key. The names of the new columns do not change the result.
-  return absl::StrCat("RASTER LOOKUP ", config_.dataset_, " band ",
-                      config_.band_, " geometry column ",
-                      subtree_->getVariableColumn(config_.geometry_),
-                      config_.center_.has_value() ? " with center" : "", "\n",
-                      subtree_->getCacheKey());
+  return absl::StrCat(
+      "RASTER LOOKUP ", config_.dataset_, " band ", config_.band_,
+      // Full precision, because `StrCat` keeps only 6 digits
+      // of a `double`.
+      config_.radius_.has_value()
+          ? absl::StrFormat(" radius %.17g", config_.radius_.value())
+          : "",
+      " geometry column ", subtree_->getVariableColumn(config_.geometry_),
+      config_.center_.has_value() ? " with center" : "", "\n",
+      subtree_->getCacheKey());
 }
 
 // _____________________________________________________________________________
@@ -245,8 +259,8 @@ Result RasterLookup::computeResult([[maybe_unused]] bool requestLaziness) {
       // about twice the memory of its output rows. Reading large windows in
       // tiles would bound them.
       std::vector<qlever::raster::Pixel> pixels = lookupPixels(
-          rasterFile, config_.band_, input(inputRow, geometryColumn),
-          getIndex(), subResult->localVocab());
+          rasterFile, config_.band_, config_.radius_,
+          input(inputRow, geometryColumn), getIndex(), subResult->localVocab());
       if (pixels.empty()) {
         ++numRowsWithoutPixels;
         continue;

@@ -56,9 +56,16 @@ class RasterFile {
   // grid or the pixel is NoData.
   std::optional<Pixel> lookupPoint(const GeoPoint& point, int band);
 
+  // The pixels in `band` with their center inside the circle of `radius`
+  // metres around `center`, without NoData pixels.
+  std::vector<Pixel> lookupCircle(const GeoPoint& center, int band,
+                                  double radius);
+
   // The pixels in `band` under a point, on a line, or with their center inside
-  // a polygon of `wktLiteral`, without NoData pixels and duplicates.
-  std::vector<Pixel> lookupGeometry(std::string_view wktLiteral, int band);
+  // a polygon of `wktLiteral`, without NoData pixels and duplicates. With a
+  // `radius` in metres, the geometry is first widened by that radius.
+  std::vector<Pixel> lookupGeometry(std::string_view wktLiteral, int band,
+                                    std::optional<double> radius);
 };
 
 // The path of the raster file for `datasetName`, which is the name of a `.tif`

@@ -55,6 +55,18 @@ void RasterQuery::addParameter(const SparqlTriple& triple) {
       throw RasterException("The parameter `<band>` is too large");
     }
     band_ = static_cast<int>(object.getInt());
+  } else if (predString == "radius") {
+    if (radius_.has_value()) {
+      throw RasterException(
+          "The parameter `<radius>` must not be set more than once");
+    }
+    std::optional<double> radius = object.getNumber();
+    // Written as "positive" so that NaN is rejected too.
+    if (!radius.has_value() || !(radius.value() > 0)) {
+      throw RasterException(
+          "The parameter `<radius>` expects a positive number (in metres)");
+    }
+    radius_ = radius;
   } else if (predString == "geometry") {
     setVariable("geometry", object, geometry_);
   } else if (predString == "value") {
@@ -64,8 +76,8 @@ void RasterQuery::addParameter(const SparqlTriple& triple) {
   } else {
     throw RasterException(absl::StrCat(
         "Unknown parameter for raster lookup: `<", predString,
-        ">`. Supported parameters: `<dataset>`, `<band>`, `<geometry>`, "
-        "`<value>`, `<center>`"));
+        ">`. Supported parameters: `<dataset>`, `<band>`, `<radius>`, "
+        "`<geometry>`, `<value>`, `<center>`"));
   }
 }
 
@@ -93,7 +105,8 @@ RasterLookupConfiguration RasterQuery::toRasterLookupConfiguration() const {
   AD_CORRECTNESS_CHECK(dataset_.has_value() && geometry_.has_value() &&
                        value_.has_value());
   return RasterLookupConfiguration{dataset_.value(), band_.value_or(1),
-                                   geometry_.value(), value_.value(), center_};
+                                   radius_,          geometry_.value(),
+                                   value_.value(),   center_};
 }
 
 }  // namespace parsedQuery

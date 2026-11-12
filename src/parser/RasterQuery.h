@@ -32,17 +32,19 @@ class RasterException : public std::runtime_error {
 //   SERVICE raster: {
 //     [] raster:dataset "vorratskarte" ;
 //        raster:band 1 ;
+//        raster:radius 500 ;
 //        raster:geometry ?geometry ;
 //        raster:value ?value ;
 //        raster:center ?center .
 //     { ?plot geo:hasGeometry/geo:asWKT ?geometry }
 //   }
 // }
-// The band (default 1) and the center are optional.
+// The band (default 1), the radius (in metres) and the center are optional.
 struct RasterQuery : MagicServiceQuery {
   // Empty until set by a configuration triple.
   std::optional<std::string> dataset_;
   std::optional<int> band_;
+  std::optional<double> radius_;
   std::optional<Variable> geometry_;
   std::optional<Variable> value_;
   std::optional<Variable> center_;

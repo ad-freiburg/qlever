@@ -202,6 +202,9 @@ struct RasterFile::Impl {
   // CRS84 to the CRS of the file, and back.
   std::unique_ptr<OGRCoordinateTransformation> crs84ToRaster_;
   std::unique_ptr<OGRCoordinateTransformation> rasterToCrs84_;
+  // How many metres one unit of the CRS of the file is: 1 for metres, 0.3048
+  // for feet. Empty for a CRS in degrees, where a radius cannot be used.
+  std::optional<double> metresPerUnit_;
   std::vector<Band> bands_;
 
   explicit Impl(const std::string& path);
@@ -222,10 +225,12 @@ struct RasterFile::Impl {
                                      const PixelWindow& window) const;
 
   // Return the pixels of `band` that belong to `geometry`, which is in CRS84
-  // (see `rasterizeMask`). Takes ownership, because `geometry` is changed in
+  // (see `rasterizeMask`). With a `radius` in metres, `geometry` is first
+  // widened by that radius. Takes ownership, because `geometry` is changed in
   // place.
   std::vector<Pixel> lookupOgrGeometry(std::unique_ptr<OGRGeometry> geometry,
-                                       const Band& band);
+                                       const Band& band,
+                                       std::optional<double> radius);
 };
 
 // _____________________________________________________________________________
@@ -269,6 +274,10 @@ RasterFile::Impl::Impl(const std::string& path) {
     throw std::runtime_error(absl::StrCat(
         "Could not transform between CRS84 and the CRS of raster file \"", path,
         "\": ", CPLGetLastErrorMsg()));
+  }
+  // A CRS in degrees also reports 1 here, so check that it is projected.
+  if (rasterCrs.IsProjected()) {
+    metresPerUnit_ = rasterCrs.GetLinearUnits();
   }
 
   for (int index = 1; index <= dataset_->GetRasterCount(); ++index) {
@@ -445,12 +454,28 @@ std::vector<uint8_t> RasterFile::Impl::rasterizeMask(
 
 // _____________________________________________________________________________
 std::vector<Pixel> RasterFile::Impl::lookupOgrGeometry(
-    std::unique_ptr<OGRGeometry> geometry, const Band& band) {
+    std::unique_ptr<OGRGeometry> geometry, const Band& band,
+    std::optional<double> radius) {
   // An edge that is straight in CRS84 is curved in the CRS of the file. Extra
   // vertices let the transformed edge follow that curve.
   geometry->segmentize(MAX_SEGMENT_LENGTH_DEGREES);
   if (geometry->transform(crs84ToRaster_.get()) != OGRERR_NONE) {
     return {};
+  }
+  // Widen in the CRS of the file, where distances are in its own unit, not in
+  // degrees.
+  if (radius.has_value()) {
+    if (!metresPerUnit_.has_value()) {
+      throw std::runtime_error(absl::StrCat(
+          "The parameter `<radius>` needs a raster in a projected CRS (for "
+          "example in metres), but the CRS of this raster is \"",
+          dataset_->GetSpatialRef()->GetName(), "\""));
+    }
+    // `Buffer` returns a new geometry, which `geometry` now owns.
+    geometry.reset(geometry->Buffer(radius.value() / metresPerUnit_.value()));
+    if (!geometry) {
+      return {};
+    }
   }
   OGREnvelope envelope;
   geometry->getEnvelope(&envelope);
@@ -555,8 +580,18 @@ std::optional<Pixel> RasterFile::lookupPoint(const GeoPoint& point, int band) {
 }
 
 // _____________________________________________________________________________
+std::vector<Pixel> RasterFile::lookupCircle(const GeoPoint& center, int band,
+                                            double radius) {
+  AD_CONTRACT_CHECK(1 <= band && band <= numBands());
+  return impl_->lookupOgrGeometry(
+      std::make_unique<OGRPoint>(center.getLng(), center.getLat()),
+      impl_->bands_[band - 1], radius);
+}
+
+// _____________________________________________________________________________
 std::vector<Pixel> RasterFile::lookupGeometry(std::string_view wktLiteral,
-                                              int band) {
+                                              int band,
+                                              std::optional<double> radius) {
   AD_CONTRACT_CHECK(1 <= band && band <= numBands());
   std::optional<ad_utility::detail::ParsedWkt> geometry =
       ad_utility::detail::parseWkt(wktLiteral).parsedWkt_;
@@ -566,25 +601,29 @@ std::vector<Pixel> RasterFile::lookupGeometry(std::string_view wktLiteral,
   const Impl::Band& bandInfo = impl_->bands_[band - 1];
 
   return std::visit(
-      [this, band, &bandInfo](const auto& parsed) -> std::vector<Pixel> {
+      [this, band, &bandInfo,
+       radius](const auto& parsed) -> std::vector<Pixel> {
         using T = std::decay_t<decltype(parsed)>;
+        // A point without a radius is one pixel, read directly.
         if constexpr (std::is_same_v<T, ::util::geo::DPoint>) {
-          std::optional<GeoPoint> point;
-          try {
-            point = ad_utility::detail::utilPointToGeoPoint(parsed);
-          } catch (const CoordinateOutOfRangeException&) {
-            return {};
+          if (!radius.has_value()) {
+            std::optional<GeoPoint> point;
+            try {
+              point = ad_utility::detail::utilPointToGeoPoint(parsed);
+            } catch (const CoordinateOutOfRangeException&) {
+              return {};
+            }
+            std::optional<Pixel> pixel = lookupPoint(point.value(), band);
+            if (!pixel.has_value()) {
+              return {};
+            }
+            return {pixel.value()};
           }
-          std::optional<Pixel> pixel = lookupPoint(point.value(), band);
-          if (!pixel.has_value()) {
-            return {};
-          }
-          return {pixel.value()};
-        } else {
-          // Lines, polygons, and their multi types and collections, each by
-          // the rule of `rasterizeMask`.
-          return impl_->lookupOgrGeometry(ToOgrGeometry{}(parsed), bandInfo);
         }
+        // Lines, polygons, their multi types and collections, and every
+        // geometry widened by a radius, each by the rule of `rasterizeMask`.
+        return impl_->lookupOgrGeometry(ToOgrGeometry{}(parsed), bandInfo,
+                                        radius);
       },
       geometry.value());
 }

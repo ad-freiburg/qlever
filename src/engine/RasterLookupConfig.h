@@ -23,6 +23,8 @@ struct RasterLookupConfiguration {
   std::string dataset_;
   // Numbered from 1, as in GDAL. The parser sets the default.
   int band_;
+  // In metres. If set, each geometry is first widened by this radius.
+  std::optional<double> radius_;
   // The child's column with the geometries.
   Variable geometry_;
   // The new columns: the pixel value and, if wanted, the pixel center.
