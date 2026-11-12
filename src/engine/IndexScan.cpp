@@ -309,24 +309,17 @@ VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
   auto isContained = [&](const Variable& var) {
     return !varsToKeep_.has_value() || varsToKeep_.value().contains(var);
   };
-  auto addCol = [&isContained, &variableToColumnMap,
-                 nextColIdx = ColumnIndex{0},
-                 permutationColIdx = ColumnIndex{0},
-                 this](const Variable& var) mutable {
+  // Add each variable at the next result column, with the undef status of the
+  // permutation column it is read from.
+  ColumnIndex nextColIdx = 0;
+  forEachVariableAndPermutationColumn([&](const Variable& var,
+                                          ColumnIndex permutationColIdx) {
     if (isContained(var)) {
       variableToColumnMap[var] = {
           nextColIdx, permutation().getColumnUndefStatus(permutationColIdx)};
       ++nextColIdx;
     }
-    ++permutationColIdx;
-  };
-
-  for (const TripleComponent* const ptr : getPermutedTriple()) {
-    if (ptr->isVariable()) {
-      addCol(ptr->getVariable());
-    }
-  }
-  ql::ranges::for_each(additionalVariables_, addCol);
+  });
   return variableToColumnMap;
 }
 
@@ -1308,35 +1301,35 @@ VariableToColumnMap IndexScan::computePermutationColumnIndices() const {
   // hidden if this scan is the root of a subquery.
   const auto& varToColInResult = getInternallyVisibleVariableColumns();
 
-  auto addVar = [this, &varToColInResult, &map](const Variable& var,
-                                                ColumnIndex col) {
-    // Skip variables that are stripped away as they are not available in the
-    // result.
-    if (varsToKeep_.has_value() && !varsToKeep_.value().contains(var)) {
-      return;
-    }
+  forEachVariableAndPermutationColumn(
+      [this, &varToColInResult, &map](const Variable& var, ColumnIndex col) {
+        // Skip variables that are stripped away as they are not available in
+        // the result.
+        if (varsToKeep_.has_value() && !varsToKeep_.value().contains(var)) {
+          return;
+        }
 
-    // Deal with potentially undef columns: inherit undef status from main
-    // `VariableToColumnMap`.
-    map[var] = {col, varToColInResult.at(var).mightContainUndef_};
-  };
+        // Deal with potentially undef columns: inherit undef status from main
+        // `VariableToColumnMap`.
+        map[var] = {col, varToColInResult.at(var).mightContainUndef_};
+      });
+  return map;
+}
 
-  // Add those of the first three columns which are read into variables. The
-  // permutation column index is given by `enumerate` (0, 1, 2 for the segments
-  // of the permuted triple). For example, if only the last segment contains a
-  // variable it is still assigned 2 not 0.
+// _____________________________________________________________________________
+void IndexScan::forEachVariableAndPermutationColumn(
+    absl::FunctionRef<void(const Variable&, ColumnIndex)> f) const {
+  // The permutation column of a triple variable is its position in the
+  // permuted triple (0, 1, 2), so a variable only in the last position gets
+  // column 2, not 0.
   auto spo = getPermutedTriple();
   for (const auto [index, component] : ::ranges::views::enumerate(spo)) {
     if (component->isVariable()) {
-      addVar(component->getVariable(), index);
+      f(component->getVariable(), index);
     }
   }
-
-  // Add all additional columns.
   for (const auto& [index, var] :
        ::ranges::views::zip(additionalColumns_, additionalVariables_)) {
-    addVar(var, index);
+    f(var, index);
   }
-
-  return map;
 }

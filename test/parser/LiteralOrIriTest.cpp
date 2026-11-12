@@ -694,6 +694,24 @@ TEST(NonOwningTest, LiteralOrIriView) {
   EXPECT_THAT(set, ::testing::UnorderedElementsAre(iv, lv));
 }
 
+// Test that `toOwned` yields an equal `LiteralOrIri` with its own copy of the
+// characters, for a view as well as for an owning object.
+TEST(LiteralOrIri, toOwned) {
+  auto literal = LiteralOrIri{Literal::literalWithoutQuotes(
+      "x", Iri::fromStringRepresentation("<http://example.org/dt>"))};
+  auto iri = LiteralOrIri::iriref("<http://example.org/>");
+  for (const auto& word : {literal, iri}) {
+    // A copy of the string representation at a different address.
+    std::string storage{word.toStringRepresentation()};
+    auto view = LiteralOrIriView::fromStringRepresentation(storage);
+    LiteralOrIri owned = view.toOwned();
+    EXPECT_EQ(owned, word);
+    EXPECT_NE(owned.toStringRepresentation().data(), storage.data());
+    // Converting an owning object directly yields a copy.
+    EXPECT_EQ(word.toOwned(), word);
+  }
+}
+
 using LitTypes =
     ::testing::Types<LiteralOrIri, LiteralOrIriView, Literal, LiteralView>;
 

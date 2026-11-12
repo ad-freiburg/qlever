@@ -14,6 +14,7 @@
 #include "util/CancellationHandle.h"
 #include "util/ChunkedForLoop.h"
 #include "util/CompilerExtensions.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/Exception.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 #include "util/JoinAlgorithms/JoinColumnMapping.h"
@@ -235,13 +236,13 @@ IdTableView<JOIN_COLUMNS> toStaticView(
 // unsupported. `matchLeft` can be used with different types to accommodate
 // different types of joins.
 class IndexNestedLoopJoin {
-  std::vector<std::array<ColumnIndex, 2>> joinColumns_;
+  qlm::vector<std::array<ColumnIndex, 2>> joinColumns_;
   std::shared_ptr<const Result> leftResult_;
   std::shared_ptr<const Result> rightResult_;
   ad_utility::SharedCancellationHandle cancellationHandle_;
 
  public:
-  IndexNestedLoopJoin(std::vector<std::array<ColumnIndex, 2>> joinColumns,
+  IndexNestedLoopJoin(qlm::vector<std::array<ColumnIndex, 2>> joinColumns,
                       std::shared_ptr<const Result> leftResult,
                       std::shared_ptr<const Result> rightResult,
                       ad_utility::SharedCancellationHandle cancellationHandle)
