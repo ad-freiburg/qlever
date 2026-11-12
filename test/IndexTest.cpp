@@ -832,6 +832,39 @@ TEST(IndexTest, processTripleHasWordNormalization) {
               UnorderedElementsAre(Pair("cafe", 3), Pair("cafes", 1)));
 }
 
+// _____________________________________________________________________________
+TEST(IndexTest, normalizedTriples) {
+  IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
+  auto process = [&index](std::string literal) {
+    TurtleTriple turtleTriple{iri("<subject>"), iri("<predicate>"),
+                              lit(std::move(literal))};
+    return index.processTriple(std::move(turtleTriple)).normalized_;
+  };
+  // Disabled by default.
+  EXPECT_EQ(process("\"Café\""), std::nullopt);
+
+  index.addNormalizedTriples() = true;
+  EXPECT_EQ(process("\"Café (Paris), OLÉ!  42\""), "cafe paris ole 42");
+  // A literal without words has no normalized form.
+  EXPECT_EQ(process("\"?!\""), std::nullopt);
+  // Not a literal.
+  EXPECT_EQ(
+      index.processTriple(TurtleTriple{iri("<s>"), iri("<p>"), iri("<o>")})
+          .normalized_,
+      std::nullopt);
+
+  // The matches of the regexes are replaced by a space, in the given order.
+  index.setNormalizationRegexes(
+      {"\\([^)]*\\)|\\[[^\\]]*\\]", "(?i)\\bco(mpany)?\\.? ltd\\b"});
+  EXPECT_EQ(process("\"Café (Paris) [2020] Olé Company Ltd\""), "cafe ole");
+  EXPECT_EQ(process("\"Foo(Bar)Baz\""), "foo baz");
+  EXPECT_EQ(index.normalizeLiteralContent("(only brackets)"), "");
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      index.setNormalizationRegexes({"(unclosed"}),
+      ::testing::HasSubstr("not a valid regular expression"));
+}
+
 // Test the names of the normalizations in the option of `qlever-index`.
 TEST(IndexTest, hasWordNormalizationNames) {
   using ad_utility::HasWordNormalization;
@@ -885,6 +918,29 @@ TEST(IndexTest, hasWordRestrictPredicates) {
       ::testing::HasSubstr("is not a valid IRI reference"));
   EXPECT_EQ(numWords(iri("<r>")), 0);
   EXPECT_EQ(numWords(iri("<q>")), 1);
+}
+
+// Test that `setHasWordRestrictPredicates` also restricts the `ql:normalized`
+// triples, also without `ql:has-word` triples.
+TEST(IndexTest, hasWordRestrictPredicatesNormalized) {
+  // An index with only `ql:normalized` triples, and a function that returns the
+  // normalized form of `"Café"` as the object of `predicate`.
+  IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
+  index.addNormalizedTriples() = true;
+  auto normalized = [&index](std::string predicate) {
+    return index
+        .processTriple(TurtleTriple{iri("<s>"), iri(std::move(predicate)),
+                                    lit("\"Café\"")})
+        .normalized_;
+  };
+
+  // By default, the triple is added for all predicates.
+  EXPECT_EQ(normalized("<p>"), "cafe");
+
+  // With predicates set, the triple is only added for these predicates.
+  index.setHasWordRestrictPredicates({"<p>", "<q>"});
+  EXPECT_EQ(normalized("<q>"), "cafe");
+  EXPECT_EQ(normalized("<r>"), std::nullopt);
 }
 
 // _____________________________________________________________________________
@@ -1978,6 +2034,43 @@ TEST(IndexImpl, addHasWordTriplesOfBuiltAndLoadedIndex) {
   configuration.erase(key);
   indexImpl.applyConfiguration(configuration);
   EXPECT_FALSE(indexImpl.addHasWordTriples());
+}
+
+// Test that whether an index has `ql:normalized` triples and the regexes of
+// their normalization are recorded in the configuration of a built index and
+// applied when loading, with no `ql:normalized` triples for an index that was
+// built before the keys existed.
+TEST(IndexImpl, addNormalizedTriplesOfBuiltAndLoadedIndex) {
+  const std::string addKey{ad_utility::ADD_NORMALIZED_TRIPLES_KEY};
+  const std::string regexesKey{ad_utility::NORMALIZATION_REGEXES_KEY};
+  using Regexes = std::vector<std::string>;
+
+  // An index built with `ql:normalized` triples records this and the regexes.
+  TestIndexConfig config{"<a> <b> \"Café (Paris)\" ."};
+  config.addNormalizedTriples = true;
+  config.normalizationRegexes = {"\\(.*?\\)"};
+  auto index = makeTestIndex("addNormalizedTriples", std::move(config));
+  EXPECT_EQ(index.getImpl().configurationJson()[addKey], true);
+  EXPECT_EQ(index.getImpl().configurationJson()[regexesKey],
+            (Regexes{"\\(.*?\\)"}));
+
+  // Loading a configuration applies the recorded values (so that the literals
+  // of an update are normalized like those of the index build), and a
+  // configuration without the keys (an older index) gives no `ql:normalized`
+  // triples.
+  auto configuration = minimalValidConfiguration();
+  configuration[addKey] = true;
+  configuration[regexesKey] = Regexes{"\\(.*?\\)"};
+  IndexImpl indexImpl{ad_utility::makeUnlimitedAllocator<Id>()};
+  auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+  indexImpl.applyConfiguration(configuration);
+  EXPECT_TRUE(std::as_const(indexImpl).addNormalizedTriples());
+  EXPECT_EQ(indexImpl.normalizeLiteralContent("Café (Paris)"), "cafe");
+  configuration.erase(addKey);
+  configuration.erase(regexesKey);
+  indexImpl.applyConfiguration(configuration);
+  EXPECT_FALSE(std::as_const(indexImpl).addNormalizedTriples());
+  EXPECT_EQ(indexImpl.normalizeLiteralContent("Café (Paris)"), "cafe paris");
 }
 
 // _____________________________________________________________________________

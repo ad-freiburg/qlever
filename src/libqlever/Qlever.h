@@ -99,8 +99,14 @@ struct CommonConfig {
   ad_utility::HasWordNormalization hasWordNormalization_{
       ad_utility::HasWordNormalization::Lowercase};
 
-  // If not empty, only add the `ql:has-word` triples for literals that are the
-  // object of a triple with one of these predicates.
+  // Option to add a triple `<literal> ql:normalized "normalized literal"` for
+  // each literal, see `IndexImpl::normalizeLiteralContent`. The
+  // `normalizationRegexes_` are removed from the literals before.
+  bool addNormalizedTriples_ = false;
+  std::vector<std::string> normalizationRegexes_;
+
+  // If not empty, only add the `ql:has-word` and `ql:normalized` triples for
+  // literals that are the object of a triple with one of these predicates.
   std::vector<std::string> hasWordRestrictPredicates_;
 };
 

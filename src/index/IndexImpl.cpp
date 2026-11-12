@@ -10,6 +10,7 @@
 #include <absl/strings/str_join.h>
 #include <absl/time/clock.h>
 #include <absl/time/time.h>
+#include <re2/re2.h>
 #include <sys/stat.h>
 
 #include <atomic>
@@ -470,6 +471,16 @@ void IndexImpl::prepareIndexBuild() {
   configurationJson_[std::string{
       ad_utility::HAS_WORD_RESTRICT_PREDICATES_KEY}] =
       hasWordRestrictPredicates_;
+  // Whether the index has `ql:normalized` triples and the regexes of their
+  // normalization are stored, so that the server can later add them for the
+  // literals that are inserted by an update.
+  configurationJson_[std::string{ad_utility::ADD_NORMALIZED_TRIPLES_KEY}] =
+      addNormalizedTriples_;
+  configurationJson_[std::string{ad_utility::NORMALIZATION_REGEXES_KEY}] =
+      ::ranges::to<std::vector<std::string>>(
+          normalizationRegexes_ | ql::views::transform([](const auto& regex) {
+            return regex->pattern();
+          }));
 
   // Use the encoding of the index for all points that the index build creates
   // (`writeConfiguration` records it), and warn if it is the deprecated
@@ -1619,6 +1630,16 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
                                                  std::greater_equal<>{}) ==
                        hasWordRestrictPredicates_.end());
 
+  // Whether this index has `ql:normalized` triples and the regexes of their
+  // normalization (an index built before these keys existed is treated as
+  // having none).
+  loadDataMember(ad_utility::ADD_NORMALIZED_TRIPLES_KEY, addNormalizedTriples_,
+                 false);
+  std::vector<std::string> normalizationRegexes;
+  loadDataMember(ad_utility::NORMALIZATION_REGEXES_KEY, normalizationRegexes,
+                 std::vector<std::string>{});
+  setNormalizationRegexes(normalizationRegexes);
+
   // The block size with which the permutations of this index were written. It
   // is needed when further permutations of this index are written later on (a
   // materialized view, for example), so that all permutations of an index have
@@ -1709,11 +1730,22 @@ ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
                         encodedIriManager().toString(predicate.getId()));
     };
 
+    // Check if the `ql:has-word` or `ql:normalized` triples are added for this
+    // literal, that is, if one of them is enabled and the predicate is one of
+    // the `hasWordRestrictPredicates_` (or none are set).
+    bool addWordTriples = (addHasWordTriples_ || addNormalizedTriples_) &&
+                          hasWordTriplesForPredicate(getPredicate);
+
     // Extract the words of the literal for the `ql:has-word` triples and count
-    // their term frequencies (only if the predicate is one of the
-    // `hasWordRestrictPredicates_`, or none are set).
-    if (addHasWordTriples_ && hasWordTriplesForPredicate(getPredicate)) {
+    // their term frequencies.
+    if (addHasWordTriples_ && addWordTriples) {
       result.wordFrequencies_ = computeHasWordFrequencies(lit.getContent());
+    }
+    if (addNormalizedTriples_ && addWordTriples) {
+      auto normalized = normalizeLiteralContent(lit.getContent());
+      if (!normalized.empty()) {
+        result.normalized_ = std::move(normalized);
+      }
     }
   }
 
@@ -2292,6 +2324,36 @@ void IndexImpl::setBlankNodeIriRegexes(
   blankNodeIriRegexes_ =
       ad_utility::RegexSet{std::move(blankNodeIriRegexes),
                            "passed to `--iri-as-blank-node-regexes`"};
+}
+
+// _____________________________________________________________________________
+void IndexImpl::setNormalizationRegexes(
+    const std::vector<std::string>& regexes) {
+  normalizationRegexes_.clear();
+  for (const std::string& regex : regexes) {
+    auto compiled = std::make_shared<const re2::RE2>(regex, re2::RE2::Quiet);
+    if (!compiled->ok()) {
+      throw std::runtime_error{absl::StrCat(
+          "The regex \"", regex,
+          "\" passed to `--normalization-regexes` is not a valid regular "
+          "expression (as understood by Google's RE2 library): ",
+          compiled->error())};
+    }
+    normalizationRegexes_.push_back(std::move(compiled));
+  }
+}
+
+// _____________________________________________________________________________
+std::string IndexImpl::normalizeLiteralContent(std::string_view content) const {
+  std::string cleaned{content};
+  for (const auto& regex : normalizationRegexes_) {
+    re2::RE2::GlobalReplace(&cleaned, *regex, " ");
+  }
+  std::string withoutAccents = ad_utility::removeAccentsUtf8(cleaned);
+  return absl::StrJoin(
+      ::ranges::to<std::vector<std::string>>(
+          tokenizeAndNormalizeText(withoutAccents, vocab_.getLocaleManager())),
+      " ");
 }
 
 // _____________________________________________________________________________

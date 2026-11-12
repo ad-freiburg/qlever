@@ -99,6 +99,10 @@ struct IndexBuilderDataAsFirstPermutationSorter {
   SorterPtr sorter_;
 };
 
+namespace re2 {
+class RE2;
+}  // namespace re2
+
 class IndexImpl {
  public:
   using TextScoringMetric = qlever::TextScoringMetric;
@@ -150,9 +154,18 @@ class IndexImpl {
   ad_utility::HasWordNormalization hasWordNormalization_{
       ad_utility::HasWordNormalization::Lowercase};
 
-  // If not empty, the `ql:has-word` triples are only added for literals that
-  // are the object of a triple with one of these predicates (IRIs in the format
-  // of `Iri::toStringRepresentation`, sorted and without duplicates).
+  // If true, add a `ql:normalized` triple for each literal, see
+  // `normalizeLiteralContent`.
+  bool addNormalizedTriples_ = false;
+
+  // The regexes whose matches are removed from a literal before it is
+  // normalized, see `normalizeLiteralContent`.
+  std::vector<std::shared_ptr<const re2::RE2>> normalizationRegexes_;
+
+  // If not empty, the `ql:has-word` and `ql:normalized` triples are only added
+  // for literals that are the object of a triple with one of these predicates
+  // (IRIs in the format of `Iri::toStringRepresentation`, sorted and without
+  // duplicates).
   std::vector<std::string> hasWordRestrictPredicates_;
 
   size_t numTriplesPerBatch_ = NUM_TRIPLES_PER_PARTIAL_VOCAB;
@@ -457,6 +470,21 @@ class IndexImpl {
   void setHasWordNormalization(ad_utility::HasWordNormalization normalization) {
     hasWordNormalization_ = normalization;
   }
+
+  bool& addNormalizedTriples() { return addNormalizedTriples_; }
+  bool addNormalizedTriples() const { return addNormalizedTriples_; }
+
+  // Set the regexes for `normalizeLiteralContent`. Throw if one of them is not
+  // a valid regular expression (as understood by Google's RE2 library).
+  void setNormalizationRegexes(const std::vector<std::string>& regexes);
+
+  // Return the normalized form of the `content` of a literal, which is the
+  // object of its `ql:normalized` triple: Replace each match of the
+  // `normalizationRegexes_` (in order) by a space, remove all accents, split
+  // the result at non-alphanumeric characters, and join the lowercased words
+  // with a single space. For example, with the regex `\(.*?\)`, the content
+  // "Café (Paris), Olé!" becomes "cafe ole".
+  std::string normalizeLiteralContent(std::string_view content) const;
 
   // Set the `hasWordRestrictPredicates_`. Throw if one of them is not a valid
   // IRI in angle brackets.
@@ -961,14 +989,13 @@ class IndexImpl {
   ad_utility::HashMap<std::string, size_t> computeHasWordFrequencies(
       std::string_view content) const;
 
-  // Return true if the `ql:has-word` triples are added for the literals that
-  // are the object of a triple with the predicate returned by `getPredicate`
-  // (in the format of `Iri::toStringRepresentation`), see
+  // Return true if the `ql:has-word` and `ql:normalized` triples are added for
+  // the literals that are the object of a triple with the predicate returned by
+  // `getPredicate` (in the format of `Iri::toStringRepresentation`), see
   // `hasWordRestrictPredicates_`.
   //
-  // NOTE: `getPredicate` is only called if the `ql:has-word` triples are
-  // restricted to certain predicates, so that the predicate is decoded only
-  // when needed.
+  // NOTE: `getPredicate` is only called if these triples are restricted to
+  // certain predicates, so that the predicate is decoded only when needed.
   template <typename GetPredicate>
   bool hasWordTriplesForPredicate(const GetPredicate& getPredicate) const {
     return hasWordRestrictPredicates_.empty() ||

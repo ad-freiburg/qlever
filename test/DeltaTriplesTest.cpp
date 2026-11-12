@@ -512,9 +512,10 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
                   {iri("<other>"), iri("@es@<a>"), lit("\"def\"@es")}}));
 }
 
-// Test that for an index with `ql:has-word` triples, inserting a triple with a
-// literal object also inserts the `ql:has-word` triples of that literal.
-TEST_F(DeltaTriplesTest, insertTriplesAddsHasWordTriples) {
+// Test that for an index with `ql:has-word` or `ql:normalized` triples,
+// inserting a triple with a literal object also inserts these triples of that
+// literal.
+TEST_F(DeltaTriplesTest, insertTriplesAddsWordTriples) {
   auto cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
 
@@ -662,6 +663,31 @@ TEST_F(DeltaTriplesTest, insertTriplesAddsHasWordTriples) {
   EXPECT_THAT(deltaTriplesRestricted,
               internalTriplesAre(indexRestricted, localVocabRestricted,
                                  restrictedHasWordTriples, {}));
+
+  // For an index with `ql:normalized` triples (with the regex `\(.*?\)` and
+  // restricted to the predicate `<b>`), inserting a literal with words as the
+  // object of a triple with that predicate adds its `ql:normalized` triple in
+  // the graph of the triple, as in the index builder. A literal without words
+  // and a literal with another predicate get none.
+  ad_utility::testing::TestIndexConfig configNormalized{"<x> <label> 45"};
+  configNormalized.addNormalizedTriples = true;
+  configNormalized.normalizationRegexes = {"\\(.*?\\)"};
+  configNormalized.hasWordRestrictPredicates = {"<b>"};
+  const IndexImpl& indexNormalized =
+      ad_utility::testing::getQec(configNormalized)->getIndex().getImpl();
+  DeltaTriples deltaTriplesNormalized(indexNormalized);
+  auto& localVocabNormalized = deltaTriplesNormalized.localVocab();
+  auto triplesNormalized = makeIdTriples(
+      indexNormalized, localVocabNormalized,
+      {"<a> <b> \"Café (Paris), Olé!\"", "<a> <b> \"!?\"", "<a> <c> \"Olé\""});
+  ql::ranges::sort(triplesNormalized);
+  deltaTriplesNormalized.insertTriples(cancellationHandle, triplesNormalized);
+  EXPECT_THAT(deltaTriplesNormalized,
+              internalTriplesAre(
+                  indexNormalized, localVocabNormalized,
+                  {{lit("\"Café (Paris), Olé!\""), iri(NORMALIZED_PREDICATE),
+                    lit("\"cafe ole\""), graph}},
+                  {}));
 }
 
 // Test that a literal inserted by an update can be found via `ql:has-word`.

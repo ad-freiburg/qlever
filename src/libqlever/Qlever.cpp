@@ -37,6 +37,7 @@
 #include "util/GlobalExecutor.h"
 #include "util/Log.h"
 #include "util/TimeTracer.h"
+#include "util/UnicodeSupport.h"
 #include "util/UninitializedAllocator.h"
 
 namespace qlever {
@@ -252,6 +253,8 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
   index.getImpl().setHasWordNormalization(config.hasWordNormalization_);
   index.getImpl().setHasWordRestrictPredicates(
       config.hasWordRestrictPredicates_);
+  index.getImpl().addNormalizedTriples() = config.addNormalizedTriples_;
+  index.getImpl().setNormalizationRegexes(config.normalizationRegexes_);
   index.getImpl().setVocabularyTypeForIndexBuilding(config.vocabType_);
   index.getImpl().setGeoPointEncodingForIndexBuilding(config.geoPointEncoding_);
   index.getImpl().setPrefixesForEncodedValues(config.prefixesForIdEncodedIris_,
@@ -511,12 +514,6 @@ void IndexBuilderConfig::validate() const {
         "must be between 1 and ",
         MAX_INDEX_ROWS_PER_BLOCK));
   }
-  if (!hasWordRestrictPredicates_.empty() && !addHasWordTriples_) {
-    throw std::invalid_argument(
-        "The predicates to which the `ql:has-word` triples are restricted "
-        "(`has-word-restrict-predicates`) require the option "
-        "`add-has-word-triples`");
-  }
   if (kScoringParam_ < 0) {
     throw std::invalid_argument("The value of bm25-k must be >= 0");
   }
@@ -532,6 +529,35 @@ void IndexBuilderConfig::validate() const {
         ". Both or none of docsfile and wordsfile have to be given to build "
         "text index. If none are given the option to add words from literals "
         "has to be true. For details see --help."));
+  }
+
+  // Reject the options for the `ql:has-word` or `ql:normalized` triples if
+  // these triples are not added (the options would silently have no effect).
+  auto throwIfIgnored = [](bool isIgnored, std::string_view option,
+                           std::string_view requiredOptions) {
+    if (isIgnored) {
+      throw std::invalid_argument(absl::StrCat(
+          "The option `", option, "` has no effect without ", requiredOptions));
+    }
+  };
+  using ad_utility::HasWordNormalization;
+  throwIfIgnored(!addHasWordTriples_ &&
+                     hasWordNormalization_ != HasWordNormalization::Lowercase,
+                 "has-word-normalization", "`add-has-word-triples`");
+  throwIfIgnored(!addNormalizedTriples_ && !normalizationRegexes_.empty(),
+                 "normalization-regexes", "`add-normalized-triples`");
+  throwIfIgnored(!addHasWordTriples_ && !addNormalizedTriples_ &&
+                     !hasWordRestrictPredicates_.empty(),
+                 "has-word-restrict-predicates",
+                 "`add-has-word-triples` or `add-normalized-triples`");
+
+  // Reject the removal of accents from the `ql:has-word` triples if QLever was
+  // built without ICU (the accents would silently be kept).
+  if (!ad_utility::useICUDefault &&
+      hasWordNormalization_ == HasWordNormalization::LowercaseNoAccents) {
+    throw std::invalid_argument(
+        "The has-word normalization `lowercase-no-accents` requires ICU, but "
+        "QLever was built without ICU support");
   }
 }
 

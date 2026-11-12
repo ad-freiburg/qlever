@@ -247,12 +247,6 @@ TEST(IndexBuilderConfig, validate) {
   AD_EXPECT_THROW_WITH_MESSAGE(c.validate(), HasSubstr("must be between"));
 
   c = IndexBuilderConfig{};
-  c.hasWordRestrictPredicates_ = {"<p>"};
-  AD_EXPECT_THROW_WITH_MESSAGE(c.validate(), HasSubstr("require the option"));
-  c.addHasWordTriples_ = true;
-  EXPECT_NO_THROW(c.validate());
-
-  c = IndexBuilderConfig{};
   c.numThreads_ = 0;
   AD_EXPECT_THROW_WITH_MESSAGE(c.validate(), HasSubstr("must be at least 1"));
 
@@ -293,6 +287,41 @@ TEST(IndexBuilderConfig, validate) {
                               HasSubstr("on-disk-compressed")));
     }
   }
+
+  // The normalization of the `ql:has-word` triples is rejected without these
+  // triples; removing the accents additionally requires ICU.
+  c = IndexBuilderConfig{};
+  c.hasWordNormalization_ =
+      ad_utility::HasWordNormalization::LowercaseNoAccents;
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      c.validate(), HasSubstr("`has-word-normalization` has no effect"));
+  c.addHasWordTriples_ = true;
+  if constexpr (ad_utility::useICUDefault) {
+    EXPECT_NO_THROW(c.validate());
+  } else {
+    AD_EXPECT_THROW_WITH_MESSAGE(c.validate(), HasSubstr("requires ICU"));
+  }
+
+  // The regexes for the `ql:normalized` triples are rejected without these
+  // triples.
+  c = IndexBuilderConfig{};
+  c.normalizationRegexes_ = {"x"};
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      c.validate(), HasSubstr("`normalization-regexes` has no effect"));
+  c.addNormalizedTriples_ = true;
+  EXPECT_NO_THROW(c.validate());
+
+  // The predicates for the `ql:has-word` and `ql:normalized` triples are
+  // rejected if neither of these triples are added.
+  c = IndexBuilderConfig{};
+  c.hasWordRestrictPredicates_ = {"<p>"};
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      c.validate(), HasSubstr("`has-word-restrict-predicates` has no effect"));
+  c.addHasWordTriples_ = true;
+  EXPECT_NO_THROW(c.validate());
+  c.addHasWordTriples_ = false;
+  c.addNormalizedTriples_ = true;
+  EXPECT_NO_THROW(c.validate());
 
   // `Qlever::buildIndex` validates its config, such that the informative error
   // message is also reported when the library API is used directly (and not

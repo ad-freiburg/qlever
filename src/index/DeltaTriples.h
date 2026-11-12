@@ -92,7 +92,7 @@ using LocatedTriplesSharedState = std::shared_ptr<const LocatedTriplesState>;
 // the discussion at the end of this file.
 class DeltaTriples {
   FRIEND_TEST(DeltaTriplesTest, insertTriplesAndDeleteTriples);
-  FRIEND_TEST(DeltaTriplesTest, insertTriplesAddsHasWordTriples);
+  FRIEND_TEST(DeltaTriplesTest, insertTriplesAddsWordTriples);
   FRIEND_TEST(DeltaTriplesTest, clear);
   FRIEND_TEST(DeltaTriplesTest, addTriplesToLocalVocab);
   FRIEND_TEST(DeltaTriplesTest, storeAndRestoreData);
@@ -150,6 +150,11 @@ class DeltaTriples {
   // It is initialized on first use, and only if the index has `ql:has-word`
   // triples (see the option `--add-has-word-triples`).
   Id hasWordPredicate_ = Id::makeUndefined();
+
+  // Store the id of the `ql:normalized` predicate to avoid repeated disk
+  // lookups. It is initialized on first use, and only if the index has
+  // `ql:normalized` triples (see the option `--add-normalized-triples`).
+  Id normalizedPredicate_ = Id::makeUndefined();
 
   // Store commonly used words of the `ql:has-word` triples to avoid repeated
   // disk lookups.
@@ -254,6 +259,13 @@ class DeltaTriples {
   void addHasWordTriples(Id literalId,
                          const ad_utility::triple_component::Literal& literal,
                          Triples& internalTriples);
+
+  // Add to `internalTriples` the `ql:normalized` triple of the `literal` with
+  // the id `literalId` (if its normalized form is not empty), in the graph with
+  // the id `graphId`.
+  void addNormalizedTriple(Id literalId,
+                           const ad_utility::triple_component::Literal& literal,
+                           Id graphId, Triples& internalTriples);
 
   // Insert triples. By default the located triples are consolidated
   // immediately; pass `Consolidate::No` when batching several inserts/deletes
