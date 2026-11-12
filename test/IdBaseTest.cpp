@@ -354,11 +354,8 @@ TYPED_TEST(IdBaseTest, IndexOrdering) {
 TYPED_TEST(IdBaseTest, DoubleOrdering) {
   using Id = TypeParam;
   auto ids = makeRandomDoubleIds<Id>();
-  std::vector<double> doubles;
-  doubles.reserve(ids.size());
-  for (auto id : ids) {
-    doubles.push_back(id.getDouble());
-  }
+  auto doubles =
+      ids | ql::views::transform(&Id::getDouble) | ::ranges::to_vector;
   std::sort(ids.begin(), ids.end());
 
   // The sorting of `double`s is broken as soon as NaNs are present. We remove
@@ -414,11 +411,7 @@ TYPED_TEST(IdBaseTest, SignedIntegerOrdering) {
   using Id = TypeParam;
   std::vector<Id> ids;
   addIdsFromGenerator(nonOverflowingNBitGenerator<Id>, &Id::makeFromInt, ids);
-  std::vector<int64_t> integers;
-  integers.reserve(ids.size());
-  for (auto id : ids) {
-    integers.push_back(id.getInt());
-  }
+  auto integers = ids | ql::views::transform(&Id::getInt) | ::ranges::to_vector;
 
   std::sort(ids.begin(), ids.end());
   std::sort(integers.begin(), integers.end());
