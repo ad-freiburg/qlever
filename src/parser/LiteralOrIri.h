@@ -21,7 +21,14 @@
 #include "rdfTypes/Literal.h"
 #include "util/Forward.h"
 
+// The only class that may use the constructor of `LiteralOrIriView` from an
+// equal object and separate storage (see there).
+class LocalVocabEntryView;
+
 namespace ad_utility::triple_component {
+
+class LiteralOrIri;
+class LiteralOrIriView;
 static constexpr char literalPrefixChar = '"';
 static constexpr char iriPrefixChar = '<';
 static constexpr std::string_view iriPrefix{&iriPrefixChar, 1};
@@ -103,6 +110,9 @@ class alignas(16) BasicLiteralOrIri {
   }
 
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(BasicLiteralOrIri, data_)
+
+  // Return an owning copy of this object.
+  LiteralOrIri toOwned() const;
 
   // Return true if object contains an Iri object.
   bool isIri() const;
@@ -199,6 +209,26 @@ class LiteralOrIriView : public BasicLiteralOrIri<false> {
  private:
   explicit LiteralOrIriView(Base&& base) : Base(std::move(base)) {}
 
+  // Create a view that is equal to `equal`, but refers to `storage`, which must
+  // have exactly the contents of `equal.toStringRepresentation()`. This is
+  // only used by `LocalVocabEntryView`, because a `LocalVocab` stores copies of
+  // the characters of its words at stable addresses. Instead of parsing
+  // `storage` again (via `fromStringRepresentation`), the structure of `equal`
+  // (that is, the position of the datatype or language tag of a literal) is
+  // taken over. This is cheaper, but more importantly it is also correct for a
+  // literal whose datatype IRI contains a quote, for which
+  // `fromStringRepresentation` cannot determine that position (see the TODO
+  // there).
+  // TODO<RobinTF> Disallow (or escape) quotes in IRIs, then the string
+  // representation is always unambiguous, and this constructor can be replaced
+  // by `fromStringRepresentation`.
+  friend class ::LocalVocabEntryView;
+  template <bool isOwning>
+  LiteralOrIriView(const BasicLiteralOrIri<isOwning>& equal,
+                   std::string_view storage)
+      : Base{equal.isIri() ? Base{IriView{equal.getIri(), storage}}
+                           : Base{LiteralView{equal.getLiteral(), storage}}} {}
+
  public:
   template <typename H>
   friend H AbslHashValue(H h, const LiteralOrIriView& v) {
@@ -209,6 +239,13 @@ class LiteralOrIriView : public BasicLiteralOrIri<false> {
     return LiteralOrIriView{Base::fromStringRepresentation(sv)};
   }
 };
+
+// _____________________________________________________________________________
+template <bool isOwning>
+LiteralOrIri BasicLiteralOrIri<isOwning>::toOwned() const {
+  return std::visit(
+      [](const auto& value) { return LiteralOrIri{value.toOwned()}; }, data_);
+}
 
 }  // namespace ad_utility::triple_component
 

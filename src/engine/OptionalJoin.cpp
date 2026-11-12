@@ -350,14 +350,13 @@ void OptionalJoin::computeSizeEstimateAndMultiplicities() {
 // ______________________________________________________________
 auto OptionalJoin::computeImplementationFromIdTables(
     const IdTableView<0>& left, const IdTableView<0>& right,
-    const std::vector<std::array<ColumnIndex, 2>>& joinColumns)
-    -> Implementation {
+    ql::span<const std::array<ColumnIndex, 2>> joinColumns) -> Implementation {
   auto implementation = Implementation::NoUndef;
   auto anyIsUndefined = [](auto column) {
     return ql::ranges::any_of(column, Id::isUndefinedL);
   };
   for (size_t i = 0; i < joinColumns.size(); ++i) {
-    auto [leftCol, rightCol] = joinColumns.at(i);
+    auto [leftCol, rightCol] = joinColumns[i];
     if (anyIsUndefined(right.getColumn(rightCol))) {
       return Implementation::GeneralCase;
     }
@@ -394,7 +393,7 @@ bool OptionalJoin::columnOriginatesFromGraphOrUndef(
 // ______________________________________________________________
 void OptionalJoin::optionalJoin(
     const IdTableView<0>& left, const IdTableView<0>& right,
-    const std::vector<std::array<ColumnIndex, 2>>& joinColumns, IdTable* result,
+    ql::span<const std::array<ColumnIndex, 2>> joinColumns, IdTable* result,
     Implementation implementation) {
   // check for trivial cases
   if (left.empty()) {
@@ -721,12 +720,12 @@ OptionalJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   // instead of evaluating the `BIND` expression on the unbound input. This
   // silently changes the result for any expression that isn't `UNDEF` itself
   // on `UNDEF` input, e.g. `COALESCE`.
-  return pushDownBindToChild(bind, {_left, _right}, 0);
+  return pushDownBindToChild(bind, {{_left, _right}, allocator()}, 0);
 }
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> OptionalJoin::cloneWithNewChildren(
-    std::vector<std::shared_ptr<QueryExecutionTree>> children) const {
+    qlm::vector<std::shared_ptr<QueryExecutionTree>> children) const {
   return std::make_unique<OptionalJoin>(
       _executionContext, std::move(children.at(0)), std::move(children.at(1)),
       keepJoinColumns_);

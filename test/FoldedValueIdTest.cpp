@@ -525,9 +525,10 @@ TEST_F(ValueIdTest, toDebugString) {
   test(ValueId::makeBoolFromZeroOrOne(false), "B:false");
   test(ValueId::makeBoolFromZeroOrOne(true), "B:true");
   test(makeVocabId(15), "V:15");
+  auto getLocalVocabId = ad_utility::testing::makeGetLocalVocabId();
   auto str = LocalVocabEntry::literalWithoutQuotes(
       "SomeValue", qec_->getLocalVocabContext());
-  test(ValueId::makeFromLocalVocabIndex(&str), "L:\"SomeValue\"");
+  test(getLocalVocabId(str), "L:\"SomeValue\"");
   test(makeTextRecordId(37), "T:37");
   test(makeWordVocabId(42), "W:42");
   test(makeBlankNodeId(27), "B:27");
@@ -693,11 +694,11 @@ TEST(ValueId, compareThreeWayWithLocalVocabIndex) {
   // `entryInVocab` is of type `VocabIndex`, and `<zzz>` is stored in the
   // secondary vocabulary, so the position of `entryInSecondaryVocab` is of type
   // `SecondaryVocabIndex`.
+  auto getLocalVocabId = ad_utility::testing::makeGetLocalVocabId();
   LocalVocabEntry entryInVocab = iriLocalVocabEntry("<b>", ctx);
   LocalVocabEntry entryInSecondaryVocab = iriLocalVocabEntry("<zzz>", ctx);
-  ValueId localVocabId = ValueId::makeFromLocalVocabIndex(&entryInVocab);
-  ValueId localVocabIdSecondary =
-      ValueId::makeFromLocalVocabIndex(&entryInSecondaryVocab);
+  ValueId localVocabId = getLocalVocabId(entryInVocab);
+  ValueId localVocabIdSecondary = getLocalVocabId(entryInSecondaryVocab);
   ValueId secondaryVocabId =
       ValueId::makeFromSecondaryVocabIndex(SecondaryVocabIndex::make(0));
   // `Int` is a datatype that is smaller than `LocalVocabIndex` and `Date` is

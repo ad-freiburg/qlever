@@ -16,6 +16,7 @@
 #include "engine/SpatialJoinCachedIndex.h"
 #include "index/LocalVocab.h"
 #include "util/Cache.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/Synchronized.h"
 #include "util/serializer/Serializer.h"
 
@@ -41,7 +42,7 @@ class NamedResultCache {
     // `Value` (and any `ExplicitIdTableOperation`/`Result` derived from it).
     ExplicitIdTableOperation::IdTableOrView result_;
     VariableToColumnMap varToColMap_;
-    std::vector<ColumnIndex> resultSortedOn_;
+    qlm::vector<ColumnIndex> resultSortedOn_;
     LocalVocab localVocab_;
     std::string cacheKey_;
     std::optional<SpatialJoinCachedIndex> cachedGeoIndex_;
