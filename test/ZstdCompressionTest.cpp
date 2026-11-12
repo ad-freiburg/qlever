@@ -361,16 +361,18 @@ TEST(CompressionTest, CheckError) {
                                HasSubstr("ZSTD error: "));
 }
 
-// Compress and decompress many inputs of different sizes and with different
-// compression levels with the same `ZstdContext` and buffer. In particular, a
-// small input is compressed after a much larger one, and the result is always
-// the same as that of the one-shot `ZstdWrapper::compress`.
+// Test that many inputs of different sizes and with different compression
+// levels can be compressed and decompressed with the same `ZstdContext` and
+// buffer. In particular, a small input is compressed after a much larger one,
+// and the result is always the same as that of the one-shot
+// `ZstdWrapper::compress`. The large inputs get the cheap levels, the level 19
+// is slow for them.
 TEST(ZstdContext, ReuseForManyInputs) {
   ad_utility::ZstdContext context;
   std::vector<char> buffer;
   ad_utility::FastRandomIntGenerator<uint64_t> randomGenerator{
       ad_utility::RandomSeed::make(42)};
-  std::vector<size_t> sizes{0, 1, 1'000'000, 3, 0, 50'000, 7, 1'000'000, 1};
+  std::vector<size_t> sizes{0, 1, 50'000, 3, 1'000'000, 7, 0, 1'000'000, 1};
   std::vector<int> levels{1, 3, 19};
   size_t maxBufferSize = 0;
   for (size_t i = 0; i < sizes.size(); ++i) {
@@ -398,7 +400,8 @@ TEST(ZstdContext, ReuseForManyInputs) {
   }
 }
 
-// _____________________________________________________________________________
+// Test that a `ZstdContext` reports a target that is too small and corrupted
+// data as errors, and still decompresses correctly afterwards.
 TEST(ZstdContext, DecompressionErrors) {
   ad_utility::ZstdContext context;
   std::vector<char> buffer;
@@ -418,6 +421,14 @@ TEST(ZstdContext, DecompressionErrors) {
       context.decompressToBuffer(
           corrupted, ql::as_writable_bytes(ql::span<uint64_t>{result})),
       HasSubstr("ZSTD error: "));
+
+  // The context still works after the failures.
+  std::vector<uint64_t> fullResult(input.size());
+  EXPECT_EQ(
+      context.decompressToBuffer(
+          compressed, ql::as_writable_bytes(ql::span<uint64_t>{fullResult})),
+      input.size() * sizeof(uint64_t));
+  EXPECT_EQ(fullResult, input);
 }
 
 // Test that `ThreadLocalZstdContext` (de)compresses correctly, that each thread
