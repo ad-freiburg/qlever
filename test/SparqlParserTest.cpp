@@ -1116,14 +1116,16 @@ TEST(ParserTest, isDeterministic) {
 
   // `Describe`, `TransPath` and `Load` never occur in the argument of an
   // `EXISTS`, the only place where `isDeterministic()` is called.
-  auto expectUnreachable = [](p::GraphPatternOperation op) {
-    ParsedQuery::GraphPattern pattern;
+  auto allocator = ad_utility::testing::makeAllocator();
+  auto expectUnreachable = [&allocator](p::GraphPatternOperation op) {
+    ParsedQuery::GraphPattern pattern{allocator};
     pattern._graphPatterns.push_back(std::move(op));
     AD_EXPECT_THROW_WITH_MESSAGE(std::ignore = pattern.isDeterministic(),
                                  ::testing::HasSubstr("unreachable"));
   };
-  expectUnreachable(p::Describe{});
-  expectUnreachable(p::TransPath{});
+  expectUnreachable(p::Describe{{}, {}, p::Subquery{allocator}});
+  expectUnreachable(
+      p::TransPath{{}, {}, {}, {}, 0, 0, ParsedQuery::GraphPattern{allocator}});
   expectUnreachable(p::Load{
       TripleComponent::Iri::fromIriref("<https://example.org>"), false});
 }

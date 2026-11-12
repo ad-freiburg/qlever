@@ -148,7 +148,13 @@ TEST(VariableCounterTest, VariableCounts) {
   {
     VariableCounter count;
     parsedQuery::TransPath tp{
-        {V{"?left"}}, {V{"?right"}}, {V{"?ileft"}}, {V{"?iright"}}, 0, 5, {}};
+        {V{"?left"}},
+        {V{"?right"}},
+        {V{"?ileft"}},
+        {V{"?iright"}},
+        0,
+        5,
+        parsedQuery::GraphPattern{ad_utility::testing::makeAllocator()}};
     count(tp);
     EXPECT_THAT(count, counts({{V{"?left"}, 1},
                                {V{"?right"}, 1},

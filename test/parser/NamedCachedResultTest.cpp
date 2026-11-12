@@ -5,11 +5,13 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "../util/AllocatorTestHelpers.h"
 #include "../util/GTestHelpers.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/NamedCachedResult.h"
 #include "parser/SparqlTriple.h"
 #include "parser/TripleComponent.h"
+#include "util/ContainersWithAllocator.h"
 
 using namespace parsedQuery;
 
@@ -97,7 +99,8 @@ TEST_F(NamedCachedResultTest, SequenceOfOperations) {
   // addGraph should always fail regardless of state.
   auto errorMatcher = ::testing::HasSubstr("must be empty");
   AD_EXPECT_THROW_WITH_MESSAGE(
-      query_->addGraph(GraphPatternOperation(parsedQuery::BasicGraphPattern())),
+      query_->addGraph(GraphPatternOperation(parsedQuery::BasicGraphPattern{
+          qlm::vector<SparqlTriple>{ad_utility::testing::makeAllocator()}})),
       errorMatcher);
   // addParameter should always fail regardless of state
   SparqlTriple testTriple = createTestTriple();

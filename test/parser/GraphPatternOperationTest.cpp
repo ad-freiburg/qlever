@@ -6,9 +6,11 @@
 
 #include <gmock/gmock.h>
 
+#include "../util/AllocatorTestHelpers.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/SparqlTriple.h"
 #include "rdfTypes/Variable.h"
+#include "util/ContainersWithAllocator.h"
 
 namespace {
 
@@ -24,7 +26,8 @@ TEST(GraphPatternOperationTest, BasicPatternContainedVars) {
   auto triple1 = SparqlTriple::fromSimple(example1);
   auto triple2 = SparqlTriple::fromSimple(example2);
 
-  parsedQuery::BasicGraphPattern bgp{{triple1, triple2}};
+  parsedQuery::BasicGraphPattern bgp{qlm::vector<SparqlTriple>{
+      {triple1, triple2}, ad_utility::testing::makeAllocator()}};
 
   ad_utility::HashSet<V> vars;
   bgp.collectAllContainedVariables(vars);

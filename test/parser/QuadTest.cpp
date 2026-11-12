@@ -8,6 +8,7 @@
 #include "../util/TripleComponentTestHelpers.h"
 #include "./SparqlAntlrParserTestHelpers.h"
 #include "parser/Quads.h"
+#include "util/ContainersWithAllocator.h"
 
 using namespace ad_utility::testing;
 // _____________________________________________________________________________
@@ -82,11 +83,13 @@ TEST(QuadTest, getOperations) {
       [](ad_utility::sparql_types::Triples triples,
          std::vector<Quads::GraphBlock> graphs,
          const testing::Matcher<
-             std::vector<parsedQuery::GraphPatternOperation>>& m,
+             qlm::vector<parsedQuery::GraphPatternOperation>>& m,
          ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
         auto t = generateLocationTrace(l);
         const Quads quads{std::move(triples), std::move(graphs)};
-        EXPECT_THAT(quads.toGraphPatternOperations(), m);
+        EXPECT_THAT(quads.toGraphPatternOperations(
+                        ad_utility::testing::makeAllocator()),
+                    m);
       };
   auto TripleOf = [](const GraphTerm& t) -> std::array<GraphTerm, 3> {
     return {t, t, t};

@@ -51,7 +51,7 @@ class SparqlQleverVisitor {
   using PredicateObjectPairsAndTriples =
       ad_utility::sparql_types::PredicateObjectPairsAndTriples;
   using OperationsAndFilters =
-      std::pair<std::vector<GraphPatternOperation>, std::vector<SparqlFilter>>;
+      std::pair<qlm::vector<GraphPatternOperation>, qlm::vector<SparqlFilter>>;
   using OperationOrFilterAndMaybeTriples =
       std::pair<std::variant<GraphPatternOperation, SparqlFilter>,
                 std::optional<parsedQuery::BasicGraphPattern>>;
@@ -188,7 +188,7 @@ class SparqlQleverVisitor {
 
   // Report an error if a `VALUES` clause in `ops` binds a variable from
   // `geoFunctionArgVariables_` to an invalid WKT literal.
-  void checkWktInValues(const std::vector<GraphPatternOperation>& ops,
+  void checkWktInValues(ql::span<const GraphPatternOperation> ops,
                         const antlr4::ParserRuleContext* ctx) const;
 
   // Report an error if the blank node label `label` (including the leading

@@ -13,10 +13,12 @@
 #include <cstdint>
 #include <variant>
 
+#include "backports/span.h"
 #include "engine/VariableToColumnMap.h"
 #include "parser/GraphPatternAnalysis.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/SparqlTriple.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/HashMap.h"
 
 // Forward declarations to prevent cyclic dependencies.
@@ -118,7 +120,7 @@ class QueryPatternCache {
   // rewriting and check it is connected. `nullopt` if the view is not
   // eligible.
   static std::optional<std::vector<PatternEdge>> buildPatternEdges(
-      const ViewPtr& view, const std::vector<SparqlTriple>& triples);
+      const ViewPtr& view, ql::span<const SparqlTriple> triples);
 };
 
 // Helper that filters the graph patterns of a parsed query using
@@ -134,7 +136,7 @@ using RewriteIgnoreReason = std::string;
 // Helper for `QueryPatternCache::analyzeView`: extracts the triples of a
 // view's defining query for pattern analysis, or a `RewriteIgnoreReason` if
 // the query's shape doesn't support pattern-based rewriting.
-std::variant<RewriteIgnoreReason, std::vector<SparqlTriple>>
+std::variant<RewriteIgnoreReason, qlm::vector<SparqlTriple>>
 getTriplesForPatternRewrite(const ParsedQuery& parsed);
 
 // Hash map for the `BIND`-to-column map.

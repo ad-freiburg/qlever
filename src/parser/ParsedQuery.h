@@ -70,7 +70,15 @@ class ParsedQuery {
   // struct
   struct AskClause : public parsedQuery::ClauseBase {};
 
-  ParsedQuery() = default;
+  // The containers of the query use the `allocator`.
+  explicit ParsedQuery(const qlever::Allocator<Id>& allocator)
+      : _rootGraphPattern{allocator},
+        _havingClauses{allocator},
+        _orderBy{allocator},
+        _groupByVariables{allocator},
+        postQueryValuesBinds_{allocator},
+        internalAliasesWithoutSelectClause_{allocator},
+        _clause{SelectClause{allocator}} {}
 
   GraphPattern _rootGraphPattern;
   std::vector<SparqlFilter> _havingClauses;

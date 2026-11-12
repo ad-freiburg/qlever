@@ -7,6 +7,7 @@
 #include "backports/algorithm.h"
 #include "backports/type_traits.h"
 #include "parser/GraphPatternOperation.h"
+#include "util/ContainersWithAllocator.h"
 
 namespace checkUsePatternTrick {
 // __________________________________________________________________________
@@ -91,7 +92,7 @@ bool isVariableContainedInGraphPatternOperation(
 // permutation or, if no triple suitable for adding this column exists, by
 // adding a triple `?subject ql:has-pattern ?predicate`.
 static void rewriteTriplesForPatternTrick(const PatternTrickTuple& subAndPred,
-                                          std::vector<SparqlTriple>& triples) {
+                                          qlm::vector<SparqlTriple>& triples) {
   // The following lambda tries to find a triple in the `triples` that has the
   // subject variable of the pattern trick in its `triplePosition` (which is
   // either the subject or the object) and a fixed predicate (no variable). If
