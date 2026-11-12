@@ -189,8 +189,6 @@ class WktCentroid {
     }
     std::optional<SourceCrsType> sourceCrs = geom.value().crs_;
     AD_CORRECTNESS_CHECK(sourceCrs.has_value());
-    // TODO<yarox-1> Check if this breaks somethings (old index might have
-    // problem as stored with unsupported Crs -> maybe just assume CRS84)
 
     Centroid centroid = geom.value().info_;
 
@@ -218,8 +216,6 @@ class WktEnvelope {
 
     std::optional<SourceCrsType> sourceCrs = geom.value().crs_;
     AD_CORRECTNESS_CHECK(sourceCrs.has_value());
-    // TODO<yarox-1> Check if this breaks somethings (old index might have
-    // problem as stored with unsupported Crs -> maybe just assume CRS84)
 
     BoundingBox boundingBox = geom.value().info_;
     using namespace triple_component;
