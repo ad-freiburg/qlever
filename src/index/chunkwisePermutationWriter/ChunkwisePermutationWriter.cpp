@@ -13,19 +13,18 @@
 
 #include <chrono>
 
-#include "util/GlobalExecutor.h"
-
 namespace chunkwisePermutationWriter {
 
 // _____________________________________________________________________________
 ChunkwisePermutationWriter::ChunkwisePermutationWriter(
-    PrivateTag, const std::string& basename,
+    PrivateTag, size_t numChunks, const std::string& basename,
     WriterAndCallback writerAndCallback1, WriterAndCallback writerAndCallback2,
     const qlever::KeyOrder& permutation,
-    std::vector<ConcurrentBlockCallback> callbacks, const Options& options)
+    std::vector<ConcurrentBlockCallback> callbacks, const Options& options,
+    net::any_io_executor executor)
     : writer1_{std::move(writerAndCallback1.writer_)},
       writer2_{std::move(writerAndCallback2.writer_)},
-      executor_{ad_utility::globalExecutor()},
+      executor_{std::move(executor)},
       context_{*writer1_,
                *writer2_,
                permutation.keys().at(0),
@@ -42,7 +41,15 @@ ChunkwisePermutationWriter::ChunkwisePermutationWriter(
                           options.numCallbackBlocksInFlight_,
                           [this](std::exception_ptr exception) {
                             storeException(std::move(exception));
-                          }} {
+                          }},
+      numChunks_{numChunks},
+      chunkWriters_(numChunks) {
+  AD_CONTRACT_CHECK(numChunks > 0,
+                    "A chunkwise permutation writer needs at least one chunk");
+  AD_CONTRACT_CHECK(static_cast<bool>(executor_),
+                    "The executor of a chunkwise permutation writer must not "
+                    "be empty");
+  chunkResults_.setNumSlots(numChunks);
   // This logic only works for permutations that have the graph as the fourth
   // column.
   AD_CORRECTNESS_CHECK(permutation.keys().at(3) == 3);
@@ -53,30 +60,20 @@ ChunkwisePermutationWriter::ChunkwisePermutationWriter(
 
 // _____________________________________________________________________________
 std::shared_ptr<ChunkwisePermutationWriter> ChunkwisePermutationWriter::create(
-    const std::string& basename, WriterAndCallback writerAndCallback1,
-    WriterAndCallback writerAndCallback2, const qlever::KeyOrder& permutation,
-    std::vector<ConcurrentBlockCallback> callbacks, const Options& options) {
+    size_t numChunks, const std::string& basename,
+    WriterAndCallback writerAndCallback1, WriterAndCallback writerAndCallback2,
+    const qlever::KeyOrder& permutation,
+    std::vector<ConcurrentBlockCallback> callbacks, const Options& options,
+    net::any_io_executor executor) {
   return std::make_shared<ChunkwisePermutationWriter>(
-      PrivateTag{}, basename, std::move(writerAndCallback1),
-      std::move(writerAndCallback2), permutation, std::move(callbacks),
-      options);
-}
-
-// _____________________________________________________________________________
-std::shared_ptr<ChunkwisePermutationWriter>
-ChunkwisePermutationWriter::makeSink(size_t numChunks) {
-  AD_CONTRACT_CHECK(numChunks_ == 0 && numChunks > 0,
-                    "The sink of a chunkwise permutation writer can only be "
-                    "created once");
-  numChunks_ = numChunks;
-  chunkWriters_.resize(numChunks);
-  chunkResults_.setNumSlots(numChunks);
-  return shared_from_this();
+      PrivateTag{}, numChunks, basename, std::move(writerAndCallback1),
+      std::move(writerAndCallback2), permutation, std::move(callbacks), options,
+      std::move(executor));
 }
 
 // _____________________________________________________________________________
 ChunkWriter& ChunkwisePermutationWriter::chunkWriter(size_t chunkIndex) {
-  // NOTE: The vector is never resized after `makeSink`, and the slot of a
+  // NOTE: The vector is never resized, and the slot of a
   // chunk is only ever touched by the (single) operation of that chunk which
   // is currently in flight, so no lock is needed here.
   auto& writer = chunkWriters_.at(chunkIndex);
@@ -176,8 +173,6 @@ void ChunkwisePermutationWriter::consolidate() {
 // _____________________________________________________________________________
 PermutationPairResult ChunkwisePermutationWriter::finish(
     std::future<void> mergeCompletion) {
-  AD_CONTRACT_CHECK(numChunks_ > 0,
-                    "The sink has to be created before `finish` is called");
   try {
     consolidate();
   } catch (...) {
