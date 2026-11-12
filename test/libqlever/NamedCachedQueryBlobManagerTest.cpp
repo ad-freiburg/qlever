@@ -35,11 +35,11 @@
 #include "libqlever/NamedCacheSecondaryVocabRewriter.h"
 #include "libqlever/NamedCachedQueryBlobManager.h"
 #include "libqlever/Qlever.h"
-#include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/Exception.h"
 #include "util/File.h"
-#include "util/Serializer/ByteBufferSerializer.h"
+#include "util/compressionUsingZstd/ZstdWrapper.h"
 #include "util/json.h"
+#include "util/serializer/ByteBufferSerializer.h"
 
 using namespace qlever;
 using namespace testing;
@@ -1936,7 +1936,8 @@ TEST(NamedCachedQueryBlobManager, blobEntriesAreInCanonicalOrder) {
     auto trace = generateLocationTrace(loc);
     auto entry = qlever.namedResultCache().get(name);
     ASSERT_NE(entry, nullptr) << name;
-    EXPECT_EQ(entry->resultSortedOn_, sortedOn) << name;
+    EXPECT_THAT(entry->resultSortedOn_, ::testing::ElementsAreArray(sortedOn))
+        << name;
     EXPECT_TRUE(canonicalRowOrder::isInCanonicalOrder(
         ExplicitIdTableOperation::viewOf(entry->result_),
         entry->resultSortedOn_))

@@ -83,7 +83,9 @@ class VocabLookupDataCommonBase {
   }
 
  private:
-  // Buffer for the materialized string data (used by disk-based vocabularies).
+  // The storage owned by the result: the materialized string data, or
+  // handles on the storage of other owners (see
+  // `SubBatchVocabBatchLookupData`).
   BufferType buffer_;
 
   // One `string_view` per looked-up index, each pointing into storage that
@@ -173,6 +175,40 @@ struct StringVectorVocabBatchLookupData
     return asResult(std::move(data));
   }
 };
+
+// The two owners that a `SubBatchVocabBatchLookupData` holds on to: the word
+// storage of a vocabulary that keeps its words in RAM (shared with that
+// vocabulary), and the result of one batch lookup in another vocabulary (null
+// if no word came from there).
+struct SubBatchSources {
+  std::shared_ptr<const CompactVectorOfStrings<char>> internalWords_;
+  VocabBatchLookupResult externalWords_;
+};
+
+// A vocabulary batch-lookup result whose words come from up to two sources
+// (see `SubBatchSources`): for example the words that
+// `VocabularyInternalExternal` keeps in RAM, and the on-disk words of the
+// same batch. The result owns a share of both, so the views stay valid as
+// long as the result lives, also after the vocabulary was closed; only the
+// views are copied into the result, no word data.
+struct SubBatchVocabBatchLookupData
+    : VocabLookupDataCommonBase<SubBatchSources> {};
+
+// The storage that a `SharedWordsWithPlaceholdersVocabBatchLookupData` owns:
+// a share of the word storage of a vocabulary with holes (see
+// `VocabularyInMemoryBinSearch`), and the placeholders for the indices of the
+// batch that are holes.
+struct SharedWordsAndPlaceholders {
+  std::shared_ptr<const CompactVectorOfStrings<char>> words_;
+  std::vector<std::string> placeholders_;
+};
+
+// A vocabulary batch-lookup result of a vocabulary with holes that keeps its
+// words in RAM (`VocabularyInMemoryBinSearch`): a contained index yields a
+// view into the shared word storage, a hole yields a view into one of the
+// owned placeholders.
+struct SharedWordsWithPlaceholdersVocabBatchLookupData
+    : VocabLookupDataCommonBase<SharedWordsAndPlaceholders> {};
 
 // Generic sequential fallback implementations of the batch-lookup interface,
 // used by all vocabularies that do not provide a specialized (e.g. io_uring)

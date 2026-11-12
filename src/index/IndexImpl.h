@@ -52,11 +52,11 @@
 #include "util/File.h"
 #include "util/Forward.h"
 #include "util/Iterators.h"
-#include "util/MemorySize/MemorySize.h"
 #include "util/ProgressBar.h"
 #include "util/RegexSet.h"
 #include "util/TransparentFunctors.h"
 #include "util/json.h"
+#include "util/memorySize/MemorySize.h"
 
 // Forward declaration, see `PartialVocabularyBuilder.h`.
 namespace qlever::partialVocabularyBuilder {

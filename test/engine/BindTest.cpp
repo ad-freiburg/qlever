@@ -5,13 +5,16 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "../util/ColumnStrippingTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
 #include "./ValuesForTesting.h"
 #include "engine/Bind.h"
+#include "engine/ExistsJoin.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
+#include "engine/StripColumns.h"
 #include "engine/sparqlExpressions/BlankNodeExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
@@ -20,6 +23,7 @@
 
 using namespace sparqlExpression;
 using Vars = std::vector<std::optional<Variable>>;
+using V = Variable;
 
 namespace {
 Bind makeBindForIdTable(QueryExecutionContext* qec, IdTable idTable) {
@@ -319,6 +323,133 @@ TEST(Bind, cloneSucceedsForNondeterministicBind) {
   auto clone = bind.clone();
   ASSERT_TRUE(clone);
   EXPECT_FALSE(clone->isDeterministic());
+}
+
+// Test that `makeTreeWithStrippedColumns` strips the subtree to the requested
+// variables plus the variables that are required by `Bind` to build its target,
+// erases `Bind` from the `QueryExecutionTree` if the parent does not request
+// the target of `Bind`, and adds a `StripColumns` for the evaluated variables
+// that the parent did not request.
+TEST(Bind, makeTreeWithStrippedColumns) {
+  using ::column_stripping_test_helpers::isStrippedColumns;
+  using ::testing::Key;
+  using ::testing::UnorderedElementsAre;
+  // A subtree with the variables `?a`, `?b`, `?c` and `?d`.
+  auto qec = ad_utility::testing::getQec();
+  auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec,
+      makeIdTableFromVector(
+          {{6, 1, 3, 6}, {2, 2, 3, 5}, {3, 6, 5, 4}, {1, 6, 5, 1}}),
+      std::vector<std::optional<V>>{V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}});
+  auto strip = [&](std::set<V> requestedVariables) {
+    // Create `Bind`(`?a` AS `?additionalA`).
+    auto varExpr = std::make_unique<VariableExpression>(V{"?a"});
+    SparqlExpressionPimpl pimpl{std::move(varExpr), V{"?a"}.name()};
+    Bind bind{qec, values, {std::move(pimpl), V{"?additionalA"}}};
+    auto tree = bind.makeTreeWithStrippedColumns(requestedVariables);
+    AD_CONTRACT_CHECK(tree.has_value() && tree.value() != nullptr);
+    return std::move(tree).value();
+  };
+
+  // `Bind` `?a` AS `?additionalA`, `?a` and `?additionalA` requested: the
+  // result has `?a` and `?additionalA`.
+  {
+    auto tree = strip({V{"?a"}, V{"?additionalA"}});
+    EXPECT_THAT(tree.get(),
+                isStrippedColumns<Bind>({V{"?a"}, V{"?additionalA"}},
+                                        matchesIdTableFromVector(
+                                            {{6, 6}, {2, 2}, {3, 3}, {1, 1}})));
+  }
+
+  // `Bind` `?a` AS `?additionalA`, `?a`, `?c` and `?additionalA` requested:
+  // `?b` and `?d` are stripped, columns are renumbered.
+  {
+    auto tree = strip({V{"?a"}, V{"?c"}, V{"?additionalA"}});
+    EXPECT_THAT(tree.get(),
+                isStrippedColumns<Bind>(
+                    {V{"?a"}, V{"?c"}, V{"?additionalA"}},
+                    matchesIdTableFromVector(
+                        {{6, 3, 6}, {2, 3, 2}, {3, 5, 3}, {1, 5, 1}})));
+    EXPECT_EQ(tree->getVariableColumn(V{"?a"}), 0u);
+    EXPECT_EQ(tree->getVariableColumn(V{"?c"}), 1u);
+    EXPECT_EQ(tree->getVariableColumn(V{"?additionalA"}), 2u);
+  }
+
+  // A requested variable that the subtree does not have is ignored.
+  {
+    auto tree = strip({V{"?a"}, V{"?b"}, V{"?additionalA"}, V{"?notIncluded"}});
+    EXPECT_THAT(tree->getVariableColumns(),
+                UnorderedElementsAre(Key(V{"?a"}), Key(V{"?b"}),
+                                     Key(V{"?additionalA"})));
+  }
+
+  // `Bind` `?a` AS `?additionalA`, only `?additionalA` requested: the `Bind`
+  // keeps `?a` and `?additionalA`, a `StripColumns` on top removes `?a`.
+  {
+    auto tree = strip({V{"?additionalA"}});
+    EXPECT_THAT(tree.get(),
+                isStrippedColumns<StripColumns>(
+                    {V{"?additionalA"}},
+                    matchesIdTableFromVector({{6}, {2}, {3}, {1}})));
+    EXPECT_THAT(tree->getRootOperation()->getChildren().at(0),
+                isStrippedColumns<Bind>({V{"?a"}, V{"?additionalA"}},
+                                        matchesIdTableFromVector(
+                                            {{6, 6}, {2, 2}, {3, 3}, {1, 1}})));
+  }
+
+  // `Bind` `?a` AS `?additionalA`, only `?b` requested: `Bind` is erased from
+  // the `QueryExecutionTree`, `?a`, `?c` and `?d` are stripped.
+  {
+    auto tree = strip({V{"?b"}});
+    auto bind = std::dynamic_pointer_cast<Bind>(tree->getRootOperation());
+    EXPECT_EQ(bind, nullptr);
+    EXPECT_THAT(tree->getVariableColumns(), UnorderedElementsAre(Key(V{"?b"})));
+    EXPECT_EQ(tree->getResult(false)->idTableView(),
+              makeIdTableFromVector({{1}, {2}, {6}, {6}}));
+  }
+
+  // All variables requested: nothing is stripped.
+  {
+    auto tree = strip({V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}, V{"?additionalA"}});
+    EXPECT_THAT(tree.get(),
+                isStrippedColumns<Bind>(
+                    {V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}, V{"?additionalA"}},
+                    matchesIdTableFromVector({{6, 1, 3, 6, 6},
+                                              {2, 2, 3, 5, 2},
+                                              {3, 6, 5, 4, 3},
+                                              {1, 6, 5, 1, 1}})));
+  }
+}
+
+// Test that `makeTreeWithStrippedColumns` keeps the column of the `ExistsJoin`
+// that the constructor added for an `EXISTS` in the bound expression, so that
+// the stripped `Bind` does not add a second `ExistsJoin`.
+TEST(Bind, makeTreeWithStrippedColumnsKeepsExistsJoin) {
+  using ::column_stripping_test_helpers::countOperations;
+  using ::column_stripping_test_helpers::isStrippedColumns;
+  using ::column_stripping_test_helpers::makeExistsExpression;
+  auto B = ad_utility::testing::BoolId;
+  auto I = ad_utility::testing::IntId;
+
+  // A subtree with `?a` and `?b` and a `Bind` of `EXISTS { ?a <is-a> ?x }`
+  // (which holds for `<x>` but not for `<z>`) to `?e`.
+  auto qec = ad_utility::testing::getQec();
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{getId("<x>"), 2}, {getId("<z>"), 4}}, I),
+      std::vector<std::optional<V>>{V{"?a"}, V{"?b"}});
+  Bind bind{qec, values, {makeExistsExpression("<is-a>").first, V{"?e"}}};
+
+  // `?b` and `?e` requested: the tree still has one `ExistsJoin`, and `?e` is
+  // true exactly for the row of `<x>`.
+  auto tree = bind.makeTreeWithStrippedColumns({V{"?b"}, V{"?e"}}).value();
+  EXPECT_EQ(countOperations<ExistsJoin>(*tree), 1u);
+  EXPECT_EQ(countOperations<Bind>(*tree), 1u);
+  EXPECT_THAT(
+      tree.get(),
+      isStrippedColumns<StripColumns>(
+          {V{"?b"}, V{"?e"}},
+          matchesIdTableFromVector({{I(2), B(true)}, {I(4), B(false)}})));
 }
 
 // Test that IRIs that are computed by an expression and that match a pattern of

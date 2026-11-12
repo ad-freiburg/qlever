@@ -13,7 +13,7 @@
 #include <vector>
 
 #include "../util/ParallelBlockMergeTestHelpers.h"
-#include "util/MemorySize/MemorySize.h"
+#include "util/memorySize/MemorySize.h"
 #include "util/parallelBlockMerge/CombinedRunsInput.h"
 #include "util/parallelBlockMerge/RunsInputPolicy.h"
 
