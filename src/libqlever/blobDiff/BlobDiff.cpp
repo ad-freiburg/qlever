@@ -14,12 +14,12 @@
 
 #include "backports/algorithm.h"
 #include "libqlever/NamedCachedQueryBlobManager.h"
-#include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/CryptographicHashUtils.h"
 #include "util/Exception.h"
-#include "util/Serializer/ByteBufferSerializer.h"
-#include "util/Serializer/SerializeArrayOrTuple.h"
 #include "util/TransparentFunctors.h"
+#include "util/compressionUsingZstd/ZstdWrapper.h"
+#include "util/serializer/ByteBufferSerializer.h"
+#include "util/serializer/SerializeArrayOrTuple.h"
 
 namespace qlever::blobDiff {
 

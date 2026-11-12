@@ -10,7 +10,7 @@
 #include "global/Id.h"
 #include "util/Allocator.h"
 #include "util/AllocatorWithLimit.h"
-#include "util/MemorySize/MemorySize.h"
+#include "util/memorySize/MemorySize.h"
 
 namespace ad_utility::testing {
 // Create a backend-agnostic allocator with the specified memory limit. If no
