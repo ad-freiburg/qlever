@@ -361,7 +361,6 @@ TEST(CompressionTest, CheckError) {
                                HasSubstr("ZSTD error: "));
 }
 
-// _____________________________________________________________________________
 // Compress and decompress many inputs of different sizes and with different
 // compression levels with the same `ZstdContext` and buffer. In particular, a
 // small input is compressed after a much larger one, and the result is always
@@ -421,7 +420,6 @@ TEST(ZstdContext, DecompressionErrors) {
       HasSubstr("ZSTD error: "));
 }
 
-// _____________________________________________________________________________
 // Test that `ThreadLocalZstdContext` (de)compresses correctly, that each thread
 // gets a compression buffer of its own and keeps using it, and that different
 // objects have different buffers.
