@@ -92,9 +92,11 @@ TEST(AllocatorMemoryResource, tooLargeAlignmentThrows) {
   EXPECT_THROW(
       std::ignore = resource.allocate(8, 2 * decltype(resource)::maxAlignment),
       std::bad_alloc);
-  // Memory with such an alignment can't have been allocated by the resource.
+  // Memory with such an alignment can't have been allocated by the resource
+  // (the pointer is never dereferenced).
+  std::byte memory[8];
   EXPECT_ANY_THROW(
-      resource.deallocate(nullptr, 8, 2 * decltype(resource)::maxAlignment));
+      resource.deallocate(memory, 8, 2 * decltype(resource)::maxAlignment));
 }
 
 // _____________________________________________________________________________

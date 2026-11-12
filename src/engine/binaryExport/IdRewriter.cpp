@@ -24,8 +24,10 @@ IdRewriter::IdRewriter(const QueryExecutionContext& qec,
                        GeoPointEncodingEnum remoteGeoPointEncoding)
     : qec_{&qec},
       encodedIriRewriter_{qec.getIndex(), std::move(remotePatterns)},
-      blankNodeRewriter_{qec.getIndex().getBlankNodeManager()},
-      remoteGeoPointEncoding_{remoteGeoPointEncoding} {}
+      blankNodeRewriter_{qec.getIndex().getBlankNodeManager(),
+                         qec.getAllocator()},
+      remoteGeoPointEncoding_{remoteGeoPointEncoding},
+      localVocab_{qec.getAllocator()} {}
 
 // _____________________________________________________________________________
 void IdRewriter::rewriteBatch(IdTable& table, size_t firstRow,
@@ -83,7 +85,7 @@ LocalVocab IdRewriter::takeLocalVocab() {
   blankNodeRewriter_.addBlankNodesTo(localVocab_);
   // The cached IDs of the decoded IRIs might point into the old local vocab.
   encodedIriRewriter_.invalidateCache();
-  return std::exchange(localVocab_, LocalVocab{});
+  return std::exchange(localVocab_, LocalVocab{qec_->getAllocator()});
 }
 
 }  // namespace qlever::binary_export

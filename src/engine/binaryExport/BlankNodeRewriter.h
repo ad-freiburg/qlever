@@ -13,6 +13,8 @@
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
+#include <utility>
+
 #include "global/Id.h"
 #include "index/LocalVocab.h"
 #include "util/BlankNodeManager.h"
@@ -33,8 +35,10 @@ class BlankNodeRewriter {
   LocalVocab blankNodes_;
 
  public:
-  explicit BlankNodeRewriter(ad_utility::BlankNodeManager* blankNodeManager)
-      : blankNodeManager_{blankNodeManager} {}
+  BlankNodeRewriter(ad_utility::BlankNodeManager* blankNodeManager,
+                    LocalVocab::Allocator allocator)
+      : blankNodeManager_{blankNodeManager},
+        blankNodes_{std::move(allocator)} {}
 
   // Return the local blank node for the remote blank node `id`.
   Id operator()(Id id);
