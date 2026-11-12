@@ -181,9 +181,9 @@ class HttpServer {
   WebSocketHandler webSocketHandler_;
   ad_utility::MemorySize lazyBodyChunkSize_;
   // All code that uses the `acceptor_` must run within this strand.
-  // Note that the `acceptor_` might be concurrently accessed by the `listener`
-  // and the `shutdown` function, the latter of which is currently only used in
-  // unit tests.
+  // Note that the `acceptor_` might be concurrently accessed by the
+  // `acceptLoop` and the `shutdown` function, the latter of which is currently
+  // only used in unit tests.
   // Use strand<any_io_executor> so that coroutines (which use any_io_executor
   // internally) and socket type conversions all work without type friction.
   // The any_io_executor wraps our InstrumentedExecutor, so every handler
@@ -199,9 +199,10 @@ class HttpServer {
   std::atomic<int> numActiveSessions_ = 0;
 
  public:
-  /// Construct from the `queryRegistry`, port and ip address, on which this
-  /// server will listen, as well as the HttpHandler. This constructor only
-  /// initializes several member functions
+  /// Construct from the port and ip address on which this server will listen,
+  /// as well as the `HttpHandler`. The constructor opens the socket, binds it
+  /// and starts listening, so that an error with the address or port is thrown
+  /// right here. Connections are only accepted once `run()` is called.
   ///
   // `lazyBodyChunkSize` is only used in `BodyReadMode::Lazy` mode: the body is
   // read in chunks of `lazyBodyChunkSize` bytes; each chunk is filled
@@ -239,23 +240,26 @@ class HttpServer {
       acceptor_.set_option(option);
       // Bind to the server address.
       acceptor_.bind(endpoint);
+      // Start listening right away, s.t. errors are reported synchronously
+      // to the caller (and not silently swallowed inside the `acceptLoop`
+      // coroutine). Incoming connections are queued by the operating system
+      // until the `acceptLoop` coroutine starts accepting them in `run()`.
+      acceptor_.listen(boost::asio::socket_base::max_listen_connections);
     } catch (const boost::system::system_error& b) {
-      logBeastError(b.code(), "Opening or binding the socket failed");
+      logBeastError(b.code(),
+                    "Opening, binding, or listening on the socket failed");
       throw;
     }
   }
 
-  /// Run the server using the specified number of threads. Note that this
-  /// function never returns, unless the Server crashes. The second argument
-  /// limits the number of connections/sessions that may be handled concurrently
-  /// (this is not equal to the number of threads due to the asynchronous
-  /// implementation of this Server).
+  /// Run the server using the number of threads given to the constructor.
+  /// Note that this function never returns, unless the server crashes.
   void run() {
-    // Create the listener coroutine.
-    auto listenerCoro = listener();
+    // Create the `acceptLoop` coroutine.
+    auto acceptLoopCoro = acceptLoop();
 
-    // Schedule the listener onto the `acceptorStrand_`.
-    net::co_spawn(acceptorStrand_, std::move(listenerCoro), net::detached);
+    // Schedule the `acceptLoop` onto the `acceptorStrand_`.
+    net::co_spawn(acceptorStrand_, std::move(acceptLoopCoro), net::detached);
 
     // Add some threads to the io context, s.t. the work can actually be
     // scheduled.
@@ -267,7 +271,7 @@ class HttpServer {
 
     // This will run forever, because the destructor of the JThreads blocks
     // until ioContext.run() completes, which should never happen, because the
-    // listener contains an infinite loop.
+    // `acceptLoop` contains an infinite loop.
   }
 
   // Get the server port.
@@ -284,7 +288,7 @@ class HttpServer {
   // case, the server runs forever.
   void shutDown() {
     // The actual code for the shutdown is being executed on the same `strand`
-    // as the `listener`. By the way strands work, there will then be no
+    // as the `acceptLoop`. By the way strands work, there will then be no
     // concurrent access to `acceptor_`.
     auto future =
         net::post(acceptorStrand_,
@@ -544,13 +548,7 @@ class HttpServer {
 
   // The loop which accepts TCP connections and delegates their handling
   // to the session() coroutine below.
-  boost::asio::awaitable<void> listener() {
-    try {
-      acceptor_.listen(boost::asio::socket_base::max_listen_connections);
-    } catch (const boost::system::system_error& b) {
-      logBeastError(b.code(), "Listening on the socket failed");
-      co_return;
-    }
+  boost::asio::awaitable<void> acceptLoop() {
     serverIsReady_ = true;
 
     // While the `acceptor_` is open, accept connections and handle each
