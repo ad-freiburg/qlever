@@ -143,9 +143,9 @@ TEST(NamedCacheSecondaryVocabRewriter, addNewWordsAndRewriteIds) {
             Id::makeFromInt(42));
   // A local vocab entry whose word is contained in the main vocabulary is
   // rewritten to the `Id` of that word.
+  auto getLocalVocabId = ad_utility::testing::makeGetLocalVocabId();
   auto entryOfM = iriLocalVocabEntry("<m>", qec->getLocalVocabContext());
-  EXPECT_EQ(rewriteId(Id::makeFromLocalVocabIndex(&entryOfM), secondaryVocab),
-            m);
+  EXPECT_EQ(rewriteId(getLocalVocabId(entryOfM), secondaryVocab), m);
 
   // A word that has not been added to the secondary vocabulary cannot be
   // rewritten.

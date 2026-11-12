@@ -1276,8 +1276,9 @@ TEST(IndexImpl, recomputeStatistics) {
         iriLocalVocabEntry("<zzz>", indexImpl.getLocalVocabContext());
     LocalVocabEntry literal = localVocabEntryFromStringRepresentation(
         "\"test\"@en", indexImpl.getLocalVocabContext());
-    Id zzzId = Id::makeFromLocalVocabIndex(&zzz);
-    Id literalId = Id::makeFromLocalVocabIndex(&literal);
+    auto getLocalVocabId = ad_utility::testing::makeGetLocalVocabId();
+    Id zzzId = getLocalVocabId(zzz);
+    Id literalId = getLocalVocabId(literal);
     // Create duplicate in different graph.
     Id x = Id::makeFromVocabIndex(VocabIndex::make(11));
     Id label = Id::makeFromVocabIndex(VocabIndex::make(10));
