@@ -15,8 +15,8 @@
 #include "global/RuntimeParameters.h"
 #include "index/IdTableUtils.h"
 #include "util/Algorithm.h"
-#include "util/JoinAlgorithms/IndexNestedLoopJoin.h"
-#include "util/JoinAlgorithms/JoinAlgorithms.h"
+#include "util/joinAlgorithms/IndexNestedLoopJoin.h"
+#include "util/joinAlgorithms/JoinAlgorithms.h"
 
 using namespace qlever::joinHelpers;
 using namespace qlever::joinWithIndexScanHelpers;

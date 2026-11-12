@@ -16,8 +16,8 @@
 #include "global/Id.h"
 #include "rdfTypes/Variable.h"
 #include "util/HashMap.h"
-#include "util/Serializer/Serializer.h"
 #include "util/TypeTraits.h"
+#include "util/serializer/Serializer.h"
 
 // TODO<joka921> We have a cyclic dependency between `Id.h` and
 // `VariableToColumnMap.h`.

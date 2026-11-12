@@ -24,7 +24,7 @@
 #include "rdfTypes/GeometryInfo.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
-#include "util/Serializer/ByteBufferSerializer.h"
+#include "util/serializer/ByteBufferSerializer.h"
 
 template <typename IndexT = WordVocabIndex>
 class IdRange {

@@ -644,7 +644,7 @@ class IdTable {
   // requiring an already-existing owning `IdTable`. This is used e.g. to
   // build a view directly from spans that were obtained via zero-copy
   // deserialization from a buffer (see `zeroCopyDeserializeToSpan` in
-  // `util/Serializer/SerializeVector.h`). The caller is responsible for
+  // `util/serializer/SerializeVector.h`). The caller is responsible for
   // ensuring that the memory backing `columns` outlives the returned view.
   CPP_template(typename = void)(requires(isView))
   static IdTable fromColumns(ViewSpans columns, size_t numColumns,

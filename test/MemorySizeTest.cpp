@@ -17,8 +17,8 @@
 #include "./util/GTestHelpers.h"
 #include "util/Cache.h"
 #include "util/ConstexprMap.h"
-#include "util/MemorySize/MemorySize.h"
 #include "util/SourceLocation.h"
+#include "util/memorySize/MemorySize.h"
 
 // Importing all the literals.
 using namespace ad_utility::memory_literals;
