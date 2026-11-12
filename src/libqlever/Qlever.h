@@ -128,12 +128,9 @@ struct IndexBuilderConfig : CommonConfig {
   // https://github.com/ad-freiburg/qlever-control/tree/main/src/qlever/Qleverfiles
   // If empty, default settings are used.
   //
-  // NOTE: The practically most relevant key, for which a non-default value is
-  // often needed, is `num-triples-per-batch`. In determines the number of
-  // triples processed at once during index building by a single thread. If this
-  // batch size is too small, there is an overhead of merging the related
-  // intermediate files. If this batch size is too large, then the memory
-  // consumption might be too large.
+  // NOTE: The key `num-triples-per-batch` is deprecated and ignored; the size
+  // of the partial vocabularies of the index building is now determined by
+  // `memoryLimit_`.
   //
   // TODO: The reason for this JSON is historical. We should have an own
   // parameter for each of the possible settings in the JSON file.

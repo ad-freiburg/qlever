@@ -334,8 +334,10 @@ int main(int argc, char** argv) {
 
   // Options for the index building process.
   add("stxxl-memory,m", po::value(&config.memoryLimit_),
-      "The amount of memory in to use for sorting during the index build. "
-      "Decrease if the index builder runs out of memory.");
+      "The amount of memory to use during the index build, in particular "
+      "for the partial vocabularies that are created while parsing the input "
+      "(their size is derived from this limit and the number of threads) and "
+      "for sorting. Decrease if the index builder runs out of memory.");
   add("parser-buffer-size,b", po::value(&config.parserBufferSize_),
       "The size of the buffer used for parsing the input files. This must be "
       "large enough to hold a single input triple. Default: 10 MB.");
@@ -380,9 +382,9 @@ int main(int argc, char** argv) {
       "vocabularies), the conversion to global IDs, and the shared thread pool "
       "that the permutation writer runs on use this number; the other phases "
       "use their own parallelism (making all phases respect this option is "
-      "work in progress). The memory of the first pass grows "
-      "linearly with this number, since each thread holds one batch of "
-      "`num-triples-per-batch` triples with its partial vocabulary in RAM.");
+      "work in progress). In the first pass, the memory limit (see "
+      "`--stxxl-memory`) is divided among the threads, so with more threads "
+      "the partial vocabularies become smaller.");
 
   // Process command line arguments.
   po::variables_map optionsMap;

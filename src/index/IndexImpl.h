@@ -155,7 +155,11 @@ class IndexImpl {
   // of `Iri::toStringRepresentation`, sorted and without duplicates).
   std::vector<std::string> hasWordRestrictPredicates_;
 
-  size_t numTriplesPerBatch_ = NUM_TRIPLES_PER_PARTIAL_VOCAB;
+  // If set, every partial vocabulary of the first pass contains at most
+  // (roughly) this many input triples, in addition to the memory budget (see
+  // `qlever::partialVocabularyBuilder::FirstPassMemoryBudget`). Only for
+  // testing.
+  std::optional<size_t> maxTriplesPerPartialVocabularyOnlyForTesting_;
 
   NumNormalAndInternal numSubjects_;
   NumNormalAndInternal numPredicates_;
@@ -657,8 +661,9 @@ class IndexImpl {
 
   void setSettingsFile(const std::string& filename);
 
-  void setNumTriplesPerBatch(uint64_t numTriplesPerBatch) {
-    numTriplesPerBatch_ = numTriplesPerBatch;
+  void setMaxTriplesPerPartialVocabularyOnlyForTesting(
+      std::optional<size_t> maxTriples) {
+    maxTriplesPerPartialVocabularyOnlyForTesting_ = maxTriples;
   }
 
   const std::string& getTextName() const { return textMeta_.getName(); }
@@ -723,21 +728,23 @@ class IndexImpl {
       ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
       size_t numThreads);
 
-  // Parse all triples from `files` and build the partial vocabularies, one per
-  // batch of (approximately) `linesPerPartial` triples, together with the
-  // corresponding ID triples (see `writePartialVocabulary`). This is the first
-  // pass of the index building. It runs as a fully asynchronous pipeline on a
-  // thread pool with `numThreads` threads for efficient CPU utilization (see
-  // `PartialVocabularyBuilder.h` for the details). If parsing or writing
+  // Parse all triples from `files` and build the partial vocabularies,
+  // together with the corresponding ID triples (see `writePartialVocabulary`).
+  // The size of the partial vocabularies is determined by the memory limit of
+  // the index build (see
+  // `qlever::partialVocabularyBuilder::computeMemoryPerTaskChain`). This is the
+  // first pass of the index building. It runs as a fully asynchronous pipeline
+  // on a thread pool with `numThreads` threads for efficient CPU utilization
+  // (see `PartialVocabularyBuilder.h` for the details). If parsing or writing
   // fails, the first error is rethrown after the pipeline has stopped.
   BuildPartialVocabulariesResult buildPartialVocabularies(
       ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
-      size_t linesPerPartial, size_t numThreads);
+      size_t numThreads);
 
   // ___________________________________________________________________
   IndexBuilderDataAsExternalVector passFileForVocabulary(
       ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
-      size_t linesPerPartial, size_t numThreads);
+      size_t numThreads);
 
   // Write the partial vocabulary with index `partialVocabIdx` given by `items`
   // to its `partialVocabularyWordsFilename` and the corresponding triples in

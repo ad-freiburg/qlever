@@ -16,7 +16,6 @@
 
 #include <algorithm>
 #include <atomic>
-#include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -30,6 +29,7 @@
 #include "index/TripleComponentConversions.h"
 #include "index/vocabulary/StringSortComparator.h"
 #include "parser/TripleComponent.h"
+#include "util/CountingMemoryResource.h"
 #include "util/HashMap.h"
 #include "util/NoCopyNoMove.h"
 #include "util/RegexSet.h"
@@ -138,14 +138,20 @@ class PartialVocabIndexWithExternalFlag {
 // During the first phase of the index building, we use hash maps from entries
 // in the partial vocabulary to their `PartialVocabIndexWithExternalFlag` (see
 // above). The hash map only stores `string_view`s as keys, so that we can
-// deallocate all strings from a single batch of triples at once as soon as we
-// have finished processing them.
+// deallocate all strings of a partial vocabulary at once as soon as we have
+// finished processing them.
 
 // The type of the hash map. The maps are cleared and reused between partial
 // vocabularies (see `ItemMapAndBuffer::clear`), so no caching allocator is
-// needed.
+// needed. The map allocates via a `polymorphic_allocator`, so that its memory
+// can be counted (see `ItemMapAndBuffer`).
+using ItemMapValue =
+    std::pair<const std::string_view, PartialVocabIndexWithExternalFlag>;
 using ItemMap =
-    ad_utility::HashMap<std::string_view, PartialVocabIndexWithExternalFlag>;
+    ad_utility::HashMap<std::string_view, PartialVocabIndexWithExternalFlag,
+                        absl::DefaultHashContainerHash<std::string_view>,
+                        absl::DefaultHashContainerEq<std::string_view>,
+                        ql::pmr::polymorphic_allocator<ItemMapValue>>;
 
 // An entry of an `ItemVec` (see below): a word of a partial vocabulary with
 // its index and external flag.
@@ -165,39 +171,82 @@ struct ItemVecEntry {
 using ItemVec = std::vector<ItemVecEntry>;
 
 // A buffer that very efficiently handles a set of strings that is deallocated
-// at once when the buffer goes out of scope or `clear` is called.
-class MonotonicBuffer {
-  std::unique_ptr<ql::pmr::monotonic_buffer_resource> buffer_ =
-      std::make_unique<ql::pmr::monotonic_buffer_resource>();
-  std::unique_ptr<ql::pmr::polymorphic_allocator<char>> charAllocator_ =
-      std::make_unique<ql::pmr::polymorphic_allocator<char>>(buffer_.get());
+// at once when the buffer goes out of scope or `clear` is called. The strings
+// are stored in blocks of (at least) `BLOCK_SIZE` bytes, which are allocated
+// from the `memory_resource` that is passed to the constructor. In contrast to
+// a `monotonic_buffer_resource`, the size of the blocks does not grow
+// geometrically, so the memory that the buffer holds exceeds the size of its
+// strings by at most one block (plus the unused tails of the blocks, which are
+// small because the strings are typically much smaller than a block).
+class MonotonicBuffer : public ad_utility::NoCopyNoMove {
+ public:
+  static constexpr size_t BLOCK_SIZE = 1 << 20;
+
+ private:
+  // A block that was allocated from `resource_`.
+  struct Block {
+    char* data_;
+    size_t size_;
+  };
+  ql::pmr::memory_resource* resource_;
+  std::vector<Block> blocks_;
+  // The free part of the last block.
+  char* current_ = nullptr;
+  size_t remaining_ = 0;
 
  public:
-  // Access to the underlying allocator.
-  ql::pmr::polymorphic_allocator<char>& charAllocator() {
-    return *charAllocator_;
-  }
+  // Allocate the blocks from `resource`, which must outlive this buffer.
+  explicit MonotonicBuffer(ql::pmr::memory_resource* resource)
+      : resource_{resource} {}
+
+  ~MonotonicBuffer() { clear(); }
+
   // Append a string to the buffer and return a `string_view` that points into
   // the buffer.
   std::string_view addString(std::string_view input) {
-    auto ptr = charAllocator_->allocate(input.size());
+    if (input.size() > remaining_) {
+      size_t size = std::max(BLOCK_SIZE, input.size());
+      current_ = static_cast<char*>(resource_->allocate(size, 1));
+      remaining_ = size;
+      blocks_.push_back(Block{current_, size});
+    }
+    char* ptr = current_;
     std::copy(input.begin(), input.end(), ptr);
+    current_ += input.size();
+    remaining_ -= input.size();
     return {ptr, input.size()};
   }
 
   // Deallocate all the strings at once and make the buffer reusable. All the
   // `string_view`s that `addString` has returned dangle afterwards.
-  void clear() { buffer_->release(); }
+  void clear() {
+    for (const auto& block : blocks_) {
+      resource_->deallocate(block.data_, block.size_, 1);
+    }
+    blocks_.clear();
+    current_ = nullptr;
+    remaining_ = 0;
+  }
 };
 
 // The hash map (which only stores pointers) together with the `MonotonicBuffer`
 // that manages the actual strings. Neither copyable nor movable: the
 // `string_view` keys of `map_` point into `buffer_`, and each task chain of the
 // first pass reuses a single instance via `clear` (see
-// `PartialVocabularyBuilder.h`).
+// `PartialVocabularyBuilder.h`). Both the hash map and the buffer allocate all
+// their memory via `memoryResource_`, so that `numBytesAllocated()` is the
+// memory that they currently hold.
 struct ItemMapAndBuffer : public ad_utility::NoCopyNoMove {
-  ItemMap map_;
-  MonotonicBuffer buffer_;
+  // NOTE: Declared first, so that it outlives `map_` and `buffer_`.
+  ad_utility::CountingMemoryResource memoryResource_;
+  ItemMap map_{ItemMap::allocator_type{&memoryResource_}};
+  MonotonicBuffer buffer_{&memoryResource_};
+
+  // Return the number of bytes that the hash map and the strings currently
+  // hold.
+  size_t numBytesAllocated() const {
+    return memoryResource_.numBytesAllocated();
+  }
 
   // Remove all the entries and deallocate all the strings, but keep the hash
   // map's memory for the next partial vocabulary.
