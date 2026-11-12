@@ -1466,10 +1466,22 @@ void QueryPlanner::applyFiltersIfPossible(
           newPlan.type = plan.type;
           newPlan.containsFilterSubstitute_ = true;
         }
+        // In the `KeepUnfiltered` mode, keep `plan` and add the candidates,
+        // also if we need to enforce substitution.
+        //
+        // NOTE: This way, `plan` can first be joined with other plans (for
+        // example, a scan of all geometries with a small set of entities
+        // before the `SpatialJoin` with a constant geometry). The final
+        // `SeedSubstitutesOnly` pass applies an enforced substitute to every
+        // plan that still lacks it.
+        if constexpr (mode == FilterMode::KeepUnfiltered) {
+          ql::ranges::move(substPlans, std::back_inserter(addedPlans));
+          continue;
+        }
+
         // If we need to enforce substitution, replace `plan` with our first
         // candidate. This is not done in all cases, because an incomplete
-        // `SpatialJoin` would not get a join partner if `plan` would be
-        // removed.
+        // `SpatialJoin` would not get a join partner if `plan` were removed.
         if (!substPlans.empty() && filterAndSubst.forceSubstitution_) {
           plan = std::move(substPlans.front());
           substPlans.erase(substPlans.begin());
@@ -1648,9 +1660,11 @@ SubtreePlanVec QueryPlanner::runDynamicProgrammingOnConnectedComponent(
   }
   auto& result = dpTab.back();
   // Apply enforced filter substitutes (currently `SpatialJoin` with a
-  // fixed-value side). Both a connected component with a single seed and a
-  // full-cover replacement plan land in the final row without passing through
-  // a DP round that may apply substitutes, so they are handled here.
+  // fixed-value side) to every final plan that still lacks them. These are
+  // the plans that kept the unfiltered side in the `KeepUnfiltered` rounds
+  // above, as well as a connected component with a single seed and a
+  // full-cover replacement plan, which land in the final row without passing
+  // through a DP round at all.
   applyFiltersIfPossible<FilterMode::SeedSubstitutesOnly>(result, filters);
   applyFiltersIfPossible<FilterMode::ReplaceUnfilteredNoSubstitutes>(result,
                                                                      filters);
@@ -1963,7 +1977,7 @@ SubtreePlanMatrix QueryPlanner::fillDpTab(const QueryPlanner::TripleGraph& tg,
   // More than one connected component, set up a Cartesian product.
   SubtreePlanMatrix result{allocator()};
   result.emplace_back(allocator());
-  std::vector<std::shared_ptr<QueryExecutionTree>> subtrees;
+  CartesianProductJoin::Children subtrees{allocator()};
   // We need to manually inform the cartesian produce about
   // its included nodes and filters and text limits to make the
   // `applyTextLimitsIfPossible` call below work correctly.
@@ -2316,7 +2330,8 @@ SubtreePlanVec QueryPlanner::createJoinCandidatesAllowEmpty(
     const JoinColumns& jcs) const {
   if (jcs.empty()) {
     return singlePlanVec(makeSubtreePlan<CartesianProductJoin>(
-        _qec, std::vector{ain._qet, bin._qet}));
+        _qec,
+        CartesianProductJoin::Children{{ain._qet, bin._qet}, allocator()}));
   }
   return createJoinCandidates(ain, bin, jcs);
 }
@@ -3232,8 +3247,8 @@ void QueryPlanner::GraphPatternPlanner::bindGraphVariableIfUnbound(
   for (auto& innerCand : candidates) {
     if (!innerCand._qet->getVariableColumns().contains(graphVar)) {
       innerCand = makeSubtreePlan<CartesianProductJoin>(
-          planner_._qec, std::vector<std::shared_ptr<QueryExecutionTree>>{
-                             graphsCand._qet, innerCand._qet});
+          planner_._qec, CartesianProductJoin::Children{
+                             {graphsCand._qet, innerCand._qet}, allocator()});
     }
     // TODO<metetolga> queries of the form SELECT * { GRAPH ?g { VALUES ?g
     // { <doesnotexist> } } } are not correctly handled.

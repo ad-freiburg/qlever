@@ -13,6 +13,7 @@
 #include "util/AllocatorTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
+#include "util/LocalVocabEntryTestHelpers.h"
 
 // _____________________________________________________________________________
 TEST(IdTableUtils, countDistinct) {
@@ -55,9 +56,10 @@ TEST(IdTableUtils, containsLocalVocabIds) {
 
   // An `Id` of type `LocalVocabIndex` in the last row of the last column, and
   // in the first row of the first column.
+  auto getLocalVocabId = ad_utility::testing::makeGetLocalVocabId();
   LocalVocabEntry entry = LocalVocabEntry::literalWithoutQuotes(
       "word", ad_utility::testing::getQec()->getLocalVocabContext());
-  Id localVocabId = Id::makeFromLocalVocabIndex(&entry);
+  Id localVocabId = getLocalVocabId(entry);
   table(1, 1) = localVocabId;
   EXPECT_TRUE(IdTableUtils::containsLocalVocabIds(table));
   EXPECT_TRUE(IdTableUtils::containsLocalVocabIds(table.asStaticView<0>()));

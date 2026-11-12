@@ -720,12 +720,12 @@ OptionalJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   // instead of evaluating the `BIND` expression on the unbound input. This
   // silently changes the result for any expression that isn't `UNDEF` itself
   // on `UNDEF` input, e.g. `COALESCE`.
-  return pushDownBindToChild(bind, {_left, _right}, 0);
+  return pushDownBindToChild(bind, {{_left, _right}, allocator()}, 0);
 }
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> OptionalJoin::cloneWithNewChildren(
-    std::vector<std::shared_ptr<QueryExecutionTree>> children) const {
+    qlm::vector<std::shared_ptr<QueryExecutionTree>> children) const {
   return std::make_unique<OptionalJoin>(
       _executionContext, std::move(children.at(0)), std::move(children.at(1)),
       keepJoinColumns_);
