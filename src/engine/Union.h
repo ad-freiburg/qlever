@@ -28,13 +28,18 @@ class Union : public Operation {
   // Stores the indices of the columns that the result of this operation should
   // be sorted on. If set, the expensive union with merge implementation has to
   // be used (which is most likely cheaper than sorting afterwards).
-  std::vector<ColumnIndex> targetOrder_;
+  qlm::vector<ColumnIndex> targetOrder_;
 
  public:
   Union(QueryExecutionContext* qec,
         const std::shared_ptr<QueryExecutionTree>& t1,
         const std::shared_ptr<QueryExecutionTree>& t2,
-        std::vector<ColumnIndex> targetOrder = {});
+        qlm::vector<ColumnIndex> targetOrder);
+
+  // Construct with an empty `targetOrder`, i.e., the result is not sorted.
+  Union(QueryExecutionContext* qec,
+        const std::shared_ptr<QueryExecutionTree>& t1,
+        const std::shared_ptr<QueryExecutionTree>& t2);
 
  protected:
   virtual std::string getCacheKeyImpl() const override;

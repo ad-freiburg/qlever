@@ -17,8 +17,13 @@ const size_t Union::NO_COLUMN = std::numeric_limits<size_t>::max();
 
 Union::Union(QueryExecutionContext* qec,
              const std::shared_ptr<QueryExecutionTree>& t1,
+             const std::shared_ptr<QueryExecutionTree>& t2)
+    : Union{qec, t1, t2, qlm::vector<ColumnIndex>{qec->getAllocator()}} {}
+
+Union::Union(QueryExecutionContext* qec,
+             const std::shared_ptr<QueryExecutionTree>& t1,
              const std::shared_ptr<QueryExecutionTree>& t2,
-             std::vector<ColumnIndex> targetOrder)
+             qlm::vector<ColumnIndex> targetOrder)
     : Operation(qec), targetOrder_{std::move(targetOrder)} {
   AD_CONTRACT_CHECK(t1 && t2);
   _subtrees[0] = t1;
@@ -152,11 +157,7 @@ size_t Union::getResultWidth() const {
   return _columnOrigins.size();
 }
 
-qlm::vector<ColumnIndex> Union::resultSortedOn() const {
-  // TODO<vrbommireddy>: Make `targetOrder_` a `qlm::vector<ColumnIndex>` and
-  // remove this conversion.
-  return {targetOrder_.begin(), targetOrder_.end(), allocator()};
-}
+qlm::vector<ColumnIndex> Union::resultSortedOn() const { return targetOrder_; }
 
 // _____________________________________________________________________________
 VariableToColumnMap Union::computeVariableToColumnMap() const {
@@ -509,7 +510,8 @@ std::optional<std::shared_ptr<QueryExecutionTree>> Union::makeSortedTree(
   AD_CONTRACT_CHECK(!isSortedBy(sortColumns));
   return ad_utility::makeExecutionTree<Union>(
       _executionContext, _subtrees.at(0), _subtrees.at(1),
-      std::vector<ColumnIndex>(sortColumns.begin(), sortColumns.end()));
+      qlm::vector<ColumnIndex>{sortColumns.begin(), sortColumns.end(),
+                               allocator()});
 }
 
 // _____________________________________________________________________________

@@ -533,9 +533,9 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
 
   std::vector<Variable> variablesXAndY{varX, varY};
 
-  std::vector<ColumnIndex> sortedColumns = {0};
+  auto sortedColumns = colIndices({0});
   Tree subtreeWithSort =
-      makeExecutionTree<Sort>(qec, validJoinWhenGroupingByX, sortedColumns);
+      ::makeExecutionTree<Sort>(qec, validJoinWhenGroupingByX, sortedColumns);
 
   SparqlExpressionPimpl avgXPimpl = makeAvgPimpl(varX);
   SparqlExpressionPimpl avgDistinctXPimpl = makeAvgPimpl(varX, true);
@@ -1365,8 +1365,8 @@ TEST_F(GroupByOptimizations, hashMapOptimizationGroupConcatIndex) {
       SparqlTripleSimple{varX, iri("<label>"), varY});
 
   // Optimization will not be used if subtree is not sort
-  std::vector<ColumnIndex> sortedColumns = {0};
-  Tree subtreeWithSort = makeExecutionTree<Sort>(qec, xyScan, sortedColumns);
+  auto sortedColumns = colIndices({0});
+  Tree subtreeWithSort = ::makeExecutionTree<Sort>(qec, xyScan, sortedColumns);
 
   auto groupConcatExpression1 = makeGroupConcatPimpl(varY);
   auto aliasGC1 = Alias{groupConcatExpression1, varZ};
@@ -1456,8 +1456,8 @@ TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxIndex) {
       SparqlTripleSimple{varX, iri("<label>"), varY});
 
   // Optimization will not be used if subtree is not sort
-  std::vector<ColumnIndex> sortedColumns = {0};
-  Tree subtreeWithSort = makeExecutionTree<Sort>(qec, xyScan, sortedColumns);
+  auto sortedColumns = colIndices({0});
+  Tree subtreeWithSort = ::makeExecutionTree<Sort>(qec, xyScan, sortedColumns);
 
   auto minExpression = makeMinPimpl(varY);
   auto aliasMin = Alias{minExpression, varZ};
@@ -1500,8 +1500,8 @@ TEST_F(GroupByOptimizations, hashMapOptimizationNonTrivial) {
       qec, Permutation::Enum::PSO,
       SparqlTripleSimple{Variable{"?z"}, iri("<is>"), Variable{"?y"}});
   Tree join = makeExecutionTree<Join>(qec, zxScan, zyScan, 0, 0);
-  std::vector<ColumnIndex> sortedColumns = {1};
-  Tree sortedJoin = makeExecutionTree<Sort>(qec, join, sortedColumns);
+  auto sortedColumns = colIndices({1});
+  Tree sortedJoin = ::makeExecutionTree<Sort>(qec, join, sortedColumns);
 
   // (AVG(?y) as ?avg)
   Variable varAvg{"?avg"};
@@ -3358,8 +3358,8 @@ TEST(GroupBy, RegexOnGroupedVariableHashMapOptimization) {
   auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{abc, I(1)}, {abc, I(2)}, {xyz, I(3)}}),
       std::vector<std::optional<Variable>>{o, y});
-  auto sorted = ad_utility::makeExecutionTree<Sort>(
-      qec, values, std::vector<ColumnIndex>{0});
+  auto sorted =
+      ad_utility::makeExecutionTree<Sort>(qec, values, colIndices({0}));
 
   auto count = std::make_unique<CountExpression>(
       false, std::make_unique<VariableExpression>(y));
@@ -3934,8 +3934,8 @@ TEST(GroupBy, HashMapOptimizationWithoutGroupByColumns) {
     qec->getQueryTreeCache().clearAll();
     auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, std::move(input), std::vector<std::optional<Variable>>{x});
-    auto sorted = ad_utility::makeExecutionTree<Sort>(
-        qec, std::move(values), std::vector<ColumnIndex>{0});
+    auto sorted = ad_utility::makeExecutionTree<Sort>(qec, std::move(values),
+                                                      colIndices({0}));
     GroupByImpl groupBy{
         qec,
         std::move(groupByVariables),
