@@ -242,7 +242,8 @@ TEST(QueryRegistry, statusSurvivesMove) {
 // An out-of-range value exercises the trailing fallback after the exhaustive
 // switch in `toString`, which is otherwise unreachable.
 TEST(QueryStatus, toStringFallbackForUnknownValue) {
-  EXPECT_EQ(ad_utility::websocket::toString(static_cast<QueryStatus>(42)),
+  EXPECT_EQ(ad_utility::websocket::toString(
+                static_cast<QueryStatus>(qlever::enumSize<QueryStatus>)),
             "unknown");
 }
 
