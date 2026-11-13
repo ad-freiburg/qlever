@@ -277,6 +277,36 @@ TEST(LocalVocab, merge) {
 }
 
 // _____________________________________________________________________________
+TEST(LocalVocab, numSetsAndIsLocalVocabIndexContained) {
+  const auto& context = ad_utility::testing::getQec()->getLocalVocabContext();
+  LocalVocab vocA = makeLocalVocab();
+  LocalVocab vocB = makeLocalVocab();
+  LocalVocab vocC = makeLocalVocab();
+  auto idxA =
+      vocA.getIndexAndAddIfNotContained(iriLocalVocabEntry("<a>", context));
+  auto idxB =
+      vocB.getIndexAndAddIfNotContained(iriLocalVocabEntry("<b>", context));
+  auto idxC =
+      vocC.getIndexAndAddIfNotContained(iriLocalVocabEntry("<c>", context));
+
+  // Before the merge, only the primary set exists.
+  EXPECT_EQ(vocA.numSets(), 1u);
+  EXPECT_TRUE(vocA.isLocalVocabIndexContained(idxA));
+  EXPECT_FALSE(vocA.isLocalVocabIndexContained(idxB));
+
+  // Merging an empty vocab doesn't add a set.
+  vocA.mergeWith(makeLocalVocab());
+  EXPECT_EQ(vocA.numSets(), 1u);
+
+  // After the merge, the words of `vocB` are contained in another set.
+  vocA.mergeWith(vocB);
+  EXPECT_EQ(vocA.numSets(), 2u);
+  EXPECT_TRUE(vocA.isLocalVocabIndexContained(idxA));
+  EXPECT_TRUE(vocA.isLocalVocabIndexContained(idxB));
+  EXPECT_FALSE(vocA.isLocalVocabIndexContained(idxC));
+}
+
+// _____________________________________________________________________________
 TEST(LocalVocab, propagation) {
   // Query execution context (with small test index), see `IndexTestHelpers.h`.
   using ad_utility::AllocatorWithLimit;
