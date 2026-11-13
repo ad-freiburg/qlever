@@ -191,7 +191,9 @@ class ChunkwisePermutationWriter
   // called once, by the thread that drives the merge. That thread must not be
   // a thread of the `executor_` (or of the executor of the merge), because
   // this function blocks it until all the chunks are done, see
-  // `createPermutationPair`.
+  // `createPermutationPair`. This also holds if an exception is thrown: the
+  // remaining chunks are then stopped, and the exception only propagates once
+  // all the chunks and callbacks are done.
   PermutationPairResult finish(std::future<void> mergeCompletion);
 
   // The number of rows that were pushed to this writer before the removal of
@@ -297,14 +299,16 @@ PermutationPairResult createPermutationPair(
   // writer is created by the sink factory, which the merge calls exactly once
   // (also for an empty input, see `parallelBlockMerge::SinkFactoryConcept`).
   std::shared_ptr<ChunkwisePermutationWriter> writer;
-  auto chunkwisePermutationWriterFactory = [&](size_t numChunks) {
-    AD_CORRECTNESS_CHECK(writer == nullptr);
-    writer = ChunkwisePermutationWriter::create(
-        numChunks, basename, std::move(writerAndCallback1),
-        std::move(writerAndCallback2), permutation, std::move(callbacks),
-        options, std::move(executor));
-    return writer;
-  };
+  auto chunkwisePermutationWriterFactory =
+      [&writer, &basename, &writerAndCallback1, &writerAndCallback2,
+       &permutation, &callbacks, &options, &executor](size_t numChunks) {
+        AD_CORRECTNESS_CHECK(writer == nullptr);
+        writer = ChunkwisePermutationWriter::create(
+            numChunks, basename, std::move(writerAndCallback1),
+            std::move(writerAndCallback2), permutation, std::move(callbacks),
+            options, std::move(executor));
+        return writer;
+      };
   auto mergeCompletion =
       sortedInput.template mergeToSink<0>(chunkwisePermutationWriterFactory);
   AD_CORRECTNESS_CHECK(writer != nullptr);

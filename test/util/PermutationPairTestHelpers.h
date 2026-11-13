@@ -12,19 +12,18 @@
 
 #include <absl/cleanup/cleanup.h>
 #include <absl/strings/str_cat.h>
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <algorithm>
 #include <atomic>
 #include <boost/asio/post.hpp>
 #include <cstdint>
-#include <iostream>
 #include <limits>
 #include <optional>
 #include <random>
 #include <set>
 #include <string>
-#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -118,25 +117,6 @@ inline size_t numDistinctCol0(const TestRows& rows) {
   return col0s.size();
 }
 
-namespace detail {
-// Print up to five of the rows of the `rows` that are not contained in
-// `others` to `std::cerr`, each prefixed by the `label`.
-inline void reportRowsNotIn(const std::set<std::vector<uint64_t>>& rows,
-                            const std::set<std::vector<uint64_t>>& others,
-                            std::string_view label) {
-  size_t numReported = 0;
-  for (const auto& row : rows) {
-    if (!others.contains(row) && numReported++ < 5) {
-      std::cerr << label << ':';
-      for (auto bits : row) {
-        std::cerr << ' ' << Id::fromBits(bits);
-      }
-      std::cerr << std::endl;
-    }
-  }
-}
-}  // namespace detail
-
 // Check that the permutation at `filename` (with the given `blocks`) contains
 // exactly the `expected` rows (sorted, unique, with `col0` first), relation by
 // relation.
@@ -154,29 +134,27 @@ inline void checkPermutation(const std::string& filename,
     auto col0 = expected[begin][0];
     auto scanned = scanRelation(filename, blocks, V(col0), numColumns);
     if (scanned.numRows() != end - begin) {
-      // Diagnostics: report the rows that are missing or superfluous.
-      std::set<std::vector<uint64_t>> scannedRows;
+      // Let `ContainerEq` report the rows that are missing or superfluous. The
+      // sets don't see duplicates, which the check of the number of rows below
+      // catches.
+      std::set<std::vector<Id>> scannedRows;
       for (size_t r = 0; r < scanned.numRows(); ++r) {
-        std::vector<uint64_t> row;
+        std::vector<Id> row;
         for (size_t col = 0; col < scanned.numColumns(); ++col) {
-          row.push_back(scanned(r, col).getBits());
+          row.push_back(scanned(r, col));
         }
         scannedRows.insert(std::move(row));
       }
-      std::set<std::vector<uint64_t>> expectedRowsSet;
+      std::set<std::vector<Id>> expectedRows;
       for (size_t i = begin; i < end; ++i) {
-        std::vector<uint64_t> row;
+        std::vector<Id> row;
         for (size_t col = 1; col < numColumns; ++col) {
-          row.push_back(V(expected[i][col]).getBits());
+          row.push_back(V(expected[i][col]));
         }
-        expectedRowsSet.insert(std::move(row));
+        expectedRows.insert(std::move(row));
       }
-      detail::reportRowsNotIn(expectedRowsSet, scannedRows, "missing row");
-      detail::reportRowsNotIn(scannedRows, expectedRowsSet, "unexpected row");
-      std::cerr << "expected " << expectedRowsSet.size()
-                << " distinct rows, scanned " << scannedRows.size()
-                << " distinct rows, scanned total " << scanned.numRows()
-                << std::endl;
+      EXPECT_THAT(scannedRows, ::testing::ContainerEq(expectedRows))
+          << "relation " << col0;
     }
     ASSERT_EQ(scanned.numRows(), end - begin) << "relation " << col0;
     ASSERT_EQ(scanned.numColumns(), numColumns - 1);

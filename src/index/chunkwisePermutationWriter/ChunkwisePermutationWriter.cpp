@@ -11,6 +11,8 @@
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
+#include <absl/cleanup/cleanup.h>
+
 #include <chrono>
 
 namespace chunkwisePermutationWriter {
@@ -152,16 +154,18 @@ net::awaitable<bool> ChunkwisePermutationWriter::finishChunkImpl(
 
 // _____________________________________________________________________________
 void ChunkwisePermutationWriter::consolidate() {
-  size_t chunkIndex = 0;
-  while (true) {
+  // Wait for the result of the next chunk, and measure the time spent waiting.
+  auto takeNextChunk = [this]() {
     statistics_.consolidationWaitTimer_.cont();
+    absl::Cleanup stopTimer = [this]() {
+      statistics_.consolidationWaitTimer_.stop();
+    };
     // Wake up regularly to report the progress of the chunks.
-    std::optional<ChunkResult> chunk = chunkResults_.takeNext(
-        std::chrono::seconds(1), [this]() { statistics_.reportProgress(); });
-    statistics_.consolidationWaitTimer_.stop();
-    if (!chunk.has_value()) {
-      break;
-    }
+    return chunkResults_.takeNext(std::chrono::seconds(1),
+                                  [this]() { statistics_.reportProgress(); });
+  };
+  size_t chunkIndex = 0;
+  while (std::optional<ChunkResult> chunk = takeNextChunk()) {
     statistics_.consolidationWorkTimer_.cont();
     consolidator_.addChunkResult(chunkIndex, std::move(chunk).value());
     statistics_.consolidationWorkTimer_.stop();
@@ -173,19 +177,28 @@ void ChunkwisePermutationWriter::consolidate() {
 // _____________________________________________________________________________
 PermutationPairResult ChunkwisePermutationWriter::finish(
     std::future<void> mergeCompletion) {
-  try {
-    consolidate();
-  } catch (...) {
-    // The chunks that are still running are stopped, and we have to wait for
-    // them (and for the callbacks) before the exception is propagated, because
-    // they refer to the writers and to the callbacks.
-    requestStop();
-    mergeCompletion.wait();
-    callbackDispatcher_.waitUntilIdle();
-    throw;
+  {
+    // Whatever happens, wait for the chunks that are still running and for the
+    // callbacks before leaving this scope, because they refer to the writers
+    // and to the callbacks. If `consolidate` throws, this waiting happens
+    // during the unwinding, before the exception propagates. This is safe,
+    // because neither `std::future::wait` nor `waitUntilIdle` throws.
+    absl::Cleanup waitForChunksAndCallbacks = [this, &mergeCompletion]() {
+      mergeCompletion.wait();
+      callbackDispatcher_.waitUntilIdle();
+    };
+    try {
+      consolidate();
+    } catch (...) {
+      // Stop the chunks that are still running, so that the waiting above
+      // terminates quickly.
+      requestStop();
+      throw;
+    }
   }
+  // Propagate an exception of the merge (the future is still valid after
+  // `wait`).
   mergeCompletion.get();
-  callbackDispatcher_.waitUntilIdle();
   chunkResults_.rethrowIfException();
   // NOTE: All the chunks and callbacks are done now, so an exception of the
   // consolidator may propagate directly.
