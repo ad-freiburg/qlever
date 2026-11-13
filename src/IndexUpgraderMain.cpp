@@ -25,6 +25,7 @@
 #include "index/IndexFormatConverter.h"
 #include "util/Forward.h"
 #include "util/GlobalExecutor.h"
+#include "util/KernelBugWorkaround.h"
 #include "util/Log.h"
 #include "util/ProgramOptionsHelpers.h"
 
@@ -32,6 +33,8 @@ namespace po = boost::program_options;
 
 // _____________________________________________________________________________
 int main(int argc, char** argv) {
+  // Avoid a bug of some Linux kernels on arm64, see `KernelBugWorkaround.h`.
+  ad_utility::kernelBugWorkaround::applyIfNeeded();
   std::string indexBasename;
 
   ad_utility::ParameterToProgramOptionFactory optionFactory{

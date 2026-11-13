@@ -14,10 +14,10 @@
 #include <array>
 #include <type_traits>
 
-#include "util/Serializer/ByteBufferSerializer.h"
-#include "util/Serializer/SerializeString.h"
-#include "util/Serializer/SerializeVector.h"
 #include "util/http/MediaTypes.h"
+#include "util/serializer/ByteBufferSerializer.h"
+#include "util/serializer/SerializeString.h"
+#include "util/serializer/SerializeVector.h"
 
 namespace qlever::binary_export {
 
