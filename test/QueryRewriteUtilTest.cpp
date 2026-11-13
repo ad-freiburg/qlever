@@ -100,6 +100,14 @@ TEST(QueryRewriteUtilTest, GetGeoDistanceExpressionParametersUnitVariable) {
           *expr, constantOf(TripleComponent{TripleComponent::UNDEF{}})),
       std::nullopt);
 
+  // A unit that is neither a constant nor a variable is not recognized.
+  auto unitPow = makeDistWithUnitExpression(
+      getExpr(V{"?a"}), getExpr(V{"?b"}),
+      makePowExpression(getExpr(V{"?u"}), getExpr(V{"?c"})));
+  checkGeoDistanceCall(
+      getGeoDistanceExpressionParameters(*unitPow, constantOf(miles)),
+      std::nullopt);
+
   // An IRI or literal of `?u` that is not a unit gives `UNKNOWN`, as for a unit
   // written directly in the call.
   auto unknown = GeoDistanceCall{{WITHIN_DIST, V{"?a"}, V{"?b"}}, UNKNOWN};
