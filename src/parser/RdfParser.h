@@ -10,6 +10,7 @@
 #ifndef QLEVER_SRC_PARSER_RDFPARSER_H
 #define QLEVER_SRC_PARSER_RDFPARSER_H
 
+#include <absl/cleanup/cleanup.h>
 #include <absl/strings/str_cat.h>
 #include <gtest/gtest_prod.h>
 
@@ -199,6 +200,16 @@ class TurtleParser : public RdfParserBase {
  public:
   using ParseException = ::ParseException;
 
+  // The maximum nesting depth of blank node property lists `[...]` and
+  // collections `(...)`. Deeper input is rejected with a parse error.
+  //
+  // NOTE: This is a recursive descent parser, so each nesting level costs
+  // several stack frames (about 1 KB in a Release build). Without a limit, a
+  // few hundred nested `[` overflow the 512 KB thread stacks of macOS and a
+  // few thousand the 8 MB default of Linux. Real data nests a handful of
+  // levels at most.
+  static constexpr size_t maxNestingDepth = 100;
+
   // Get the result of the single rule that was parsed most recently. Used for
   // testing.
   const TripleComponent& getLastParseResult() const { return lastParseResult_; }
@@ -293,6 +304,10 @@ class TurtleParser : public RdfParserBase {
   TripleComponent defaultGraphIri_ = qlever::specialIds().at(DEFAULT_GRAPH_IRI);
   size_t numBlankNodes_ = 0;
 
+  // The current nesting depth of blank node property lists and collections,
+  // see `maxNestingDepth` and `enterNestedTerm`.
+  size_t nestingDepth_ = 0;
+
   bool currentTripleIgnoredBecauseOfInvalidLiteral_ = false;
 
   // Make sure that each blank nodes is unique, even across different parser
@@ -342,6 +357,20 @@ class TurtleParser : public RdfParserBase {
 
   // Log error message (with parse position) and throw parse exception.
   [[noreturn]] void raise(std::string_view error_message) const;
+
+  // Count one more level of nested blank node property lists or collections
+  // and raise a parse error if the nesting is deeper than `maxNestingDepth`.
+  // The returned guard uncounts the level when it goes out of scope.
+  [[nodiscard]] auto enterNestedTerm() {
+    if (nestingDepth_ >= maxNestingDepth) {
+      raise(
+          absl::StrCat("The nesting of blank node property lists `[...]` and "
+                       "collections `(...)` is deeper than the maximum of ",
+                       maxNestingDepth, " levels"));
+    }
+    ++nestingDepth_;
+    return absl::Cleanup{[this]() noexcept { --nestingDepth_; }};
+  }
 
   // Throw an exception or simply ignore the current triple, depending on the
   // setting of `settings().invalidLiteralsAreSkipped_`.
