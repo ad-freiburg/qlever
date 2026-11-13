@@ -12,21 +12,25 @@
 
 using ad_utility::LazyJsonParser;
 
+namespace {
+// Yield `s` in chunks of `chunkSize` characters.
+cppcoro::generator<std::string_view> yieldInChunks(std::string_view s,
+                                                   size_t chunkSize) {
+  for (size_t i = 0; i < s.size(); i += chunkSize) {
+    co_yield s.substr(i, chunkSize);
+  }
+}
+}  // namespace
+
 TEST(parseTest, parse) {
   const std::vector<std::string> arrayPath = {"results", "bindings"};
 
-  auto yieldChars =
-      [](const std::string_view s) -> cppcoro::generator<std::string_view> {
-    for (size_t i = 0; i < s.size(); ++i) {
-      co_yield std::string_view(s.data() + i, 1);
-    }
-  };
   // Check if the parser yields the expected results when parsing each char
   // individually.
-  auto expectYields = [&yieldChars](const std::string& s,
-                                    const std::vector<std::string>& exp,
-                                    const std::vector<std::string> arrayPath) {
-    auto parsedResult = LazyJsonParser::parse(yieldChars(s), arrayPath);
+  auto expectYields = [](const std::string& s,
+                         const std::vector<std::string>& exp,
+                         const std::vector<std::string> arrayPath) {
+    auto parsedResult = LazyJsonParser::parse(yieldInChunks(s, 1), arrayPath);
 
     size_t expIdx = 0;
     for (const auto& y : parsedResult) {
@@ -99,23 +103,16 @@ TEST(parseTest, parse) {
       arrayPath);
 }
 
-// If the input ends after the `arrayPath` has been reached, but before the
-// JSON object is complete, the parser has to throw instead of silently
-// ignoring the rest of the input. This happens when the sender of a result
-// aborts the transmission, for example because of a timeout.
+// Test that the parser throws if the input ends after the `arrayPath` has been
+// reached, but before the JSON object is complete (as it does when the sender
+// aborts the transmission, for example because of a timeout), instead of
+// silently ignoring the rest of the input.
 TEST(parseTest, truncatedInputThrows) {
   const std::vector<std::string> arrayPath = {"results", "bindings"};
-  auto yieldInChunks =
-      [](std::string_view s,
-         size_t chunkSize) -> cppcoro::generator<std::string_view> {
-    for (size_t i = 0; i < s.size(); i += chunkSize) {
-      co_yield s.substr(i, chunkSize);
-    }
-  };
   // Consume all the parts that the parser yields for `s` (split into chunks of
   // size `chunkSize`) and return the number of parts.
-  auto parseAll = [&yieldInChunks](std::string_view s, size_t chunkSize,
-                                   const std::vector<std::string>& path) {
+  auto parseAll = [](std::string_view s, size_t chunkSize,
+                     const std::vector<std::string>& path) {
     size_t numParts = 0;
     for ([[maybe_unused]] const auto& part :
          LazyJsonParser::parse(yieldInChunks(s, chunkSize), path)) {
