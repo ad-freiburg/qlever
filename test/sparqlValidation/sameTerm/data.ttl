@@ -1,0 +1,45 @@
+# Test data for the `sameTerm` validation suite (see `README.md`). The object
+# of each triple is an RDF term of a different kind, and the local name of the
+# subject describes that term.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix geo: <http://www.opengis.net/ont/geosparql#> .
+@prefix : <http://example.org/> .
+
+# Numbers.
+:integer :p 1 .
+:integerAgain :p 1 .
+:integerWithLeadingZero :p "01"^^xsd:integer .
+:int :p "1"^^xsd:int .
+:decimal :p 1.0 .
+:double :p 1.0E0 .
+:doubleNaN :p "NaN"^^xsd:double .
+:floatNaN :p "NaN"^^xsd:float .
+:doubleZero :p "0.0E0"^^xsd:double .
+:doubleNegativeZero :p "-0.0E0"^^xsd:double .
+:doubleInf :p "INF"^^xsd:double .
+# Booleans.
+:booleanTrue :p true .
+:booleanOne :p "1"^^xsd:boolean .
+# Strings, language-tagged strings, and a custom datatype.
+:string :p "1" .
+:stringAgain :p "1" .
+:xsdString :p "1"^^xsd:string .
+:stringAlpha :p "alpha" .
+:stringAlphaUppercase :p "Alpha" .
+:langEn :p "1"@en .
+:langDe :p "1"@de .
+:customDatatype :p "1"^^:datatype .
+# IRIs (the last one has the form of an IRI that QLever can encode in its ID,
+# see `--encode-as-id` in `run-qlever.sh`).
+:iri :p :one .
+:iriAgain :p :one .
+:encodedIri :p <http://example.org/enc/1> .
+# Blank nodes.
+:blankNode :p _:b .
+:blankNodeAgain :p _:b .
+:otherBlankNode :p _:c .
+# Dates and geometries.
+:date :p "2025-01-01"^^xsd:date .
+:dateTime :p "2025-01-01T00:00:00"^^xsd:dateTime .
+:point :p "POINT(1 2)"^^geo:wktLiteral .
+:pointWithDecimals :p "POINT(1.0 2.0)"^^geo:wktLiteral .
