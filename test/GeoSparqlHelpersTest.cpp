@@ -186,4 +186,18 @@ TEST(GeoSparqlHelpers, WktTypeIri) {
   EXPECT_EQ(WktCrsType{}(SourceCrsType{4}), undef);
 }
 
+TEST(GeoSparqlHelpers, geoPointToWktInCrs) {
+  GeoPoint g{50, 60};
+  auto wktDefault = ad_utility::detail::geoPointToWktInCrs(
+      g, ad_utility::SourceCrsType{util::geo::CRSType::CRS84});
+  ASSERT_TRUE(wktDefault.has_value());
+  EXPECT_EQ(wktDefault.value(), "POINT(60 50)");
+
+  auto wktWGS84 = ad_utility::detail::geoPointToWktInCrs(
+      g, ad_utility::SourceCrsType{util::geo::CRSType::WGS84});
+  ASSERT_TRUE(wktWGS84.has_value());
+  EXPECT_EQ(wktWGS84.value(),
+            "<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(50 60)");
+}
+
 }  // namespace

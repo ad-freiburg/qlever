@@ -37,8 +37,8 @@ constexpr std::string_view litPointWGS84 =
     "\"<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(4 "
     "3)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 constexpr std::string_view litPointWebMerc =
-    "\"<http://www.opengis.net/def/crs/EPSG/0/3857> POINT(333958.4723798207 "
-    "445640.10965602624)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+    "\"<http://www.opengis.net/def/crs/EPSG/0/3857> POINT(333958.47238 "
+    "445640.109656)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 const DPoint expectedPoint{3, 4};
 constexpr std::string_view litLineString =
     "\"LINESTRING(2 2,4 4)\""
@@ -941,27 +941,22 @@ TEST(GeometryInfoTest, UtilGeomToWktVisitor) {
   ASSERT_EQ(literals.size(), geometries.size());
 
   for (size_t i = 0; i < literals.size(); ++i) {
-    // TODO<yarox-1> `utilGeomToWkt` cannot reconstruct the CRS IRI yet, so
-    // skip the literals that have one.
-    if (literals[i] == litPointWGS84 || literals[i] == litPointWebMerc) {
-      continue;
-    }
-
     auto parsedWkt = geometries[i].parsedWkt_;
+    auto sourceCrs = geometries[i].sourceCrs_;
     auto expected = removeDatatype(literals[i]);
     ASSERT_TRUE(parsedWkt.has_value());
 
     // Test with `ParsedWKT` input.
-    EXPECT_EQ(utilGeomToWkt(parsedWkt.value()), expected);
+    EXPECT_EQ(utilGeomToWkt(parsedWkt.value(), sourceCrs), expected);
 
     // Test with optional input.
-    EXPECT_EQ(utilGeomToWkt(parsedWkt), expected);
+    EXPECT_EQ(utilGeomToWkt(parsedWkt, sourceCrs), expected);
 
     // Test with individual geometry type as input.
     std::visit(
         [&](const auto& geom) -> void {
-          EXPECT_EQ(utilGeomToWkt(geom), expected);
-          EXPECT_EQ(utilGeomToWkt(DAnyGeometry{geom}), expected);
+          EXPECT_EQ(utilGeomToWkt(geom, sourceCrs), expected);
+          EXPECT_EQ(utilGeomToWkt(DAnyGeometry{geom}, sourceCrs), expected);
         },
         parsedWkt.value());
   }
