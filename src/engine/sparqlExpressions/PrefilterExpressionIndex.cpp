@@ -38,22 +38,6 @@ std::unique_ptr<PrefilterExpression> make(Args&&... args) {
   return std::make_unique<PrefilterT>(std::forward<Args>(args)...);
 }
 
-// Given a PermutedTriple retrieve the suitable Id w.r.t. a column (index).
-static Id getIdFromColumnIndex(
-    const CompressedBlockMetadata::PermutedTriple& triple, size_t columnIndex) {
-  switch (columnIndex) {
-    case 0:
-      return triple.col0Id_;
-    case 1:
-      return triple.col1Id_;
-    case 2:
-      return triple.col2Id_;
-    default:
-      // columnIndex out of bounds
-      AD_FAIL();
-  }
-}
-
 // Check for the following conditions.
 // (1) All `CompressedBlockMetadata` values in `input` must be unique.
 // (2) `input` must contain those `CompressedBlockMetadata` values in sorted
@@ -395,9 +379,8 @@ static std::string getLogicalOpStr(const LogicalOperator logOp) {
 ValueId AccessValueIdFromBlockMetadata::operator()(
     BlockMetadataSpan randomAccessContainer, uint64_t i) const {
   const CompressedBlockMetadata& block = randomAccessContainer[i / 2];
-  return i % 2 == 0
-             ? getIdFromColumnIndex(block.firstTriple_, evaluationColumn_)
-             : getIdFromColumnIndex(block.lastTriple_, evaluationColumn_);
+  return i % 2 == 0 ? block.firstTriple_.getId(evaluationColumn_)
+                    : block.lastTriple_.getId(evaluationColumn_);
 }
 
 // SECTION PREFILTER EXPRESSION (BASE CLASS)

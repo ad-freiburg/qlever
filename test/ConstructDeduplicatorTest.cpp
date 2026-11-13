@@ -15,7 +15,7 @@
 #include "util/IdTestHelpers.h"
 #include "util/IndexTestHelpers.h"
 #include "util/LocalVocabEntryTestHelpers.h"
-#include "util/MemorySize/MemorySize.h"
+#include "util/memorySize/MemorySize.h"
 
 namespace {
 

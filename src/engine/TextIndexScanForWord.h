@@ -44,7 +44,7 @@ class TextIndexScanForWord : public Operation {
 
   bool knownEmptyResult() override { return getSizeEstimateBeforeLimit() == 0; }
 
-  std::vector<ColumnIndex> resultSortedOn() const override;
+  qlm::vector<ColumnIndex> resultSortedOn() const override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 

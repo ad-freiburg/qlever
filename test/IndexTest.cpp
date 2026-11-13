@@ -41,8 +41,8 @@
 #include "util/HashSet.h"
 #include "util/IndexTestHelpers.h"
 #include "util/LocalVocabEntryTestHelpers.h"
-#include "util/Serializer/ByteBufferSerializer.h"
 #include "util/UnicodeSupport.h"
+#include "util/serializer/ByteBufferSerializer.h"
 
 // Multi-threaded, to exercise the concurrency of the tested code.
 static constexpr auto executor = &ad_utility::testing::multiThreadExecutor;
@@ -1276,8 +1276,9 @@ TEST(IndexImpl, recomputeStatistics) {
         iriLocalVocabEntry("<zzz>", indexImpl.getLocalVocabContext());
     LocalVocabEntry literal = localVocabEntryFromStringRepresentation(
         "\"test\"@en", indexImpl.getLocalVocabContext());
-    Id zzzId = Id::makeFromLocalVocabIndex(&zzz);
-    Id literalId = Id::makeFromLocalVocabIndex(&literal);
+    auto getLocalVocabId = ad_utility::testing::makeGetLocalVocabId();
+    Id zzzId = getLocalVocabId(zzz);
+    Id literalId = getLocalVocabId(literal);
     // Create duplicate in different graph.
     Id x = Id::makeFromVocabIndex(VocabIndex::make(11));
     Id label = Id::makeFromVocabIndex(VocabIndex::make(10));
@@ -1948,6 +1949,35 @@ TEST(IndexImpl, hasWordRestrictPredicatesOfBuiltAndLoadedIndex) {
   // Recorded predicates that are not sorted are rejected.
   configuration[key] = Predicates{"<q>", "<b>"};
   EXPECT_ANY_THROW(indexImpl.applyConfiguration(configuration));
+}
+
+// Test that whether an index has `ql:has-word` triples is recorded in the
+// configuration of a built index and applied when loading, with `false` for an
+// index that was built before the key existed.
+TEST(IndexImpl, addHasWordTriplesOfBuiltAndLoadedIndex) {
+  const std::string key{ad_utility::ADD_HAS_WORD_TRIPLES_KEY};
+
+  // An index built with or without `ql:has-word` triples records this.
+  for (bool addHasWordTriples : {false, true}) {
+    TestIndexConfig config{"<a> <b> \"Café\" ."};
+    config.addHasWordTriples = addHasWordTriples;
+    auto index =
+        makeTestIndex(absl::StrCat("addHasWordTriples.", addHasWordTriples),
+                      std::move(config));
+    EXPECT_EQ(index.getImpl().configurationJson()[key], addHasWordTriples);
+  }
+
+  // Loading a configuration applies the recorded value, and a configuration
+  // without the key (an older index) gives `false`.
+  auto configuration = minimalValidConfiguration();
+  configuration[key] = true;
+  IndexImpl indexImpl{ad_utility::makeUnlimitedAllocator<Id>()};
+  auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+  indexImpl.applyConfiguration(configuration);
+  EXPECT_TRUE(indexImpl.addHasWordTriples());
+  configuration.erase(key);
+  indexImpl.applyConfiguration(configuration);
+  EXPECT_FALSE(indexImpl.addHasWordTriples());
 }
 
 // _____________________________________________________________________________

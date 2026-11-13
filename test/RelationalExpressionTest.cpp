@@ -112,11 +112,8 @@ auto liftToValueId = [](const auto& t) {
 template <typename T>
 VectorWithMemoryLimit<ValueId> makeValueIdVector(
     const VectorWithMemoryLimit<T>& vec) {
-  VectorWithMemoryLimit<ValueId> result{makeAllocator()};
-  for (const auto& d : vec) {
-    result.push_back(liftToValueId(d));
-  }
-  return result;
+  return vec | ql::views::transform(liftToValueId) |
+         ::ranges::to<VectorWithMemoryLimit>(makeAllocator());
 }
 
 auto expectTrue = [](const ExpressionResult& result,
@@ -333,6 +330,19 @@ TEST(RelationalExpression, StringAndString) {
   // testLessThanGreaterThanEqualHelper<IdOrLocalVocabEntry,
   // IdOrLocalVocabEntry>({"Alpha", "beta"},
   // {"beta", "äpfel"}, {"xxx", "xxx"});
+}
+
+// Test that an `IdOrLocalVocabEntry` that holds an `Id` is compared like that
+// `Id`, also with an `Id` on the other side (which goes through `idGenerator`).
+TEST(RelationalExpression, IdOrLocalVocabEntryHoldingId) {
+  auto i = [](int64_t x) { return IdOrLocalVocabEntry{Id::makeFromInt(x)}; };
+  auto id = [](int64_t x) { return Id::makeFromInt(x); };
+  testLessThanGreaterThanEqualHelper<IdOrLocalVocabEntry, IdOrLocalVocabEntry>(
+      {i(1), i(2)}, {i(3), i(-1)}, {i(4), i(4)});
+  testLessThanGreaterThanEqualHelper<Id, IdOrLocalVocabEntry>(
+      {id(1), i(2)}, {id(3), i(-1)}, {id(4), i(4)});
+  testLessThanGreaterThanEqualHelper<IdOrLocalVocabEntry, Id>(
+      {i(1), id(2)}, {i(3), id(-1)}, {i(4), id(4)});
 }
 
 TEST(RelationalExpression, NumericAndStringAreNeverEqual) {

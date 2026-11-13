@@ -76,7 +76,7 @@ class SpatialJoin : public Operation {
   float getMultiplicity(size_t col) override;
 
   bool knownEmptyResult() override;
-  [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override;
+  [[nodiscard]] qlm::vector<ColumnIndex> resultSortedOn() const override;
   Result computeResult(bool requestLaziness) override;
 
   // Depending on the amount of children the operation returns a different
@@ -184,7 +184,7 @@ class SpatialJoin : public Operation {
   makeTreeWithDistanceVariable(const parsedQuery::Bind& bind) const;
 
   std::unique_ptr<Operation> cloneWithNewChildren(
-      std::vector<std::shared_ptr<QueryExecutionTree>> children) const override;
+      qlm::vector<std::shared_ptr<QueryExecutionTree>> children) const override;
 
   // Get the internal variable names of bounding box columns.
   static std::pair<Variable, Variable> getBoundingBoxColumnNames(

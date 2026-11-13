@@ -2,8 +2,8 @@ add_subdirectory(sparqlExpressions)
 add_library(engine
         QueryExecutionTree.cpp Operation.cpp Result.cpp
         IndexScan.cpp Join.cpp JoinImpl.cpp Sort.cpp
-        Distinct.cpp OrderBy.cpp Filter.cpp
-        QueryPlanner.cpp QueryPlanningCostFactors.cpp QueryRewriteUtils.cpp
+        Distinct.cpp OrderBy.cpp OrderByOnSortedNumericInput.cpp NumericRun.cpp Filter.cpp
+        QueryPlanner.cpp QueryRewriteUtils.cpp
         OptionalJoin.cpp CountAvailablePredicates.cpp GroupByImpl.cpp GroupBy.cpp HasPredicateScan.cpp
         Union.cpp MultiColumnJoin.cpp TransitivePathBase.cpp
         TransitivePathHashMap.cpp TransitivePathBinSearch.cpp Service.cpp

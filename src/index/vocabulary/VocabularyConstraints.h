@@ -10,8 +10,8 @@
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyInMemoryBinSearch.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
-#include "util/Serializer/ByteBufferSerializer.h"
 #include "util/TypeTraits.h"
+#include "util/serializer/ByteBufferSerializer.h"
 
 // This header contains type constraints used to ensure that the correct
 // semantics of complex vocabulary types, like the `SplitVocabulary`, are

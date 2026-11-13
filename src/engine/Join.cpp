@@ -42,12 +42,17 @@ string Join::getDescriptor() const { return impl_->getDescriptor(); }
 size_t Join::getResultWidth() const { return impl_->getResultWidth(); }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> Join::resultSortedOn() const {
+qlm::vector<ColumnIndex> Join::resultSortedOn() const {
   return impl_->resultSortedOn();
 }
 
 // _____________________________________________________________________________
 size_t Join::getCostEstimate() { return impl_->getCostEstimate(); }
+
+// _____________________________________________________________________________
+std::vector<size_t> Join::getCostEstimatesChargedForChildren() {
+  return impl_->getCostEstimatesChargedForChildren();
+}
 
 // _____________________________________________________________________________
 bool Join::knownEmptyResult() { return impl_->knownEmptyResult(); }

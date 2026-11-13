@@ -16,7 +16,7 @@
 #include <thread>
 
 #include "util/Exception.h"
-#include "util/MemorySize/MemorySize.h"
+#include "util/memorySize/MemorySize.h"
 
 // The tuning knobs of the block merge together with their defaults. These are
 // shared configuration and not a policy, which is why they live in a header of

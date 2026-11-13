@@ -14,7 +14,6 @@
 
 #include "backports/asio.h"
 #include "backports/three_way_comparison.h"
-#include "engine/QueryPlanningCostFactors.h"
 #include "engine/Result.h"
 #include "engine/RuntimeInformation.h"
 #include "global/Id.h"
@@ -150,10 +149,6 @@ class QueryExecutionContext
   }
 
   void clearCacheUnpinnedOnly() { getQueryTreeCache().clearUnpinnedOnly(); }
-
-  [[nodiscard]] double getCostFactor(const std::string& key) const {
-    return _costFactors.getCostFactor(key);
-  }
 
   const ad_utility::AllocatorWithLimit<Id>& getAllocator() const {
     return _allocator;
@@ -307,7 +302,6 @@ class QueryExecutionContext
   QueryResultCache* const _subtreeCache;
   // allocators are copied but hold shared state
   ad_utility::AllocatorWithLimit<Id> _allocator;
-  QueryPlanningCostFactors _costFactors;
   std::function<void(std::string)> updateCallback_;
 
   // Cache the state of both runtime parameters to reduce the contention of the

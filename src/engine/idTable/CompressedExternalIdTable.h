@@ -25,17 +25,16 @@
 #include "engine/CallFixedSize.h"
 #include "engine/idTable/AsyncIdTablePusher.h"
 #include "engine/idTable/ExternalIdTableSorterMergeConfig.h"
+#include "engine/idTable/IdColumnByteIO.h"
 #include "engine/idTable/IdTable.h"
 #include "util/AsyncStream.h"
 #include "util/CancellationHandle.h"
-#include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/ExceptionHandling.h"
 #include "util/File.h"
 #include "util/GlobalExecutor.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
 #include "util/Log.h"
-#include "util/MemorySize/MemorySize.h"
 #include "util/NoCopyNoMove.h"
 #include "util/ParallelExecutor.h"
 #include "util/Synchronized.h"
@@ -43,6 +42,8 @@
 #include "util/UniqueCleanup.h"
 #include "util/Views.h"
 #include "util/blockSort/BlockIndirectSort.h"
+#include "util/compressionUsingZstd/ZstdWrapper.h"
+#include "util/memorySize/MemorySize.h"
 #include "util/parallelBlockMerge/ParallelBlockMerge.h"
 #include "util/views/ChunkedIotaView.h"
 
@@ -239,10 +240,10 @@ class CompressedExternalIdTableWriter {
     size_t lower = blockIdx * layout.blockSize_;
     size_t upper = std::min(lower + layout.blockSize_, column.size());
     AD_CORRECTNESS_CHECK(lower < upper);
-    static_assert(sizeof(column[0]) == BYTES_PER_ID_COLUMN_ENTRY);
     auto uncompressedSize = (upper - lower) * BYTES_PER_ID_COLUMN_ENTRY;
-    auto compressed =
-        ZstdWrapper::compress(column.data() + lower, uncompressedSize);
+    auto compressed = idColumnByteIO::encode(
+        column.subspan(lower, upper - lower),
+        [](const auto& chunks) { return ZstdWrapper::compressChunks(chunks); });
     auto offset = nextOffset_.fetch_add(static_cast<off_t>(compressed.size()));
     // NOTE: This throws if not all the bytes could be written.
     file_.rlock()->write(compressed.data(), compressed.size(), offset);
@@ -258,12 +259,10 @@ class CompressedExternalIdTableWriter {
   template <size_t N = 0>
   std::vector<InputRangeTypeErased<IdTableStatic<N>>> getAllGenerators() {
     file_.wlock()->flush();
-    std::vector<InputRangeTypeErased<IdTableStatic<N>>> result;
-    result.reserve(startOfSingleIdTables_.size());
-    for (auto i : ql::views::iota(0u, startOfSingleIdTables_.size())) {
-      result.push_back(makeGeneratorForIdTable<N>(i));
-    }
-    return result;
+    return ad_utility::integerRange(startOfSingleIdTables_.size()) |
+           ql::views::transform(
+               [this](size_t i) { return makeGeneratorForIdTable<N>(i); }) |
+           ::ranges::to_vector;
   }
 
   // The number of `IdTable`s (= presorted runs) that have been written.
@@ -401,10 +400,9 @@ class CompressedExternalIdTableWriter {
     AD_CORRECTNESS_CHECK(numBytesRead >= 0 &&
                          static_cast<size_t>(numBytesRead) ==
                              metaData.compressedSize_);
-    auto numBytesDecompressed =
-        ZstdWrapper::decompressToBuffer(compressed.data(), compressed.size(),
-                                        col.data(), metaData.uncompressedSize_);
-    AD_CORRECTNESS_CHECK(numBytesDecompressed == metaData.uncompressedSize_);
+    idColumnByteIO::decode(col, [&compressed](const auto& buffers) {
+      ZstdWrapper::decompressChunks(compressed, buffers);
+    });
   }
 
   // Allocate and size an IdTableStatic for the block at `blockIdx`.
