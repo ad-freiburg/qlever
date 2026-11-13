@@ -23,6 +23,7 @@
 #include "backports/type_traits.h"
 #include "util/ConstexprMap.h"
 #include "util/ConstexprUtils.h"
+#include "util/DefaultedHash.h"
 #include "util/Exception.h"
 
 namespace ad_utility {
@@ -65,10 +66,7 @@ class MemorySize {
                                                         memoryInBytes_)
 
   // Hashing.
-  template <typename H>
-  friend H AbslHashValue(H h, const MemorySize& mem) {
-    return H::combine(std::move(h), mem.memoryInBytes_);
-  }
+  QL_DEFINE_DEFAULTED_HASH(MemorySize, memoryInBytes_)
 
   /*
   Factory functions for creating an instance of this class with the wanted

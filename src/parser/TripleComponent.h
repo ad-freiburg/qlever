@@ -20,6 +20,7 @@
 #include "rdfTypes/RdfEscaping.h"
 #include "rdfTypes/Variable.h"
 #include "util/Date.h"
+#include "util/DefaultedHash.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
 
@@ -146,11 +147,7 @@ class TripleComponent {
   /// this overload would also be eligible for the contained types that are
   /// implicitly convertible to `TripleComponent` which would lead to strange
   /// bugs.
-  CPP_template(typename H, typename TC)(
-      requires ql::concepts::same_as<TC, TripleComponent>)
-  friend H AbslHashValue(H h, const TC& tc) {
-    return H::combine(std::move(h), tc._variant);
-  }
+  QL_DEFINE_DEFAULTED_HASH(TripleComponent, _variant)
 
   /// Check which type the underlying variants hold.
   [[nodiscard]] bool isString() const {

@@ -15,6 +15,7 @@
 #include "backports/three_way_comparison.h"
 #include "rdfTypes/Literal.h"
 #include "util/BitUtils.h"
+#include "util/DefaultedHash.h"
 #include "util/SourceLocation.h"
 
 /// Exception type for construction of GeoPoints that have invalid values
@@ -64,11 +65,7 @@ class GeoPoint {
  public:
   using T = uint64_t;
 
-  CPP_template(typename H, typename G)(
-      requires ql::concepts::same_as<G, GeoPoint>)
-  friend H AbslHashValue(H h, const G& g) {
-    return H::combine(std::move(h), g.lat_, g.lng_);
-  }
+  QL_DEFINE_DEFAULTED_HASH(GeoPoint, lat_, lng_)
 
   // A GeoPoint stores two values (lat and lng), each quantized to 30 bits.
   // How the two 30-bit values are arranged in the 60 data bits depends on the

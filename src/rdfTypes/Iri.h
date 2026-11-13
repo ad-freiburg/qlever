@@ -18,6 +18,7 @@
 
 #include "backports/concepts.h"
 #include "backports/three_way_comparison.h"
+#include "util/DefaultedHash.h"
 #include "util/Exception.h"
 #include "util/ParsedUri.h"
 
@@ -63,11 +64,7 @@ class BasicIri {
   // A default constructed IRI is empty.
   BasicIri() = default;
 
-  CPP_template(typename H, typename I)(
-      requires ql::concepts::same_as<I, BasicIri>)
-  friend H AbslHashValue(H h, const I& iri) {
-    return H::combine(std::move(h), iri.iri_);
-  }
+  QL_DEFINE_DEFAULTED_HASH(BasicIri, iri_)
 
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(BasicIri, iri_)
 

@@ -358,6 +358,8 @@ addLinkAndDiscoverTest(SetOfIntervalsTest sparqlExpressions)
 
 addLinkAndDiscoverTestNoLibs(TypeTraitsTest)
 
+addLinkAndDiscoverTestNoLibs(DefaultedHashTest)
+
 addLinkAndDiscoverTest(SparqlExpressionTest sparqlExpressions index engine)
 
 addLinkAndDiscoverTest(SparqlExpressionMemberFunctionsTest sparqlExpressions index engine)

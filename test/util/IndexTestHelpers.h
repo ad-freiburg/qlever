@@ -27,6 +27,7 @@
 #include "index/Index.h"
 #include "index/vocabulary/EncodedIriManager.h"
 #include "index/vocabulary/EncodedIriPattern.h"
+#include "util/DefaultedHash.h"
 #include "util/Executor.h"
 #include "util/memorySize/MemorySize.h"
 
@@ -169,18 +170,16 @@ struct TestIndexConfig {
       : turtleInput{std::move(turtleKgInput)} {}
 
   // Hashing.
-  template <typename H>
-  friend H AbslHashValue(H h, const TestIndexConfig& c) {
-    return H::combine(
-        std::move(h), c.turtleInput, c.loadAllPermutations, c.usePatterns,
-        c.usePrefixCompression, c.rowsPerBlock, c.createTextIndex,
-        c.addWordsFromLiterals, c.contentsOfWordsFileAndDocsfile,
-        c.parserBufferSize, c.scoringMetric, c.bAndKParam, c.indexType,
-        c.encodedPrefixesWithoutAngleBrackets, c.encodedIriPatterns,
-        c.addHasWordTriples, c.hasWordRestrictPredicates, c.secondaryVocabWords,
-        c.numThreads, c.parseInParallel, c.additionalSettings,
-        c.geoPointEncoding.value());
-  }
+  QL_DEFINE_DEFAULTED_HASH(TestIndexConfig, turtleInput, loadAllPermutations,
+                           usePatterns, usePrefixCompression, rowsPerBlock,
+                           createTextIndex, addWordsFromLiterals,
+                           contentsOfWordsFileAndDocsfile, parserBufferSize,
+                           scoringMetric, bAndKParam, indexType, vocabularyType,
+                           encodedPrefixesWithoutAngleBrackets,
+                           encodedIriPatterns, addHasWordTriples,
+                           hasWordNormalization, hasWordRestrictPredicates,
+                           secondaryVocabWords, numThreads, parseInParallel,
+                           additionalSettings, geoPointEncoding)
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(
       TestIndexConfig, turtleInput, loadAllPermutations, usePatterns,
       usePrefixCompression, rowsPerBlock, createTextIndex, addWordsFromLiterals,

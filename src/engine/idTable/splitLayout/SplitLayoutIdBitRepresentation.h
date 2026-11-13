@@ -21,6 +21,7 @@
 
 #include "backports/three_way_comparison.h"
 #include "util/BitUtils.h"
+#include "util/DefaultedHash.h"
 
 namespace columnBasedIdTable::splitLayout {
 
@@ -109,10 +110,9 @@ struct SplitLayoutIdBitRepresentation {
 
   // Enable hashing in abseil (required by `ad_utility::HashSet` and
   // `ad_utility::HashMap`).
-  template <typename H>
-  friend H AbslHashValue(H h, const SplitLayoutIdBitRepresentation& rep) {
-    return H::combine(std::move(h), rep.datatype_, rep.payload_);
-  }
+  QL_DEFINE_DEFAULTED_HASH_OF_SUBSET(SplitLayoutIdBitRepresentation,
+                                     QL_HASHED(payload_, datatype_),
+                                     QL_NOT_HASHED(padding_))
 
   // The bit representation can be serialized by simply copying its bytes
   // (including the zeroed padding).

@@ -21,6 +21,7 @@
 #include "backports/three_way_comparison.h"
 #include "index/vocabulary/NibbleEncoding.h"
 #include "util/BitUtils.h"
+#include "util/DefaultedHash.h"
 #include "util/Exception.h"
 #include "util/json.h"
 
@@ -61,10 +62,7 @@ struct FixedBitRange {
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(FixedBitRange, begin_, end_,
                                               value_)
 
-  template <typename H>
-  friend H AbslHashValue(H h, const FixedBitRange& range) {
-    return H::combine(std::move(h), range.begin_, range.end_, range.value_);
-  }
+  QL_DEFINE_DEFAULTED_HASH(FixedBitRange, begin_, end_, value_)
 };
 
 // The way in which the decimal number of a `Part` (see below) is encoded.
@@ -114,11 +112,7 @@ struct Part {
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Part, numBits_, fixedBitRanges_,
                                               suffix_, encoding_)
 
-  template <typename H>
-  friend H AbslHashValue(H h, const Part& part) {
-    return H::combine(std::move(h), part.numBits_, part.fixedBitRanges_,
-                      part.suffix_, part.encoding_);
-  }
+  QL_DEFINE_DEFAULTED_HASH(Part, numBits_, fixedBitRanges_, suffix_, encoding_)
 };
 
 // The pattern of a family of IRIs that are all encoded with the same tag: a
@@ -155,10 +149,7 @@ struct Pattern {
 
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Pattern, prefix_, parts_)
 
-  template <typename H>
-  friend H AbslHashValue(H h, const Pattern& pattern) {
-    return H::combine(std::move(h), pattern.prefix_, pattern.parts_);
-  }
+  QL_DEFINE_DEFAULTED_HASH(Pattern, prefix_, parts_)
 };
 
 // The pattern for the simple case of a fixed prefix that is followed by up to
