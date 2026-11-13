@@ -271,8 +271,8 @@ class GraphStoreProtocol {
  public:
   // Every Graph Store Protocol request has equivalent SPARQL Query or Update.
   // Transform the Graph Store Protocol request into it's equivalent Query or
-  // Update. The `allocator` is used for parsing the SPARQL that is created for
-  // some of the requests.
+  // Update. The `allocator` is used for the triples of the payload and for
+  // parsing the SPARQL that is created for some of the requests.
   CPP_template_2(typename RequestT)(
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
   static std::vector<ParsedQuery> transformGraphStoreProtocol(

@@ -13,7 +13,6 @@
 using namespace updateClause;
 using V = Variable;
 
-// _____________________________________________________________________________
 // Test that the constructor that only takes an allocator creates empty
 // `UpdateTriples`.
 TEST(UpdateTriples, ConstructorWithAllocator) {

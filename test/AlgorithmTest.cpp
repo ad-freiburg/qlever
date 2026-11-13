@@ -152,7 +152,6 @@ TEST(Algorithm, AppendVector) {
   ASSERT_TRUE(v3[1].empty());
 }
 
-// _____________________________________________________________________________
 // Test that `appendVector` works for vectors with an allocator, for different
 // allocators of the destination and the source, and for moving from the source.
 TEST(Algorithm, AppendVectorWithAllocator) {
@@ -199,7 +198,6 @@ TEST(Algorithm, Transform) {
   ASSERT_TRUE(ql::ranges::all_of(v, &std::string::empty));
 }
 
-// _____________________________________________________________________________
 // Test that `transform` with an allocator returns a `qlm::vector` that
 // allocates its memory via this allocator.
 TEST(Algorithm, TransformWithAllocator) {

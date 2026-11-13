@@ -460,7 +460,6 @@ TEST(GraphStoreProtocolTest, convertTriples) {
                                    iri("<g>"), iri("<a>")}});
 }
 
-// _____________________________________________________________________________________________
 // Test that the triples of a POST request count towards the memory limit of
 // the allocator that is passed to `transformGraphStoreProtocol`. The memory of
 // the result has to grow with the number of triples by at least the size of

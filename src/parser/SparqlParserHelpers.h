@@ -29,8 +29,8 @@ struct ParserAndVisitor : public ParserAndVisitorBase<SparqlQleverVisitor> {
   using Base = ParserAndVisitorBase<SparqlQleverVisitor>;
 
  public:
-  // The `allocator` is used for the containers that are only needed during
-  // parsing, see `SparqlQleverVisitor`.
+  // The `allocator` is used for the containers of the visitor and for the
+  // triples of an update in the result, see `SparqlQleverVisitor`.
   ParserAndVisitor(
       ad_utility::BlankNodeManager* blankNodeManager,
       const EncodedIriManager* encodedIriManager,

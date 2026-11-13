@@ -21,8 +21,8 @@ class SparqlParser {
   // `datasets` are fixed datasets as per the SPARQL protocol. These cannot be
   // overwritten from inside the query (using `FROM`) or update (using `USING`).
   // Passing no datasets means that the datasets are set normally from the
-  // query or update. The `allocator` is used for the containers that are only
-  // needed during parsing (as opposed to the ones in the result).
+  // query or update. The `allocator` is used for the containers of the parser
+  // and for the triples of an update in the result.
   static ParsedQuery parseQuery(
       const EncodedIriManager* encodedIriManager,
       qlever::Allocator<Id> allocator, std::string query,
