@@ -43,9 +43,9 @@ bool Distinct::isDistinctByImpl(
 }
 
 // _____________________________________________________________________________
-string Distinct::getCacheKeyImpl() const {
-  return absl::StrCat("DISTINCT (", subtree_->getCacheKey(), ") (",
-                      absl::StrJoin(keepIndices_, ","), ")");
+qlm::string Distinct::getCacheKeyImpl() const {
+  return qlm::StrCat(allocator(), "DISTINCT (", subtree_->getCacheKey(), ") (",
+                     qlm::StrJoin(allocator(), keepIndices_, ","), ")");
 }
 
 // _____________________________________________________________________________

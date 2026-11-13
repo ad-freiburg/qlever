@@ -217,7 +217,7 @@ class PathSearch : public Operation {
     return variableColumns_.at(targetVar).columnIndex_;
   }
 
-  std::string getCacheKeyImpl() const override;
+  qlm::string getCacheKeyImpl() const override;
   std::string getDescriptor() const override;
   size_t getResultWidth() const override;
 

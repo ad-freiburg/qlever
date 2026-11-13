@@ -322,6 +322,8 @@ addLinkAndDiscoverTest(VectorWithMemoryLimitTest)
 
 addLinkAndDiscoverTest(ContainersWithAllocatorTest)
 
+addLinkAndDiscoverTest(StringWithAllocatorTest)
+
 addLinkAndDiscoverTestNoLibs(AllocatorPmrTest)
 
 addLinkAndDiscoverTestNoLibs(AllocateSharedTest)

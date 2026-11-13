@@ -42,7 +42,7 @@ class CountAvailablePredicates : public Operation {
                            Variable predicateVariable, Variable countVariable);
 
  protected:
-  [[nodiscard]] std::string getCacheKeyImpl() const override;
+  [[nodiscard]] qlm::string getCacheKeyImpl() const override;
 
  public:
   [[nodiscard]] std::string getDescriptor() const override;

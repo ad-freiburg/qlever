@@ -22,8 +22,8 @@ class NeutralElementOperation : public Operation {
 
   // The individual implementation of `getCacheKey` (see above) that has to be
   // customized by every child class.
-  [[nodiscard]] std::string getCacheKeyImpl() const override {
-    return "Neutral Element";
+  [[nodiscard]] qlm::string getCacheKeyImpl() const override {
+    return qlm::string{"Neutral Element", allocator()};
   }
 
  public:

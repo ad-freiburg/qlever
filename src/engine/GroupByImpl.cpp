@@ -360,7 +360,7 @@ GroupByImpl::GroupByImpl(QueryExecutionContext* qec, bool isImplicitGroupBy,
 }
 
 // _____________________________________________________________________________
-std::string GroupByImpl::getCacheKeyImpl() const {
+qlm::string GroupByImpl::getCacheKeyImpl() const {
   const auto& varMap = getInternallyVisibleVariableColumns();
   auto varMapInput = _subtree->getVariableColumns();
 
@@ -378,7 +378,7 @@ std::string GroupByImpl::getCacheKeyImpl() const {
     }
   }
 
-  std::ostringstream os;
+  qlm::ostringstream os{allocator()};
   os << (isImplicitGroupBy_ ? "IMPLICIT_GROUP_BY " : "GROUP_BY ");
   for (const auto& var : _groupByVariables) {
     os << varMap.at(var).columnIndex_ << ", ";

@@ -52,9 +52,10 @@ qlm::vector<QueryExecutionTree*> StripColumns::getChildrenImpl() const {
 }
 
 // _____________________________________________________________________________
-std::string StripColumns::getCacheKeyImpl() const {
-  return absl::StrCat("StripColumns(", absl::StrJoin(subset_, ","), " - ",
-                      child_->getCacheKey(), ")");
+qlm::string StripColumns::getCacheKeyImpl() const {
+  return qlm::StrCat(allocator(), "StripColumns(",
+                     qlm::StrJoin(allocator(), subset_, ","), " - ",
+                     child_->getCacheKey(), ")");
 }
 
 // _____________________________________________________________________________

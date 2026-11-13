@@ -26,8 +26,8 @@ CountAvailablePredicates::CountAvailablePredicates(
       countVariable_(std::move(countVariable)) {}
 
 // _____________________________________________________________________________
-std::string CountAvailablePredicates::getCacheKeyImpl() const {
-  std::ostringstream os;
+qlm::string CountAvailablePredicates::getCacheKeyImpl() const {
+  qlm::ostringstream os{allocator()};
   if (subtree_ == nullptr) {
     os << "COUNT_AVAILABLE_PREDICATES for all entities";
   } else {

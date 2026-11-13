@@ -63,7 +63,7 @@ class ExplicitIdTableOperation : public Operation {
   size_t sizeEstimate() const { return idTableView().numRows(); }
 
   // Overridden methods from the `Operation` base class.
-  std::string getCacheKeyImpl() const override;
+  qlm::string getCacheKeyImpl() const override;
   std::string getDescriptor() const override;
   size_t getResultWidth() const override;
   size_t getCostEstimate() override;

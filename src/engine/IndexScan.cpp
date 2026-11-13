@@ -135,8 +135,8 @@ IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
 }
 
 // _____________________________________________________________________________
-string IndexScan::getCacheKeyImpl() const {
-  std::ostringstream os;
+qlm::string IndexScan::getCacheKeyImpl() const {
+  qlm::ostringstream os{allocator()};
   // This string only represents the type of permutation, like "SPO".
   auto permutationString = Permutation::toString(permutation().permutation());
 
@@ -159,11 +159,12 @@ string IndexScan::getCacheKeyImpl() const {
   os << " on index " << permutation().onDiskBase();
   if (!additionalColumns_.empty()) {
     os << " Additional Columns: ";
-    os << absl::StrJoin(additionalColumns(), " ");
+    os << qlm::StrJoin(allocator(), additionalColumns(), " ");
   }
   if (!constantColumns_.empty()) {
     os << " Constant Columns: ";
-    os << absl::StrJoin(
+    os << qlm::StrJoin(
+        allocator(),
         constantColumns_ | ql::views::keys | ql::views::transform(&Id::getBits),
         " ");
   }
@@ -173,7 +174,7 @@ string IndexScan::getCacheKeyImpl() const {
 
   if (varsToKeep_.has_value()) {
     os << " column subset "
-       << absl::StrJoin(getSubsetForStrippedColumns(), ",");
+       << qlm::StrJoin(allocator(), getSubsetForStrippedColumns(), ",");
   }
   return std::move(os).str();
 }

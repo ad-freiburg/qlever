@@ -32,8 +32,8 @@ class StallForeverOperation : public Operation {
   qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
     return qlm::vector<QueryExecutionTree*>{allocator()};
   }
-  std::string getCacheKeyImpl() const override {
-    return "StallForeverOperation";
+  qlm::string getCacheKeyImpl() const override {
+    return qlm::string{"StallForeverOperation", allocator()};
   }
   std::string getDescriptor() const override {
     return "StallForeverOperationDescriptor";
@@ -76,7 +76,9 @@ class ShallowParentOperation : public Operation {
   explicit ShallowParentOperation(std::shared_ptr<QueryExecutionTree> child)
       : Operation{child->getRootOperation()->getExecutionContext()},
         child_{std::move(child)} {}
-  std::string getCacheKeyImpl() const override { return "ParentOperation"; }
+  qlm::string getCacheKeyImpl() const override {
+    return qlm::string{"ParentOperation", allocator()};
+  }
   std::string getDescriptor() const override {
     return "ParentOperationDescriptor";
   }
@@ -121,9 +123,9 @@ class AlwaysFailOperation : public Operation {
   qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
     return qlm::vector<QueryExecutionTree*>{allocator()};
   }
-  std::string getCacheKeyImpl() const override {
+  qlm::string getCacheKeyImpl() const override {
     // Because this operation always fails, it should never be cached.
-    return "AlwaysFailOperationCacheKey";
+    return qlm::string{"AlwaysFailOperationCacheKey", allocator()};
   }
   std::string getDescriptor() const override {
     return "AlwaysFailOperationDescriptor";
@@ -176,7 +178,7 @@ class CustomGeneratorOperation : public Operation {
   qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
     return qlm::vector<QueryExecutionTree*>{allocator()};
   }
-  std::string getCacheKeyImpl() const override { AD_FAIL(); }
+  qlm::string getCacheKeyImpl() const override { AD_FAIL(); }
   std::string getDescriptor() const override {
     return "CustomGeneratorOperationDescriptor";
   }

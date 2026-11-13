@@ -487,7 +487,7 @@ class MaterializedViewsManager {
   //  with the given cache key. The `VariableToColumnMap` needs to be provided
   //  to apply the view's column permutation.
   std::shared_ptr<IndexScan> makeIndexScan(
-      QueryExecutionContext* qec, const std::string& cacheKey,
+      QueryExecutionContext* qec, std::string_view cacheKey,
       const VariableToColumnMap& varToCol) const;
 
   // Write a `MaterializedView` given a valid `name` (consisting only of

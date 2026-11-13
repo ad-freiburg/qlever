@@ -331,7 +331,7 @@ class IndexScan final : public Operation {
   // is not a lot of redundant triples in different graphs in the data set.
   std::pair<bool, size_t> computeSizeEstimate() const;
 
-  std::string getCacheKeyImpl() const override;
+  qlm::string getCacheKeyImpl() const override;
 
   // If `ScanSpecAndBlocks` contains prefiltered `BlockMetadataRanges`, the
   // result of this `IndexScan` is only a subset of the result associated with

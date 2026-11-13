@@ -30,7 +30,7 @@ class TextIndexScanForWord : public Operation {
 
   const std::string& word() const { return config_.word_; }
 
-  std::string getCacheKeyImpl() const override;
+  qlm::string getCacheKeyImpl() const override;
 
   std::string getDescriptor() const override;
 

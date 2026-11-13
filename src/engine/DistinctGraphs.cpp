@@ -39,9 +39,9 @@ std::unique_ptr<Operation> DistinctGraphs::cloneImpl() const {
 }
 
 // ____________________________________________________________________________
-std::string DistinctGraphs::getCacheKeyImpl() const {
-  return absl::StrCat("DistinctGraphs includeDefaultGraph=",
-                      includeDefaultGraph_ ? "true" : "false");
+qlm::string DistinctGraphs::getCacheKeyImpl() const {
+  return qlm::StrCat(allocator(), "DistinctGraphs includeDefaultGraph=",
+                     includeDefaultGraph_ ? "true" : "false");
 }
 
 // ____________________________________________________________________________

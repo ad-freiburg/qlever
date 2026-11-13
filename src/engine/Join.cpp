@@ -71,7 +71,7 @@ bool Join::columnOriginatesFromGraphOrUndef(const Variable& variable) const {
 }
 
 // _____________________________________________________________________________
-string Join::getCacheKeyImpl() const { return impl_->getCacheKeyImpl(); }
+qlm::string Join::getCacheKeyImpl() const { return impl_->getCacheKeyImpl(); }
 
 // _____________________________________________________________________________
 bool Join::isDeterministicImpl() const { return impl_->isDeterministicImpl(); }

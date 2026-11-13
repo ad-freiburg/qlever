@@ -710,7 +710,7 @@ qet-width: 3
 }
 )xxx");
 
-  auto actual = strip(qet->getCacheKey());
+  auto actual = strip(std::string{qet->getCacheKey()});
 
   if (actual != possible1 && actual != possible2 && actual != possible3 &&
       actual != possible4 && actual != possible5) {

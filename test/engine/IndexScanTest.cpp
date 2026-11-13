@@ -1868,7 +1868,7 @@ TEST(IndexScanTest, StripColumns) {
         baseScan.makeTreeWithStrippedColumns(varsWithNonExistent).value();
     EXPECT_EQ(subsetScan->getResultWidth(), varsToKeep.size());
 
-    auto [_, wasNew] = cacheKeys.insert(subsetScan->getCacheKey());
+    auto [_, wasNew] = cacheKeys.insert(std::string{subsetScan->getCacheKey()});
     EXPECT_TRUE(wasNew);
 
     using namespace ::testing;

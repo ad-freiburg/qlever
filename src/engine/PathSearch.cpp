@@ -138,8 +138,8 @@ qlm::vector<QueryExecutionTree*> PathSearch::getChildrenImpl() const {
 }
 
 // _____________________________________________________________________________
-std::string PathSearch::getCacheKeyImpl() const {
-  std::ostringstream os;
+qlm::string PathSearch::getCacheKeyImpl() const {
+  qlm::ostringstream os{allocator()};
   os << "PathSearch:\n";
   os << config_.toString();
 

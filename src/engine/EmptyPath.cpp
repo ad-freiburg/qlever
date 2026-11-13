@@ -157,8 +157,8 @@ std::string EmptyPath::getDescriptor() const {
 size_t EmptyPath::getResultWidth() const { return resultWidth_; }
 
 // _____________________________________________________________________________
-std::string EmptyPath::getCacheKeyImpl() const {
-  std::ostringstream os;
+qlm::string EmptyPath::getCacheKeyImpl() const {
+  qlm::ostringstream os{allocator()};
   os << "EMPTY PATH";
   if (graphVariable_.has_value()) {
     os << " with graph column";

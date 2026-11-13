@@ -63,8 +63,8 @@ qlm::vector<QueryExecutionTree*> ExplicitIdTableOperation::getChildrenImpl()
 }
 
 // _____________________________________________________________________________
-std::string ExplicitIdTableOperation::getCacheKeyImpl() const {
-  return cacheKey_;
+qlm::string ExplicitIdTableOperation::getCacheKeyImpl() const {
+  return qlm::string{cacheKey_, allocator()};
 }
 
 // _____________________________________________________________________________

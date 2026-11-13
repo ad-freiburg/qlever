@@ -20,6 +20,7 @@
 #include "util/AllocateShared.h"
 #include "util/ContainersWithAllocator.h"
 #include "util/HashSet.h"
+#include "util/StringWithAllocator.h"
 
 // Strongly typed enum for controlling whether stripped variables are explicitly
 // stored as stripped in this class, or completely hidden. (this is used to
@@ -34,7 +35,7 @@ class QueryExecutionTree {
   QueryExecutionTree(QueryExecutionContext* qec,
                      std::shared_ptr<Operation> operation);
 
-  std::string getCacheKey() const;
+  const qlm::string& getCacheKey() const;
 
   const QueryExecutionContext* getQec() const { return qec_; }
 
@@ -294,7 +295,7 @@ class QueryExecutionTree {
   std::shared_ptr<Operation> rootOperation_ =
       nullptr;  // Owned child. Will be deleted at deconstruction.
   std::optional<size_t> sizeEstimate_ = std::nullopt;
-  std::optional<std::string> cacheKey_ = std::nullopt;
+  std::optional<qlm::string> cacheKey_ = std::nullopt;
   std::optional<size_t> resultWidth_ = std::nullopt;
   bool isRoot_ = false;  // used to distinguish the root from child
                          // operations/subtrees when pinning only the result.

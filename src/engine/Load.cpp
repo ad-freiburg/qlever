@@ -20,12 +20,13 @@ Load::Load(QueryExecutionContext* qec, parsedQuery::Load loadClause,
       getResultFunction_(std::move(getResultFunction)) {}
 
 // _____________________________________________________________________________
-std::string Load::getCacheKeyImpl() const {
+qlm::string Load::getCacheKeyImpl() const {
   if (getRuntimeParameter<&RuntimeParameters::cacheLoadResults_>()) {
-    return absl::StrCat("LOAD ", loadClause_.iri_.toStringRepresentation(),
-                        loadClause_.silent_ ? " SILENT" : "");
+    return qlm::StrCat(allocator(), "LOAD ",
+                       loadClause_.iri_.toStringRepresentation(),
+                       loadClause_.silent_ ? " SILENT" : "");
   }
-  return absl::StrCat("LOAD ", cacheBreaker_);
+  return qlm::StrCat(allocator(), "LOAD ", cacheBreaker_);
 }
 
 // _____________________________________________________________________________

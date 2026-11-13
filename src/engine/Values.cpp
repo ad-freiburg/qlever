@@ -34,9 +34,9 @@ std::shared_ptr<QueryExecutionTree> makeValuesForSingleValue(
 }
 
 // ____________________________________________________________________________
-std::string Values::getCacheKeyImpl() const {
-  return absl::StrCat("VALUES (", parsedValues_.variablesToString(), ") { ",
-                      parsedValues_.valuesToString(), " }");
+qlm::string Values::getCacheKeyImpl() const {
+  return qlm::StrCat(allocator(), "VALUES (", parsedValues_.variablesToString(),
+                     ") { ", parsedValues_.valuesToString(), " }");
 }
 
 // ____________________________________________________________________________

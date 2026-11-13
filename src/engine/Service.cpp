@@ -45,15 +45,15 @@ bool Service::isDeterministicImpl() const {
 }
 
 // ____________________________________________________________________________
-std::string Service::getCacheKeyImpl() const {
+qlm::string Service::getCacheKeyImpl() const {
   if (getRuntimeParameter<&RuntimeParameters::cacheServiceResults_>()) {
-    return absl::StrCat(
-        "SERVICE ", parsedServiceClause_.silent_ ? "SILENT " : "",
+    return qlm::StrCat(
+        allocator(), "SERVICE ", parsedServiceClause_.silent_ ? "SILENT " : "",
         parsedServiceClause_.serviceIri_.toStringRepresentation(), " {\n",
         parsedServiceClause_.prologue_, "\n",
         parsedServiceClause_.graphPatternAsString_, "\n}");
   }
-  return absl::StrCat("SERVICE ", cacheBreaker_);
+  return qlm::StrCat(allocator(), "SERVICE ", cacheBreaker_);
 }
 
 // ____________________________________________________________________________
@@ -692,7 +692,7 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
         getRuntimeParameter<&RuntimeParameters::serviceMaxValueRows_>();
     if (resultIsSmall) {
       service->siblingInfo_.emplace(siblingResult, std::move(siblingVariables),
-                                    sibling->getCacheKey());
+                                    std::string{sibling->getCacheKey()});
     }
     sibling->precomputedResultBecauseSiblingOfService() =
         std::move(siblingResult);
@@ -749,7 +749,7 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
   service->siblingInfo_.emplace(
       service->makeShared<Result>(std::move(siblingPair),
                                   siblingResult->sortedBy()),
-      std::move(siblingVariables), sibling->getCacheKey());
+      std::move(siblingVariables), std::string{sibling->getCacheKey()});
 
   sibling->precomputedResultBecauseSiblingOfService() =
       service->siblingInfo_->precomputedResult_;

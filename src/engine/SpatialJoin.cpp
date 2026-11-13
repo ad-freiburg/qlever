@@ -170,9 +170,9 @@ qlm::vector<QueryExecutionTree*> SpatialJoin::getChildrenImpl() const {
 }
 
 // ____________________________________________________________________________
-std::string SpatialJoin::getCacheKeyImpl() const {
+qlm::string SpatialJoin::getCacheKeyImpl() const {
   if (childLeft_ && childRight_) {
-    std::ostringstream os;
+    qlm::ostringstream os{allocator()};
     // This includes all attributes that change the result
 
     // Children
@@ -237,7 +237,7 @@ std::string SpatialJoin::getCacheKeyImpl() const {
     // the result.
     return std::move(os).str();
   } else {
-    return "incomplete SpatialJoin class";
+    return qlm::string{"incomplete SpatialJoin class", allocator()};
   }
 }
 
