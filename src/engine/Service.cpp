@@ -542,11 +542,14 @@ void Service::throwErrorWithContext(std::string_view msg,
   const ad_utility::httpUtils::Url serviceUrl{
       parsedServiceClause_.serviceIri_.getContent()};
 
-  throw std::runtime_error(absl::StrCat(
+  // Throw the message with invalid UTF-8 replaced (the quoted bytes of the
+  // response may end within a multi-byte character, and the server could then
+  // not serialize the message as JSON).
+  throw std::runtime_error(ad_utility::utf8ReplaceInvalid(absl::StrCat(
       "Error while executing a SERVICE request to <", serviceUrl.asString(),
       ">: ", msg, ". First 100 bytes of the response: '", first100,
       (last100.empty() ? "'"
-                       : absl::StrCat(", last 100 bytes: '", last100, "'"))));
+                       : absl::StrCat(", last 100 bytes: '", last100, "'")))));
 }
 
 // ____________________________________________________________________________

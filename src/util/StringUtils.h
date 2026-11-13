@@ -104,6 +104,14 @@ std::pair<size_t, std::string_view> getUTF8Prefix(std::string_view s,
 // `start`-th codepoint to the end of the string.
 std::string_view getUTF8Substring(const std::string_view str, size_t start);
 
+// Return `s` with each byte that is not part of a valid UTF-8 sequence replaced
+// by the replacement character U+FFFD. This function does not depend on ICU.
+//
+// NOTE: This is used for bytes that come from outside (e.g. the response of a
+// remote endpoint) and that may be cut within a multi-byte character, or not be
+// UTF-8 at all.
+std::string utf8ReplaceInvalid(std::string_view s);
+
 //! Gets the last part of a string that is somehow split by the given separator.
 std::string getLastPartOfString(const std::string& text, const char separator);
 

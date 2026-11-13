@@ -126,37 +126,47 @@ void utf8EncodeCodepoint(uint32_t codepoint, std::string& output) {
   }
 }
 
+namespace {
+// Return the length of the UTF-8 sequence that starts at `sv[i]`, or 0 if it
+// is malformed.
+//
+// NOTE: This only requires the byte structure of UTF-8 and no Unicode tables,
+// so it is ICU-free. Malformed UTF-8 (invalid lead or continuation bytes,
+// overlong encodings, surrogates, values beyond U+10FFFF) is rejected exactly
+// like by ICU's `U8_NEXT`.
+size_t validUtf8SequenceLength(std::string_view sv, size_t i) {
+  auto lead = static_cast<unsigned char>(sv[i]);
+  // The length of the sequence and the payload bits of the lead byte.
+  size_t sequenceLength = lead < 0x80             ? 1
+                          : (lead & 0xE0) == 0xC0 ? 2
+                          : (lead & 0xF0) == 0xE0 ? 3
+                          : (lead & 0xF8) == 0xF0 ? 4
+                                                  : 0;
+  static constexpr uint32_t leadMask[] = {0, 0x7F, 0x1F, 0x0F, 0x07};
+  bool valid = sequenceLength > 0 && i + sequenceLength <= sv.size();
+  uint32_t codepoint = valid ? lead & leadMask[sequenceLength] : 0;
+  for (size_t j = 1; valid && j < sequenceLength; ++j) {
+    auto continuation = static_cast<unsigned char>(sv[i + j]);
+    valid = (continuation & 0xC0) == 0x80;
+    codepoint = (codepoint << 6) | (continuation & 0x3F);
+  }
+  static constexpr uint32_t minimumBySequenceLength[] = {0, 0, 0x80, 0x800,
+                                                         0x10000};
+  valid = valid && codepoint >= minimumBySequenceLength[sequenceLength] &&
+          codepoint <= 0x10FFFF &&
+          !(codepoint >= 0xD800 && codepoint <= 0xDFFF);
+  return valid ? sequenceLength : 0;
+}
+}  // namespace
+
 // ___________________________________________________________________________
 std::pair<size_t, std::string_view> getUTF8Prefix(std::string_view sv,
                                                   size_t prefixLength) {
-  // Counting codepoints only requires the byte structure of UTF-8 and no
-  // Unicode tables, so this implementation is ICU-free. Malformed UTF-8
-  // (invalid lead or continuation bytes, overlong encodings, surrogates,
-  // values beyond U+10FFFF) is rejected exactly like by ICU's `U8_NEXT`.
   size_t numCodepoints = 0;
   size_t i = 0;
   while (i < sv.size() && numCodepoints < prefixLength) {
-    auto lead = static_cast<unsigned char>(sv[i]);
-    // The length of the sequence and the payload bits of the lead byte.
-    size_t sequenceLength = lead < 0x80             ? 1
-                            : (lead & 0xE0) == 0xC0 ? 2
-                            : (lead & 0xF0) == 0xE0 ? 3
-                            : (lead & 0xF8) == 0xF0 ? 4
-                                                    : 0;
-    static constexpr uint32_t leadMask[] = {0, 0x7F, 0x1F, 0x0F, 0x07};
-    bool valid = sequenceLength > 0 && i + sequenceLength <= sv.size();
-    uint32_t codepoint = valid ? lead & leadMask[sequenceLength] : 0;
-    for (size_t j = 1; valid && j < sequenceLength; ++j) {
-      auto continuation = static_cast<unsigned char>(sv[i + j]);
-      valid = (continuation & 0xC0) == 0x80;
-      codepoint = (codepoint << 6) | (continuation & 0x3F);
-    }
-    static constexpr uint32_t minimumBySequenceLength[] = {0, 0, 0x80, 0x800,
-                                                           0x10000};
-    valid = valid && codepoint >= minimumBySequenceLength[sequenceLength] &&
-            codepoint <= 0x10FFFF &&
-            !(codepoint >= 0xD800 && codepoint <= 0xDFFF);
-    if (!valid) {
+    size_t sequenceLength = validUtf8SequenceLength(sv, i);
+    if (sequenceLength == 0) {
       throw std::runtime_error(
           "Illegal UTF sequence in ad_utility::getUTF8Prefix");
     }
@@ -164,6 +174,24 @@ std::pair<size_t, std::string_view> getUTF8Prefix(std::string_view sv,
     ++numCodepoints;
   }
   return {numCodepoints, sv.substr(0, i)};
+}
+
+// ___________________________________________________________________________
+std::string utf8ReplaceInvalid(std::string_view sv) {
+  std::string result;
+  result.reserve(sv.size());
+  size_t i = 0;
+  while (i < sv.size()) {
+    size_t sequenceLength = validUtf8SequenceLength(sv, i);
+    if (sequenceLength == 0) {
+      utf8EncodeCodepoint(0xFFFD, result);
+      ++i;
+    } else {
+      result.append(sv.substr(i, sequenceLength));
+      i += sequenceLength;
+    }
+  }
+  return result;
 }
 
 #ifndef QLEVER_NO_UNICODE
