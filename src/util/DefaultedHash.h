@@ -64,28 +64,8 @@
 
 #include <string>
 #include <string_view>
-#include <vector>
 
-namespace ad_utility::defaultedHash {
-// Split the stringification (`#__VA_ARGS__`) of a list of identifiers in a
-// macro into the single identifiers. Whitespace is ignored.
-consteval std::vector<std::string> splitListOfMembers(std::string_view list) {
-  std::vector<std::string> result;
-  std::string current;
-  for (char c : list) {
-    if (c == ',') {
-      result.push_back(std::move(current));
-      current.clear();
-    } else if (c != ' ' && c != '\t' && c != '\n' && c != '\r') {
-      current += c;
-    }
-  }
-  if (!current.empty()) {
-    result.push_back(std::move(current));
-  }
-  return result;
-}
-
+namespace ql::reflection {
 // Return the empty string iff the stringified lists of the members that are
 // hashed (`hashedMembers`) and of the members that are deliberately not hashed
 // (`notHashedMembers`) are each in the declaration order of the class `T`, and
@@ -99,33 +79,25 @@ consteval std::vector<std::string> splitListOfMembers(std::string_view list) {
 template <typename T>
 consteval std::string_view checkHashedMembers(
     std::string_view hashedMembers, std::string_view notHashedMembers) {
-  constexpr auto ctx = std::meta::access_context::unchecked();
-  const std::string className{std::meta::display_string_of(^^T)};
-  auto error = [&className](std::string_view message) {
-    return std::string_view{std::define_static_string(
-        "The `QL_DEFINE_DEFAULTED_HASH...` (see `util/DefaultedHash.h`) of `" +
-        className + "` is invalid: " + message)};
+  auto error = [](std::string_view message) {
+    return makeErrorMessage<T>(
+        "`QL_DEFINE_DEFAULTED_HASH...` (see `util/DefaultedHash.h`)", message);
   };
-  if (!std::meta::bases_of(^^T, ctx).empty()) {
+  if (!std::meta::bases_of(^^T, std::meta::access_context::unchecked())
+           .empty()) {
     return error(
         "The class has base classes, which is not supported. Define the "
         "`AbslHashValue` function manually");
   }
-  auto hashed = splitListOfMembers(hashedMembers);
-  auto notHashed = splitListOfMembers(notHashedMembers);
+  auto hashed = splitListOfIdentifiers(hashedMembers);
+  auto notHashed = splitListOfIdentifiers(notHashedMembers);
   // As the names of the members are unique, the two lists are valid iff each
   // member of the class is the next element of exactly one of them.
   size_t numHashed = 0;
   size_t numNotHashed = 0;
   bool isValid = true;
-  std::string actualMembers;
-  auto members = std::meta::nonstatic_data_members_of(^^T, ctx);
-  for (auto member : members) {
-    std::string_view name = std::meta::identifier_of(member);
-    if (!actualMembers.empty()) {
-      actualMembers += ", ";
-    }
-    actualMembers += name;
+  auto actualMembers = namesOfDataMembers<T>();
+  for (const auto& name : actualMembers) {
     if (numHashed < hashed.size() && hashed[numHashed] == name) {
       ++numHashed;
     } else if (numNotHashed < notHashed.size() &&
@@ -146,27 +118,24 @@ consteval std::string_view checkHashedMembers(
                  std::string{notHashedMembers} +
                  "` have to be in declaration order each, and together have "
                  "to be exactly the data members of the class, which are `" +
-                 actualMembers + "`");
+                 joinNames(actualMembers) + "`");
   }
   return error("The listed members `" + std::string{hashedMembers} +
                "` are not exactly the data members of the class in "
                "declaration order, which are `" +
-               actualMembers + "`");
+               joinNames(actualMembers) + "`");
 }
-}  // namespace ad_utility::defaultedHash
+}  // namespace ql::reflection
 
 // The check is implemented in a static member function that is not a template,
 // such that for a class that is not a template it is evaluated when the class
 // is defined, even if the hash is never used. For a class template, the
 // function is instantiated (and thus the check is evaluated) by the call in the
 // hash function. `HASHED` and `NOT_HASHED` are string literals.
-#define QL_IMPL_DEFINE_CHECK_OF_HASHED_MEMBERS(T, HASHED, NOT_HASHED)          \
-  static constexpr void qlImplCheckHashedMembers() {                           \
-    static_assert(                                                             \
-        ::ad_utility::defaultedHash::checkHashedMembers<T>(HASHED, NOT_HASHED) \
-            .empty(),                                                          \
-        ::ad_utility::defaultedHash::checkHashedMembers<T>(HASHED,             \
-                                                           NOT_HASHED));       \
+#define QL_IMPL_DEFINE_CHECK_OF_HASHED_MEMBERS(T, HASHED, NOT_HASHED) \
+  static constexpr void qlImplCheckHashedMembers() {                  \
+    QL_STATIC_ASSERT_NO_ERROR_MESSAGE(                                \
+        ::ql::reflection::checkHashedMembers<T>(HASHED, NOT_HASHED))  \
   }
 #define QL_IMPL_CALL_CHECK_OF_HASHED_MEMBERS qlImplCheckHashedMembers();
 #else

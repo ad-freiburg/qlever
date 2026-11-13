@@ -430,39 +430,6 @@ constexpr inline auto compareThreeWay(const T& /*lhs*/,
 
 #ifdef QLEVER_HAS_REFLECTION
 namespace ql::reflection {
-// Return the names of the non-static data members of the class `T` (including
-// the private ones) in declaration order, separated by `", "`.
-//
-// NOTE: This is deliberately a template. GCC 16 (20260322) wrongly evaluates
-// an equivalent non-template `consteval` function that takes the class as a
-// `std::meta::info` argument when it is called from a member function of that
-// class (the loop then sees no members at all).
-template <typename T>
-consteval std::string namesOfDataMembers() {
-  std::string result;
-  for (auto member : std::meta::nonstatic_data_members_of(
-           ^^T, std::meta::access_context::unchecked())) {
-    if (!result.empty()) {
-      result += ", ";
-    }
-    result += std::meta::identifier_of(member);
-  }
-  return result;
-}
-
-// Return `text` with all whitespace removed. Used to compare the result of the
-// stringification (`#__VA_ARGS__`) of a list of identifiers in a macro with the
-// result of `namesOfDataMembers` independent of the formatting.
-consteval std::string removeWhitespace(std::string_view text) {
-  std::string result;
-  for (char c : text) {
-    if (c != ' ' && c != '\t' && c != '\n' && c != '\r') {
-      result += c;
-    }
-  }
-  return result;
-}
-
 // Return the empty string iff the stringified list of members of one of the
 // defaulted comparison macros (`listedMembers`) contains exactly the data
 // members of `T` in declaration order, none of them is a C array, and the
@@ -472,11 +439,9 @@ template <typename T, typename... Bases>
 consteval std::string_view checkComparedMembers(
     std::string_view listedMembers) {
   constexpr auto ctx = std::meta::access_context::unchecked();
-  const std::string className{std::meta::display_string_of(^^T)};
-  auto error = [&className](std::string_view message) {
-    return std::string_view{std::define_static_string(
-        "The comparison macro (see `backports/three_way_comparison.h`) of `" +
-        className + "` is invalid: " + message)};
+  auto error = [](std::string_view message) {
+    return makeErrorMessage<T>(
+        "comparison macro (see `backports/three_way_comparison.h`)", message);
   };
   auto bases = std::meta::bases_of(^^T, ctx);
   std::array<std::meta::info, sizeof...(Bases)> expectedBases{^^Bases...};
@@ -507,11 +472,11 @@ consteval std::string_view checkComparedMembers(
     }
   }
   auto actualMembers = namesOfDataMembers<T>();
-  if (removeWhitespace(listedMembers) != removeWhitespace(actualMembers)) {
+  if (splitListOfIdentifiers(listedMembers) != actualMembers) {
     return error("The listed members `" + std::string{listedMembers} +
                  "` are not exactly the data members of the class in "
                  "declaration order, which are `" +
-                 actualMembers + "`");
+                 joinNames(actualMembers) + "`");
   }
   return {};
 }
@@ -520,12 +485,9 @@ consteval std::string_view checkComparedMembers(
 // Expand to `, BASE` if `BASE` is not empty, else to nothing.
 #define QL_IMPL_COMMA_AND_BASE(...) __VA_OPT__(, __VA_ARGS__)
 #define QL_IMPL_CHECK_COMPARED_MEMBERS(T, BASE, ...)                          \
-  static_assert(                                                              \
+  QL_STATIC_ASSERT_NO_ERROR_MESSAGE(                                          \
       ::ql::reflection::checkComparedMembers<T QL_IMPL_COMMA_AND_BASE(BASE)>( \
-          #__VA_ARGS__)                                                       \
-          .empty(),                                                           \
-      ::ql::reflection::checkComparedMembers<T QL_IMPL_COMMA_AND_BASE(BASE)>( \
-          #__VA_ARGS__));
+          #__VA_ARGS__))
 // In C++26 mode, the operators are always `constexpr`, like the defaulted
 // operators of C++20 mode, which are implicitly `constexpr` whenever the
 // members allow it (and since C++23 a `constexpr` function may be one that can

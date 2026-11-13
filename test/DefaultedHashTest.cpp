@@ -150,7 +150,7 @@ struct Derived : ThreeMembers {
 // Test the compile-time check of the listed members, which only exists with
 // C++26 reflection.
 TEST(DefaultedHash, CheckHashedMembers) {
-  using ad_utility::defaultedHash::checkHashedMembers;
+  using ql::reflection::checkHashedMembers;
   using ::testing::AllOf;
   using ::testing::HasSubstr;
   static_assert(checkHashedMembers<ThreeMembers>("a_, b_, c_", "").empty());
