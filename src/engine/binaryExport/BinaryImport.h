@@ -27,12 +27,16 @@ namespace qlever::binary_export {
 // Read the result that the exporting instance sent in the binary format (see
 // `exportAsQLeverBinary`) from the `response`. The columns of the result are
 // the `expectedVariables` (names with a leading `?`) in this order, and the
-// response has to contain exactly these variables (in any order). The result
-// is never sorted: Even if the exporting instance sends sorted rows, their
-// order in general doesn't survive the conversion of the `Id`s (see below). A
-// single string, as well as the strings of a single batch, may take up at most
+// response has to contain exactly these variables (in any order). A single
+// string, as well as the strings of a single batch, may take up at most
 // `maxStringBatchSize`, which protects against allocating huge amounts of
 // memory for an invalid response.
+//
+// NOTE: The result is never sorted. Even if the exporting instance sends
+// sorted rows, their order in general doesn't survive the conversion of the
+// IDs (see below): the IDs of the strings depend on the vocabulary of the local
+// index, the IDs of the encoded IRIs on its prefixes, and the blank nodes get
+// new IDs.
 //
 // The strings (literals and IRIs) of the result, as well as the IRIs that are
 // encoded with a pattern that doesn't exist in the local index, are converted
