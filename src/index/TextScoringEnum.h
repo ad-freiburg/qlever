@@ -7,6 +7,7 @@
 
 #include "global/Id.h"
 #include "global/IndexTypes.h"
+#include "util/EnumSize.h"
 #include "util/HashMap.h"
 
 // Inverted index mapping WordIndex to a list of pairs of TextRecordIndex, and
@@ -18,6 +19,7 @@ using DocLengthMap = ad_utility::HashMap<DocumentIndex, size_t>;
 
 namespace qlever {
 enum struct TextScoringMetric { EXPLICIT, TFIDF, BM25 };
+QLEVER_ENUM_SIZE(TextScoringMetric, 3);
 
 std::string getTextScoringMetricAsString(TextScoringMetric textScoringMetric);
 
