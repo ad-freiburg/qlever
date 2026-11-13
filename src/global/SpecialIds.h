@@ -25,10 +25,10 @@ inline const ad_utility::HashMap<std::string, Id>& specialIds() {
   static const auto ids = []() {
     using S = std::string;
     ad_utility::HashMap<std::string, Id> result{
-        {S{HAS_PREDICATE_PREDICATE}, Id::fromBits(1)},
-        {S{HAS_PATTERN_PREDICATE}, Id::fromBits(2)},
-        {S{DEFAULT_GRAPH_IRI}, Id::fromBits(3)},
-        {S{QLEVER_INTERNAL_GRAPH_IRI}, Id::fromBits(4)}};
+        {S{HAS_PREDICATE_PREDICATE}, Id::fromBits(Datatype::Undefined, 1)},
+        {S{HAS_PATTERN_PREDICATE}, Id::fromBits(Datatype::Undefined, 2)},
+        {S{DEFAULT_GRAPH_IRI}, Id::fromBits(Datatype::Undefined, 3)},
+        {S{QLEVER_INTERNAL_GRAPH_IRI}, Id::fromBits(Datatype::Undefined, 4)}};
 
     // Perform the following checks: All the special IDs are unique, all of them
     // have the `Undefined` datatype, but none of them is equal to the "actual"
