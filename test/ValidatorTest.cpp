@@ -14,10 +14,10 @@
 #include "../test/util/GTestHelpers.h"
 #include "../test/util/TypeTraitsTestHelpers.h"
 #include "backports/functional.h"
-#include "util/ConfigManager/ConfigOption.h"
-#include "util/ConfigManager/ConfigOptionProxy.h"
-#include "util/ConfigManager/Validator.h"
 #include "util/ValidatorHelpers.h"
+#include "util/configManager/ConfigOption.h"
+#include "util/configManager/ConfigOptionProxy.h"
+#include "util/configManager/Validator.h"
 
 namespace ad_utility {
 

@@ -2038,6 +2038,34 @@ TEST(QueryPlanner, BindAtBeginningOfQuery) {
       h::Bind(h::NeutralElement(), "3 + 5", Variable{"?x"}));
 }
 
+// Test that a `BIND` of a constant that equals a fixed component of a triple is
+// computed by the `IndexScan` of this triple, but not pushed through other
+// operations.
+TEST(QueryPlanner, BindOfFixedComponentOfTriple) {
+  // A knowledge graph with the predicates `<p>` and `<q>`.
+  auto qec = ad_utility::testing::getQec("<x> <p> <o>. <x> <q> <y>.");
+  auto scan = h::IndexScanFromStrings;
+
+  // A `BIND` directly after the triple becomes a constant column of its scan.
+  h::expect("SELECT * { ?s <p> ?o BIND(<p> AS ?x) }",
+            scan("?s", "<p>", "?o", {}, {}, {}, {}, 3), qec);
+
+  // A `BIND` after a join stays on top of the join.
+  h::expect("SELECT * { ?s <p> ?o . ?s <q> ?y BIND(<p> AS ?x) }",
+            h::Bind(h::Join(scan("?s", "<p>", "?o"), scan("?s", "<q>", "?y")),
+                    "<p>", Variable{"?x"}),
+            qec);
+
+  // A `BIND` to a variable that a subquery strips from the scan (here `?o`,
+  // with `strip-columns` enabled) stays on top of the scan.
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::stripColumns_>(true);
+  h::expect("SELECT * { { SELECT ?s { ?s <p> ?o } } BIND(<p> AS ?o) }",
+            h::Bind(scan("?s", "<p>", "?o", {}, {}, {}, {}, 1), "<p>",
+                    Variable{"?o"}),
+            qec);
+}
+
 namespace {
 // Get a `QueryExecutionContext` with a text index. This is used in several
 // tests below.

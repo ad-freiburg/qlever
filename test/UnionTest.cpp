@@ -23,6 +23,7 @@
 #include "util/LocalVocabEntryTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 
+using ad_utility::testing::colIndices;
 using ad_utility::testing::localVocabEntryFromStringRepresentation;
 
 namespace {
@@ -47,8 +48,10 @@ void testSortedUnion(
     std::vector<ColumnIndex> targetOrder, const IdTable& expected,
     ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(loc);
-  Union unionOperation{qec, std::move(left), std::move(right),
-                       std::move(targetOrder)};
+  Union unionOperation{
+      qec, std::move(left), std::move(right),
+      qlm::vector<ColumnIndex>{targetOrder.begin(), targetOrder.end(),
+                               qec->getAllocator()}};
   for (auto mode : {ComputationMode::FULLY_MATERIALIZED,
                     ComputationMode::LAZY_IF_SUPPORTED}) {
     SCOPED_TRACE(mode == ComputationMode::FULLY_MATERIALIZED
@@ -78,7 +81,39 @@ Union makeUnionForDecidingColumns(QueryExecutionContext* qec,
                                 Vars{Var{"?a"}, Var{"?b"}}),
                makeSortedValues(qec, std::move(right),
                                 Vars{Var{"?a"}, Var{"?c"}, Var{"?d"}}),
-               std::move(targetOrder)};
+               qlm::vector<ColumnIndex>{targetOrder.begin(), targetOrder.end(),
+                                        qec->getAllocator()}};
+}
+
+using SortedUnionRange = std::vector<Result::IdTableVocabPair>;
+
+// Create a `SortedUnionRange` that consists of a single block with the given
+// `table`.
+SortedUnionRange makeSortedUnionRange(IdTable table) {
+  SortedUnionRange range;
+  range.emplace_back(std::move(table), LocalVocab{});
+  return range;
+}
+
+// Create a `SortedUnionImpl` that merges the single-column inputs `left` and
+// `right`, which both have to be sorted.
+auto makeSortedUnion(SortedUnionRange left, SortedUnionRange right,
+                     bool requestLaziness,
+                     const ad_utility::AllocatorWithLimit<Id>& allocator,
+                     ad_utility::SharedCancellationHandle handle) {
+  // `SortedUnionImpl` copies the column origins and the target order, so they
+  // don't have to outlive it.
+  std::vector<std::array<size_t, 2>> columnOrigins{{0, 0}};
+  std::vector<ColumnIndex> targetOrder{0};
+  return sortedUnion::SortedUnionImpl{
+      sortedUnion::IterationData{nullptr, std::move(left), {0}},
+      sortedUnion::IterationData{nullptr, std::move(right), {0}},
+      requestLaziness,
+      columnOrigins,
+      allocator,
+      ql::span<const ColumnIndex>{targetOrder},
+      [](IdTable table, const std::vector<ColumnIndex>&) { return table; },
+      std::move(handle)};
 }
 }  // namespace
 
@@ -146,9 +181,8 @@ TEST(Union, computeUnionLazy) {
       if (!invisibleSubtreeColumns) {
         IdTable left = makeIdTableFromVector({{V(1)}, {V(2)}, {V(3)}});
         return ad_utility::makeExecutionTree<ValuesForTesting>(
-            qec, std::move(left), Vars{Variable{"?x"}}, false,
-            std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt,
-            nonLazyChildren);
+            qec, std::move(left), Vars{Variable{"?x"}}, false, colIndices({}),
+            LocalVocab{}, std::nullopt, nonLazyChildren);
       } else {
         // With the `invisibleSubtreeColumns==true` case we test the case, that
         // the input contains variables that are not visible because of a
@@ -157,8 +191,7 @@ TEST(Union, computeUnionLazy) {
             {{V(1), V(3)}, {V(2), V(27)}, {V(3), V(123)}});
         auto tree = ad_utility::makeExecutionTree<ValuesForTesting>(
             qec, std::move(left), Vars{Variable{"?x"}, Variable{"?invisible"}},
-            false, std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt,
-            nonLazyChildren);
+            false, colIndices({}), LocalVocab{}, std::nullopt, nonLazyChildren);
         tree->getRootOperation()->setSelectedVariablesForSubquery(
             {Variable{"?x"}});
         return tree;
@@ -168,8 +201,7 @@ TEST(Union, computeUnionLazy) {
     IdTable right = makeIdTableFromVector({{V(4), V(5)}, {V(6), V(7)}});
     auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, std::move(right), Vars{Variable{"?u"}, Variable{"?x"}}, false,
-        std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt,
-        nonLazyChildren);
+        colIndices({}), LocalVocab{}, std::nullopt, nonLazyChildren);
 
     Union u{qec, std::move(leftT), std::move(rightT)};
     auto resultTable = u.computeResultOnlyForTesting(true);
@@ -302,12 +334,12 @@ TEST(Union, cheapMergeIfOrderNotImportant) {
 
   auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{1, 2}}), Vars{Var{"?a"}, Var{"?b"}}, false,
-      std::vector<ColumnIndex>{0, 1});
+      colIndices({0, 1}));
 
   auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{0, 0}, {2, 4}}), Vars{Var{"?a"}, Var{"?b"}},
-      false, std::vector<ColumnIndex>{0, 1});
-  Union unionOperation{qec, std::move(leftT), std::move(rightT), {}};
+      false, colIndices({0, 1}));
+  Union unionOperation{qec, std::move(leftT), std::move(rightT)};
   EXPECT_TRUE(unionOperation.resultSortedOn().empty());
   {
     qec->getQueryTreeCache().clearAll();
@@ -338,13 +370,13 @@ TEST(Union, sortedMerge) {
 
   auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{1, 2, 4}}),
-      Vars{Var{"?a"}, Var{"?b"}, Var{"?c"}}, false,
-      std::vector<ColumnIndex>{0, 1, 2});
+      Vars{Var{"?a"}, Var{"?b"}, Var{"?c"}}, false, colIndices({0, 1, 2}));
 
   auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{4, 1}, {8, 2}}), Vars{Var{"?c"}, Var{"?a"}},
-      false, std::vector<ColumnIndex>{1, 0});
-  Union unionOperation{qec, std::move(leftT), std::move(rightT), {0, 1, 2}};
+      false, colIndices({1, 0}));
+  Union unionOperation{qec, std::move(leftT), std::move(rightT),
+                       colIndices({0, 1, 2})};
   EXPECT_THAT(unionOperation.resultSortedOn(), ::testing::ElementsAre(0, 1, 2));
   {
     qec->getQueryTreeCache().clearAll();
@@ -529,12 +561,13 @@ TEST(Union, sortedMergeWithOneSideNonLazy) {
 
   auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{2}}), Vars{Var{"?a"}}, false,
-      std::vector<ColumnIndex>{0}, LocalVocab{}, std::nullopt, true);
+      colIndices({0}), LocalVocab{}, std::nullopt, true);
 
   auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{0}, {1}}), Vars{Var{"?a"}}, false,
-      std::vector<ColumnIndex>{0});
-  Union unionOperation{qec, std::move(leftT), std::move(rightT), {0}};
+      colIndices({0}));
+  Union unionOperation{qec, std::move(leftT), std::move(rightT),
+                       colIndices({0})};
   auto expected = makeIdTableFromVector({{0}, {1}, {2}});
   {
     qec->getQueryTreeCache().clearAll();
@@ -570,7 +603,7 @@ TEST(Union, sortedMergeWithLocalVocab) {
 
   auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{1}, {2}, {4}}), Vars{Var{"?a"}}, false,
-      std::vector<ColumnIndex>{0}, vocab1.clone());
+      colIndices({0}), vocab1.clone());
 
   LocalVocab vocab2;
   vocab2.getIndexAndAddIfNotContained(localVocabEntryFromStringRepresentation(
@@ -581,11 +614,11 @@ TEST(Union, sortedMergeWithLocalVocab) {
   tables.push_back(makeIdTableFromVector({{5}}));
 
   auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
-      qec, std::move(tables), Vars{Var{"?a"}}, false,
-      std::vector<ColumnIndex>{0}, vocab2.clone());
+      qec, std::move(tables), Vars{Var{"?a"}}, false, colIndices({0}),
+      vocab2.clone());
   {
     qec->getQueryTreeCache().clearAll();
-    Union unionOperation{qec, leftT, rightT, {0}};
+    Union unionOperation{qec, leftT, rightT, colIndices({0})};
     auto result =
         unionOperation.getResult(true, ComputationMode::FULLY_MATERIALIZED);
     auto expected = makeIdTableFromVector({{0}, {1}, {2}, {3}, {4}, {5}});
@@ -597,7 +630,8 @@ TEST(Union, sortedMergeWithLocalVocab) {
   }
   {
     qec->getQueryTreeCache().clearAll();
-    Union unionOperation{qec, std::move(leftT), std::move(rightT), {0}};
+    Union unionOperation{qec, std::move(leftT), std::move(rightT),
+                         colIndices({0})};
     auto result =
         unionOperation.getResult(true, ComputationMode::LAZY_IF_SUPPORTED);
     auto idTables = result->idTables();
@@ -628,13 +662,14 @@ TEST(Union, cacheKeyDiffersForDifferentOrdering) {
 
   auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{1, 4}}), Vars{Var{"?a"}, Var{"?b"}}, false,
-      std::vector<ColumnIndex>{0, 1});
+      colIndices({0, 1}));
 
   auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{1, 8}}), Vars{Var{"?a"}, Var{"?c"}}, false,
-      std::vector<ColumnIndex>{0, 1});
-  Union unionOperation1{qec, leftT, rightT, {0, 1, 2}};
-  Union unionOperation2{qec, std::move(leftT), std::move(rightT), {0, 2, 1}};
+      colIndices({0, 1}));
+  Union unionOperation1{qec, leftT, rightT, colIndices({0, 1, 2})};
+  Union unionOperation2{qec, std::move(leftT), std::move(rightT),
+                        colIndices({0, 2, 1})};
 
   EXPECT_NE(unionOperation1.getCacheKey(), unionOperation2.getCacheKey());
   EXPECT_EQ(unionOperation1.getChildren().at(0)->getCacheKey(),
@@ -674,12 +709,12 @@ TEST(Union, cacheKeyPreventsAmbiguity) {
   auto values2 = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{1}}), Vars{Var{"?a"}});
   auto sort = ad_utility::makeExecutionTree<Sort>(qec, values1->clone(),
-                                                  std::vector<ColumnIndex>{0});
+                                                  colIndices({0}));
   Union operation1{qec, std::move(sort), values2};
   Sort operation2{qec,
                   ad_utility::makeExecutionTree<Union>(qec, std::move(values1),
                                                        std::move(values2)),
-                  std::vector<ColumnIndex>{0}};
+                  colIndices({0})};
 
   // Check that the two cache keys are different (which was not the case before
   // #1933).
@@ -735,15 +770,15 @@ TEST(Union, testEfficientMerge) {
 
   auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{1}}), Vars{Var{"?a"}}, false,
-      std::vector<ColumnIndex>{0});
+      colIndices({0}));
 
   auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{2}}), Vars{Var{"?b"}}, false,
-      std::vector<ColumnIndex>{0});
+      colIndices({0}));
 
   {
     qec->getQueryTreeCache().clearAll();
-    Union unionOperation{qec, leftT, rightT, {0, 1}};
+    Union unionOperation{qec, leftT, rightT, colIndices({0, 1})};
     // Check if children were swapped
     EXPECT_EQ(unionOperation.getChildren().at(0)->getCacheKey(),
               rightT->getCacheKey());
@@ -757,7 +792,7 @@ TEST(Union, testEfficientMerge) {
   }
   {
     qec->getQueryTreeCache().clearAll();
-    Union unionOperation{qec, leftT, rightT, {1, 0}};
+    Union unionOperation{qec, leftT, rightT, colIndices({1, 0})};
     // Ensure children were not swapped
     EXPECT_EQ(unionOperation.getChildren().at(0)->getCacheKey(),
               leftT->getCacheKey());
@@ -783,13 +818,12 @@ TEST(Union, createSortedVariantWorksProperly) {
 
   auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{1, 4}, {2, 8}}), Vars{Var{"?a"}, Var{"?d"}});
-  Union unionOperation{qec, std::move(leftT), std::move(rightT), {}};
+  Union unionOperation{qec, std::move(leftT), std::move(rightT)};
   EXPECT_TRUE(unionOperation.resultSortedOn().empty());
 
   {
     qec->getQueryTreeCache().clearAll();
-    auto tree =
-        unionOperation.makeSortedTree(std::vector<ColumnIndex>{0, 1, 2, 3});
+    auto tree = unionOperation.makeSortedTree(colIndices({0, 1, 2, 3}));
     ASSERT_TRUE(tree.has_value());
     auto variant = tree.value()->getRootOperation();
     EXPECT_THAT(variant->getResultSortedOn(),
@@ -807,8 +841,7 @@ TEST(Union, createSortedVariantWorksProperly) {
   }
   {
     qec->getQueryTreeCache().clearAll();
-    auto tree =
-        unionOperation.makeSortedTree(std::vector<ColumnIndex>{0, 3, 1, 2});
+    auto tree = unionOperation.makeSortedTree(colIndices({0, 3, 1, 2}));
     ASSERT_TRUE(tree.has_value());
     auto variant = tree.value()->getRootOperation();
     EXPECT_THAT(variant->getResultSortedOn(),
@@ -843,14 +876,13 @@ TEST(Union, checkChunkSizeSplitsProperly) {
   reference.getColumn(0).back() = Id::makeFromInt(1337);
 
   auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
-      qec, reference.clone(), Vars{Var{"?a"}}, false,
-      std::vector<ColumnIndex>{0});
+      qec, reference.clone(), Vars{Var{"?a"}}, false, colIndices({0}));
 
   auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
-      qec, std::move(reference), Vars{Var{"?a"}}, false,
-      std::vector<ColumnIndex>{0});
+      qec, std::move(reference), Vars{Var{"?a"}}, false, colIndices({0}));
 
-  Union unionOperation{qec, std::move(leftT), std::move(rightT), {0}};
+  Union unionOperation{qec, std::move(leftT), std::move(rightT),
+                       colIndices({0})};
 
   qec->getQueryTreeCache().clearAll();
   auto result =
@@ -890,7 +922,7 @@ TEST(Union, columnOriginatesFromGraphOrUndef) {
 
   auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, reference.clone(), Vars{Var{"?a"}, Var{"?d"}}, false,
-      std::vector<ColumnIndex>{0, 1});
+      colIndices({0, 1}));
 
   auto index = ad_utility::makeExecutionTree<IndexScan>(
       qec, Permutation::PSO,
@@ -941,20 +973,19 @@ TEST(Union, getCostEstimate) {
   ql::ranges::fill(twoColumns.getColumn(1), Id::makeFromInt(1));
 
   auto valuesA = ad_utility::makeExecutionTree<ValuesForTesting>(
-      qec, oneColumn.clone(), Vars{Var{"?a"}}, false,
-      std::vector<ColumnIndex>{0});
+      qec, oneColumn.clone(), Vars{Var{"?a"}}, false, colIndices({0}));
 
   auto valuesB = ad_utility::makeExecutionTree<ValuesForTesting>(
-      qec, oneColumn.clone(), Vars{Var{"?b"}}, false,
-      std::vector<ColumnIndex>{0});
+      qec, oneColumn.clone(), Vars{Var{"?b"}}, false, colIndices({0}));
 
   auto valuesAb = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, twoColumns.clone(), Vars{Var{"?a"}, Var{"?b"}}, false,
-      std::vector<ColumnIndex>{0, 1});
+      colIndices({0, 1}));
 
-  Union sortedUnionWithUndefCol{qec, valuesB->clone(), valuesAb->clone(), {1}};
-  Union sortedUnionWithWrongUndefCol{
-      qec, valuesA->clone(), valuesAb->clone(), {0}};
+  Union sortedUnionWithUndefCol{qec, valuesB->clone(), valuesAb->clone(),
+                                colIndices({1})};
+  Union sortedUnionWithWrongUndefCol{qec, valuesA->clone(), valuesAb->clone(),
+                                     colIndices({0})};
 
   // Second option is way cheaper because the faster implementation can be used.
   EXPECT_LT(sortedUnionWithUndefCol.getCostEstimate(),
@@ -962,9 +993,10 @@ TEST(Union, getCostEstimate) {
 
   Union unsortedUnionWithSingleVar{qec, valuesA->clone(), valuesA->clone()};
   Union unsortedUnionWithDifferentVars{qec, valuesA->clone(), valuesB->clone()};
-  Union sortedUnionWithSingleVar{qec, valuesA->clone(), valuesA->clone(), {0}};
-  Union sortedUnionWithTwoVars{
-      qec, valuesAb->clone(), valuesAb->clone(), {0, 1}};
+  Union sortedUnionWithSingleVar{qec, valuesA->clone(), valuesA->clone(),
+                                 colIndices({0})};
+  Union sortedUnionWithTwoVars{qec, valuesAb->clone(), valuesAb->clone(),
+                               colIndices({0, 1})};
 
   EXPECT_LT(unsortedUnionWithSingleVar.getCostEstimate(),
             unsortedUnionWithDifferentVars.getCostEstimate());
@@ -980,8 +1012,7 @@ TEST(Union, getCostEstimate) {
   ql::ranges::fill(oneColumn.getColumn(0), Id::makeUndefined());
 
   auto valuesSmall = ad_utility::makeExecutionTree<ValuesForTesting>(
-      qec, oneColumn.clone(), Vars{Var{"?a"}}, false,
-      std::vector<ColumnIndex>{0});
+      qec, oneColumn.clone(), Vars{Var{"?a"}}, false, colIndices({0}));
   Union unsortedUnionSmall{qec, valuesSmall->clone(), valuesSmall->clone()};
   // Union should never be free.
   EXPECT_GT(unsortedUnionSmall.getCostEstimate(),
@@ -1004,7 +1035,7 @@ TEST(Union, limitPushdownRestoresSortOrderOfChildren) {
         qec,
         makeIdTableFromVector(
             {{0, 0}, {1, 1}, {2, 2}, {3, 3}, {4, 4}, {5, 5}, {6, 6}}),
-        Vars{Var{"?a"}, Var{"?b"}}, false, std::vector<ColumnIndex>{0});
+        Vars{Var{"?a"}, Var{"?b"}}, false, colIndices({0}));
     // Deliberately unsorted, so that the `OptionalJoin` wraps it in a `Sort`,
     // which is a precondition for the index nested loop join.
     auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
@@ -1015,20 +1046,19 @@ TEST(Union, limitPushdownRestoresSortOrderOfChildren) {
   };
   auto other = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{7, 70}, {8, 80}}),
-      Vars{Var{"?a"}, Var{"?d"}}, false, std::vector<ColumnIndex>{0});
+      Vars{Var{"?a"}, Var{"?d"}}, false, colIndices({0}));
 
   // The result of the union has to be sorted on `?a`, which is its column 0.
   Union unionOperation{qec, makeOptionalJoin(), std::move(other),
-                       std::vector<ColumnIndex>{0}};
-  auto expectChildrenAreSorted = [&unionOperation](
-                                     ad_utility::source_location loc =
-                                         AD_CURRENT_SOURCE_LOC()) {
-    auto trace = generateLocationTrace(loc);
-    for (const auto* child : unionOperation.getChildren()) {
-      EXPECT_TRUE(
-          child->getRootOperation()->isSortedBy(std::vector<ColumnIndex>{0}));
-    }
-  };
+                       colIndices({0})};
+  auto expectChildrenAreSorted =
+      [&unionOperation](ad_utility::source_location loc =
+                            AD_CURRENT_SOURCE_LOC()) {
+        auto trace = generateLocationTrace(loc);
+        for (const auto* child : unionOperation.getChildren()) {
+          EXPECT_TRUE(child->getRootOperation()->isSortedBy(colIndices({0})));
+        }
+      };
   // Both children are already sorted, so the constructor added no `Sort`.
   expectChildrenAreSorted();
 
@@ -1107,20 +1137,9 @@ TEST(Union, limitAndOffsetArePushedDownToChildren) {
 
 // Test that `SortedUnionImpl` requires a cancellation handle.
 TEST(Union, sortedUnionImplRequiresCancellationHandle) {
-  auto* qec = ad_utility::testing::getQec();
-  using Range = std::vector<Result::IdTableVocabPair>;
-  std::vector<std::array<size_t, 2>> columnOrigins{{0, 0}};
-  std::vector<ColumnIndex> targetOrder{0};
-  auto makeUnion = [&](ad_utility::SharedCancellationHandle handle) {
-    sortedUnion::SortedUnionImpl sortedUnion{
-        sortedUnion::IterationData<Range>{nullptr, Range{}, {0}},
-        sortedUnion::IterationData<Range>{nullptr, Range{}, {0}},
-        false,
-        columnOrigins,
-        qec->getAllocator(),
-        ql::span<const ColumnIndex>{targetOrder},
-        [](IdTable table, const std::vector<ColumnIndex>&) { return table; },
-        std::move(handle)};
+  auto makeUnion = [](ad_utility::SharedCancellationHandle handle) {
+    makeSortedUnion({}, {}, false, ad_utility::testing::makeAllocator(),
+                    std::move(handle));
   };
   EXPECT_NO_THROW(
       makeUnion(std::make_shared<ad_utility::CancellationHandle<>>()));
@@ -1129,11 +1148,26 @@ TEST(Union, sortedUnionImplRequiresCancellationHandle) {
       ::testing::HasSubstr("cancellationHandle_ != nullptr"));
 }
 
+// Test that a lazy `SortedUnionImpl` doesn't reserve memory for a full chunk
+// up front, which would fail with a tight memory limit and many concurrent
+// unions, even if the inputs are tiny (see issue #3898).
+TEST(Union, lazySortedUnionImplDoesNotReserveFullChunk) {
+  // A full chunk of a single column would need 8 MB.
+  auto allocator =
+      ad_utility::testing::makeAllocator(ad_utility::MemorySize::megabytes(1));
+  auto sortedUnion = makeSortedUnion(
+      makeSortedUnionRange(makeIdTableFromVector({{1}, {3}})),
+      makeSortedUnionRange(makeIdTableFromVector({{2}})), true, allocator,
+      std::make_shared<ad_utility::CancellationHandle<>>());
+  EXPECT_EQ(
+      aggregateTables(Result::LazyResult{std::move(sortedUnion)}, 1).first,
+      makeIdTableFromVector({{1}, {2}, {3}}));
+}
+
 // Test that the non-lazy merge of a sorted union checks for cancellation
 // after every `Union::chunkSize` merged rows.
 TEST(Union, sortedUnionImplChecksForCancellationWhileMerging) {
   auto* qec = ad_utility::testing::getQec();
-  using Range = std::vector<Result::IdTableVocabPair>;
   // The inputs interleave, so the merge loop (and not the final append of the
   // remaining rows) produces more than `Union::chunkSize` rows.
   size_t numRows = Union::chunkSize / 2 + 1;
@@ -1143,22 +1177,12 @@ TEST(Union, sortedUnionImplChecksForCancellationWhileMerging) {
     for (size_t i = 0; i < numRows; ++i) {
       table(i, 0) = V(2 * i + offset);
     }
-    Range range;
-    range.emplace_back(std::move(table), LocalVocab{});
-    return sortedUnion::IterationData<Range>{nullptr, std::move(range), {0}};
+    return makeSortedUnionRange(std::move(table));
   };
-  std::vector<std::array<size_t, 2>> columnOrigins{{0, 0}};
-  std::vector<ColumnIndex> targetOrder{0};
-  auto makeUnion = [&](ad_utility::SharedCancellationHandle handle) {
-    return sortedUnion::SortedUnionImpl{
-        makeInput(0),
-        makeInput(1),
-        false,
-        columnOrigins,
-        qec->getAllocator(),
-        ql::span<const ColumnIndex>{targetOrder},
-        [](IdTable table, const std::vector<ColumnIndex>&) { return table; },
-        std::move(handle)};
+  auto makeUnion = [qec,
+                    &makeInput](ad_utility::SharedCancellationHandle handle) {
+    return makeSortedUnion(makeInput(0), makeInput(1), false,
+                           qec->getAllocator(), std::move(handle));
   };
 
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();

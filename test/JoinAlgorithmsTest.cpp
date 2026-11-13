@@ -10,8 +10,8 @@
 
 #include "./util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
-#include "util/JoinAlgorithms/JoinAlgorithms.h"
 #include "util/TransparentFunctors.h"
+#include "util/joinAlgorithms/JoinAlgorithms.h"
 
 using namespace ad_utility;
 namespace {

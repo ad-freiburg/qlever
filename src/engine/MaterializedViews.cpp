@@ -43,9 +43,9 @@
 #include "util/FilesystemHelpers.h"
 #include "util/HyperLogLog.h"
 #include "util/InputRangeUtils.h"
-#include "util/MemorySize/MemorySize.h"
 #include "util/ProgressBar.h"
 #include "util/Views.h"
+#include "util/memorySize/MemorySize.h"
 
 // _____________________________________________________________________________
 MaterializedViewWriter::MaterializedViewWriter(

@@ -147,7 +147,7 @@ TEST(RowNumber, invalidArguments) {
   EXPECT_ANY_THROW(RowNumber(qec, child, Variable{"?n"}, -1));
 
   // The sort columns must start with the row number column.
-  EXPECT_ANY_THROW(RowNumber(qec, child, Variable{"?n"}, 0, {1}));
+  EXPECT_ANY_THROW(RowNumber(qec, child, Variable{"?n"}, 0, colIndices({1})));
 
   // The row number variable must not be a variable of the child.
   EXPECT_ANY_THROW(RowNumber(qec, child, Variable{"?a"}));

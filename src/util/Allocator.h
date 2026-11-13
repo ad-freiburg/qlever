@@ -35,7 +35,7 @@
 
 #include <utility>
 
-#include "util/MemorySize/MemorySize.h"
+#include "util/memorySize/MemorySize.h"
 
 #ifdef QLEVER_USE_PMR_ALLOCATOR
 

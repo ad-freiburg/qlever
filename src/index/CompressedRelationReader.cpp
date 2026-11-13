@@ -24,11 +24,11 @@
 #include "index/LocatedTriples.h"
 #include "index/compressedRelationWriter/CompressedRelationWriter.h"
 #include "util/Algorithm.h"
-#include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/HashSet.h"
 #include "util/Iterators.h"
 #include "util/Timer.h"
 #include "util/Views.h"
+#include "util/compressionUsingZstd/ZstdWrapper.h"
 #include "util/views/AsyncTransformView.h"
 
 using namespace std::chrono_literals;
@@ -826,10 +826,10 @@ CompressedRelationReader::decompressAndPostprocessBlock(
 
 // ____________________________________________________________________________
 void CompressedRelationReader::decompressColumn(
-    const std::vector<char>& compressedBlock, IdColumnRef column) {
+    const std::vector<char>& compressedBlock, IdColumnRef column) const {
   ad_utility::idColumnByteIO::decode(
-      column, [&compressedBlock](const auto& buffers) {
-        ZstdWrapper::decompressChunks(compressedBlock, buffers);
+      column, [this, &compressedBlock](const auto& buffers) {
+        zstdContext_->decompressChunks(compressedBlock, buffers);
       });
 }
 

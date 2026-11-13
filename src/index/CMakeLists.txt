@@ -25,6 +25,7 @@ add_library(index
         chunkwisePermutationWriter/BoundaryConsolidator.cpp
         chunkwisePermutationWriter/ChunkWriter.cpp
         chunkwisePermutationWriter/ConcurrentCallbackDispatcher.cpp
+        chunkwisePermutationWriter/Statistics.cpp
         DistinctCol0Ids.cpp
         PatternCreator.cpp ScanSpecification.cpp
         DeltaTriples.cpp TextScoring.cpp TextScoringEnum.cpp TextIndexReadWrite.cpp

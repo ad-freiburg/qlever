@@ -21,9 +21,9 @@
 
 #include "util/Exception.h"
 #include "util/MaybeOwningPtr.h"
-#include "util/MemorySize/MemorySize.h"
 #include "util/ThreadLocalMember.h"
 #include "util/TransparentFunctors.h"
+#include "util/memorySize/MemorySize.h"
 
 // This header contains the memory-limit bookkeeping used by both
 // allocator backends: the classical `allocatorImpl::AllocatorWithLimit` (see

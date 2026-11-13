@@ -123,6 +123,12 @@ using GreaterEqualExpression =
 
 using InExpression = relational::InExpression;
 
+// Return the comparison of `expression` if it is one of the six relational
+// expressions above (e.g. `Comparison::LT` for `a < b`), and `std::nullopt`
+// otherwise.
+std::optional<valueIdComparators::Comparison> getComparison(
+    const SparqlExpression& expression);
+
 // This function is a helper for the query planner. It allows unpacking a
 // `SparqlExpression` of any of these forms
 // * `geof:distance(?variable1, ?variable2) <= constant`

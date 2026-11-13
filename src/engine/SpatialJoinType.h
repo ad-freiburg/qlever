@@ -19,10 +19,10 @@
 namespace detail {
 // The supported spatial join types (geometry predicates). When updating this
 // enum with a new two-argument boolean relation, also add a case in
-// `getGeoFunctionExpressionParameters` in `GeoExpression.cpp`. This does not
-// apply to `WITHIN_DIST` and `DE9IM`, which take an additional parameter
-// (the distance resp. the filter pattern) and are therefore not exposed as
-// `geof:sf...`-style two-argument relations.
+// `getGeoFunctionExpressionParameters` in `GeoRelationExpression.cpp`. This
+// does not apply to `WITHIN_DIST` and `DE9IM`, which take an additional
+// parameter (the distance resp. the filter pattern) and are therefore not
+// exposed as `geof:sf...`-style two-argument relations.
 enum class SpatialJoinTypeEnum {
   INTERSECTS,
   CONTAINS,

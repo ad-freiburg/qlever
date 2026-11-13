@@ -80,6 +80,24 @@ inline auto metricAreaNear = liftOptionalMatcher<MetricArea>(
 #define EXPECT_METRICAREA_NEAR(a, b) EXPECT_THAT(a, metricAreaNear(b))
 
 // ____________________________________________________________________________
+template <typename T>
+inline auto withSourceCrsNear = liftOptionalMatcher<WithSourceCrs<T>>(
+    [](WithSourceCrs<T> expected) -> Matcher<WithSourceCrs<T>> {
+      Matcher<std::optional<T>> infoMatcher =
+          [&]() -> Matcher<std::optional<T>> {
+        if constexpr (std::is_same_v<T, Centroid>) {
+          return centroidNear(expected.info_);
+        } else if constexpr (std::is_same_v<T, BoundingBox>) {
+          return boundingBoxNear(expected.info_);
+        } else {
+          static_assert(ad_utility::alwaysFalse<T>);
+        }
+      }();
+      return AllOf(Field(&WithSourceCrs<T>::info_, infoMatcher),
+                   Field(&WithSourceCrs<T>::crs_, Eq(expected.crs_)));
+    });
+
+// ____________________________________________________________________________
 inline auto geoInfoMatcher = liftOptionalMatcher<GeometryInfo>(
     [](GeometryInfo expected) -> Matcher<GeometryInfo> {
       return AllOf(
@@ -138,7 +156,15 @@ Matcher<Input> requestedInfoMatches(const GeometryInfo& expected) {
       requestedInfoIs<SourceCrsType, Input>(
           Optional(expected.getSourceCrsType())),
       requestedInfoIs<SerializationType, Input>(
-          Optional(expected.getSerializationType())));
+          Optional(expected.getSerializationType())),
+      requestedInfoIs<WithSourceCrs<Centroid>, Input>(
+          withSourceCrsNear<Centroid>(
+              ad_utility::detail::getWithSourceCrs<Centroid>(
+                  expected.getCentroid(), expected.getSourceCrsType()))),
+      requestedInfoIs<WithSourceCrs<BoundingBox>, Input>(
+          withSourceCrsNear<BoundingBox>(
+              ad_utility::detail::getWithSourceCrs<BoundingBox>(
+                  expected.getBoundingBox(), expected.getSourceCrsType()))));
 }
 
 // ____________________________________________________________________________

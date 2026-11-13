@@ -8,7 +8,7 @@
 #include "./VocabularyTestHelpers.h"
 #include "backports/algorithm.h"
 #include "index/vocabulary/VocabularyInMemory.h"
-#include "util/Serializer/ByteBufferSerializer.h"
+#include "util/serializer/ByteBufferSerializer.h"
 using Vocab = VocabularyInMemory;
 
 namespace {
