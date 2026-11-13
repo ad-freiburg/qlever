@@ -955,6 +955,11 @@ class IndexImpl {
   // 3. If the IRI or literal can be encoded directly into an `Id`, do so
   ProcessedTriple processTriple(TurtleTriple&& triple) const;
 
+  // Return the words of `content` as they are stored in the `ql:has-word`
+  // triples (in order and with duplicates). Also used by the SPARQL function
+  // `ql:normalize`, so that strings in queries can be normalized the same way.
+  std::vector<std::string> getNormalizedWords(std::string_view content) const;
+
   // Return the distinct words of the `content` of a literal together with their
   // term frequencies. These are the words of the `ql:has-word` triples of the
   // literal, normalized according to `hasWordNormalization_`.
