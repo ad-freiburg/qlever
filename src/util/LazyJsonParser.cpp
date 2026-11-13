@@ -41,12 +41,13 @@ LazyJsonParser::Generator LazyJsonParser::parse(
       }
     }
   }
-  // If the input ends after the `arrayPath` has been reached, but before the
-  // JSON object is complete, then the input was truncated (for example, by an
-  // endpoint that aborts the sending of its result because of a timeout). The
-  // incomplete rest of the input can't be parsed, so silently returning would
-  // drop it. NOTE: If the `arrayPath` was never reached, nothing has been
-  // yielded, which the caller has to handle anyway.
+  // Throw if the input ends after the `arrayPath` has been reached, but before
+  // the JSON object is complete. Then the input was truncated (for example, by
+  // an endpoint that aborts the sending of its result because of a timeout),
+  // and silently returning would drop the incomplete rest of it.
+  //
+  // NOTE: If the `arrayPath` was never reached, nothing has been yielded, which
+  // the caller has to handle anyway.
   if (!std::holds_alternative<BeforeArrayPath>(p.state_) &&
       !p.isParsingCompletelyDone()) {
     throw Error(
