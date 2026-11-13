@@ -57,7 +57,8 @@ TEST_F(ValueIdComparators, GetRangeForDatatype) {
                                   Datatype::LocalVocabIndex,
                                   Datatype::TextRecordIndex,
                                   Datatype::WordVocabIndex,
-                                  Datatype::SecondaryVocabIndex};
+                                  Datatype::SecondaryVocabIndex,
+                                  Datatype::TripleTermIndex};
   auto ids = makeRandomIds();
   std::sort(ids.begin(), ids.end(), compareByBits);
   for (auto datatype : datatypes) {
@@ -266,6 +267,7 @@ TEST_F(ValueIdComparators, IndexTypes) {
   testImpl(vi<Datatype::TextRecordIndex>, &getTextRecordIndex<>);
   testImpl(vi<Datatype::LocalVocabIndex>, &getLocalVocabIndex<>);
   testImpl(vi<Datatype::WordVocabIndex>, &getWordVocabIndex<>);
+  testImpl(vi<Datatype::TripleTermIndex>, &getTripleTermIndex<>);
 }
 
 // _______________________________________________________________________
@@ -285,17 +287,4 @@ TEST_F(ValueIdComparators, contractViolations) {
   auto u = ValueId::makeUndefined();
   // Invalid value for the `Comparison` enum.
   ASSERT_ANY_THROW((compareIds(u, u, static_cast<Comparison>(542))));
-}
-
-// Test that an equality range matches the term reference, excluding IDs of
-// other datatypes with the same numeric value or payload.
-TEST_F(ValueIdComparators, TripleTermEqualityRangeDoesNotMatchOtherDatatypes) {
-  auto term = Id::makeFromTripleTermIndex(TripleTermIndex::make(17));
-  std::vector<Id> values{Id::makeFromInt(17),
-                         Id::makeFromVocabIndex(VocabIndex::make(17)), term};
-  auto ranges = valueIdComparators::getRangesForId(
-      values.begin(), values.end(), term, valueIdComparators::Comparison::EQ);
-  ASSERT_EQ(ranges.size(), 1);
-  EXPECT_EQ(ranges[0].first, values.begin() + 2);
-  EXPECT_EQ(ranges[0].second, values.end());
 }

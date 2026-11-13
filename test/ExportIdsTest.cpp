@@ -634,6 +634,9 @@ TEST(ExportIds, resolveNonVocabIndexIds) {
 
 }  // namespace
 
+// _____________________________________________________________________________
+// Test that triple-term references have no literal representation and that
+// string export rejects them until structural serialization is implemented.
 TEST(ExportIds, tripleTermReferencesHaveNoLiteralOrStringRepresentationYet) {
   const auto& index = ad_utility::testing::getQec()->getIndex();
   auto term = Id::makeFromTripleTermIndex(TripleTermIndex::make(17));

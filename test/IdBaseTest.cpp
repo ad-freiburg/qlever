@@ -182,20 +182,41 @@ TYPED_TEST(IdBaseTest, makeFromBool) {
 // `LocalVocabIndex` is a pointer and has no `maxIndex`.
 TYPED_TEST(IdBaseTest, Indices) {
   using Id = TypeParam;
-  auto testRandomIds = [&](auto makeId, auto getFromId, Datatype type) {
+  auto testRandomIds = [&](auto makeId, auto getFromId, Datatype type,
+                           auto indexType) {
+    using IndexType = typename decltype(indexType)::type;
     auto testSingle = [&](auto value) {
       auto id = makeId(value);
       ASSERT_EQ(id.getDatatype(), type);
       ASSERT_EQ(std::invoke(getFromId, id), value);
+      EXPECT_EQ(id, Id::fromBits(id.getBits()));
+      if (type != Datatype::LocalVocabIndex) {
+        EXPECT_NE(id, Id::makeFromInt(17));
+      }
+      EXPECT_FALSE(id.isTrivial());
+      EXPECT_EQ(id.canBeComparedBitwise(), type != Datatype::LocalVocabIndex);
+      EXPECT_TRUE(id.visit([](const auto& payload) {
+        return std::is_same_v<std::decay_t<decltype(payload)>, IndexType>;
+      }));
+      if (type != Datatype::VocabIndex && type != Datatype::LocalVocabIndex &&
+          type != Datatype::SecondaryVocabIndex) {
+        EXPECT_NE(id, Id::makeFromVocabIndex(VocabIndex::make(17)));
+      }
     };
     for (size_t idx = 0; idx < numElements; ++idx) {
       testSingle(indexGenerator<Id>());
     }
     testSingle(0);
+    testSingle(17);
     testSingle(Id::maxIndex);
+    if (type != Datatype::LocalVocabIndex) {
+      EXPECT_LT(makeId(0), makeId(Id::maxIndex));
+    }
 
     if (type != Datatype::LocalVocabIndex &&
         Id::maxIndex < std::numeric_limits<uint64_t>::max()) {
+      AD_EXPECT_THROW_WITH_MESSAGE(makeId(Id::maxIndex + 1),
+                                   ::testing::HasSubstr("is bigger than"));
       for (size_t idx = 0; idx < numElements; ++idx) {
         auto value = invalidIndexGenerator<Id>();
         if (value == Id::maxIndex) {
@@ -208,20 +229,28 @@ TYPED_TEST(IdBaseTest, Indices) {
   };
 
   testRandomIds(&makeTextRecordId<Id>, &getTextRecordIndex<Id>,
-                Datatype::TextRecordIndex);
-  testRandomIds(&makeVocabId<Id>, &getVocabIndex<Id>, Datatype::VocabIndex);
+                Datatype::TextRecordIndex,
+                std::type_identity<TextRecordIndex>{});
+  testRandomIds(&makeVocabId<Id>, &getVocabIndex<Id>, Datatype::VocabIndex,
+                std::type_identity<VocabIndex>{});
   auto localVocabWordToInt = [](const auto& input) {
     return std::strtoull(getLocalVocabIndex(input).c_str(), nullptr, 10);
   };
   testRandomIds(&makeLocalVocabId<Id>, localVocabWordToInt,
-                Datatype::LocalVocabIndex);
+                Datatype::LocalVocabIndex,
+                std::type_identity<LocalVocabIndex>{});
   testRandomIds(&makeWordVocabId<Id>, &getWordVocabIndex<Id>,
-                Datatype::WordVocabIndex);
+                Datatype::WordVocabIndex, std::type_identity<WordVocabIndex>{});
   testRandomIds(&makeSecondaryVocabId<Id>, &getSecondaryVocabIndex<Id>,
-                Datatype::SecondaryVocabIndex);
+                Datatype::SecondaryVocabIndex,
+                std::type_identity<SecondaryVocabIndex>{});
   testRandomIds(&makeBlankNodeId<Id>, &getBlankNodeIndex<Id>,
-                Datatype::BlankNodeIndex);
-  testRandomIds(&makeEncodedId<Id>, &getEncodedVal<Id>, Datatype::EncodedVal);
+                Datatype::BlankNodeIndex, std::type_identity<BlankNodeIndex>{});
+  testRandomIds(&makeEncodedId<Id>, &getEncodedVal<Id>, Datatype::EncodedVal,
+                std::type_identity<uint64_t>{});
+  testRandomIds(&makeTripleTermId<Id>, &getTripleTermIndex<Id>,
+                Datatype::TripleTermIndex,
+                std::type_identity<TripleTermIndex>{});
 }
 
 // Test `makeUndefined` and `getUndefined`.
@@ -893,39 +922,3 @@ TYPED_TEST(IdBaseTest, fromBitsL) {
 // evaluated in a `static_assert` after the definition of the class, which the
 // coverage tool does not count as a call.
 TYPED_TEST(IdBaseTest, checkDerived) { EXPECT_TRUE(TypeParam::checkDerived()); }
-
-// Test triple-term ID round-tripping, datatype separation and visitor dispatch
-// for both layouts.
-TYPED_TEST(IdBaseTest, TripleTermRoundTripAndTypeSeparation) {
-  using Id = TypeParam;
-  auto id = Id::makeFromTripleTermIndex(TripleTermIndex::make(17));
-  EXPECT_EQ(id.getDatatype(), Datatype::TripleTermIndex);
-  EXPECT_EQ(id.getTripleTermIndex().get(), 17);
-  EXPECT_EQ(id, Id::fromBits(id.getBits()));
-  EXPECT_NE(id, Id::makeFromInt(17));
-  EXPECT_NE(id, Id::makeFromVocabIndex(VocabIndex::make(17)));
-  EXPECT_FALSE(id.isTrivial());
-  EXPECT_TRUE(id.canBeComparedBitwise());
-  EXPECT_TRUE(id.visit([](const auto& value) {
-    return std::is_same_v<std::decay_t<decltype(value)>, TripleTermIndex>;
-  }));
-}
-
-// Test triple-term payload bounds and physical reference ordering for both
-// layouts, including overflow rejection where a larger index is representable.
-TYPED_TEST(IdBaseTest, TripleTermPayloadBoundsAndOrdering) {
-  using Id = TypeParam;
-  auto zero = Id::makeFromTripleTermIndex(TripleTermIndex::make(0));
-  auto maximum =
-      Id::makeFromTripleTermIndex(TripleTermIndex::make(Id::maxIndex));
-  EXPECT_LT(zero, maximum);
-  EXPECT_EQ(maximum.getTripleTermIndex().get(), Id::maxIndex);
-  // A 64-bit payload has no representable index beyond its maximum.
-  if constexpr (Id::maxIndex < std::numeric_limits<uint64_t>::max()) {
-    AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-        Id::makeFromTripleTermIndex(TripleTermIndex::make(Id::maxIndex + 1)),
-        ::testing::HasSubstr(
-            "is bigger than what the maxIndex of ValueId allows"),
-        typename Id::IndexTooLargeException);
-  }
-}

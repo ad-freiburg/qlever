@@ -389,8 +389,9 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForId(
     case Datatype::Date:
     case Datatype::GeoPoint:
     case Datatype::BlankNodeIndex:
-    // Equality is exact for index-local term references. Order across term IDs
-    // is only their physical order, not a SPARQL ordering.
+    // As long as we don't have local vocab triple term indices, the equality on
+    // `TripleTermIndex` works on bits. For `<>`  we currently also use the bit
+    // order.
     // TODO<Prashanth0703> Determine the correct semantic ordering of triple
     // terms.
     case Datatype::TripleTermIndex:

@@ -40,11 +40,12 @@ static constexpr auto datatypesOfVersion1 = []() {
                         Date, GeoPoint, WordVocabIndex, BlankNodeIndex,
                         EncodedVal});
 }();
-// We never transmit TripleTermIndex in the binary export because
-// StringMapping::remapId rejects it. The existing datatype tags are unchanged,
-// so the export remains compatible with version 1, which predates this
-// datatype. If that rejection is removed, reassess binaryQleverExportVersion
-// and these format checks before transmitting triple-term references.
+// NOTE: We never transmit `TripleTermIndex` in the binary export because
+// `StringMapping::remapId` rejects it. The existing datatype tags are
+// unchanged, so the export remains compatible with version 1, which predates
+// this datatype. If that rejection is removed, reassess
+// `binaryQleverExportVersion` and these format checks before transmitting
+// triple-term references.
 static_assert([] {
   for (size_t i = 0; i < datatypesOfVersion1.size(); ++i) {
     if (static_cast<size_t>(datatypesOfVersion1[i]) != i) {
