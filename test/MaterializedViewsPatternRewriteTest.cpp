@@ -501,6 +501,21 @@ TEST_F(MaterializedViewsPatternRewriteContextTest,
                                   ad_utility::HashSet<std::string>{"<g1>"})));
 }
 
+// Test that a triple from which the pattern trick reads the patterns is not
+// replaced by a view scan (which cannot provide the patterns).
+TEST_F(MaterializedViewsPatternRewriteContextTest, patternTrickNotRewritten) {
+  qlv().writeMaterializedView("testViewChain", std::string{simpleChain});
+
+  // The patterns of `?s` are read from the scan of `<p1>`, so the chain is not
+  // replaced by the view. All three subjects `?s` only have the predicate
+  // `<p1>`.
+  static constexpr std::string_view query =
+      "SELECT ?p (COUNT(DISTINCT ?s) AS ?c) "
+      "{ ?s ?p ?o . ?s <p1> ?m . ?m <p2> ?o2 } GROUP BY ?p";
+  EXPECT_EQ(qlv().query(std::string{query}, ad_utility::MediaType::tsv),
+            "?p\t?c\n<p1>\t3\n");
+}
+
 // An assignment limit too small for one full match (a 2-edge chain needs >= 2
 // attempts) finds nothing and warns; the default limit finds the match.
 TEST_F(MaterializedViewsPatternMatchingTest,

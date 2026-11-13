@@ -321,3 +321,49 @@ TEST(CheckUsePatternTrick, tripleIsCorrectlyRemoved) {
   }
 }
 }  // namespace
+
+// Test that the patterns are only read from additional columns of triples that
+// are evaluated by an index scan on the regular PSO or POS permutation, and
+// otherwise from an added triple `?x ql:has-pattern ?p`.
+TEST(CheckUsePatternTrick, patternColumnsOnlyForRegularIndexScans) {
+  using namespace ::testing;
+  // Apply the pattern trick to the query with the given `whereClause` and
+  // return the triples of its first graph pattern.
+  auto rewrite = [](const std::string& whereClause) {
+    auto pq = parseQuery(
+        absl::StrCat("SELECT ?p WHERE { ", whereClause, " } GROUP BY ?p"));
+    auto patternTrickTuple = checkUsePatternTrick::checkUsePatternTrick(&pq);
+    AD_CORRECTNESS_CHECK(patternTrickTuple.has_value());
+    return std::get<parsedQuery::BasicGraphPattern>(
+               pq._rootGraphPattern._graphPatterns.at(0))
+        ._triples;
+  };
+  auto hasNoAdditionalColumns =
+      Field(&SparqlTriple::additionalScanColumns_, IsEmpty());
+  auto isHasPatternTriple =
+      AllOf(Property(&SparqlTriple::getSimplePredicate,
+                     Optional(Eq(HAS_PATTERN_PREDICATE))),
+            Field(&SparqlTriple::o_, Eq(TripleComponent{Variable{"?p"}})));
+
+  // A triple with a language-tagged predicate (from the `LANG` filter), the
+  // predicate `ql:langtag`, `ql:has-predicate`, a text search predicate, or a
+  // magic predicate of a spatial join or a materialized view is not used.
+  for (std::string specialTriple :
+       {"?x <label> ?l FILTER(LANG(?l) = \"fr\")", "FILTER(LANG(?x) = \"fr\")",
+        "?x ql:has-predicate ?q", "?t ql:contains-entity ?x",
+        "?y <max-distance-in-meters:100> ?x",
+        "?x <https://qlever.cs.uni-freiburg.de/materializedView/v-c> ?y"}) {
+    EXPECT_THAT(rewrite(absl::StrCat("?x ?p ?o . ", specialTriple)),
+                ElementsAre(hasNoAdditionalColumns, isHasPatternTriple))
+        << specialTriple;
+  }
+
+  // A regular triple after a special one is used.
+  EXPECT_THAT(
+      rewrite("?x ?p ?o . ?x ql:has-predicate ?q . ?x <is-a> ?y"),
+      ElementsAre(
+          hasNoAdditionalColumns,
+          Field(&SparqlTriple::additionalScanColumns_,
+                ElementsAre(std::pair{ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN,
+                                      Variable{"?p"}}))));
+}
