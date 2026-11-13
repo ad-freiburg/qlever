@@ -37,6 +37,7 @@
 #include "util/Generator.h"
 #include "util/HashSet.h"
 #include "util/Iterators.h"
+#include "util/compressionUsingZstd/ZstdContext.h"
 
 class LocatedTriplesPerBlock;
 
@@ -239,6 +240,11 @@ class CompressedRelationReader {
 
   // The file that stores the actual permutations.
   ad_utility::File file_;
+
+  // The ZSTD context of each thread that decompresses blocks. It is held via a
+  // pointer, because a `ThreadLocalZstdContext` cannot be moved.
+  std::unique_ptr<ad_utility::ThreadLocalZstdContext> zstdContext_ =
+      std::make_unique<ad_utility::ThreadLocalZstdContext>();
 
   // This setting controls whether filtering on the graph column and
   // deduplication of rows is performed during scanning. Deactivating this is
@@ -536,8 +542,8 @@ class CompressedRelationReader {
   // Helper function for `decompressBlock`. Decompress the `compressedColumn`
   // into the `column`, whose size is the number of rows to read (see the
   // documentation of `decompressBlock`).
-  static void decompressColumn(const std::vector<char>& compressedColumn,
-                               IdColumnRef column);
+  void decompressColumn(const std::vector<char>& compressedColumn,
+                        IdColumnRef column) const;
 
   // Read and decompress the parts of the block given by `blockMetaData` (which
   // identifies the block) and `scanConfig` (which specifies the part of that

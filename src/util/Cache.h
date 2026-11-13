@@ -14,10 +14,10 @@
 
 #include "backports/type_traits.h"
 #include "util/HashMap.h"
-#include "util/MemorySize/MemorySize.h"
 #include "util/PriorityQueue.h"
 #include "util/TypeTraits.h"
 #include "util/ValueSizeGetters.h"
+#include "util/memorySize/MemorySize.h"
 
 namespace ad_utility {
 

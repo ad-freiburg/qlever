@@ -18,7 +18,7 @@
 #include "backports/algorithm.h"
 #include "engine/idTable/splitLayout/IdColumnVector.h"
 #include "engine/idTable/splitLayout/IdRef.h"
-#include "util/MemorySize/MemorySize.h"
+#include "util/memorySize/MemorySize.h"
 
 using namespace columnBasedIdTable::splitLayout;
 using testHelpers::sampleIds;

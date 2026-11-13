@@ -38,7 +38,7 @@
 #include "parser/TokenizerCtre.h"
 #include "parser/TripleComponent.h"
 #include "util/Log.h"
-#include "util/MemorySize/MemorySize.h"
+#include "util/memorySize/MemorySize.h"
 
 using std::string;
 using namespace std::literals;

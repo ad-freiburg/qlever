@@ -14,7 +14,7 @@
 #include <vector>
 
 #include "parser/BlankNodeAdder.h"
-#include "util/MemorySize/MemorySize.h"
+#include "util/memorySize/MemorySize.h"
 
 namespace {
 using ad_utility::MemorySize;
