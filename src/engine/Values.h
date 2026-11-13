@@ -25,6 +25,10 @@ class Values : virtual public Operation {
   SparqlValues& parsedValues() { return parsedValues_; }
 
  public:
+  // Return the parsed values (before the result is computed, which moves them
+  // out).
+  const SparqlValues& parsedValues() const { return parsedValues_; }
+
   // Create operation from parsed values. This calls `sanitizeValues`.
   // and values.
   Values(QueryExecutionContext* qec, SparqlValues parsedValues);
