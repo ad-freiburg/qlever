@@ -53,6 +53,18 @@ TEST(EnumSize, enumSize) {
   EXPECT_EQ(qlever::enumSize<Color>, 3u);
 }
 
+// Test that the function `qleverEnumSize` defined by the two macros also
+// returns the size when it is called at runtime.
+TEST(EnumSize, qleverEnumSizeAtRuntime) {
+  qlever::enumSizeDetail::EnumSizeTag tag;
+  Color color = Color::Green;
+  WithNestedEnum::Kind kind = WithNestedEnum::Kind::First;
+  std::size_t colorSize = qleverEnumSize(tag, color);
+  std::size_t kindSize = qleverEnumSize(tag, kind);
+  EXPECT_EQ(colorSize, 3u);
+  EXPECT_EQ(kindSize, 2u);
+}
+
 // Test that `qlever::allEnumValues` lists all the values in increasing order.
 TEST(EnumSize, allEnumValues) {
   using C = Color;
