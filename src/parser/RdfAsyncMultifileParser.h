@@ -23,8 +23,8 @@
 #include "parser/AsyncRdfParserBase.h"
 #include "parser/RdfParser.h"
 #include "util/Iterators.h"
-#include "util/MemorySize/MemorySize.h"
 #include "util/Synchronized.h"
+#include "util/memorySize/MemorySize.h"
 
 // The asynchronous counterpart of `RdfMultifileParser`: parses several input
 // files, each specified by an `InputFileSpecification`, and delivers their

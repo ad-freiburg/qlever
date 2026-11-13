@@ -24,8 +24,8 @@
 #include "util/AsyncHandlerUtils.h"
 #include "util/File.h"
 #include "util/Forward.h"
-#include "util/MemorySize/MemorySize.h"
 #include "util/UninitializedAllocator.h"
+#include "util/memorySize/MemorySize.h"
 
 namespace qlever::parser {
 

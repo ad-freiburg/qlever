@@ -29,7 +29,7 @@
 #include "parser/AsyncBlockSource.h"
 #include "util/Exception.h"
 #include "util/File.h"
-#include "util/MemorySize/MemorySize.h"
+#include "util/memorySize/MemorySize.h"
 
 namespace {
 

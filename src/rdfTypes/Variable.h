@@ -12,9 +12,9 @@
 
 #include "backports/three_way_comparison.h"
 #include "util/DefaultedHash.h"
-#include "util/Serializer/SerializeString.h"
-#include "util/Serializer/Serializer.h"
 #include "util/UnicodeSupport.h"
+#include "util/serializer/SerializeString.h"
+#include "util/serializer/Serializer.h"
 
 class Variable {
  private:

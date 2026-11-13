@@ -20,13 +20,13 @@
 #include "util/Exception.h"
 #include "util/File.h"
 #include "util/Iterators.h"
-#include "util/MemorySize/MemorySize.h"
 #include "util/NoCopyNoMove.h"
 #include "util/OwnedOrViewedVector.h"
-#include "util/Serializer/FileSerializer.h"
-#include "util/Serializer/SerializeVector.h"
 #include "util/TypeTraits.h"
 #include "util/UniqueCleanup.h"
+#include "util/memorySize/MemorySize.h"
+#include "util/serializer/FileSerializer.h"
+#include "util/serializer/SerializeVector.h"
 
 namespace detail {
 template <typename DataT>
@@ -70,7 +70,7 @@ class CompactVectorOfStrings {
   // Build a `CompactVectorOfStrings` as a non-owning, zero-copy view directly
   // into the buffer of `serializer`, which must support zero-copy
   // deserialization (see `ZeroCopyReadSerializer` in
-  // `util/Serializer/Serializer.h`). The returned object is only valid as
+  // `util/serializer/Serializer.h`). The returned object is only valid as
   // long as the memory backing `serializer`'s buffer is valid and unchanged.
   CPP_template(typename S)(
       requires ad_utility::serialization::ZeroCopyReadSerializer<S>)
