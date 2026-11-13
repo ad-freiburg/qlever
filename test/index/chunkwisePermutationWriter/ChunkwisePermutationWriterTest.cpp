@@ -22,9 +22,11 @@
 #include "../../util/PermutationPairTestHelpers.h"
 
 // The tests of the chunkwise permutation writer that are specific to it: many
-// chunks, relations that span several chunks, the serial merge, and failing
-// callbacks. The tests that apply to both the classical and the chunkwise
-// writer are parameterized in `test/index/PermutationPairWriterTest.cpp`.
+// chunks, relations that span several chunks, the serial merge, failing
+// callbacks, and the interface of the sink driven directly (invalid arguments,
+// exceptions and stops from the merge, failing operations of a chunk). The
+// tests that apply to both the classical and the chunkwise writer are
+// parameterized in `test/index/PermutationPairWriterTest.cpp`.
 //
 // NOTE: The chunkwise writer needs the parallel merge, which only exists in the
 // C++20 mode of the build.
