@@ -14,11 +14,11 @@
 
 #include "../test/util/ConfigOptionHelpers.h"
 #include "backports/type_traits.h"
-#include "util/ConfigManager/ConfigExceptions.h"
-#include "util/ConfigManager/ConfigOption.h"
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"
 #include "util/GTestHelpers.h"
+#include "util/configManager/ConfigExceptions.h"
+#include "util/configManager/ConfigOption.h"
 #include "util/json.h"
 
 namespace ad_utility {
