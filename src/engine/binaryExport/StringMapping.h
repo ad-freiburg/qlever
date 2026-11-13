@@ -26,7 +26,8 @@ namespace qlever::binary_export {
 // non-trivial IDs (IDs that point to literals or IRIs that are not encoded
 // directly in the ID) for a batch of IDs. It assigns a unique index to each of
 // those IDs and resolves it to its string right away, so the size of a batch
-// is known.
+// is known. The counterpart on the importing side is
+// `TransmittedStringRewriter` (see below).
 class StringMapping {
   const Index* index_;
   // Only required for the signature of `idToLiteralOrIri`. A `LocalVocabIndex`
@@ -68,7 +69,46 @@ class StringMapping {
 
   // Const access to the string mapping.
   const auto& stringMappingForTesting() const { return stringMapping_; }
+
+  // The `Id` with which `remapId` refers to the string with the given `index`
+  // of its batch, and the inverse of this function, which the importer uses
+  // (see `TransmittedStringRewriter`). The `index` is not a pointer, so it is
+  // stored directly as the payload, without `Id::makeFromLocalVocabIndex`.
+  static Id makeTransmittedId(size_t index) {
+    return Id::fromBits(Datatype::LocalVocabIndex, index);
+  }
+  static size_t getTransmittedIndex(Id id) { return id.getPayloadBits(); }
 };
+
+// The counterpart of `StringMapping` on the importing side: rewrite the IDs
+// that refer to the strings of one batch (see `StringMapping::takeStrings`) to
+// the local IDs of these strings.
+class TransmittedStringRewriter {
+  // The local `Id` of the string with index `i` is at position `i`.
+  std::vector<Id> ids_;
+
+ public:
+  // Convert each of the `strings` to a local `Id` once (see
+  // `stringToLocalId`), the `localVocab` then contains the strings that are
+  // not contained in the `index`.
+  TransmittedStringRewriter(std::vector<std::string> strings,
+                            const Index& index, LocalVocab& localVocab);
+
+  // Return the local `Id` of the string that the `id` (as returned by
+  // `StringMapping::remapId`) refers to. Throw if the batch doesn't contain
+  // that string.
+  Id operator()(Id id) const;
+};
+
+// Convert the string representation of a literal or IRI to a local `Id` in
+// the same way as for any other input (see `toValueId`): an IRI that can be
+// encoded with a local pattern becomes an `EncodedVal`, a word of the
+// vocabularies of the `index` the corresponding `VocabIndex` or
+// `SecondaryVocabIndex`, and only the remaining words are added to the
+// `localVocab`. Throw if the string is not the representation of an IRI or a
+// literal.
+Id stringToLocalId(std::string representation, const Index& index,
+                   LocalVocab& localVocab);
 }  // namespace qlever::binary_export
 
 #endif  // QLEVER_SRC_ENGINE_BINARYEXPORT_STRINGMAPPING_H

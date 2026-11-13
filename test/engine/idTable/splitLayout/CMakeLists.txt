@@ -9,3 +9,5 @@ addLinkAndDiscoverTest(IdRefTest engine testUtil)
 addLinkAndDiscoverTest(IdColumnVectorTest engine testUtil)
 
 addLinkAndDiscoverTest(SplitLayoutIdBitRepresentationTest engine testUtil)
+
+addLinkAndDiscoverTest(SplitLayoutIdTest engine testUtil)
