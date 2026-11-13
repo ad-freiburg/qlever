@@ -57,11 +57,8 @@ CartesianProductJoin::CartesianProductJoin(
 
 // ____________________________________________________________________________
 qlm::vector<QueryExecutionTree*> CartesianProductJoin::getChildrenImpl() const {
-  qlm::vector<QueryExecutionTree*> result{allocator()};
-  ql::ranges::copy(
-      children_ | ql::views::transform([](auto& ptr) { return ptr.get(); }),
-      std::back_inserter(result));
-  return result;
+  return children_ | ql::views::transform([](auto& ptr) { return ptr.get(); }) |
+         ::ranges::to<qlm::vector>(allocator());
 }
 
 // ____________________________________________________________________________
@@ -486,17 +483,14 @@ CartesianProductJoin::makeDistinctTree(
   // empty set of columns, which reduces it to (at most) a single row. This is
   // correct, because such a child does not contribute to `distinctIndices` and
   // only multiplies the number of rows in the Cartesian product.
-  auto distinctChildren =
+  auto newChildren =
       ::ranges::views::zip(children_,
                            perChildDistinctIndices(distinctIndices)) |
       ql::views::transform([](const auto& childAndIndices) {
         const auto& [child, childIndices] = childAndIndices;
         return QueryExecutionTree::createDistinctTree(child, childIndices);
-      });
-  // TODO<joka921>: Use `::ranges::to<Children>(allocator())` once supported.
-  Children newChildren{allocator()};
-  newChildren.reserve(children_.size());
-  ql::ranges::copy(distinctChildren, std::back_inserter(newChildren));
+      }) |
+      ::ranges::to<qlm::vector>(allocator());
   return ad_utility::makeExecutionTree<CartesianProductJoin>(
       _executionContext, std::move(newChildren));
 }

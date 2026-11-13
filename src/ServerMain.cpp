@@ -19,12 +19,12 @@
 #include "libqlever/Qlever.h"
 #include "util/Algorithm.h"
 #include "util/KernelBugWorkaround.h"
-#include "util/MemorySize/MemorySize.h"
 #include "util/ParseableDuration.h"
 #include "util/ProgramOptionsHelpers.h"
 #include "util/ReadableNumberFacet.h"
 #include "util/ResourceMonitor.h"
 #include "util/http/HttpProxyConfig.h"
+#include "util/memorySize/MemorySize.h"
 #include "util/metrics/Metrics.h"
 
 using std::size_t;
