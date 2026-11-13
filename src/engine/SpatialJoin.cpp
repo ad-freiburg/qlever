@@ -49,7 +49,7 @@
 #include "util/AllocatorWithLimit.h"
 #include "util/ContainersWithAllocator.h"
 #include "util/Exception.h"
-#include "util/MemorySize/MemorySize.h"
+#include "util/memorySize/MemorySize.h"
 
 // ____________________________________________________________________________
 SpatialJoin::SpatialJoin(

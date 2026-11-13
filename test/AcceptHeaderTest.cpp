@@ -7,7 +7,7 @@
 #include <string>
 
 #include "util/ParseException.h"
-#include "util/http/HttpParser/AcceptHeaderQleverVisitor.h"
+#include "util/http/httpParser/AcceptHeaderQleverVisitor.h"
 
 using namespace antlr4;
 using std::string;
