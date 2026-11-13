@@ -917,17 +917,11 @@ GraphPatternOperation makeAllTripleGraphPattern(
 }
 
 // ____________________________________________________________________________________
-// Make `UpdateTriples` that consist of a single triple that templates all
-// triples in the graph.
-updateClause::UpdateTriples makeAllTripleTemplate(
-    const qlever::Allocator<Id>& allocator,
+// Make a `SparqlTripleSimpleWithGraph` that templates all triples in the graph.
+SparqlTripleSimpleWithGraph makeAllTripleTemplate(
     SparqlTripleSimpleWithGraph::Graph graph) {
-  return {qlm::vector<SparqlTripleSimpleWithGraph>{{{{Variable("?s")},
-                                                     {Variable("?p")},
-                                                     {Variable("?o")},
-                                                     std::move(graph)}},
-                                                   allocator},
-          LocalVocab{}};
+  return {
+      {Variable("?s")}, {Variable("?p")}, {Variable("?o")}, std::move(graph)};
 }
 }  // namespace
 
@@ -965,9 +959,11 @@ ParsedQuery Visitor::makeClear(const GraphRefAll& graph) {
   parsedQuery_._rootGraphPattern._graphPatterns.push_back(
       std::move(graphPattern));
   parsedQuery_._clause = parsedQuery::UpdateClause{
-      allocator(), GraphUpdate{updateClause::UpdateTriples{allocator()},
-                               makeAllTripleTemplate(
-                                   allocator(), std::move(updatePattern))}};
+      allocator(),
+      GraphUpdate{
+          updateClause::UpdateTriples{allocator()},
+          {{{makeAllTripleTemplate(std::move(updatePattern))}, allocator()},
+           LocalVocab{}}}};
   parsedQuery_.datasetClauses_ = activeDatasetClauses_;
   return parsedQuery_;
 }
@@ -979,8 +975,10 @@ ParsedQuery Visitor::makeAdd(const GraphOrDefault& source,
       makeAllTripleGraphPattern(transformGraph(source)));
   parsedQuery_._clause = parsedQuery::UpdateClause{
       allocator(),
-      GraphUpdate{makeAllTripleTemplate(allocator(), transformGraph(target)),
-                  updateClause::UpdateTriples{allocator()}}};
+      GraphUpdate{
+          {{{makeAllTripleTemplate(transformGraph(target))}, allocator()},
+           LocalVocab{}},
+          updateClause::UpdateTriples{allocator()}}};
   parsedQuery_.datasetClauses_ = activeDatasetClauses_;
   return parsedQuery_;
 }

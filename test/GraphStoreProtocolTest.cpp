@@ -403,8 +403,7 @@ TEST(GraphStoreProtocolTest, convertTriples) {
             ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
         auto trace = generateLocationTrace(l);
         auto convertedTriples = GraphStoreProtocol::convertTriples(
-            graph, std::move(triples), bn,
-            ad_utility::testing::makeAllocator());
+            graph, std::move(triples), bn, makeAllocator());
         EXPECT_THAT(convertedTriples,
                     AD_FIELD(updateClause::UpdateTriples, triples_,
                              testing::ElementsAreArray(expectedTriples)));
@@ -459,20 +458,18 @@ TEST(GraphStoreProtocolTest, convertTriples) {
 // the result has to grow with the number of triples by at least the size of
 // the triples.
 TEST(GraphStoreProtocolTest, postAllocationsCountTowardsMemoryLimit) {
-  auto index = ad_utility::testing::makeTestIndex(TestIndexConfig{});
+  auto index = makeTestIndex(TestIndexConfig{});
   auto memoryUsedByPost = [&index](size_t numTriples) {
     std::string body;
     for (size_t i = 0; i < numTriples; ++i) {
       absl::StrAppend(&body, "<http://example.org/s", i,
                       "> <http://example.org/p> \"o", i, "\" .\n");
     }
-    auto allocator = ad_utility::testing::makeAllocator(
-        ad_utility::MemorySize::megabytes(100));
+    auto allocator = makeAllocator(ad_utility::MemorySize::megabytes(100));
     const size_t memoryLeftBefore = allocator.amountMemoryLeft().getBytes();
     auto parsedQueries = GraphStoreProtocol::transformGraphStoreProtocol(
         GraphStoreOperation{DEFAULT{}},
-        ad_utility::testing::makePostRequest("/?default", "text/turtle", body),
-        index, allocator);
+        makePostRequest("/?default", "text/turtle", body), index, allocator);
     return memoryLeftBefore - allocator.amountMemoryLeft().getBytes();
   };
   constexpr size_t numSmall = 10;
