@@ -51,12 +51,12 @@
 //
 // NOTE 3: The hash containers `flat_hash_map`, `flat_hash_set`,
 // `node_hash_map`, and `node_hash_set` are the `boost::unordered_flat_...` and
-// `boost::unordered_node_...` containers if available, and
-// `std::unordered_map` and `std::unordered_set` else (see
-// `backports/unordered.h`; the `absl` containers are not exception safe, but
-// `qlever::Allocator` throws when the memory limit is exceeded). The `node_...`
-// containers guarantee pointer stability of their elements, the `flat_...`
-// containers don't. In all cases, the hash function defaults to `absl::Hash`.
+// `boost::unordered_node_...` containers if available, and otherwise
+// `std::unordered_map` and `std::unordered_set` (see `backports/unordered.h`;
+// the `absl` containers are not exception safe, but `qlever::Allocator` throws
+// when the memory limit is exceeded). The `node_...` containers guarantee
+// pointer stability of their elements, the `flat_...` containers don't. In all
+// cases, the hash function defaults to `absl::Hash`.
 namespace qlm {
 
 template <typename T>

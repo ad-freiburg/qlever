@@ -15,20 +15,21 @@
 #include "util/AllocatorWithLimit.h"
 
 namespace ad_utility {
-// Wrapper for HashMaps to be used everywhere throughout code for the semantic
-// search. This wrapper interface is not designed to be complete from the
-// beginning. Feel free to extend it at need. The underlying hash map is
-// `boost::unordered_flat_map` if available, and `std::unordered_map` else (see
-// `backports/unordered.h`). The hash function defaults to `absl::Hash`.
+// The hash map that is used everywhere throughout the code. The underlying
+// hash map is `boost::unordered_flat_map` if available, and otherwise
+// `std::unordered_map` (see `backports/unordered.h`). The hash function
+// defaults to `absl::Hash`.
 template <class K, class V, class HashFct = absl::DefaultHashContainerHash<K>,
           class EqualElem = absl::DefaultHashContainerEq<K>,
           class Alloc = std::allocator<std::pair<const K, V>>>
 using HashMap = ql::FlatHashMapTemplate<K, V, HashFct, EqualElem, Alloc>;
 
-// A HashMap with a memory limit. Note: We cannot use `absl::flat_hash_map`
-// here, because it is inherently not exception safe, and the
-// `AllocatorWithLimit` uses exceptions. Both `boost::unordered_flat_map` and
-// `std::unordered_map` are exception safe.
+// A `HashMap` with a memory limit.
+//
+// NOTE: The `AllocatorWithLimit` throws when the limit is exceeded, so the
+// underlying hash map has to be exception safe, which
+// `boost::unordered_flat_map` and `std::unordered_map` are, but
+// `absl::flat_hash_map` is not.
 template <class K, class V, class HashFct = absl::DefaultHashContainerHash<K>,
           class EqualElem = absl::DefaultHashContainerEq<K>,
           class Alloc = ad_utility::AllocatorWithLimit<std::pair<const K, V>>>
