@@ -42,7 +42,7 @@
 #include "util/UniqueCleanup.h"
 #include "util/Views.h"
 #include "util/blockSort/BlockIndirectSort.h"
-#include "util/compressionUsingZstd/ZstdWrapper.h"
+#include "util/compressionUsingZstd/ZstdContext.h"
 #include "util/memorySize/MemorySize.h"
 #include "util/parallelBlockMerge/ParallelBlockMerge.h"
 #include "util/views/ChunkedIotaView.h"
@@ -91,6 +91,9 @@ class CompressedExternalIdTableWriter {
   std::atomic<off_t> nextOffset_{0};
   ad_utility::Synchronized<ad_utility::File, std::shared_mutex> file_{filename_,
                                                                       "w+"};
+  // The ZSTD context and compression buffer of each thread that compresses or
+  // decompresses blocks.
+  ad_utility::ThreadLocalZstdContext zstdContext_;
   // For a single column, the concatenation of the blocks for that column of all
   // `IdTables`.
   using ColumnMetadata = std::vector<CompressedBlockMetadata>;
@@ -242,8 +245,9 @@ class CompressedExternalIdTableWriter {
     AD_CORRECTNESS_CHECK(lower < upper);
     auto uncompressedSize = (upper - lower) * BYTES_PER_ID_COLUMN_ENTRY;
     auto compressed = idColumnByteIO::encode(
-        column.subspan(lower, upper - lower),
-        [](const auto& chunks) { return ZstdWrapper::compressChunks(chunks); });
+        column.subspan(lower, upper - lower), [this](const auto& chunks) {
+          return zstdContext_.compressChunks(chunks);
+        });
     auto offset = nextOffset_.fetch_add(static_cast<off_t>(compressed.size()));
     // NOTE: This throws if not all the bytes could be written.
     file_.rlock()->write(compressed.data(), compressed.size(), offset);
@@ -400,8 +404,8 @@ class CompressedExternalIdTableWriter {
     AD_CORRECTNESS_CHECK(numBytesRead >= 0 &&
                          static_cast<size_t>(numBytesRead) ==
                              metaData.compressedSize_);
-    idColumnByteIO::decode(col, [&compressed](const auto& buffers) {
-      ZstdWrapper::decompressChunks(compressed, buffers);
+    idColumnByteIO::decode(col, [this, &compressed](const auto& buffers) {
+      zstdContext_.decompressChunks(compressed, buffers);
     });
   }
 
