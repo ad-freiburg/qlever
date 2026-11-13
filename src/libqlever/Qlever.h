@@ -44,13 +44,13 @@
 #include "util/Allocator.h"
 #include "util/Executor.h"
 #include "util/GlobalExecutor.h"
-#include "util/MemorySize/MemorySize.h"
 #include "util/NoCopyNoMove.h"
 #include "util/Synchronized.h"
 #include "util/TimeTracer.h"
 #include "util/TransparentFunctors.h"
 #include "util/http/MediaTypes.h"
 #include "util/json.h"
+#include "util/memorySize/MemorySize.h"
 
 namespace qlever {
 

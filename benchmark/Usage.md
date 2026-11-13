@@ -168,7 +168,7 @@ Setting the values of the configuration options at runtime can be done in two wa
 
 1. Writing a JSON file and passing the file location via CLI.
 
-2. Using the shorthand described in `src/util/ConfigManager/generated/ConfigShorthand.g4`, by writing it directly as an argument via CLI. Note: The shorthand will overwrite the value of any configuration option, if both ways try to set it.
+2. Using the shorthand described in `src/util/configManager/generated/ConfigShorthand.g4`, by writing it directly as an argument via CLI. Note: The shorthand will overwrite the value of any configuration option, if both ways try to set it.
 
 The shorthand is basically just normal JSON, but adjusted for easier usage. There are 3 big changes.  
 

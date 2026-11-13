@@ -17,8 +17,8 @@
 #include "index/vocabulary/VocabularyType.h"
 #include "rdfTypes/GeoCellGrid.h"
 #include "util/GTestHelpers.h"
-#include "util/Serializer/ByteBufferSerializer.h"
 #include "util/json.h"
+#include "util/serializer/ByteBufferSerializer.h"
 
 using json = nlohmann::json;
 using std::string;
