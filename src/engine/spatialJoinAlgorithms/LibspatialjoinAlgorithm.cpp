@@ -309,22 +309,15 @@ Result LibspatialjoinAlgorithm::run() {
 
   auto [sweeperTmpPath, sweeperPrefix] = getSweeperTempPath();
 
-  // Each side has its own temporary `GeometryStore` and `SweepEventList`,
-  // indexed by `smallerIsRight` below (`0` for the left side, `1` for the right
-  // side).
-  //
-  // NOTE: A shared store would be enough, but the `Sweeper` skips a pair of
-  // geometries with the same type, ID and store ID as the same geometry, even
-  // if they are from different sides. This happens for points, whose ID is
-  // derived from the row index.
-  std::array<sj::GeometryStore, 2> stores{
-      sj::GeometryStore{sweeperCfg, sweeperTmpPath, sweeperPrefix, false},
-      sj::GeometryStore{sweeperCfg, sweeperTmpPath, sweeperPrefix, false}};
+  // Both sides share one temporary `GeometryStore`. Each side has its own
+  // `SweepEventList`, indexed by `smallerIsRight` below (`0` for the left side,
+  // `1` for the right side).
+  sj::GeometryStore store{sweeperCfg, sweeperTmpPath, sweeperPrefix, false};
   std::array events{
       sj::SweepEventList{sweeperCfg, sweeperTmpPath, sweeperPrefix},
       sj::SweepEventList{sweeperCfg, sweeperTmpPath, sweeperPrefix}};
   sj::GeometryCache cache(sweeperCfg);
-  std::array storeIds{cache.addStore(&stores[0]), cache.addStore(&stores[1])};
+  const auto storeId = cache.addStore(&store);
   ad_utility::Timer tParse{ad_utility::Timer::Started};
 
   // Parse the geometries from the left and right input table, starting with the
@@ -336,10 +329,8 @@ Result LibspatialjoinAlgorithm::run() {
     // Parse and add all geometries of the smaller side
     auto& eventsSmall = events[smallerIsRight];
     auto& eventsLarge = events[!smallerIsRight];
-    auto& storeLarge = stores[!smallerIsRight];
     auto [boxSmall, countSmall, droppedSmall, invalidSmall, threadsSmall] =
-        parse(smaller, stores[smallerIsRight],
-              eventsSmall.addCb(storeIds[smallerIsRight]), NUM_THREADS,
+        parse(smaller, store, eventsSmall.addCb(storeId), NUM_THREADS,
               std::nullopt);
     AD_CORRECTNESS_CHECK(droppedSmall == 0);
     spatialJoin_.value()->runtimeInfo().addDetail(
@@ -350,14 +341,14 @@ Result LibspatialjoinAlgorithm::run() {
     // precomputed bounding boxes for filtering *before* parsing are not
     // available.
     if (!qec_->getIndex().getVocab().isGeoInfoAvailable()) {
-      storeLarge.setFilterBox(boxSmall);
+      store.setFilterBox(boxSmall);
     }
 
     // Parse and add the relevant (intersection with the bounding box)
     // geometries from the larger side
     auto [boxLarge, countLarge, droppedLarge, invalidLarge, threadsLarge] =
-        parse(larger, storeLarge, eventsLarge.addCb(storeIds[!smallerIsRight]),
-              NUM_THREADS, storeLarge.getPaddedBoundingBox(boxSmall));
+        parse(larger, store, eventsLarge.addCb(storeId), NUM_THREADS,
+              store.getPaddedBoundingBox(boxSmall));
     auto numValidGeomsLarge = eventsLarge.numObjects();
     auto numValidGeomsTotal = numValidGeomsSmall + numValidGeomsLarge;
 
@@ -387,12 +378,10 @@ Result LibspatialjoinAlgorithm::run() {
           ? runParser(leftTableAndCol, rightTableAndCol, false)
           : runParser(rightTableAndCol, leftTableAndCol, true);
 
-  // Flush the geometry stores, sort the sweepline event lists and replace
+  // Flush the geometry store, sort the sweepline event lists and replace
   // duplicate geometries by references. Add the time for parsing and
   // processing the geometries to the runtime information.
-  for (auto& sideStore : stores) {
-    sideStore.flush();
-  }
+  store.flush();
   for (auto& sideEvents : events) {
     sideEvents.finalize(NUM_THREADS);
     sideEvents.duplicatesToReferences(cache);
