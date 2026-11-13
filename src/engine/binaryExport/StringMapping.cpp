@@ -14,6 +14,7 @@
 #include <utility>
 
 #include "backports/StartsWithAndEndsWith.h"
+#include "backports/algorithm.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "index/ExportIds.h"
 #include "index/Index.h"
@@ -45,20 +46,12 @@ Id StringMapping::remapId(Id id) {
   // (see above), or `EncodedVal`, or `BlankNodeIndex`. The latter two are not
   // sent as strings: An `EncodedVal` is sent as is (together with the patterns
   // of its encoding), and a `BlankNodeIndex` is remapped by the importer.
-  static constexpr auto checkDatatypes = []() {
-    auto checkType = [](Datatype datatype) {
-      return ad_utility::contains(allowedDatatypes, datatype) ||
-             isDatatypeTrivial(datatype) || datatype == BlankNodeIndex ||
-             datatype == EncodedVal;
-    };
-    for (size_t i = 0; i <= static_cast<size_t>(MaxValue); ++i) {
-      if (!checkType(static_cast<Datatype>(i))) {
-        return false;
-      }
-    }
-    return true;
+  static constexpr auto checkType = [](Datatype datatype) {
+    return ad_utility::contains(allowedDatatypes, datatype) ||
+           isDatatypeTrivial(datatype) || datatype == BlankNodeIndex ||
+           datatype == EncodedVal;
   };
-  static_assert(checkDatatypes());
+  static_assert(ql::ranges::all_of(qlever::allEnumValues<Datatype>, checkType));
 
   // A new ID gets the next free index and is resolved to its string right
   // away, so that `numBytes()` always accounts for all IDs of the batch.
