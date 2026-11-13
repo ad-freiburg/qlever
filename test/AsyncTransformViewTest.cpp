@@ -11,6 +11,7 @@
 #include <gtest/gtest.h>
 
 #include <atomic>
+#include <boost/asio/io_context.hpp>
 #include <boost/asio/thread_pool.hpp>
 #include <chrono>
 #include <condition_variable>
@@ -24,12 +25,15 @@
 
 #include "util/GlobalExecutor.h"
 #include "util/Random.h"
+#include "util/Views.h"
 #include "util/views/AsyncTransformView.h"
 
 namespace {
 using ad_utility::AsyncTransformView;
+using ad_utility::integerRange;
 using ::testing::ElementsAre;
 using ::testing::ElementsAreArray;
+using ::testing::SizeIs;
 using namespace std::chrono_literals;
 
 // The time that the tests wait for something that is expected to happen. It is
@@ -43,19 +47,19 @@ TEST(AsyncTransformView, resultsAreYieldedInOrder) {
   boost::asio::thread_pool pool{4};
   // The random sleeps make the transformations complete in an order that
   // differs from the order of the elements.
-  auto transformation = [](int i) {
+  auto transformation = [](size_t i) {
     ad_utility::SlowRandomIntGenerator<int> sleepMicros{0, 500};
     std::this_thread::sleep_for(std::chrono::microseconds{sleepMicros()});
     return std::to_string(2 * i);
   };
   std::vector<std::string> expected;
-  for (int i : ql::views::iota(0, 200)) {
+  for (size_t i : integerRange(200u)) {
     expected.push_back(std::to_string(2 * i));
   }
   // Fewer, as many, and more elements in flight than there are threads, and
   // more elements in flight than there are elements.
   for (size_t maxNumElementsInFlight : {1, 2, 4, 7, 1000}) {
-    AsyncTransformView view{ql::views::iota(0, 200), transformation,
+    AsyncTransformView view{integerRange(200u), transformation,
                             maxNumElementsInFlight, pool.get_executor()};
     EXPECT_THAT(::ranges::to_vector(view), ElementsAreArray(expected));
     // An exhausted view stays exhausted.
@@ -81,48 +85,48 @@ TEST(AsyncTransformView, emptyInput) {
 // _____________________________________________________________________________
 TEST(AsyncTransformView, invalidNumberOfElementsInFlight) {
   boost::asio::thread_pool pool{1};
-  EXPECT_ANY_THROW((AsyncTransformView{ql::views::iota(0, 3), std::identity{},
-                                       0, pool.get_executor()}));
+  EXPECT_ANY_THROW((AsyncTransformView{integerRange(3u), std::identity{}, 0,
+                                       pool.get_executor()}));
 }
 
 // _____________________________________________________________________________
 TEST(AsyncTransformView, inputIsNotOwnedWhenPassedAsRefView) {
   boost::asio::thread_pool pool{2};
-  std::vector<int> input = ::ranges::to_vector(ql::views::iota(0, 10));
+  auto input = ::ranges::to_vector(integerRange(10u));
   // The view only skips the odd elements, the actual input stays untouched,
   // because the view only refers to it.
   auto even = ql::ranges::ref_view{input} |
-              ql::views::filter([](int i) { return i % 2 == 0; });
-  AsyncTransformView view{std::move(even), [](int i) { return i + 100; }, 2,
+              ql::views::filter([](size_t i) { return i % 2 == 0; });
+  AsyncTransformView view{std::move(even), [](size_t i) { return i + 100; }, 2,
                           pool.get_executor()};
-  EXPECT_THAT(::ranges::to_vector(view), ElementsAre(100, 102, 104, 106, 108));
-  EXPECT_THAT(input,
-              ElementsAreArray(::ranges::to_vector(ql::views::iota(0, 10))));
+  EXPECT_THAT(::ranges::to_vector(view),
+              ElementsAre(100u, 102u, 104u, 106u, 108u));
+  EXPECT_THAT(input, ElementsAreArray(::ranges::to_vector(integerRange(10u))));
 }
 
 // _____________________________________________________________________________
 TEST(AsyncTransformView, moveOnlyElementsAndResults) {
   boost::asio::thread_pool pool{3};
-  std::vector<std::unique_ptr<int>> input;
-  for (int i : ql::views::iota(0, 20)) {
-    input.push_back(std::make_unique<int>(i));
+  std::vector<std::unique_ptr<size_t>> input;
+  for (size_t i : integerRange(20u)) {
+    input.push_back(std::make_unique<size_t>(i));
   }
   // Both the element and the result are move-only, and the result takes over
   // the ownership of the element.
-  auto transformation = [](std::unique_ptr<int> ptr) {
+  auto transformation = [](std::unique_ptr<size_t> ptr) {
     *ptr *= 3;
     return std::pair{std::move(ptr), std::string{"x"}};
   };
   AsyncTransformView view{std::move(input), transformation, 3,
                           pool.get_executor()};
-  int expected = 0;
+  size_t expected = 0;
   for (auto& [ptr, str] : view) {
     ASSERT_NE(ptr, nullptr);
     EXPECT_EQ(*ptr, 3 * expected);
     EXPECT_EQ(str, "x");
     ++expected;
   }
-  EXPECT_EQ(expected, 20);
+  EXPECT_EQ(expected, 20u);
 }
 
 // _____________________________________________________________________________
@@ -135,7 +139,7 @@ TEST(AsyncTransformView, elementsAreTransformedConcurrently) {
   std::mutex mutex;
   std::condition_variable cv;
   size_t numStarted = 0;
-  auto transformation = [&](int i) {
+  auto transformation = [&](size_t i) {
     std::unique_lock lock{mutex};
     ++numStarted;
     cv.notify_all();
@@ -143,26 +147,26 @@ TEST(AsyncTransformView, elementsAreTransformedConcurrently) {
         cv.wait_for(lock, timeout, [&]() { return numStarted >= numInFlight; });
     return std::pair{i, allStarted};
   };
-  AsyncTransformView view{ql::views::iota(0, static_cast<int>(numInFlight)),
-                          transformation, numInFlight, pool.get_executor()};
-  int expected = 0;
+  AsyncTransformView view{integerRange(numInFlight), transformation,
+                          numInFlight, pool.get_executor(), numInFlight};
+  size_t expected = 0;
   for (auto& [i, allStarted] : view) {
     EXPECT_EQ(i, expected);
     EXPECT_TRUE(allStarted);
     ++expected;
   }
-  EXPECT_EQ(expected, static_cast<int>(numInFlight));
+  EXPECT_EQ(expected, numInFlight);
 }
 
 // _____________________________________________________________________________
 TEST(AsyncTransformView, readsAheadLazilyAndBounded) {
   boost::asio::thread_pool pool{4};
   constexpr size_t numInFlight = 3;
-  constexpr int numElements = 20;
+  constexpr size_t numElements = 20;
   // Count how many elements have been read from the input so far.
   size_t numRead = 0;
   auto countedInput =
-      ql::views::iota(0, numElements) | ql::views::transform([&numRead](int i) {
+      integerRange(numElements) | ql::views::transform([&numRead](size_t i) {
         ++numRead;
         return i;
       });
@@ -172,7 +176,7 @@ TEST(AsyncTransformView, readsAheadLazilyAndBounded) {
   EXPECT_EQ(numRead, 0);
   size_t numYielded = 0;
   while (auto element = view.get()) {
-    EXPECT_EQ(element.value(), static_cast<int>(numYielded));
+    EXPECT_EQ(element.value(), numYielded);
     ++numYielded;
     // At most `numInFlight` elements are read before they are yielded, the
     // yielded one included.
@@ -187,17 +191,17 @@ TEST(AsyncTransformView, readsAheadLazilyAndBounded) {
 // _____________________________________________________________________________
 TEST(AsyncTransformView, exceptionInTransformation) {
   boost::asio::thread_pool pool{2};
-  auto transformation = [](int i) {
+  auto transformation = [](size_t i) {
     if (i == 5) {
       throw std::runtime_error{"transformation failed"};
     }
     return i;
   };
   for (size_t maxNumElementsInFlight : {1, 3, 10}) {
-    AsyncTransformView view{ql::views::iota(0, 10), transformation,
+    AsyncTransformView view{integerRange(10u), transformation,
                             maxNumElementsInFlight, pool.get_executor()};
     // The results before the failing element are yielded normally.
-    for (int i : ql::views::iota(0, 5)) {
+    for (size_t i : integerRange(5u)) {
       auto element = view.get();
       ASSERT_TRUE(element.has_value());
       EXPECT_EQ(element.value(), i);
@@ -210,7 +214,7 @@ TEST(AsyncTransformView, exceptionInTransformation) {
 TEST(AsyncTransformView, exceptionInInput) {
   boost::asio::thread_pool pool{2};
   auto throwingInput = []() {
-    return ql::views::iota(0, 10) | ql::views::transform([](int i) {
+    return integerRange(10u) | ql::views::transform([](size_t i) {
              if (i == 4) {
                throw std::runtime_error{"input failed"};
              }
@@ -222,7 +226,7 @@ TEST(AsyncTransformView, exceptionInInput) {
   {
     AsyncTransformView view{throwingInput(), std::identity{}, 1,
                             pool.get_executor()};
-    for (int i : ql::views::iota(0, 4)) {
+    for (size_t i : integerRange(4u)) {
       auto element = view.get();
       ASSERT_TRUE(element.has_value());
       EXPECT_EQ(element.value(), i);
@@ -241,31 +245,139 @@ TEST(AsyncTransformView, exceptionInInput) {
 // _____________________________________________________________________________
 TEST(AsyncTransformView, destructionWithPendingElements) {
   boost::asio::thread_pool pool{2};
-  // The transformations are slow, so that several of them are still pending
-  // when the view is destroyed. The destructor has to wait for all of them,
-  // because they use the transformation, which is owned by the view.
+  // The transformations are slow, so that several elements are still pending
+  // when the view is destroyed. The destructor drops the ones that haven't
+  // been started yet and waits for the running ones, because they use the
+  // transformation, which is owned by the view.
   std::atomic<size_t> numStarted = 0;
   std::atomic<size_t> numFinished = 0;
   auto transformation = [&numStarted, &numFinished,
-                         data = std::make_shared<int>(42)](int i) {
+                         data = std::make_shared<size_t>(42)](size_t i) {
     ++numStarted;
     std::this_thread::sleep_for(5ms);
     // Touch the state of the transformation after the sleep.
-    int result = i + *data;
+    size_t result = i + *data;
     ++numFinished;
     return result;
   };
   {
-    AsyncTransformView view{ql::views::iota(0, 100), transformation, 5,
+    AsyncTransformView view{integerRange(100u), transformation, 5,
                             pool.get_executor()};
     auto element = view.get();
     ASSERT_TRUE(element.has_value());
-    EXPECT_EQ(element.value(), 42);
+    EXPECT_EQ(element.value(), 42u);
   }
-  // The view has read exactly five elements ahead, and the destructor has
-  // waited for all of them.
-  EXPECT_EQ(numStarted, 5);
-  EXPECT_EQ(numFinished, 5);
+  // The view has read at most five elements ahead, and every element that was
+  // started has also finished before the destructor returned.
+  EXPECT_LE(numStarted, 5);
+  EXPECT_GE(numStarted, 1);
+  EXPECT_EQ(numFinished, numStarted.load());
+}
+
+// _____________________________________________________________________________
+TEST(AsyncTransformView, nothingOutlivesTheView) {
+  // Every element, every result, and the transformation hold a copy of the
+  // `token`. Once the view is destroyed, none of them may be alive anymore,
+  // even if a runner is still alive (they may refer to resources of the
+  // caller, like an allocator).
+  auto token = std::make_shared<int>(42);
+  auto makeInput = [&token]() {
+    return integerRange(20u) |
+           ql::views::transform([token](size_t) { return token; });
+  };
+  auto transformation = [token](std::shared_ptr<int> element) {
+    std::this_thread::sleep_for(1ms);
+    return element;
+  };
+  // The copy in the `transformation` above.
+  const auto numCopiesOutsideTheView = token.use_count();
+  ASSERT_EQ(numCopiesOutsideTheView, 2);
+
+  // The `io_context` is only run after the view is destroyed, so the posted
+  // runner outlives the view.
+  {
+    boost::asio::io_context ctx;
+    {
+      AsyncTransformView view{makeInput(), transformation, 4,
+                              ctx.get_executor()};
+      EXPECT_EQ(*view.get().value(), 42);
+    }
+    EXPECT_EQ(token.use_count(), numCopiesOutsideTheView);
+    ctx.run();
+    EXPECT_EQ(token.use_count(), numCopiesOutsideTheView);
+  }
+
+  // The runners are busy when the view is destroyed.
+  boost::asio::thread_pool pool{4};
+  for ([[maybe_unused]] size_t i : integerRange(20u)) {
+    {
+      AsyncTransformView view{makeInput(), transformation, 8,
+                              pool.get_executor(), 3};
+      EXPECT_EQ(*view.get().value(), 42);
+    }
+    EXPECT_EQ(token.use_count(), numCopiesOutsideTheView);
+  }
+}
+
+// _____________________________________________________________________________
+TEST(AsyncTransformView, consumerTransformsElementsThatNoRunnerStarted) {
+  // The `io_context` is never run, so no runner ever starts. The consumer
+  // transforms all the elements itself, in order.
+  boost::asio::io_context ctx;
+  AsyncTransformView view{integerRange(50u), [](size_t i) { return 3 * i; }, 4,
+                          ctx.get_executor()};
+  std::vector<size_t> expected;
+  for (size_t i : integerRange(50u)) {
+    expected.push_back(3 * i);
+  }
+  EXPECT_THAT(::ranges::to_vector(view), ElementsAreArray(expected));
+}
+
+// _____________________________________________________________________________
+TEST(AsyncTransformView, numberOfRunnersIsBounded) {
+  boost::asio::thread_pool pool{8};
+  std::atomic<size_t> numActive = 0;
+  std::atomic<size_t> maxActive = 0;
+  std::thread::id consumerThread = std::this_thread::get_id();
+  std::atomic<size_t> maxActiveOnPool = 0;
+  std::atomic<size_t> numActiveOnPool = 0;
+  // Raise `max` to `value` if `value` is larger.
+  auto updateMax = [](std::atomic<size_t>& max, size_t value) {
+    size_t prev = max.load();
+    while (value > prev && !max.compare_exchange_weak(prev, value)) {
+    }
+  };
+  auto transformation = [&](size_t i) {
+    bool onPool = std::this_thread::get_id() != consumerThread;
+    updateMax(maxActive, ++numActive);
+    updateMax(maxActiveOnPool,
+              onPool ? ++numActiveOnPool : numActiveOnPool.load());
+    std::this_thread::sleep_for(1ms);
+    if (onPool) {
+      --numActiveOnPool;
+    }
+    --numActive;
+    return i;
+  };
+  for (size_t maxNumRunners : {1, 2, 3}) {
+    maxActive = 0;
+    maxActiveOnPool = 0;
+    AsyncTransformView view{integerRange(200u), transformation, 16,
+                            pool.get_executor(), maxNumRunners};
+    EXPECT_THAT(::ranges::to_vector(view), SizeIs(200u));
+    // At most `maxNumRunners` transformations run on the pool at the same
+    // time, plus possibly one on the consumer's thread.
+    EXPECT_LE(maxActiveOnPool.load(), maxNumRunners);
+    EXPECT_LE(maxActive.load(), maxNumRunners + 1);
+  }
+}
+
+// _____________________________________________________________________________
+TEST(AsyncTransformView, invalidNumberOfRunners) {
+  boost::asio::thread_pool pool{1};
+  EXPECT_ANY_THROW(
+      (AsyncTransformView{integerRange(3u), [](size_t i) { return i; }, 2,
+                          pool.get_executor(), 0}));
 }
 
 // _____________________________________________________________________________
