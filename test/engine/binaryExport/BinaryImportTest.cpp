@@ -15,7 +15,6 @@
 
 #include <cstring>
 #include <random>
-#include <ranges>
 #include <string>
 #include <vector>
 
@@ -125,7 +124,7 @@ class BinaryExportRoundTrip : public ::testing::Test {
         std::string chunk = data.substr(start, chunkSize);
         co_yield ql::as_writable_bytes(ql::span{chunk});
         // Make sure that the chunk is not used after it has been "received".
-        std::ranges::fill(chunk, '\0');
+        ql::ranges::fill(chunk, '\0');
         start += chunkSize;
       }
     };
@@ -192,8 +191,8 @@ class BinaryExportRoundTrip : public ::testing::Test {
   }
 };
 
-// Results without rows, and results without columns (for which only the number
-// of rows is transferred).
+// Test the round trip of a result without rows, and of a result without
+// columns (for which only the number of rows is transferred).
 TEST_F(BinaryExportRoundTrip, noRowsOrNoColumns) {
   auto* qec = ad_utility::testing::getQec();
 
@@ -218,8 +217,8 @@ TEST_F(BinaryExportRoundTrip, noRowsOrNoColumns) {
   EXPECT_EQ(result.idTableView().numRows(), 2);
 }
 
-// Encoded IRIs are re-encoded with the prefixes of the importing index, or
-// stored in the local vocab if none of them matches.
+// Test that an encoded IRI is re-encoded with the prefixes of the importing
+// index, or stored in the local vocab if none of them matches.
 TEST_F(BinaryExportRoundTrip, encodedIrisWithDifferentPrefixes) {
   // Export the `iri`, which the exporting instance encodes with one of its
   // `exportPrefixes`, to an instance with the `importPrefixes`. If one of the
@@ -267,7 +266,7 @@ TEST_F(BinaryExportRoundTrip, encodedIrisWithDifferentPrefixes) {
        "<http://export-only.org/123>", false);
 }
 
-// Every datatype of `Id` survives the round trip (semantically).
+// Test that every datatype of `Id` survives the round trip (semantically).
 TEST_F(BinaryExportRoundTrip, allDatatypes) {
   using namespace valueGetterTestHelpers;
   AllDatatypesTestContext testContext;
@@ -346,8 +345,9 @@ TEST_F(BinaryExportRoundTrip, allDatatypes) {
   }
 }
 
-// The columns are matched by the names of the variables, unbound variables
-// become undefined columns, and unexpected variables are rejected.
+// Test that the columns are matched by the names of the variables, that
+// unbound variables become undefined columns, and that unexpected variables
+// are rejected.
 TEST_F(BinaryExportRoundTrip, variablesAreMatchedByName) {
   auto* qec = ad_utility::testing::getQec();
   auto qet = makeQet(qec, makeIdTableFromVector({{1, 2}}, &Id::makeFromInt),
@@ -382,7 +382,8 @@ TEST_F(BinaryExportRoundTrip, variablesAreMatchedByName) {
   EXPECT_EQ(result.idTableView()(1, 0), Id::makeUndefined());
 }
 
-// Geo points are converted when the two instances encode them differently.
+// Test that geo points are converted when the two instances encode them
+// differently.
 TEST_F(BinaryExportRoundTrip, geoPointsAreConvertedToTheLocalEncoding) {
   auto* qec = ad_utility::testing::getQec();
   GeoPoint point{47.9, 7.8};
@@ -413,7 +414,7 @@ TEST_F(BinaryExportRoundTrip, geoPointsAreConvertedToTheLocalEncoding) {
   test(GeoPointEncodingEnum::LatMajor, GeoPointEncodingEnum::ZOrder);
 }
 
-// Invalid headers and truncated responses are rejected.
+// Test that invalid headers and truncated responses are rejected.
 TEST_F(BinaryExportRoundTrip, invalidHeader) {
   auto* qec = ad_utility::testing::getQec();
   auto bytes = exportBytes(
@@ -467,7 +468,8 @@ TEST_F(BinaryExportRoundTrip, invalidHeader) {
       ::testing::HasSubstr("range of chunks"));
 }
 
-// A lazy result whose blocks have different local vocabs.
+// Test the round trip of a lazy result whose blocks have different local
+// vocabs.
 TEST_F(BinaryExportRoundTrip, lazyExportWithSeveralLocalVocabs) {
   auto* qec = ad_utility::testing::getQec();
   Id blankNode = Id::makeFromBlankNodeIndex(BlankNodeIndex::make(7));
@@ -499,8 +501,8 @@ TEST_F(BinaryExportRoundTrip, lazyExportWithSeveralLocalVocabs) {
   }
 }
 
-// Large results are transferred in several batches, each of which becomes a
-// block of a lazy result.
+// Test that a large result is transferred in several batches, each of which
+// becomes a block of a lazy result.
 TEST_F(BinaryExportRoundTrip, severalBatches) {
   auto* qec = ad_utility::testing::getQec();
   // Large distinct strings (of about 1 MB each), which take up more than the
@@ -543,7 +545,7 @@ TEST_F(BinaryExportRoundTrip, severalBatches) {
   EXPECT_EQ(resultTable, intTable);
 }
 
-// The limit on the size of the strings, and the cancellation.
+// Test the limit on the size of the strings, and the cancellation.
 TEST_F(BinaryExportRoundTrip, limitsAndCancellation) {
   auto* qec = ad_utility::testing::getQec();
   LocalVocab localVocab;
