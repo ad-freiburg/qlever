@@ -28,8 +28,6 @@ using ad_utility::triple_component::Iri;
 using ad_utility::triple_component::Literal;
 using Ptr = SparqlExpression::Ptr;
 
-using GeoDistanceFilter =
-    std::optional<std::pair<sparqlExpression::GeoFunctionCall, double>>;
 using DistancePtrAndExpected = std::pair<Ptr, std::optional<GeoDistanceCall>>;
 using De9imPtrAndExpected = std::pair<Ptr, std::optional<De9imRelationCall>>;
 
@@ -69,20 +67,6 @@ inline void checkDe9imRelationCall(const std::optional<De9imRelationCall>& a,
     return;
   }
   ASSERT_EQ(a.value().pattern_, b.value().pattern_);
-}
-
-// Test helper for `getGeoDistanceFilter`
-inline void checkGeoDistanceFilter(
-    const GeoDistanceFilter& result,
-    const std::optional<GeoFunctionCall>& expected, double expectedMeters,
-    Loc loc = AD_CURRENT_SOURCE_LOC()) {
-  auto l = generateLocationTrace(loc);
-  ASSERT_EQ(result.has_value(), expected.has_value());
-  if (!result.has_value()) {
-    return;
-  }
-  checkGeoFunctionCall(result.value().first, expected);
-  ASSERT_NEAR(result.value().second, expectedMeters, 0.01);
 }
 
 //______________________________________________________________________________

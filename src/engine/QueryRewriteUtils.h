@@ -27,4 +27,10 @@ std::shared_ptr<SpatialJoin> rewriteFilterToSpatialJoin(
     const SparqlFilter& filter, QueryExecutionContext* qec,
     absl::FunctionRef<Variable()> generateUniqueVarName);
 
+// Split each FILTER in `filters` with a conjunct (of `&&`) that is a fact (see
+// `engine/filterFacts`) into its conjuncts. Then this conjunct can be rewritten
+// on its own (e.g. to a `SpatialJoin`), and the other conjuncts are applied as
+// regular FILTERs.
+void splitFiltersWithFacts(std::vector<SparqlFilter>& filters);
+
 #endif  // QLEVER_SRC_ENGINE_QUERYREWRITEUTILS_H

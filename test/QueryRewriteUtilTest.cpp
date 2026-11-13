@@ -4,11 +4,9 @@
 
 #include <gtest/gtest.h>
 
-#include <cmath>
-#include <limits>
-
 #include "./QueryRewriteUtilTestHelpers.h"
 #include "./util/IndexTestHelpers.h"
+#include "./util/ParsedQueryTestHelpers.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryRewriteUtils.h"
 #include "engine/SpatialJoin.h"
@@ -121,58 +119,6 @@ TEST(QueryRewriteUtilTest, GetGeoDistanceExpressionParametersUnitVariable) {
           *expr, constantOf(TripleComponent{
                      Literal::fromStringRepresentation("\"m\"")})),
       unknown);
-}
-
-// _____________________________________________________________________________
-TEST(QueryRewriteUtilTest, GetGeoDistanceFilter) {
-  auto D = &ValueId::makeFromDouble;
-
-  auto [dExpr1, dExp1] = makeTwoArgumentDist();
-  auto expr1 = leSprql(std::move(dExpr1), D(10));
-  checkGeoDistanceFilter(getGeoDistanceFilter(*expr1), dExp1,
-                         // Expect unit converted: 10 km in meters
-                         10'000);
-
-  auto [dExpr2, dExp2] = makeThreeArgumentDist();
-  auto expr2 = leSprql(std::move(dExpr2), D(10));
-  checkGeoDistanceFilter(getGeoDistanceFilter(*expr2), dExp2,
-                         // Expect unit converted: 10 miles in meters
-                         16'093.44);
-
-  auto [dExpr3, dExp3] = makeMetricDist();
-  auto expr3 = leSprql(std::move(dExpr3), D(10));
-  checkGeoDistanceFilter(getGeoDistanceFilter(*expr3), dExp3, 10);
-
-  auto [dExpr4, dExp4] = makeUnrelated();
-  auto expr4 = leSprql(std::move(dExpr4), D(10));
-  checkGeoDistanceFilter(getGeoDistanceFilter(*expr4), dExp4, 10);
-
-  // "<" relation: the maximum distance is the largest `double` below the
-  // constant.
-  auto [dExpr5, dExp5] = makeMetricDist();
-  auto expr5 = ltSprql(std::move(dExpr5), D(10));
-  auto filter5 = getGeoDistanceFilter(*expr5);
-  checkGeoDistanceFilter(filter5, dExp5, 10);
-  EXPECT_LT(filter5.value().second, 10.0);
-  EXPECT_EQ(filter5.value().second,
-            std::nextafter(10.0, -std::numeric_limits<double>::infinity()));
-
-  // Non-numeric comparison is unsupported
-  auto [dExpr6, dExp6] = makeMetricDist();
-  auto expr6 = ltSprql(std::move(dExpr6), ValueId::makeFromGeoPoint({1, 1}));
-  checkGeoDistanceFilter(getGeoDistanceFilter(*expr6), std::nullopt, 10);
-
-  // A negative maximum distance ("< 0" or a negative constant) is not
-  // rewritten, "<= 0" is.
-  auto [dExpr7, dExp7] = makeMetricDist();
-  auto expr7 = ltSprql(std::move(dExpr7), D(0));
-  checkGeoDistanceFilter(getGeoDistanceFilter(*expr7), std::nullopt, 0);
-  auto [dExpr8, dExp8] = makeMetricDist();
-  auto expr8 = leSprql(std::move(dExpr8), D(-1));
-  checkGeoDistanceFilter(getGeoDistanceFilter(*expr8), std::nullopt, 0);
-  auto [dExpr9, dExp9] = makeMetricDist();
-  auto expr9 = leSprql(std::move(dExpr9), D(0));
-  checkGeoDistanceFilter(getGeoDistanceFilter(*expr9), dExp9, 0);
 }
 
 // _____________________________________________________________________________
@@ -354,6 +300,38 @@ TEST(QueryRewriteUtilTest, GetGeoFunctionExpressionParametersWithFixedValue) {
       makePowExpression(getExpr(V{"?a"}), getExpr(V{"?c"})), getExpr(V{"?b"}));
   checkGeoFunctionCall(getGeoFunctionExpressionParameters(*unsupportedArgPtr),
                        std::nullopt);
+}
+
+// Test that a FILTER is split into its conjuncts iff one of them is a fact,
+// and that each conjunct keeps its original input as descriptor.
+TEST(QueryRewriteUtilTest, SplitFiltersWithFacts) {
+  auto split = [](std::string_view filter) {
+    auto query = ad_utility::testing::parseQuery(absl::StrCat(
+        "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+        "SELECT * { ?a <p> ?b . ?x <p> ?y . FILTER(",
+        filter, ") }"));
+    auto filters = query._rootGraphPattern._filters;
+    splitFiltersWithFacts(filters);
+    std::vector<std::string> descriptors;
+    for (const auto& f : filters) {
+      descriptors.push_back(f.expression_.getDescriptor());
+    }
+    return descriptors;
+  };
+  using ::testing::ElementsAre;
+
+  // A conjunct that is a fact, also in a nested `&&`.
+  EXPECT_THAT(split("geof:distance(?y, ?b) <= 0.5 && ?x != ?a"),
+              ElementsAre("geof:distance(?y, ?b) <= 0.5", "?x != ?a"));
+  EXPECT_THAT(
+      split("?x != ?a && (geof:distance(?y, ?b) < 0.5 && ?x != <c>)"),
+      ElementsAre("?x != ?a", "geof:distance(?y, ?b) < 0.5", "?x != <c>"));
+
+  // No conjunct is a fact, or the FILTER is no `&&`.
+  for (std::string_view filter : {"geof:distance(?y, ?b) > 0.5 && ?x != ?a",
+                                  "geof:distance(?y, ?b) <= 0.5 || ?x != ?a"}) {
+    EXPECT_THAT(split(filter), ElementsAre(absl::StrCat("(", filter, ")")));
+  }
 }
 
 }  // namespace

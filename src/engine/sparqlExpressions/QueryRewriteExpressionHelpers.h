@@ -16,10 +16,8 @@
 // parts of queries. The implementations of `getGeoFunctionExpressionParameters`
 // and `getDe9imRelationExpressionParameters` can be found in
 // `GeoRelationExpression.cpp`, that of `getGeoDistanceExpressionParameters` in
-// `GeoDistanceExpression.cpp`. Additionally note the `getGeoDistanceFilter`
-// function from `RelationalExpressions.cpp` for
-// extracting information from expressions of the form `geof:distance(?a, ?b) <=
-// constant`.
+// `GeoDistanceExpression.cpp`. Expressions of the form
+// `geof:distance(?a, ?b) <= constant` are recognized in `engine/filterFacts`.
 
 namespace sparqlExpression {
 
