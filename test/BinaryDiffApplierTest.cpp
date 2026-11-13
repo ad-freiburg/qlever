@@ -23,7 +23,7 @@
 #include "backports/span.h"
 #include "util/AlignedAllocator.h"
 #include "util/BinaryDiffApplier.h"
-#include "util/Serializer/ByteBufferSerializer.h"
+#include "util/serializer/ByteBufferSerializer.h"
 
 using ad_utility::BinaryDiffApplier;
 using Align = BinaryDiffApplier::Align;
@@ -104,7 +104,7 @@ std::vector<char> writeRawDiff(const RawDiffHeader& header,
 
 // The index of an instruction in the `BinaryDiffApplier::Instruction` variant,
 // which is what the generic serialization of a `std::variant` writes to
-// identify the instruction (see `util/Serializer/SerializeVariant.h`).
+// identify the instruction (see `util/serializer/SerializeVariant.h`).
 constexpr uint64_t copyIndex = 0;
 constexpr uint64_t alignIndex = 2;
 

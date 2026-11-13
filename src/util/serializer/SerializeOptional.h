@@ -1,0 +1,39 @@
+//  Copyright 2024, University of Freiburg,
+//                  Chair of Algorithms and Data Structures.
+// Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+
+#ifndef QLEVER_SRC_UTIL_SERIALIZER_SERIALIZEOPTIONAL_H
+#define QLEVER_SRC_UTIL_SERIALIZER_SERIALIZEOPTIONAL_H
+
+#include <optional>
+
+#include "util/TypeTraits.h"
+#include "util/serializer/Serializer.h"
+
+// Serialization for `std::optional<T>`. This also applies to trivially
+// copyable optionals like `std::optional<double>`, which are not trivially
+// serializable (their raw bytes would contain padding).
+namespace ad_utility::serialization {
+AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
+    (ad_utility::similarToInstantiation<T, std::optional>) &&
+    CPP_NOT(TriviallySerializable<T>)) {
+  if constexpr (ReadSerializer<S>) {
+    bool hasValue;
+    serializer >> hasValue;
+    if (!hasValue) {
+      arg = std::nullopt;
+    } else {
+      arg.emplace();
+      serializer >> arg.value();
+    }
+  } else {
+    bool hasValue = arg.has_value();
+    serializer << hasValue;
+    if (hasValue) {
+      serializer << arg.value();
+    }
+  }
+}
+}  // namespace ad_utility::serialization
+
+#endif  // QLEVER_SRC_UTIL_SERIALIZER_SERIALIZEOPTIONAL_H

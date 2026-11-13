@@ -16,7 +16,7 @@
 #include <string>
 #include <vector>
 
-#include "./index/vocabulary_merger/VocabularyMergerTestHelpers.h"
+#include "./index/vocabularyMerger/VocabularyMergerTestHelpers.h"
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/filesystem.h"
 #include "global/Constants.h"
@@ -227,7 +227,7 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
 // _____________________________________________________________________________
 TEST(MergeVocabulary, mergeVocabularyAssertion) {
   // The violated order is only detected if the expensive checks are enabled
-  // (see `buildSegment` in `index/vocabulary_merger/Segment.h`).
+  // (see `buildSegment` in `index/vocabularyMerger/Segment.h`).
   if constexpr (!ad_utility::areExpensiveChecksEnabled) {
     GTEST_SKIP();
   }

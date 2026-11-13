@@ -23,7 +23,6 @@ WKTParser::WKTParser(sj::GeometryStore* store, sj::PreparedGeomMetaCb metaCb,
                                              numThreads),
       _numSkipped(numThreads),
       _numParsed(numThreads),
-      _bboxes(numThreads),
       _usePersistedGeometries(usePersistedGeometries),
       _storedRows(numThreads),
       _usePrefiltering(usePrefiltering),
@@ -60,15 +59,6 @@ size_t WKTParser::getPrefilterCounter() {
 // _____________________________________________________________________________
 size_t WKTParser::getParseCounter() {
   return ::ranges::accumulate(_numParsed, 0);
-}
-
-// _____________________________________________________________________________
-::util::geo::I32Box WKTParser::getBoundingBox() const {
-  ::util::geo::I32Box box;
-  for (const auto& threadBox : _bboxes) {
-    box = ::util::geo::extendBox(threadBox, box);
-  }
-  return box;
 }
 
 // _____________________________________________________________________________
@@ -118,14 +108,6 @@ void WKTParser::processQueue(size_t t) {
   size_t prefilterCounter = 0;
   size_t parseCounter = 0;
 
-  // Extend the bounding box of this thread by each geometry added to the store
-  // and forward it to `_metaCb`.
-  auto metaCb = [this](size_t t, const std::string& gid,
-                       const sj::PreparedGeomMeta& meta) {
-    _bboxes[t] = ::util::geo::extendBox(meta.bbox, _bboxes[t]);
-    _metaCb(t, gid, meta);
-  };
-
   while ((batch = _jobs.get()).size()) {
     sj::WriteBatch w;
     for (auto& job : batch) {
@@ -144,7 +126,7 @@ void WKTParser::processQueue(size_t t) {
             prefilterCounter++;
             continue;
           }
-          _bboxes[t] = ::util::geo::extendBox(stored->boundingBox_, _bboxes[t]);
+          addBox(_store->getPaddedBoundingBox(stored->boundingBox_), t);
           _storedRows[t].push_back(std::move(stored.value()));
           parseCounter++;
           continue;
@@ -183,7 +165,7 @@ void WKTParser::processQueue(size_t t) {
         ::util::geo::I32Point addPoint{
             static_cast<int32_t>(mercPoint.getX() * PREC),
             static_cast<int32_t>(mercPoint.getY() * PREC)};
-        _store->add(addPoint, std::to_string(job.line), w);
+        addBox(_store->add(addPoint, std::to_string(job.line), w), t);
         parseCounter++;
       } else if (dt == Datatype::LocalVocabIndex) {
         // `LocalVocabEntry` has to be parsed in any case: we have no
@@ -199,7 +181,7 @@ void WKTParser::processQueue(size_t t) {
       }
     }
 
-    _store->addBatch(w, t, metaCb);
+    _store->addBatch(w, t, _metaCb);
   }
 
   _numSkipped[t] = prefilterCounter;

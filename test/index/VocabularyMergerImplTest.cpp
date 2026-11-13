@@ -16,9 +16,9 @@
 #include "index/ConstantsIndexBuilding.h"
 #include "index/VocabularyMergerImpl.h"
 #include "util/GlobalExecutor.h"
-#include "util/MemorySize/MemorySize.h"
-#include "util/Serializer/FileSerializer.h"
-#include "util/Serializer/SerializeString.h"
+#include "util/memorySize/MemorySize.h"
+#include "util/serializer/FileSerializer.h"
+#include "util/serializer/SerializeString.h"
 
 namespace {
 using ad_utility::vocabulary_merger::writePartialVocabularyToFile;

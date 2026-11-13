@@ -47,7 +47,6 @@
 #include "util/HashMap.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
-#include "util/JoinAlgorithms/JoinAlgorithms.h"
 #include "util/ParallelExecutor.h"
 #include "util/ProgressBar.h"
 #include "util/Synchronized.h"
@@ -56,6 +55,7 @@
 #include "util/TypeTraits.h"
 #include "util/UnicodeSupport.h"
 #include "util/Views.h"
+#include "util/joinAlgorithms/JoinAlgorithms.h"
 #include "util/json.h"
 #include "util/views/UniqueBlockView.h"
 

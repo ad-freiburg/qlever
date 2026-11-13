@@ -16,7 +16,7 @@
 #include "backports/algorithm.h"
 #include "util/Exception.h"
 #include "util/MmapVector.h"
-#include "util/Serializer/FileSerializer.h"
+#include "util/serializer/FileSerializer.h"
 
 // _____________________________________________________________________________
 auto MetaDataWrapperDense::lower_bound(Id col0Id) const {

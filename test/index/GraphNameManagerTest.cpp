@@ -14,8 +14,8 @@
 #include "../util/FileTestHelpers.h"
 #include "../util/GTestHelpers.h"
 #include "index/GraphNameManager.h"
-#include "util/Serializer/FileSerializer.h"
-#include "util/Serializer/Serializer.h"
+#include "util/serializer/FileSerializer.h"
+#include "util/serializer/Serializer.h"
 
 // _____________________________________________________________________________
 TEST(GraphNameManager, allocateNewGraph) {
