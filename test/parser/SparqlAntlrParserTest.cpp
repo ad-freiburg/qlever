@@ -7,6 +7,7 @@
 #include <gtest/gtest.h>
 
 #include <iostream>
+#include <limits>
 #include <typeindex>
 #include <utility>
 
@@ -175,6 +176,93 @@ TEST(SparqlParser, GraphTerm) {
   }
   expectGraphTerm("\"abc\"", m::Literal("\"abc\""));
   expectGraphTerm("()", m::Iri(nil));
+}
+
+// _____________________________________________________________________________
+TEST(SparqlParser, RecursiveTripleTermGrammar) {
+  // Parse without invoking `SparqlQleverVisitor`: grammar support is
+  // independent of the currently unsupported translation to a `ParsedQuery`.
+  auto check = [](const std::string& input) {
+    SCOPED_TRACE(input);
+    sparqlParserHelpers::ParserAndVisitorBase<int> p{input};
+    auto* term = p.parser_.tripleTerm();
+    EXPECT_EQ(p.parser_.getNumberOfSyntaxErrors(), 0);
+    EXPECT_EQ(p.parser_.getCurrentToken()->getType(),
+              std::numeric_limits<size_t>::max());
+    return term != nullptr;
+  };
+  for (const std::string input :
+       {"<<(?subject <predicate> <object>)>>", "<<( <s> a ?o )>>",
+        "<<( _:s ?predicate [] )>>", "<<( \"subject\" <p> \"object\"@en )>>",
+        "<<( 1 <p> true )>>", "<<( :s :p :o )>>",
+        "<<( <<(?s <p> ?o)>> <p> ?o )>>", "<<( ?s <p> <<(?s <p> ?o)>> )>>",
+        "<<( <<(?s <p> ?o)>> ?p <<(?s <p> <<(?s a 42)>>)>> )>>"}) {
+    EXPECT_TRUE(check(input));
+  }
+
+  // Verify the recursive parse-tree structure, not just token acceptance.
+  sparqlParserHelpers::ParserAndVisitorBase<int> p{
+      "<<( <<(?s <p> ?o)>> <p> <<(?s a 42)>> )>>"};
+  auto* term = p.parser_.tripleTerm();
+  ASSERT_NE(term->tripleTermSubject()->tripleTerm(), nullptr);
+  auto* object = term->tripleTermObject()->tripleTerm();
+  ASSERT_NE(object, nullptr);
+  ASSERT_NE(object->tripleTermObject()->numericLiteral(), nullptr);
+  EXPECT_THAT(object->tripleTermObject()->numericLiteral()->getText(),
+              StrEq("42"));
+
+  // Exercise both `graphNodePath` (WHERE) and `graphNode` (CONSTRUCT) routes.
+  for (const std::string query :
+       {"SELECT * WHERE { ?s <p> <<(?s <p> <<(?s a 42)>>)>> }",
+        "SELECT * WHERE { <<(?s <p> ?o)>> <p> ?o }",
+        "CONSTRUCT { ?s <p> <<(?s <p> ?o)>> } WHERE { ?s <p> ?o }"}) {
+    SCOPED_TRACE(query);
+    sparqlParserHelpers::ParserAndVisitorBase<int> parser{query};
+    EXPECT_NO_THROW(parser.parser_.query());
+    EXPECT_EQ(parser.parser_.getCurrentToken()->getType(),
+              std::numeric_limits<size_t>::max());
+  }
+}
+
+// _____________________________________________________________________________
+TEST(SparqlParser, InvalidTripleTermGrammar) {
+  for (const std::string input :
+       {"<<(?s <p>)>>", "<<(?s <p> ?o ?extra)>>", "<<(?s <p> ?o)>> extra",
+        "<<(?s <p> ?o)", "<<(?s \"predicate\" ?o)>>", "<<(?s <p>/<q> ?o)>>",
+        "<<( () <p> ?o )>>", "<<(?s <p> ())>>", "<<(?s <p> [<p> ?o])>>",
+        "<<(?s <p> <<(?s <p>)>>)>>", "<< ?s <p> ?o >>"}) {
+    SCOPED_TRACE(input);
+    sparqlParserHelpers::ParserAndVisitorBase<int> parser{
+        "SELECT * WHERE { ?s <p> " + input + " }"};
+    AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+        parser.parser_.query(), testing::HasSubstr("Invalid SPARQL query:"),
+        InvalidSparqlQueryException);
+  }
+}
+
+// _____________________________________________________________________________
+TEST(SparqlParser, TripleTermTranslationNotSupported) {
+  for (const std::string input :
+       {"<<(?subject <predicate> <object>)>>", "<<( <s> a ?o )>>",
+        "<<( _:s ?p \"object\" )>>", "<<( <<(?s <p> ?o)>> <p> ?o )>>",
+        "<<( ?s <p> <<(?s <p> ?o)>> )>>"}) {
+    SCOPED_TRACE(input);
+    auto fails = testing::HasSubstr(
+        "Triple terms in SPARQL patterns are currently not supported by "
+        "QLever.");
+    AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(parse<&Parser::varOrTerm>(input),
+                                          fails, NotSupportedException);
+    AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+        parse<&Parser::query>("SELECT * WHERE { ?s <p> " + input + " }"), fails,
+        NotSupportedException);
+    AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+        parse<&Parser::query>("SELECT * WHERE { " + input + " <p> ?o }"), fails,
+        NotSupportedException);
+    AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+        parse<&Parser::query>("CONSTRUCT { ?s <p> " + input +
+                              " } WHERE { ?s <p> ?o }"),
+        fails, NotSupportedException);
+  }
 }
 
 TEST(SparqlParser, RdfCollectionSingleVar) {
@@ -422,6 +510,11 @@ TEST(SparqlParser, VarOrTermVariable) {
 
 TEST(SparqlParser, VarOrTermGraphTerm) {
   expectCompleteParse(parseVarOrTerm("()"), m::Iri(nil));
+  expectCompleteParse(parseVarOrTerm("<iri>"), m::Iri("<iri>"));
+  expectCompleteParse(parseVarOrTerm("42"), m::Literal("42"));
+  expectCompleteParse(parseVarOrTerm("true"), m::Literal("true"));
+  expectCompleteParse(parseVarOrTerm("\"text\""), m::Literal("\"text\""));
+  expectCompleteParse(parseVarOrTerm("[]"), m::InternalVariable("0"));
 }
 
 TEST(SparqlParser, Iri) {
