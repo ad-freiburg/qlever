@@ -27,11 +27,10 @@ namespace qlever::binary_export {
 // Read the result that the exporting instance sent in the binary format (see
 // `exportAsQLeverBinary`) from the `response`. The columns of the result are
 // the `expectedVariables` (names with a leading `?`) in this order, and the
-// response has to contain exactly these variables (in any order). The
-// `resultSortedOn` are the columns by which the result is sorted (as in the
-// constructor of `Result`). They are not checked, the caller has to make sure
-// that the exporting instance sends the result in this order. A single string,
-// as well as the strings of a single batch, may take up at most
+// response has to contain exactly these variables (in any order). The result
+// is never sorted: Even if the exporting instance sends sorted rows, their
+// order in general doesn't survive the conversion of the `Id`s (see below). A
+// single string, as well as the strings of a single batch, may take up at most
 // `maxStringBatchSize`, which protects against allocating huge amounts of
 // memory for an invalid response.
 //
@@ -44,7 +43,6 @@ Result importBinaryHttpResponse(
     bool requestLaziness, HttpOrHttpsResponse response,
     const QueryExecutionContext& qec,
     std::vector<std::string> expectedVariables,
-    qlm::vector<ColumnIndex> resultSortedOn,
     ad_utility::MemorySize maxStringBatchSize,
     ad_utility::SharedCancellationHandle cancellationHandle);
 

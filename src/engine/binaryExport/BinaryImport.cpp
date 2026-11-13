@@ -20,6 +20,7 @@
 #include "engine/binaryExport/BinaryFormat.h"
 #include "engine/binaryExport/IdRewriter.h"
 #include "util/Algorithm.h"
+#include "util/Exception.h"
 #include "util/Generator.h"
 #include "util/HashSet.h"
 #include "util/serializer/AllocationLimitedReadSerializer.h"
@@ -30,10 +31,14 @@ namespace qlever::binary_export {
 using CancellationHandle = ad_utility::SharedCancellationHandle;
 namespace serialization = ad_utility::serialization;
 
-// Read the special case of a result without columns, for which only the number
-// of rows is exported (see `exportNumRows` in `BinaryExport.cpp`), from the
-// `serializer`. Return a table with `numColumns` columns (all of which are
-// unbound) and that number of rows.
+// Read the special case of a response without columns, for which only the
+// number of rows is exported (see `exportNumRows` in `BinaryExport.cpp`), from
+// the `serializer`. The response has no columns if none of the selected
+// variables is bound, but there may still be selected variables that are
+// unbound (for example `?x` in `SELECT ?x WHERE { ?s ?p ?o }`). Each of them
+// becomes a column of the local result (see `getRemoteColumns`), so return a
+// table with `numColumns` columns (all of which are undefined) and that number
+// of rows.
 template <typename Serializer>
 static IdTable importNumRows(Serializer& serializer, size_t numColumns,
                              const QueryExecutionContext& qec) {
@@ -50,7 +55,7 @@ static IdTable importNumRows(Serializer& serializer, size_t numColumns,
 // response that contains it (`std::nullopt` if it is unbound). Throw if the
 // response doesn't contain exactly the `expectedVariables`.
 static std::vector<std::optional<size_t>> getRemoteColumns(
-    const std::vector<std::string>& expectedVariables, const Header& header) {
+    ql::span<const std::string> expectedVariables, const Header& header) {
   const auto& remoteVariables = header.variableNames_;
   auto allRemoteVariables = remoteVariables;
   ql::ranges::copy(header.unboundVariableNames_,
@@ -80,9 +85,12 @@ static std::vector<std::optional<size_t>> getRemoteColumns(
 // (which has one column per entry of `remoteColumns`, see `getRemoteColumns`).
 template <typename Serializer>
 static void readRow(Serializer& serializer, Id::T firstId,
-                    const std::vector<std::optional<size_t>>& remoteColumns,
-                    std::vector<Id::T>& rowBuffer, IdTable& table) {
-  rowBuffer.at(0) = firstId;
+                    ql::span<const std::optional<size_t>> remoteColumns,
+                    ql::span<Id::T> rowBuffer, IdTable& table) {
+  // The response has at least one column, see the special case in
+  // `importBinaryGenerator`.
+  AD_CORRECTNESS_CHECK(!rowBuffer.empty());
+  rowBuffer[0] = firstId;
   serializer.serializeBytes(reinterpret_cast<char*>(rowBuffer.data() + 1),
                             (rowBuffer.size() - 1) * sizeof(Id::T));
   table.emplace_back();
@@ -108,7 +116,8 @@ static Result::Generator importBinaryGenerator(
   auto remoteColumns = getRemoteColumns(expectedVariables, header);
   size_t numColumns = expectedVariables.size();
 
-  // Special case 0 columns: yield a single pair with the correct row count.
+  // Special case: None of the variables is bound in the response, so it only
+  // contains the number of rows (see `importNumRows`).
   if (header.variableNames_.empty()) {
     co_yield Result::IdTableVocabPair{
         importNumRows(serializer, numColumns, qec), LocalVocab{}};
@@ -158,19 +167,19 @@ Result importBinaryHttpResponse(bool requestLaziness,
                                 HttpOrHttpsResponse response,
                                 const QueryExecutionContext& qec,
                                 std::vector<std::string> expectedVariables,
-                                qlm::vector<ColumnIndex> resultSortedOn,
                                 ad_utility::MemorySize maxStringBatchSize,
                                 CancellationHandle cancellationHandle) {
   auto generator = importBinaryGenerator(
       std::move(response), qec, std::move(expectedVariables), !requestLaziness,
       maxStringBatchSize.getBytes(), std::move(cancellationHandle));
 
+  qlm::vector<ColumnIndex> notSorted{qec.getAllocator()};
   if (requestLaziness) {
-    return Result{std::move(generator), std::move(resultSortedOn)};
+    return Result{std::move(generator), std::move(notSorted)};
   } else {
     auto [idTable, localVocab] =
         ad_utility::getSingleElement(std::move(generator));
-    return Result{std::move(idTable), std::move(resultSortedOn),
+    return Result{std::move(idTable), std::move(notSorted),
                   std::move(localVocab)};
   }
 }

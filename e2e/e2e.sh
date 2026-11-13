@@ -118,6 +118,7 @@ if [ ${REBUILD_THE_INDEX} == "YES" ] || ! [ -f "${INDEX}.index.pso" ]; then
         -F ttl \
         -f "$INPUT.nt" \
         -s "$PROJECT_DIR/e2e/e2e-build-settings.json" \
+        --encode-as-id "STS-" \
         -w "$INPUT.wordsfile.tsv" \
               -W \
         -d "$INPUT.docsfile.tsv" || bail "Building Index failed"
@@ -127,6 +128,7 @@ if [ ${REBUILD_THE_INDEX} == "YES" ] || ! [ -f "${INDEX}.index.pso" ]; then
         -F ttl \
         -f "$INPUT.nt" \
         -s "$PROJECT_DIR/e2e/e2e-build-settings.json" \
+        --encode-as-id "STS-" \
         || bail "Building Index failed"
     echo "Adding text index"
     ./qlever-index -A -i "$INDEX" \
@@ -222,8 +224,7 @@ echo "The HTTP proxy tests passed"
 # queries with `SERVICE` parts to the first server, and the result must be the
 # same as the one of the direct query. The queries cover all the datatypes
 # that the binary format has to handle, except for the ones that are tested in
-# the unit tests only (blank nodes, encoded IRIs, and the secondary
-# vocabulary).
+# the unit tests only (blank nodes and the secondary vocabulary).
 echo "Testing the transfer of results between QLever instances ..."
 function sorted_tsv_result {
   curl --silent --fail "http://localhost:$1/" -H "Accept: text/tab-separated-values" \
@@ -241,12 +242,16 @@ BODY_1='?s <is-a> <Scientist> . ?s <label> ?name .
 # Text records and words of the text index.
 VARIABLES_2="?s ?t ?ql_matchingword_t_relati"
 BODY_2='?s <is-a> <Scientist> . ?t ql:contains-entity ?s . ?t ql:contains-word "relati*"'
+# Encoded IRIs (the index is built with `--encode-as-id STS-`).
+VARIABLES_3="?s ?mission"
+BODY_3='?s <Space_Mission> ?mission'
 # The text records and words are printed without quotes by the direct query,
 # but are ordinary literals after the transfer, so the quotes are ignored for
 # that query.
 NORMALIZE_1="cat"
 NORMALIZE_2="tr -d \""
-for i in 1 2; do
+NORMALIZE_3="cat"
+for i in 1 2 3; do
   VARIABLES="VARIABLES_$i"
   BODY="BODY_$i"
   NORMALIZE="NORMALIZE_$i"

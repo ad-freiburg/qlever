@@ -70,7 +70,7 @@ class BinaryExportRoundTrip : public ::testing::Test {
  protected:
   // The `Variable`s with the given names.
   static std::vector<Variable> toVariables(
-      const std::vector<std::string>& varNames) {
+      ql::span<const std::string> varNames) {
     return ad_utility::transform(
         varNames, [](const std::string& name) { return Variable{name}; });
   }
@@ -134,11 +134,10 @@ class BinaryExportRoundTrip : public ::testing::Test {
                                      ad_utility::MediaType::binaryQleverExport),
                                  .location_ = {},
                                  .body_ = body(std::move(bytes))};
-    return importBinaryHttpResponse(
-        requestLaziness, std::move(response), *qec,
-        std::move(expectedVariables),
-        qlm::vector<ColumnIndex>{qec->getAllocator()}, maxStringBatchSize,
-        std::move(cancellationHandle));
+    return importBinaryHttpResponse(requestLaziness, std::move(response), *qec,
+                                    std::move(expectedVariables),
+                                    maxStringBatchSize,
+                                    std::move(cancellationHandle));
   }
 
   // Export the `varNames` of the result of `qet` and import them into
@@ -193,7 +192,8 @@ class BinaryExportRoundTrip : public ::testing::Test {
   }
 };
 
-// _____________________________________________________________________________
+// Results without rows, and results without columns (for which only the number
+// of rows is transferred).
 TEST_F(BinaryExportRoundTrip, noRowsOrNoColumns) {
   auto* qec = ad_utility::testing::getQec();
 
@@ -218,7 +218,8 @@ TEST_F(BinaryExportRoundTrip, noRowsOrNoColumns) {
   EXPECT_EQ(result.idTableView().numRows(), 2);
 }
 
-// _____________________________________________________________________________
+// Encoded IRIs are re-encoded with the prefixes of the importing index, or
+// stored in the local vocab if none of them matches.
 TEST_F(BinaryExportRoundTrip, encodedIrisWithDifferentPrefixes) {
   // Export the `iri`, which the exporting instance encodes with one of its
   // `exportPrefixes`, to an instance with the `importPrefixes`. If one of the
@@ -266,7 +267,7 @@ TEST_F(BinaryExportRoundTrip, encodedIrisWithDifferentPrefixes) {
        "<http://export-only.org/123>", false);
 }
 
-// _____________________________________________________________________________
+// Every datatype of `Id` survives the round trip (semantically).
 TEST_F(BinaryExportRoundTrip, allDatatypes) {
   using namespace valueGetterTestHelpers;
   AllDatatypesTestContext testContext;
@@ -345,7 +346,8 @@ TEST_F(BinaryExportRoundTrip, allDatatypes) {
   }
 }
 
-// _____________________________________________________________________________
+// The columns are matched by the names of the variables, unbound variables
+// become undefined columns, and unexpected variables are rejected.
 TEST_F(BinaryExportRoundTrip, variablesAreMatchedByName) {
   auto* qec = ad_utility::testing::getQec();
   auto qet = makeQet(qec, makeIdTableFromVector({{1, 2}}, &Id::makeFromInt),
@@ -380,7 +382,7 @@ TEST_F(BinaryExportRoundTrip, variablesAreMatchedByName) {
   EXPECT_EQ(result.idTableView()(1, 0), Id::makeUndefined());
 }
 
-// _____________________________________________________________________________
+// Geo points are converted when the two instances encode them differently.
 TEST_F(BinaryExportRoundTrip, geoPointsAreConvertedToTheLocalEncoding) {
   auto* qec = ad_utility::testing::getQec();
   GeoPoint point{47.9, 7.8};
@@ -411,7 +413,7 @@ TEST_F(BinaryExportRoundTrip, geoPointsAreConvertedToTheLocalEncoding) {
   test(GeoPointEncodingEnum::LatMajor, GeoPointEncodingEnum::ZOrder);
 }
 
-// _____________________________________________________________________________
+// Invalid headers and truncated responses are rejected.
 TEST_F(BinaryExportRoundTrip, invalidHeader) {
   auto* qec = ad_utility::testing::getQec();
   auto bytes = exportBytes(
@@ -465,7 +467,7 @@ TEST_F(BinaryExportRoundTrip, invalidHeader) {
       ::testing::HasSubstr("range of chunks"));
 }
 
-// _____________________________________________________________________________
+// A lazy result whose blocks have different local vocabs.
 TEST_F(BinaryExportRoundTrip, lazyExportWithSeveralLocalVocabs) {
   auto* qec = ad_utility::testing::getQec();
   Id blankNode = Id::makeFromBlankNodeIndex(BlankNodeIndex::make(7));
@@ -497,7 +499,8 @@ TEST_F(BinaryExportRoundTrip, lazyExportWithSeveralLocalVocabs) {
   }
 }
 
-// _____________________________________________________________________________
+// Large results are transferred in several batches, each of which becomes a
+// block of a lazy result.
 TEST_F(BinaryExportRoundTrip, severalBatches) {
   auto* qec = ad_utility::testing::getQec();
   // Large distinct strings (of about 1 MB each), which take up more than the
@@ -540,7 +543,7 @@ TEST_F(BinaryExportRoundTrip, severalBatches) {
   EXPECT_EQ(resultTable, intTable);
 }
 
-// _____________________________________________________________________________
+// The limit on the size of the strings, and the cancellation.
 TEST_F(BinaryExportRoundTrip, limitsAndCancellation) {
   auto* qec = ad_utility::testing::getQec();
   LocalVocab localVocab;
