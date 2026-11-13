@@ -584,8 +584,11 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindSides(
   auto leftVar = getVar(leftCol);
   auto rightVar = getVar(rightCol);
 
-  // Match the operation with the start side (left if bound, right otherwise).
-  // Since it is the same on all bound sides, we only need to compute it once.
+  // Make sure that the values of the start side (the left side if it is bound,
+  // the right side otherwise, see `decideDirection`) exist in the knowledge
+  // graph. For the empty path this may wrap `op` into an `EmptyPath`, which
+  // can change the column indices, so the bound columns are looked up again
+  // by their variable below.
   size_t matchCol = leftCol.has_value() ? leftCol.value() : rightCol.value();
   op = matchWithKnowledgeGraph(matchCol, std::move(op));
 
@@ -594,8 +597,6 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindSides(
   auto bindOneSide = [&op](auto& col, auto& var, auto& side,
                            bool resetPlaceholder) {
     if (col.has_value()) {
-      // Update this side column's index which might get messed up by
-      // `EmptyPath` operations added by `matchWithKnowledgeGraph`.
       col = op->getVariableColumn(var.value());
       side.treeAndCol_ = {op, col.value()};
     } else if (resetPlaceholder || !side.isVariable()) {
@@ -700,9 +701,9 @@ void TransitivePathBase::copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
                                      IdTableStatic<OUTPUT_WIDTH>& outputTable,
                                      size_t inputRow, size_t outputRow) const {
   size_t inCol = 0;
-  // The first two columns are both sides of the transitive path, then they
-  // are followed by the payload columns (if present) and then the (optional)
-  // graph column follows (but it is not written in this function).
+  // The first two columns are both sides of the transitive path, then they are
+  // followed by the payload columns (if present) and then the (optional) graph
+  // column follows (but it is not written in this function).
   size_t outCol = 2;
   AD_CORRECTNESS_CHECK(inputTable.numColumns() +
                            (graphVariable_.has_value() ? 3 : 2) ==

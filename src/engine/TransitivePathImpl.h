@@ -34,10 +34,11 @@ struct TableColumnWithVocab {
 
   // Explicit to prevent issues with co_yield and lifetime.
   // See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=103909 for more info.
-  TableColumnWithVocab(std::optional<IdTableView<0>> payload, ColumnType nodes,
-                       LocalVocab vocab, ql::span<const Id> targetNodes = {})
+  TableColumnWithVocab(std::optional<IdTableView<0>> payload,
+                       ColumnType startNodes, LocalVocab vocab,
+                       ql::span<const Id> targetNodes = {})
       : payload_{std::move(payload)},
-        startNodes_{std::move(nodes)},
+        startNodes_{std::move(startNodes)},
         targetNodes_{targetNodes},
         vocab_{std::move(vocab)} {}
 
