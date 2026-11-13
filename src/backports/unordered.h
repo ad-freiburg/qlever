@@ -43,6 +43,7 @@
 #include <utility>
 
 #include "backports/algorithm.h"
+#include "backports/concepts.h"
 #include "backports/type_traits.h"
 #include "util/Forward.h"
 
@@ -62,11 +63,12 @@ namespace ql {
 
 namespace backports {
 namespace detail {
-template <typename T, typename = void>
-struct IsTransparent : std::false_type {};
+// True iff `T` (a hash or equality function) is transparent.
 template <typename T>
-struct IsTransparent<T, std::void_t<typename T::is_transparent>>
-    : std::true_type {};
+CPP_requires(HasIsTransparent,
+             requires()(ql::type_identity<typename T::is_transparent>{}));
+template <typename T>
+CPP_concept IsTransparent = CPP_requires_ref(HasIsTransparent, T);
 }  // namespace detail
 
 // A hash container (`std::unordered_map`, `std::unordered_set`, or the flat
@@ -91,8 +93,8 @@ class HeterogeneousContainer : public Base {
   using typename Base::value_type;
 
  private:
-  static constexpr bool isTransparent = detail::IsTransparent<hasher>::value &&
-                                        detail::IsTransparent<key_equal>::value;
+  static constexpr bool isTransparent =
+      detail::IsTransparent<hasher> && detail::IsTransparent<key_equal>;
 
   // True iff a `Key` has to be converted to the `key_type`, see above.
   template <typename Key>
@@ -104,8 +106,13 @@ class HeterogeneousContainer : public Base {
  public:
   using Base::Base;
 
-  // The member functions that take a key. The default template arguments make
-  // calls with a braced initializer list (e.g. `map.find({a, b})`) work.
+  // The member functions that take a key. The default template arguments
+  // (`Key = key_type`) are needed for keys that are given as a braced
+  // initializer list (e.g. `map.find({a, b})` for a map with `std::pair`
+  // keys): a type cannot be deduced from a braced initializer list, so without
+  // the default, such a call wouldn't compile, whereas it does compile for the
+  // Boost containers (which have non-template overloads for `const key_type&`).
+  // With the default, the braced initializer list initializes a `key_type`.
   template <typename Key = key_type>
   iterator find(Key&& key) {
     return Base::find(toKey(AD_FWD(key)));
@@ -155,8 +162,15 @@ class HeterogeneousContainer : public Base {
     return Base::erase(first, last);
   }
 
-  // Insert a `value`. For a set, the `value` is converted to the `key_type` if
-  // required (see above).
+  // Insert a `value`. For a set, the `value_type` is the `key_type`, so
+  // `set.insert(value)` takes a key, which is converted to the `key_type` if
+  // required, just as for the other member functions above (e.g.
+  // `set.insert(stringView)` for a set of `std::string`s). For a map, the
+  // `value_type` is a `std::pair<const key_type, mapped_type>`, so
+  // `map.insert(value)` never takes a bare key, and the `value` is passed on
+  // unchanged (heterogeneous insertions into a map are done via `try_emplace`,
+  // `insert_or_assign`, or `operator[]`). For the default template argument,
+  // see the comment above `find`.
   template <typename Value = value_type>
   decltype(auto) insert(Value&& value) {
     if constexpr (std::is_same_v<key_type, value_type>) {
@@ -185,8 +199,9 @@ class HeterogeneousContainer : public Base {
   }
 };
 
-// The fallbacks for the Boost containers. (These are classes and not aliases,
-// s.t. `ad_utility::isInstantiation` works for them.)
+// The fallbacks based on the STL, which are used when the Boost containers are
+// not available. (These are classes and not aliases, s.t.
+// `ad_utility::isInstantiation` works for them.)
 template <typename... Ts>
 class StdUnorderedMap
     : public HeterogeneousContainer<std::unordered_map<Ts...>> {
