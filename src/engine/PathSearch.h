@@ -274,7 +274,14 @@ class PathSearch : public Operation {
 
   std::unique_ptr<Operation> cloneImpl() const override;
 
-  std::pair<ConstIdColumnRef, ConstIdColumnRef> handleSearchSides() const;
+  // The `Id`s of a search side, without a copy: a column of the result of a
+  // child or a span of the `Id`s of a `SearchSide`, which are different types
+  // with the split layout.
+  using SearchSideView =
+      std::conditional_t<std::is_same_v<ConstIdColumnRef, ql::span<const Id>>,
+                         ConstIdColumnRef,
+                         std::variant<ConstIdColumnRef, ql::span<const Id>>>;
+  std::pair<SearchSideView, SearchSideView> handleSearchSides() const;
 
   /**
    * @brief Finds paths based on the configured algorithm.
@@ -290,8 +297,9 @@ class PathSearch : public Operation {
    * @brief Finds all paths in the graph.
    * @return A vector of all paths.
    */
+  template <typename Sources, typename Targets>
   pathSearch::PathsLimited allPaths(
-      ConstIdColumnRef sources, ConstIdColumnRef targets,
+      Sources sources, Targets targets,
       const pathSearch::BinSearchWrapper& binSearch, bool cartesian,
       std::optional<uint64_t> numPathsPerTarget,
       std::optional<uint64_t> maxDepth) const;

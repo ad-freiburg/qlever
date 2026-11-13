@@ -178,7 +178,7 @@ struct DistinctIdCountOfBlock {
 
 // Return the `DistinctIdCountOfBlock` of the `column`, which has to be sorted
 // and must not be empty.
-inline DistinctIdCountOfBlock countDistinctIds(ql::span<const Id> column) {
+inline DistinctIdCountOfBlock countDistinctIds(ConstIdColumnRef column) {
   AD_CORRECTNESS_CHECK(!column.empty());
   // Note: The comparison of the bits (instead of the general comparison of
   // `Id`s) is not only much cheaper per element, it also makes this reduction
@@ -205,7 +205,7 @@ class DistinctIdCounter {
   // Add the `column` of the next block, which has to be sorted, and whose
   // first ID must not be smaller than the last ID of the previous block. An
   // empty `column` is ignored.
-  void addBlock(ql::span<const Id> column) {
+  void addBlock(ConstIdColumnRef column) {
     if (column.empty()) {
       return;
     }
