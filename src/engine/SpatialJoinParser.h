@@ -5,7 +5,7 @@
 #ifndef QLEVER_SRC_ENGINE_SPATIALJOINPARSER_H_
 #define QLEVER_SRC_ENGINE_SPATIALJOINPARSER_H_
 
-#include <spatialjoin/Sweeper.h>
+#include <spatialjoin/GeometryStore.h>
 #include <spatialjoin/WKTParse.h>
 #include <util/geo/Geo.h>
 #include <util/log/Log.h>
@@ -22,7 +22,6 @@ constexpr inline size_t WKT_PARSER_BATCH_SIZE = 10'000;
 struct SpatialJoinParseJob {
   ValueId valueId;
   size_t line;
-  bool side;
   std::string wkt;
   std::optional<BoundingBox> boundingBox;
 };
@@ -33,15 +32,18 @@ struct SpatialJoinParseJob {
 // prefiltering and is therefore also not compared here.
 inline bool operator==(const SpatialJoinParseJob& a,
                        const SpatialJoinParseJob& b) {
-  return a.line == b.line && a.valueId == b.valueId && a.side == b.side;
+  return a.line == b.line && a.valueId == b.valueId;
 }
 
 // Custom parallel WKT parser, which receives only `ValueId`s instead of
 // literals and fetches the corresponding bounding boxes and literals from the
-// vocabulary on the fly (and in parallel).
+// vocabulary on the fly (and in parallel). The parsed geometries are added to
+// `store`, and `metaCb` is called for each of them (usually the `addCb` of the
+// `sj::SweepEventList` of one side of the spatial join).
 class WKTParser : public sj::WKTParserBase<SpatialJoinParseJob> {
  public:
-  WKTParser(sj::Sweeper* sweeper, size_t numThreads, bool usePrefiltering,
+  WKTParser(sj::GeometryStore* store, sj::PreparedGeomMetaCb metaCb,
+            size_t numThreads, bool usePrefiltering,
             const std::optional<::util::geo::DBox>& prefilterLatLngBox,
             const Index& index);
 
@@ -52,12 +54,10 @@ class WKTParser : public sj::WKTParserBase<SpatialJoinParseJob> {
   ~WKTParser();
 
   // Enqueue a new row from the input table (given the `ValueId` of the
-  // geometry: `GeoPoint` or `VocabIndex` or `LocalVocabIndex`, the `rowIndex`
-  // in the input table `id` and whether the geometry should be assigned to the
-  // left or right `side` of the spatial join). If available as part of the
-  // `IdTable`, this function accepts a precomputed bounding box for
-  // prefiltering.
-  void addValueIdToQueue(ValueId valueId, size_t rowIndex, bool side,
+  // geometry: `GeoPoint` or `VocabIndex` or `LocalVocabIndex` and the
+  // `rowIndex` in the input table). If available as part of the `IdTable`,
+  // this function accepts a precomputed bounding box for prefiltering.
+  void addValueIdToQueue(ValueId valueId, size_t rowIndex,
                          std::optional<BoundingBox> boundingBox);
 
   // Accumulate the counters across all threads. They count the number of

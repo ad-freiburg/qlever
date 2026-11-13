@@ -12,6 +12,9 @@
 
 #include <absl/strings/str_join.h>
 #include <gmock/gmock.h>
+#include <spatialjoin/GeometryCache.h>
+#include <spatialjoin/GeometryStore.h>
+#include <spatialjoin/SweepEventList.h>
 #include <spatialjoin/Sweeper.h>
 #include <util/geo/Geo.h>
 
@@ -183,14 +186,13 @@ inline ValIdTable resolveValIdTable(QueryExecutionContext* qec,
   return {std::move(vMap), std::move(nMap)};
 }
 
-// Helper to construct the `SweeperCfg` configuration struct for
+// Helper to construct the `SpatialJoinCfg` configuration struct for
 // `runParsingAndSweeper`
-inline sj::SweeperCfg makeSweeperCfg(const LibSpatialJoinConfig& libSJConfig,
-                                     SweeperResult& results,
-                                     SweeperDistResult& resultDists,
-                                     double withinDist) {
+inline sj::SpatialJoinCfg makeSweeperCfg(
+    const LibSpatialJoinConfig& libSJConfig, SweeperResult& results,
+    SweeperDistResult& resultDists, double withinDist) {
   using enum SpatialJoinType::Enum;
-  sj::SweeperCfg cfg = LibspatialjoinAlgorithm::sweeperConfig(1, 1_GB);
+  sj::SpatialJoinCfg cfg = LibspatialjoinAlgorithm::sweeperConfig(1, 1_GB);
   cfg.withinDist = withinDist;
   auto joinTypeVal = libSJConfig.joinType_;
   cfg.writeRelCb = [&results, &resultDists, joinTypeVal](
@@ -273,44 +275,51 @@ inline void runParsingAndSweeper(
     return;
   }
 
-  // Instantiate a libspatialjoin `Sweeper`
+  // Instantiate a libspatialjoin `GeometryStore` and one `SweepEventList`
+  // per side
   SweeperResult results{{}};
   SweeperDistResult resultDists{{}};
   double withinDist = sjTask.maxDist_.value_or(-1);
   auto sweeperCfg = makeSweeperCfg(sjTask, results, resultDists, withinDist);
   std::string sweeperPath = qec->getIndex().getOnDiskBase() + ".spatialjoin";
-  sj::Sweeper sweeper(sweeperCfg, ".", sweeperPath);
-
-  ASSERT_EQ(sweeper.numElements(), 0);
+  sj::GeometryStore store(sweeperCfg, ".", sweeperPath, false);
+  sj::GeometryCache cache(sweeperCfg);
+  const uint8_t storeId = cache.addStore(&store);
+  sj::SweepEventList eventsLeft(sweeperCfg, ".", sweeperPath);
+  sj::SweepEventList eventsRight(sweeperCfg, ".", sweeperPath);
 
   // Run first parsing step (left side)
   auto [aggBoundingBoxLeft, numGeomAddedLeft, numGeomDroppedLeft,
         numGeomInvalidLeft, numThreadsLeft] =
-      sjAlgo.parse(false,
-                   {prepared.idTableLeft_, prepared.leftJoinCol_, std::nullopt},
-                   sweeper, 1, std::nullopt);
-  // Due to problems in `Sweeper` when a side is empty, we don't use
-  // `sweeper.setFilterBox(box);` here.
+      sjAlgo.parse({prepared.idTableLeft_, prepared.leftJoinCol_, std::nullopt},
+                   store, eventsLeft.addCb(storeId), 1, std::nullopt);
+  // Only the prefilter of the parser is tested here, so the filter box of the
+  // store (see `LibspatialjoinAlgorithm::run`) is not set.
 
   // Run second parsing step (right side)
   std::optional<util::geo::I32Box> prefilterBox = std::nullopt;
   if (usePrefilter) {
-    prefilterBox = sweeper.getPaddedBoundingBox(aggBoundingBoxLeft);
+    prefilterBox = store.getPaddedBoundingBox(aggBoundingBoxLeft);
   }
   auto [aggBoundingBoxRight, numGeomAddedRight, numGeomDroppedRight,
         numGeomInvalidRight, numThreadsRight] =
       sjAlgo.parse(
-          true, {prepared.idTableRight_, prepared.rightJoinCol_, std::nullopt},
-          sweeper, 1, prefilterBox);
+          {prepared.idTableRight_, prepared.rightJoinCol_, std::nullopt}, store,
+          eventsRight.addCb(storeId), 1, prefilterBox);
 
-  sweeper.flush();
+  store.flush();
+  eventsLeft.finalize(1);
+  eventsRight.finalize(1);
+  eventsLeft.duplicatesToReferences(cache);
+  eventsRight.duplicatesToReferences(cache);
 
   // Check counters
   size_t numSkipped = numGeomDroppedLeft + numGeomDroppedRight;
 
-  size_t numEl = sweeper.numElements();
+  size_t numEl = eventsLeft.numObjects() + eventsRight.numObjects();
   if (numGeomAddedLeft && numGeomAddedRight) {
-    sweeper.sweep();
+    sj::Sweeper sweeper(sweeperCfg, &cache);
+    sweeper.sweep(&eventsLeft, &eventsRight);
   }
 
   ASSERT_EQ(results.size(), 1);
@@ -444,7 +453,7 @@ inline void checkSweeperTestResult(
 
 // Construct a bounding box for a list of geometries simply by computing the
 // bounding box of a geometry collection with all geometries. Use to compute the
-// expected bounding box after adding the geometries to `Sweeper`.
+// expected bounding box after adding the geometries to the `GeometryStore`.
 inline util::geo::DBox makeAggregatedBoundingBox(
     const std::vector<std::string>& wktGeometries) {
   std::vector<std::string> wktWithoutDatatype;
