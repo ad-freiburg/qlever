@@ -153,4 +153,23 @@ TEST(StringWithAllocator, ostringstreamSeek) {
     os << "ab";
     os.seekp(1, std::ios_base::end);
   });
+  // Seeking the input position fails, as the buffer is output-only.
+  check([](std::ostream& os) {
+    os << "ab";
+    EXPECT_EQ(os.rdbuf()->pubseekoff(0, std::ios_base::cur, std::ios_base::in),
+              std::streampos(std::streamoff(-1)));
+  });
+}
+
+// `overflow(eof)` succeeds without writing anything.
+TEST(StringWithAllocator, overflowWithEof) {
+  struct Buf : qlm::detail::StringStreamBuf {
+    using StringStreamBuf::overflow;
+    using StringStreamBuf::StringStreamBuf;
+  };
+  using Traits = std::char_traits<char>;
+  Buf buf{unlimited()};
+  EXPECT_EQ(buf.overflow('a'), 'a');
+  EXPECT_FALSE(Traits::eq_int_type(buf.overflow(Traits::eof()), Traits::eof()));
+  EXPECT_EQ(buf.str(), "a");
 }
