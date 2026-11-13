@@ -423,8 +423,8 @@ Result LibspatialjoinAlgorithm::run() {
     addSkippedRowsWarning(smallerIsRight ? invalidLarge : invalidSmall,
                           smallerIsRight ? invalidSmall : invalidLarge);
 
-    // If we have filtered out all geometries or one side is otherwise empty,
-    // bail out early.
+    // Return whether both sides have at least one valid geometry (otherwise
+    // the sweep is skipped).
     return numValidGeomsSmall > 0 && numValidGeomsLarge > 0;
   };
 
