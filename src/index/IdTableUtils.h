@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "backports/algorithm.h"
+#include "backports/span.h"
 #include "backports/type_traits.h"
 #include "engine/idTable/IdTable.h"
 #include "index/SortConfig.h"
@@ -51,7 +52,7 @@ class IdTableUtils {
   }
 
   // Sort the rows of `idTable` lexicographically by the columns `sortCols`.
-  static void sort(IdTable& idTable, const std::vector<ColumnIndex>& sortCols,
+  static void sort(IdTable& idTable, ql::span<const ColumnIndex> sortCols,
                    const SortConfig& sortConfig);
 
   // Return the number of distinct rows in the `input`. The input must have all

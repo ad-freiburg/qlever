@@ -21,6 +21,7 @@
 #include "util/OperationTestHelpers.h"
 #include "util/RuntimeParametersTestHelpers.h"
 
+using ad_utility::testing::colIndices;
 using ::testing::ElementsAre;
 using ::testing::Eq;
 using V = Variable;
@@ -147,8 +148,14 @@ TEST(Filter, verifyPredicateIsAppliedCorrectlyOnNonLazyEvaluation) {
                                            {true}},
                                           asBool);
 
-  ValuesForTesting values{qec, std::move(idTable), {Variable{"?x"}}, false,
-                          {},  LocalVocab{},       std::nullopt,     true};
+  ValuesForTesting values{qec,
+                          std::move(idTable),
+                          {Variable{"?x"}},
+                          false,
+                          colIndices({}),
+                          LocalVocab{},
+                          std::nullopt,
+                          true};
   QueryExecutionTree subTree{
       qec, std::make_shared<ValuesForTesting>(std::move(values))};
   Filter filter{

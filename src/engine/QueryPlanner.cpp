@@ -70,6 +70,7 @@
 #include "global/Id.h"
 #include "global/RuntimeParameters.h"
 #include "index/ExportIds.h"
+#include "index/TripleComponentConversions.h"
 #include "parser/Alias.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/MagicServiceIriConstants.h"
@@ -128,6 +129,112 @@ void assignNodesFilterAndTextLimitIds(QueryPlanner::SubtreePlan& target,
   target.idsOfIncludedTextLimits_ = source.idsOfIncludedTextLimits_;
   target.containsFilterSubstitute_ = source.containsFilterSubstitute_;
   target.containsBindSubstitute_ = source.containsBindSubstitute_;
+}
+
+// Return the `BIND`s that compute the single row of `qet` if this row consists
+// of constants: a `VALUES` clause with a single row (one `BIND` of each value)
+// or `BIND`s of constants to the neutral element, without `LIMIT` or `OFFSET`.
+// Otherwise, return `std::nullopt`. Variables that are hidden (e.g. by the
+// `SELECT` clause of a subquery) get no `BIND`.
+std::optional<std::vector<p::Bind>> getConstantBinds(
+    const QueryExecutionTree& qet) {
+  const Operation* operation = qet.getRootOperation().get();
+  const auto& visibleVariables = qet.getVariableColumns();
+  auto hasLimitOrOffset = [](const Operation* op) {
+    return !op->getLimitOffset().isUnconstrained();
+  };
+
+  // Return a `BIND` of each value of a `VALUES` clause with a single row (an
+  // IRI, a literal, or a value with an `Id` of its own, like a number or
+  // `UNDEF`).
+  if (const auto* values = dynamic_cast<const Values*>(operation)) {
+    using namespace sparqlExpression;
+    const auto& parsedValues = values->parsedValues();
+    if (parsedValues._values.size() != 1 || hasLimitOrOffset(values)) {
+      return std::nullopt;
+    }
+    std::vector<p::Bind> binds;
+    for (const auto& [variable, value] : ::ranges::views::zip(
+             parsedValues._variables, parsedValues._values.at(0))) {
+      if (!visibleVariables.contains(variable)) {
+        continue;
+      }
+      SparqlExpression::Ptr expression;
+      if (value.isIri()) {
+        expression = std::make_unique<IriExpression>(value.getIri());
+      } else if (value.isLiteral()) {
+        expression =
+            std::make_unique<StringLiteralExpression>(value.getLiteral());
+      } else if (auto id = toValueId(value, operation->getIndex())) {
+        expression = std::make_unique<IdExpression>(id.value());
+      } else {
+        return std::nullopt;
+      }
+      binds.push_back(p::Bind{
+          SparqlExpressionPimpl{std::move(expression), value.toString()},
+          variable});
+    }
+    return binds;
+  }
+
+  // Collect the `BIND`s of constants down to the neutral element (in the order
+  // in which they are applied).
+  std::vector<p::Bind> binds;
+  while (const auto* bind = dynamic_cast<const Bind*>(operation)) {
+    if (!bind->bind()._expression.getConstantValue().has_value() ||
+        hasLimitOrOffset(bind)) {
+      return std::nullopt;
+    }
+    if (visibleVariables.contains(bind->bind()._target)) {
+      binds.push_back(bind->bind());
+    }
+    operation = bind->getChildren().at(0)->getRootOperation().get();
+  }
+  if (dynamic_cast<const NeutralElementOperation*>(operation) == nullptr ||
+      hasLimitOrOffset(operation)) {
+    return std::nullopt;
+  }
+  ql::ranges::reverse(binds);
+  return binds;
+}
+
+// Return `subtrees` without a Cartesian product if all of them except one
+// compute a single row of constants (see `getConstantBinds`): The remaining
+// subtree with a column for each of the constants (via
+// `QueryExecutionTree::makeTreeWithBindColumn`, e.g. a constant column of an
+// `IndexScan`, or else a `Bind` on top). Otherwise, return `std::nullopt`.
+//
+// NOTE: The Cartesian product would copy all rows of the remaining subtree,
+// while a `Bind` only adds a column to them.
+std::optional<std::shared_ptr<QueryExecutionTree>> addConstantsAsColumns(
+    const std::vector<std::shared_ptr<QueryExecutionTree>>& subtrees) {
+  // Split the `subtrees` into the `BIND`s of the constants and the single
+  // remaining subtree, return `std::nullopt` if there is no such split.
+  std::vector<p::Bind> binds;
+  std::shared_ptr<QueryExecutionTree> result;
+  for (const auto& subtree : subtrees) {
+    if (auto constantBinds = getConstantBinds(*subtree)) {
+      ql::ranges::move(constantBinds.value(), std::back_inserter(binds));
+    } else if (result == nullptr) {
+      result = subtree;
+    } else {
+      return std::nullopt;
+    }
+  }
+  if (result == nullptr) {
+    return std::nullopt;
+  }
+
+  // Add a column for each constant to the remaining subtree.
+  for (const auto& bind : binds) {
+    auto withColumn = result->makeTreeWithBindColumn(bind);
+    result = withColumn.has_value()
+                 ? std::move(withColumn.value())
+                 : ad_utility::makeExecutionTree<Bind>(
+                       result->getRootOperation()->getExecutionContext(),
+                       result, bind);
+  }
+  return result;
 }
 }  // namespace
 
@@ -477,10 +584,11 @@ SubtreePlanVec QueryPlanner::optimize(ParsedQuery::GraphPattern* rootPattern) {
   if (!candidatePlans.empty()) {
     applyFiltersIfPossible<FilterMode::ApplyAllFiltersAndReplaceUnfiltered>(
         candidatePlans[0], optimizer.filtersAndSubst_);
-    applyTextLimitsIfPossible(candidatePlans[0],
-                              TextLimitVec{rootPattern->textLimits_.begin(),
-                                           rootPattern->textLimits_.end()},
-                              true);
+    applyTextLimitsIfPossible(
+        candidatePlans[0],
+        TextLimitVec{rootPattern->textLimits_.begin(),
+                     rootPattern->textLimits_.end(), allocator()},
+        true);
     checkCancellation();
   }
 
@@ -1489,7 +1597,7 @@ QueryPlanner::JoinColumns QueryPlanner::connected(
   // Check if there is overlap.
   // If so, don't consider them as properly connected.
   if ((a._idsOfIncludedNodes & b._idsOfIncludedNodes) != 0) {
-    return {};
+    return JoinColumns{allocator()};
   }
 
   // If a substitute is contained, do not use the triple graph. This is because
@@ -1516,7 +1624,7 @@ QueryPlanner::JoinColumns QueryPlanner::connected(
       }
     }
   }
-  return {};
+  return JoinColumns{allocator()};
 }
 
 // _____________________________________________________________________________
@@ -1626,10 +1734,22 @@ void QueryPlanner::applyFiltersIfPossible(
           newPlan.type = plan.type;
           newPlan.containsFilterSubstitute_ = true;
         }
+        // In the `KeepUnfiltered` mode, keep `plan` and add the candidates,
+        // also if we need to enforce substitution.
+        //
+        // NOTE: This way, `plan` can first be joined with other plans (for
+        // example, a scan of all geometries with a small set of entities
+        // before the `SpatialJoin` with a constant geometry). The final
+        // `SeedSubstitutesOnly` pass applies an enforced substitute to every
+        // plan that still lacks it.
+        if constexpr (mode == FilterMode::KeepUnfiltered) {
+          ql::ranges::move(substPlans, std::back_inserter(addedPlans));
+          continue;
+        }
+
         // If we need to enforce substitution, replace `plan` with our first
         // candidate. This is not done in all cases, because an incomplete
-        // `SpatialJoin` would not get a join partner if `plan` would be
-        // removed.
+        // `SpatialJoin` would not get a join partner if `plan` were removed.
         if (!substPlans.empty() && filterAndSubst.forceSubstitution_) {
           plan = std::move(substPlans.front());
           substPlans.erase(substPlans.begin());
@@ -1808,9 +1928,11 @@ SubtreePlanVec QueryPlanner::runDynamicProgrammingOnConnectedComponent(
   }
   auto& result = dpTab.back();
   // Apply enforced filter substitutes (currently `SpatialJoin` with a
-  // fixed-value side). Both a connected component with a single seed and a
-  // full-cover replacement plan land in the final row without passing through
-  // a DP round that may apply substitutes, so they are handled here.
+  // fixed-value side) to every final plan that still lacks them. These are
+  // the plans that kept the unfiltered side in the `KeepUnfiltered` rounds
+  // above, as well as a connected component with a single seed and a
+  // full-cover replacement plan, which land in the final row without passing
+  // through a DP round at all.
   applyFiltersIfPossible<FilterMode::SeedSubstitutesOnly>(result, filters);
   applyFiltersIfPossible<FilterMode::ReplaceUnfilteredNoSubstitutes>(result,
                                                                      filters);
@@ -1980,7 +2102,7 @@ SubtreePlanVec QueryPlanner::runGreedyPlanningOnConnectedComponent(
 // _____________________________________________________________________________
 QueryPlanner::FiltersAndOptionalSubstitutes QueryPlanner::seedFilterSubstitutes(
     const std::vector<SparqlFilter>& filters) {
-  FiltersAndOptionalSubstitutes plans;
+  FiltersAndOptionalSubstitutes plans{allocator()};
   plans.reserve(filters.size());
 
   for (const auto& [i, filterExpression] :
@@ -2007,13 +2129,11 @@ QueryPlanner::FiltersAndOptionalSubstitutes QueryPlanner::seedFilterSubstitutes(
 // _____________________________________________________________________________
 QueryPlanner::FiltersAndOptionalSubstitutes
 QueryPlanner::wrapFiltersWithoutSubstitutes(
-    const std::vector<SparqlFilter>& filters) {
-  FiltersAndOptionalSubstitutes plans;
-  plans.reserve(filters.size());
-  for (const auto& filter : filters) {
-    plans.push_back({filter, std::nullopt});
-  }
-  return plans;
+    const std::vector<SparqlFilter>& filters) const {
+  return filters | ql::views::transform([](const auto& filter) {
+           return FilterAndOptionalSubstitute{filter, std::nullopt};
+         }) |
+         ::ranges::to<qlm::vector>(allocator());
 }
 
 // _____________________________________________________________________________
@@ -2043,7 +2163,7 @@ SubtreePlanMatrix QueryPlanner::fillDpTab(const QueryPlanner::TripleGraph& tg,
         .first->second.push_back(std::move(initialPlans.at(i)));
   }
   SubtreePlanMatrix lastDpRowFromComponents{allocator()};
-  TextLimitVec textLimitVec(textLimits.begin(), textLimits.end());
+  TextLimitVec textLimitVec(textLimits.begin(), textLimits.end(), allocator());
   for (auto& component : components | ql::views::values) {
     std::vector<const SubtreePlan*> g;
     uint64_t coveredNodes = 0;
@@ -2123,7 +2243,7 @@ SubtreePlanMatrix QueryPlanner::fillDpTab(const QueryPlanner::TripleGraph& tg,
   // More than one connected component, set up a Cartesian product.
   SubtreePlanMatrix result{allocator()};
   result.emplace_back(allocator());
-  std::vector<std::shared_ptr<QueryExecutionTree>> subtrees;
+  CartesianProductJoin::Children subtrees{allocator()};
   // We need to manually inform the cartesian produce about
   // its included nodes and filters and text limits to make the
   // `applyTextLimitsIfPossible` call below work correctly.
@@ -2145,14 +2265,20 @@ SubtreePlanMatrix QueryPlanner::fillDpTab(const QueryPlanner::TripleGraph& tg,
         containsBindSubstitute |= plan.containsBindSubstitute_;
         subtrees.push_back(std::move(plan._qet));
       });
+  // Add the components that are only constants as columns to the remaining
+  // component if possible, otherwise compute the Cartesian product.
+  auto constantsAsColumns = addConstantsAsColumns(subtrees);
   result.at(0).push_back(
-      makeSubtreePlan<CartesianProductJoin>(_qec, std::move(subtrees)));
+      constantsAsColumns.has_value()
+          ? SubtreePlan{std::move(constantsAsColumns.value())}
+          : makeSubtreePlan<CartesianProductJoin>(_qec, std::move(subtrees)));
   auto& plan = result.at(0).back();
   plan._idsOfIncludedNodes = nodes;
   plan._idsOfIncludedFilters = filterIds;
   plan.idsOfIncludedTextLimits_ = textLimitIds;
   plan.containsFilterSubstitute_ = containsFilterSubstitute;
-  plan.containsBindSubstitute_ = containsBindSubstitute;
+  plan.containsBindSubstitute_ =
+      containsBindSubstitute || constantsAsColumns.has_value();
   applyFiltersIfPossible<FilterMode::ReplaceUnfilteredNoSubstitutes>(
       result.at(0), filtersAndOptSubstitutes);
   applyTextLimitsIfPossible(result.at(0), textLimitVec, true);
@@ -2288,7 +2414,7 @@ qlm::vector<SparqlFilter> QueryPlanner::TripleGraph::pickFilters(
 QueryPlanner::TripleGraph::TripleGraph(
     const std::vector<std::pair<Node, std::vector<size_t>>>& init,
     qlever::Allocator<size_t> allocator)
-    : _adjLists(allocator) {
+    : _adjLists(allocator), _nodeStorage(allocator) {
   for (const std::pair<Node, std::vector<size_t>>& p : init) {
     _nodeStorage.push_back(p.first);
     _nodeMap[p.first.id_] = &_nodeStorage.back();
@@ -2299,7 +2425,8 @@ QueryPlanner::TripleGraph::TripleGraph(
 // _____________________________________________________________________________
 QueryPlanner::TripleGraph::TripleGraph(const QueryPlanner::TripleGraph& other,
                                        qlm::vector<size_t> keepNodes)
-    : _adjLists(other._adjLists.get_allocator()) {
+    : _adjLists(other._adjLists.get_allocator()),
+      _nodeStorage(other._nodeStorage.get_allocator()) {
   ad_utility::HashSet<size_t> keep;
   for (auto v : keepNodes) {
     keep.insert(v);
@@ -2331,7 +2458,9 @@ QueryPlanner::TripleGraph::TripleGraph(const QueryPlanner::TripleGraph& other,
 
 // _____________________________________________________________________________
 QueryPlanner::TripleGraph::TripleGraph(const TripleGraph& other)
-    : _adjLists(other._adjLists), _nodeMap(), _nodeStorage() {
+    : _adjLists(other._adjLists),
+      _nodeMap(),
+      _nodeStorage(other._nodeStorage.get_allocator()) {
   for (auto it : other._nodeMap) {
     _nodeStorage.push_back(*it.second);
     _nodeMap[it.first] = &_nodeStorage.back();
@@ -2351,7 +2480,7 @@ QueryPlanner::TripleGraph& QueryPlanner::TripleGraph::operator=(
 
 // _____________________________________________________________________________
 QueryPlanner::TripleGraph::TripleGraph(qlever::Allocator<size_t> allocator)
-    : _adjLists(allocator), _nodeMap(), _nodeStorage() {}
+    : _adjLists(allocator), _nodeMap(), _nodeStorage(allocator) {}
 
 // _____________________________________________________________________________
 bool QueryPlanner::TripleGraph::isSimilar(
@@ -2473,7 +2602,8 @@ SubtreePlanVec QueryPlanner::createJoinCandidatesAllowEmpty(
     const JoinColumns& jcs) const {
   if (jcs.empty()) {
     return singlePlanVec(makeSubtreePlan<CartesianProductJoin>(
-        _qec, std::vector{ain._qet, bin._qet}));
+        _qec,
+        CartesianProductJoin::Children{{ain._qet, bin._qet}, allocator()}));
   }
   return createJoinCandidates(ain, bin, jcs);
 }
@@ -2640,9 +2770,9 @@ namespace {
 std::pair<QueryPlanner::JoinColumns, QueryPlanner::JoinColumns>
 mapColumnsInUnion(size_t columnIndex, const Union& unionOperation,
                   const QueryPlanner::JoinColumns& jcs) {
-  QueryPlanner::JoinColumns leftMapping;
+  QueryPlanner::JoinColumns leftMapping{jcs.get_allocator()};
   leftMapping.reserve(jcs.size());
-  QueryPlanner::JoinColumns rightMapping;
+  QueryPlanner::JoinColumns rightMapping{jcs.get_allocator()};
   rightMapping.reserve(jcs.size());
   auto mapColumns = [columnIndex, &unionOperation](
                         bool isLeft, std::array<ColumnIndex, 2> columns)
@@ -3065,7 +3195,8 @@ void QueryPlanner::QueryGraph::setupGraph(
   // Prepare the `nodes_` vector for the graph. We have one node for each leaf
   // of what later becomes the `QueryExecutionTree`.
   for (const auto& leafOperation : leafOperations) {
-    nodes_.push_back(std::make_shared<Node>(&leafOperation));
+    nodes_.push_back(
+        qlm::makeShared<Node>(nodes_.get_allocator(), &leafOperation));
   }
 
   // Set up a hash map from variables to nodes that contain this variable.
@@ -3177,8 +3308,8 @@ void QueryPlanner::QueryGraph::dfs(Node* startNode, size_t componentIndex) {
   }
 }
 // _______________________________________________________________
-std::vector<size_t> QueryPlanner::QueryGraph::dfsForAllNodes() {
-  std::vector<size_t> result;
+qlm::vector<size_t> QueryPlanner::QueryGraph::dfsForAllNodes() {
+  qlm::vector<size_t> result{nodes_.get_allocator()};
   size_t nextIndex = 0;
   for (const auto& node : nodes_) {
     if (node->visited_) {
@@ -3388,8 +3519,8 @@ void QueryPlanner::GraphPatternPlanner::bindGraphVariableIfUnbound(
   for (auto& innerCand : candidates) {
     if (!innerCand._qet->getVariableColumns().contains(graphVar)) {
       innerCand = makeSubtreePlan<CartesianProductJoin>(
-          planner_._qec, std::vector<std::shared_ptr<QueryExecutionTree>>{
-                             graphsCand._qet, innerCand._qet});
+          planner_._qec, CartesianProductJoin::Children{
+                             {graphsCand._qet, innerCand._qet}, allocator()});
     }
     // TODO<metetolga> queries of the form SELECT * { GRAPH ?g { VALUES ?g
     // { <doesnotexist> } } } are not correctly handled.

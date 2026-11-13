@@ -35,6 +35,15 @@ static size_t getNumberOfVariables(const TripleComponent& subject,
          static_cast<size_t>(object.isVariable());
 }
 
+// Return true iff `id` can be the `Id` of a constant column (see
+// `IndexScan::constantColumns_`).
+static bool isValidConstantColumnId(Id id) {
+  return !ad_utility::contains(
+      std::array{Datatype::Undefined, Datatype::LocalVocabIndex,
+                 Datatype::BlankNodeIndex},
+      id.getDatatype());
+}
+
 // _____________________________________________________________________________
 IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
                      LocatedTriplesSharedState locatedTriplesSharedState,
@@ -118,6 +127,8 @@ IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
   AD_CONTRACT_CHECK(qec != nullptr);
   AD_CONTRACT_CHECK(permutation_ != nullptr);
   AD_CONTRACT_CHECK(locatedTriplesSharedState_ != nullptr);
+  AD_CONTRACT_CHECK(ql::ranges::all_of(constantColumns_ | ql::views::keys,
+                                       &isValidConstantColumnId));
   // NOTE: The multiplicities are determined lazily (see `getMultiplicity`),
   // because they may depend on the size estimate, which some callers only set
   // after construction (see `makeCopyWithPrefilteredScanSpecAndBlocks`).
@@ -152,7 +163,9 @@ string IndexScan::getCacheKeyImpl() const {
   }
   if (!constantColumns_.empty()) {
     os << " Constant Columns: ";
-    os << absl::StrJoin(constantColumns_ | ql::views::keys, " ");
+    os << absl::StrJoin(
+        constantColumns_ | ql::views::keys | ql::views::transform(&Id::getBits),
+        " ");
   }
 
   os << " ";
@@ -185,9 +198,7 @@ string IndexScan::getDescriptor() const {
       }) | ql::views::transform(&TripleComponent::toString),
       // All non-stripped additional variables and the variables of the
       // constant columns.
-      ::ranges::views::concat(additionalVariables_,
-                              constantColumns_ | ql::views::values) |
-          ql::views::filter(isNotStripped) |
+      additionalAndConstantVariables() | ql::views::filter(isNotStripped) |
           ql::views::transform(
               [](const auto& var) -> decltype(auto) { return var.name(); }));
   return absl::StrCat("IndexScan ", permutation().readableName(), " ",
@@ -204,10 +215,8 @@ size_t IndexScan::getResultWidth() const {
 
 // _____________________________________________________________________________
 qlm::vector<ColumnIndex> IndexScan::variableAndGraphColumns() const {
-  qlm::vector<ColumnIndex> result{allocator()};
-  for (auto i : ad_utility::integerRange(ColumnIndex{numVariables_})) {
-    result.push_back(i);
-  }
+  auto result = ad_utility::integerRange(ColumnIndex{numVariables_}) |
+                ::ranges::to<qlm::vector>(allocator());
   for (size_t i = 0; i < additionalColumns_.size(); ++i) {
     if (additionalColumns_.at(i) == ADDITIONAL_COLUMN_GRAPH_ID) {
       result.push_back(numVariables_ + i);
@@ -318,26 +327,19 @@ VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
   auto isContained = [&](const Variable& var) {
     return !varsToKeep_.has_value() || varsToKeep_.value().contains(var);
   };
+  // Add each variable at the next result column, with the undef status of the
+  // permutation column it is read from.
   ColumnIndex nextColIdx = 0;
-  auto addCol = [&isContained, &variableToColumnMap, &nextColIdx,
-                 permutationColIdx = ColumnIndex{0},
-                 this](const Variable& var) mutable {
+  forEachVariableAndPermutationColumn([&](const Variable& var,
+                                          ColumnIndex permutationColIdx) {
     if (isContained(var)) {
       variableToColumnMap[var] = {
           nextColIdx, permutation().getColumnUndefStatus(permutationColIdx)};
       ++nextColIdx;
     }
-    ++permutationColIdx;
-  };
+  });
 
-  for (const TripleComponent* const ptr : getPermutedTriple()) {
-    if (ptr->isVariable()) {
-      addCol(ptr->getVariable());
-    }
-  }
-  ql::ranges::for_each(additionalVariables_, addCol);
-
-  // The constant columns come last and are always defined.
+  // Add the constant columns (they come last and are always defined).
   for (const auto& var : constantColumns_ | ql::views::values) {
     if (isContained(var)) {
       variableToColumnMap[var] = makeAlwaysDefinedColumn(nextColIdx);
@@ -627,7 +629,8 @@ void IndexScan::determineMultiplicities() {
   multiplicity_ = view != nullptr ? computeMultiplicitiesForView(*view)
                                   : computeMultiplicitiesForIndex();
 
-  // Each constant column contains the same value in every row.
+  // Add the multiplicities of the constant columns (each contains the same
+  // value in every row).
   multiplicity_.resize(multiplicity_.size() + constantColumns_.size(),
                        std::max(1.0f, static_cast<float>(sizeEstimate_)));
 
@@ -749,7 +752,7 @@ IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
         addOtherVar(el.getVariable());
       }
     }
-    for (const auto& var : scan.additionalVariables()) {
+    for (const auto& var : scan.additionalAndConstantVariables()) {
       addOtherVar(var);
     }
     return std::pair{*scan.getPermutedTriple()[3 - numVars],
@@ -1204,7 +1207,26 @@ IndexScan::makeTreeWithStrippedColumns(
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 IndexScan::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
-  // A `BIND` of a fixed component of the scan triple is a constant column.
+  // Refuse a `BIND` whose target is already read by this `IndexScan`, even into
+  // a column that is stripped away or hidden by a subquery.
+  //
+  // NOTE: `QueryExecutionTree::makeTreeWithBindColumn` only refuses targets
+  // that are hidden. A stripped variable is not contained in this `IndexScan`
+  // at all, but adding it to `varsToKeep_` would bring its column back (e.g.
+  // `?o` in `{ SELECT ?s { ?s <p> ?o } } BIND(<p> AS ?o)` when the column of
+  // `?o` is stripped).
+  auto isTarget = [&bind](const auto& var) { return var == bind._target; };
+  if (ql::ranges::any_of(getPermutedTriple(),
+                         [&isTarget](const TripleComponent* component) {
+                           return component->isVariable() &&
+                                  isTarget(component->getVariable());
+                         }) ||
+      ql::ranges::any_of(additionalVariables_, isTarget)) {
+    return std::nullopt;
+  }
+
+  // Provide a `BIND` of a fixed component of the scan triple as a constant
+  // column.
   if (auto result = makeTreeWithConstantBindColumn(bind)) {
     return result;
   }
@@ -1229,19 +1251,6 @@ IndexScan::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
       bind._expression.containedVariables(),
       [&scanColumns](const auto* v) { return scanColumns.contains(*v); });
   if (!allVarsCovered) {
-    return std::nullopt;
-  }
-
-  // Check that the target variable of the `BIND` is not read already by this
-  // `IndexScan`, not even into a column that is stripped away or hidden by a
-  // subquery.
-  auto isTarget = [&bind](const auto& var) { return var == bind._target; };
-  if (ql::ranges::any_of(getPermutedTriple(),
-                         [&isTarget](const TripleComponent* component) {
-                           return component->isVariable() &&
-                                  isTarget(component->getVariable());
-                         }) ||
-      ql::ranges::any_of(additionalVariables_, isTarget)) {
     return std::nullopt;
   }
 
@@ -1317,31 +1326,29 @@ IndexScan::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 IndexScan::makeTreeWithConstantBindColumn(const parsedQuery::Bind& bind) const {
+  // Return `std::nullopt` if the `BIND` expression is not a constant or the
+  // scan triple has no fixed component.
   auto constant = bind._expression.getConstantValue();
-  if (!constant.has_value()) {
+  if (!constant.has_value() || numVariables_ == 3) {
     return std::nullopt;
   }
 
-  // Find a fixed component of the scan triple with the same `Id`. A constant
-  // that is not in the vocabulary is not supported (its `Id` would have to be
-  // kept alive by a `LocalVocab`).
+  // Return `std::nullopt` if no fixed component of the scan triple has the
+  // `Id` of the constant (the components that are not fixed are
+  // `std::nullopt`). A constant that is not in the vocabulary or a blank node
+  // is not supported (its `Id` might have to be kept alive by a `LocalVocab`).
   auto constantId = toValueId(constant.value(), getIndex());
-  if (!constantId.has_value() ||
-      constantId.value().getDatatype() == Datatype::LocalVocabIndex) {
-    return std::nullopt;
-  }
   const auto& scanSpec = scanSpecAndBlocks_.scanSpec_;
-  std::array fixedIds{scanSpec.col0Id(), scanSpec.col1Id(), scanSpec.col2Id()};
-  auto fixedIdsEnd = fixedIds.begin() + (3 - numVariables_);
-  auto it = ql::ranges::find(fixedIds.begin(), fixedIdsEnd, constantId);
-  if (it == fixedIdsEnd) {
+  if (!constantId.has_value() || !isValidConstantColumnId(constantId.value()) ||
+      !ad_utility::contains(
+          std::array{scanSpec.col0Id(), scanSpec.col1Id(), scanSpec.col2Id()},
+          constantId)) {
     return std::nullopt;
   }
 
   // Add the constant column, and its variable to the variables to keep.
   auto newConstantColumns = constantColumns_;
-  newConstantColumns.emplace_back(std::distance(fixedIds.begin(), it),
-                                  bind._target);
+  newConstantColumns.emplace_back(constantId.value(), bind._target);
   auto newVariables = varsToKeep_;
   if (newVariables.has_value()) {
     newVariables.value().insert(bind._target);
@@ -1352,19 +1359,6 @@ IndexScan::makeTreeWithConstantBindColumn(const parsedQuery::Bind& bind) const {
       std::move(newConstantColumns), graphsToFilter_, scanSpecAndBlocks_,
       scanSpecAndBlocksIsPrefiltered_, std::move(newVariables),
       sizeEstimateIsExact_, sizeEstimate_);
-}
-
-// _____________________________________________________________________________
-std::vector<Id> IndexScan::getConstantColumnIds() const {
-  const auto& scanSpec = scanSpecAndBlocks_.scanSpec_;
-  std::array fixedIds{scanSpec.col0Id(), scanSpec.col1Id(), scanSpec.col2Id()};
-  std::vector<Id> result;
-  for (ColumnIndex position : constantColumns_ | ql::views::keys) {
-    Id id = fixedIds.at(position).value();
-    AD_CORRECTNESS_CHECK(id.getDatatype() != Datatype::LocalVocabIndex);
-    result.push_back(id);
-  }
-  return result;
 }
 
 // _____________________________________________________________________________
@@ -1381,8 +1375,7 @@ std::vector<ColumnIndex> IndexScan::getSubsetForStrippedColumns() const {
       ++idx;
     }
   }
-  for (const auto& var : ::ranges::views::concat(
-           additionalVariables_, constantColumns_ | ql::views::values)) {
+  for (const auto& var : additionalAndConstantVariables()) {
     if (v.contains(var)) {
       result.push_back(idx);
     }
@@ -1398,35 +1391,35 @@ VariableToColumnMap IndexScan::computePermutationColumnIndices() const {
   // hidden if this scan is the root of a subquery.
   const auto& varToColInResult = getInternallyVisibleVariableColumns();
 
-  auto addVar = [this, &varToColInResult, &map](const Variable& var,
-                                                ColumnIndex col) {
-    // Skip variables that are stripped away as they are not available in the
-    // result.
-    if (varsToKeep_.has_value() && !varsToKeep_.value().contains(var)) {
-      return;
-    }
+  forEachVariableAndPermutationColumn(
+      [this, &varToColInResult, &map](const Variable& var, ColumnIndex col) {
+        // Skip variables that are stripped away as they are not available in
+        // the result.
+        if (varsToKeep_.has_value() && !varsToKeep_.value().contains(var)) {
+          return;
+        }
 
-    // Deal with potentially undef columns: inherit undef status from main
-    // `VariableToColumnMap`.
-    map[var] = {col, varToColInResult.at(var).mightContainUndef_};
-  };
+        // Deal with potentially undef columns: inherit undef status from main
+        // `VariableToColumnMap`.
+        map[var] = {col, varToColInResult.at(var).mightContainUndef_};
+      });
+  return map;
+}
 
-  // Add those of the first three columns which are read into variables. The
-  // permutation column index is given by `enumerate` (0, 1, 2 for the segments
-  // of the permuted triple). For example, if only the last segment contains a
-  // variable it is still assigned 2 not 0.
+// _____________________________________________________________________________
+void IndexScan::forEachVariableAndPermutationColumn(
+    absl::FunctionRef<void(const Variable&, ColumnIndex)> f) const {
+  // The permutation column of a triple variable is its position in the
+  // permuted triple (0, 1, 2), so a variable only in the last position gets
+  // column 2, not 0.
   auto spo = getPermutedTriple();
   for (const auto [index, component] : ::ranges::views::enumerate(spo)) {
     if (component->isVariable()) {
-      addVar(component->getVariable(), index);
+      f(component->getVariable(), index);
     }
   }
-
-  // Add all additional columns.
   for (const auto& [index, var] :
        ::ranges::views::zip(additionalColumns_, additionalVariables_)) {
-    addVar(var, index);
+    f(var, index);
   }
-
-  return map;
 }
