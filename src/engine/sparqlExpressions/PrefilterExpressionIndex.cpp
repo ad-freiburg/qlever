@@ -476,6 +476,8 @@ BlockMetadataRanges PrefixRegexExpression::evaluateImpl(
     BlockMetadataSpan blockRange, bool getTotalComplement) const {
   static_assert(Datatype::LocalVocabIndex > Datatype::VocabIndex);
   static_assert(Vocab::PrefixRanges::Ranges{}.size() == 1);
+  // The local vocab holds at most the one prefix word, so it needs no memory
+  // limit.
   LocalVocab localVocab{ad_utility::makeUnlimitedAllocator<Id>()};
   auto prefixQuoted = absl::StrCat("\"", prefixLiteral_.getContent());
   auto [lowerVocabIndex, upperVocabIndex] =
@@ -551,7 +553,8 @@ BlockMetadataRanges RelationalExpression<Comparison>::evaluateImpl(
     BlockMetadataSpan blockRange, bool getTotalComplement) const {
   using namespace valueIdComparators;
   // If `rightSideReferenceValue_` contains a `LocalVocabEntry` value, we use
-  // the here created `LocalVocab` to retrieve a corresponding `ValueId`.
+  // the here created `LocalVocab` to retrieve a corresponding `ValueId`. It
+  // holds at most this one word, so it needs no memory limit.
   LocalVocab localVocab{ad_utility::makeUnlimitedAllocator<Id>()};
   auto referenceId =
       getValueIdFromIdOrLocalVocabEntry(rightSideReferenceValue_, localVocab);

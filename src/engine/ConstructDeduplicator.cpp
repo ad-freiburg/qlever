@@ -135,7 +135,8 @@ ValueId ConstructDeduplicator::canonicalize(ValueId id) {
   // Only `Lru` bounds the size of `dedupVocab_`, so only there do we
   // track the vocab's byte size and check the threshold. In `Full` mode, the
   // size of the `dedupVocab_` is only bounded by the memory limit of the
-  // query, toward which its words count (see `LocalVocab::trackMemory`).
+  // query, toward which its words count (see the class comment of
+  // `LocalVocab`).
   const bool addedNewString = dedupVocab_.size() != sizeBefore;
   if (isLru() && addedNewString) {
     dedupVocabBytes_ += entry.toStringRepresentation().size();
