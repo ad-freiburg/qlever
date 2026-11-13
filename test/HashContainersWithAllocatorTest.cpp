@@ -69,6 +69,47 @@ void testMapExceptionSafety(Map& map) {
   EXPECT_EQ(map.count(i), 0u);
 }
 
+// Fill the `container` (which has a `qlm::Allocator` with a memory limit), call
+// `clear()`, and check that `clear()` keeps the table of the container. If
+// `elementsAreInTable` is true, the elements are stored directly in the table,
+// so `clear()` must not deallocate anything. Otherwise (for node-based
+// containers), `clear()` deallocates the nodes of the elements, but has to
+// keep at least one pointer per bucket.
+template <typename Container, typename MakeElement>
+void testClearKeepsTable(Container& container, bool elementsAreInTable,
+                         const MakeElement& makeElement) {
+  auto allocator = container.get_allocator();
+  auto memoryUsed = [&allocator,
+                     initial = allocator.amountMemoryLeft().getBytes()]() {
+    return initial - allocator.amountMemoryLeft().getBytes();
+  };
+  auto fill = [&container, &makeElement]() {
+    for (size_t i = 0; i < 1000; ++i) {
+      container.insert(makeElement(i));
+    }
+  };
+  fill();
+  auto bucketCount = container.bucket_count();
+  auto memoryUsedWhenFull = memoryUsed();
+  EXPECT_GT(memoryUsedWhenFull, 0u);
+
+  container.clear();
+  EXPECT_TRUE(container.empty());
+  EXPECT_EQ(container.bucket_count(), bucketCount);
+  if (elementsAreInTable) {
+    EXPECT_EQ(memoryUsed(), memoryUsedWhenFull);
+  } else {
+    EXPECT_LT(memoryUsed(), memoryUsedWhenFull);
+    EXPECT_GE(memoryUsed(), bucketCount * sizeof(void*));
+  }
+
+  // Refilling the container needs no rehashing and uses the same memory.
+  fill();
+  EXPECT_EQ(container.size(), 1000u);
+  EXPECT_EQ(container.bucket_count(), bucketCount);
+  EXPECT_EQ(memoryUsed(), memoryUsedWhenFull);
+}
+
 }  // namespace
 
 // Test that all the hash containers with a memory limit throw when the limit
@@ -280,4 +321,34 @@ TEST(HashContainersWithAllocator, eraseIf) {
       makeAllocator<std::pair<const int, int>>(1_MB)});
   testMap(qlm::node_hash_map<int, int>{
       makeAllocator<std::pair<const int, int>>(1_MB)});
+}
+
+// Test that `clear()` keeps the memory of the table of all the hash containers
+// (which `ItemMapAndBuffer::clear` in `index/IndexBuilderTypes.h` relies on).
+TEST(HashContainersWithAllocator, clearKeepsTable) {
+#ifdef QLEVER_HAS_BOOST_UNORDERED_FLAT
+  constexpr bool flatIsFlat = true;
+#else
+  constexpr bool flatIsFlat = false;
+#endif
+  auto makeKey = [](size_t i) { return i; };
+  auto makePair = [](size_t i) { return std::pair{i, 42}; };
+  {
+    qlm::flat_hash_set<size_t> set{makeAllocator<size_t>(10_MB)};
+    testClearKeepsTable(set, flatIsFlat, makeKey);
+  }
+  {
+    qlm::node_hash_set<size_t> set{makeAllocator<size_t>(10_MB)};
+    testClearKeepsTable(set, false, makeKey);
+  }
+  {
+    qlm::flat_hash_map<size_t, int> map{
+        makeAllocator<std::pair<const size_t, int>>(10_MB)};
+    testClearKeepsTable(map, flatIsFlat, makePair);
+  }
+  {
+    qlm::node_hash_map<size_t, int> map{
+        makeAllocator<std::pair<const size_t, int>>(10_MB)};
+    testClearKeepsTable(map, false, makePair);
+  }
 }

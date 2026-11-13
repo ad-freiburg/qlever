@@ -201,6 +201,12 @@ struct ItemMapAndBuffer : public ad_utility::NoCopyNoMove {
 
   // Remove all the entries and deallocate all the strings, but keep the hash
   // map's memory for the next partial vocabulary.
+  //
+  // NOTE: `clear()` keeps the table of the hash map for all the
+  // implementations that `ItemMap` can have (the Boost containers, and the
+  // `std` containers of libstdc++ and libc++), see the test
+  // `HashContainersWithAllocator.clearKeepsTable`. This is not the case for
+  // the Abseil containers.
   void clear() {
     map_.clear();
     buffer_.clear();
