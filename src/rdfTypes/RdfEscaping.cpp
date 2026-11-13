@@ -12,6 +12,7 @@
 #include <string>
 
 #include "backports/StartsWithAndEndsWith.h"
+#include "backports/memory.h"
 #include "backports/shift.h"
 #include "util/Exception.h"
 #include "util/StringUtils.h"
@@ -93,12 +94,12 @@ void unescapeStringAndNumericEscapes(std::string_view input,
                                                    size_t length) {
     if constexpr (!acceptOnlyBackslashAndNewline) {
       AD_CONTRACT_CHECK(iterator + length <= endIterator);
-      // Use `&*iterator` to obtain a raw pointer rather than passing the
+      // Use `ql::to_address` to obtain a raw pointer rather than passing the
       // iterator directly: newer libc++ wraps the string-view iterator in
       // `__wrap_iter` and no longer converts it implicitly to `const char*`.
-      // `length` is always positive here, so dereferencing is safe.
+      // `length` is always positive here, so the iterator is dereferenceable.
       appendUtf8CodepointFromHexadecimalCharacters(
-          std::string_view(&*iterator, length), output);
+          std::string_view(ql::to_address(iterator), length), output);
     } else {
       (void)output;
       (void)endIterator;

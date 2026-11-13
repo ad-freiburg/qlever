@@ -19,8 +19,8 @@
 // supports reflection, which CMake passes automatically for that compiler (see
 // the `QLEVER_USE_REFLECTION` option).
 
-// Note: Old compilers (e.g. GCC 8, which is used for the C++17 build) don't
-// have the `<version>` header. They also don't support reflection.
+// NOTE: The `<version>` header only exists since C++20 (e.g. it is missing in
+// the standard library of GCC 8). Without it, there is no reflection either.
 #if __has_include(<version>)
 #include <version>
 #endif

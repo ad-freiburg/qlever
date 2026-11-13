@@ -33,8 +33,8 @@
 #include "util/Generators.h"
 #include "util/HashMap.h"
 #include "util/Iterators.h"
-#include "util/JoinAlgorithms/JoinAlgorithms.h"
 #include "util/Math.h"
+#include "util/joinAlgorithms/JoinAlgorithms.h"
 
 using namespace qlever::joinHelpers;
 using namespace qlever::joinWithIndexScanHelpers;
@@ -189,9 +189,8 @@ Result JoinImpl::computeResult(bool requestLaziness) {
 // _____________________________________________________________________________
 VariableToColumnMap JoinImpl::computeVariableToColumnMap() const {
   return makeVarToColMapForJoinOperation(
-      left_->getVariableColumns(), right_->getVariableColumns(),
-      {{leftJoinCol_, rightJoinCol_}}, BinOpType::Join, left_->getResultWidth(),
-      keepJoinColumn_);
+      left_->getVariableColumns(), right_->getVariableColumns(), joinColumns(),
+      BinOpType::Join, left_->getResultWidth(), keepJoinColumn_);
 }
 
 // _____________________________________________________________________________
@@ -790,8 +789,7 @@ Result JoinImpl::createEmptyResult() const {
 
 // _____________________________________________________________________________
 ad_utility::JoinColumnMapping JoinImpl::getJoinColumnMapping() const {
-  return ad_utility::JoinColumnMapping{{{leftJoinCol_, rightJoinCol_}},
-                                       left_->getResultWidth(),
+  return ad_utility::JoinColumnMapping{joinColumns(), left_->getResultWidth(),
                                        right_->getResultWidth(),
                                        keepJoinColumn_};
 }
@@ -853,12 +851,12 @@ JoinImpl::makeTreeWithStrippedColumns(
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 JoinImpl::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
-  return pushDownBindToAnyChild(bind, {left_, right_});
+  return pushDownBindToAnyChild(bind, {{left_, right_}, allocator()});
 }
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> JoinImpl::cloneWithNewChildren(
-    std::vector<std::shared_ptr<QueryExecutionTree>> children) const {
+    qlm::vector<std::shared_ptr<QueryExecutionTree>> children) const {
   auto& left = children.at(0);
   auto& right = children.at(1);
   auto leftCol = left->getVariableColumn(joinVar_);

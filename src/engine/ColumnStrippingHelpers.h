@@ -12,6 +12,8 @@
 
 #include "engine/QueryExecutionTree.h"
 #include "engine/StripColumns.h"
+#include "engine/sparqlExpressions/ExistsExpression.h"
+#include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "rdfTypes/Variable.h"
 #include "util/Algorithm.h"
 
@@ -51,6 +53,38 @@ class VarsRequiredFromSubtree {
       varsRequiredFromSubtree_ = &newVariables_;
     }
     newVariables_.insert(variable);
+  }
+
+  // Result of `addVarsFromExpression`.
+  enum class AddVarsResult { Success, NeedAllVarsFromSubtree };
+
+  // Add the variables that the given `expression` reads. Return
+  // `NeedAllVarsFromSubtree` without adding anything if the expression reads
+  // all columns of the subtree (`COUNT(DISTINCT *)`), else `Success`.
+  AddVarsResult addVarsFromExpression(
+      const sparqlExpression::SparqlExpressionPimpl& expression) {
+    if (expression.readsAllVisibleColumns()) {
+      return AddVarsResult::NeedAllVarsFromSubtree;
+    }
+    for (const auto* var : expression.containedVariables()) {
+      add(*var);
+    }
+    // The column of each `EXISTS` was added to the subtree by
+    // `ExistsJoin::addExistsJoinsToSubtree`. It has to survive the stripping,
+    // otherwise the constructor of the new operation adds a second
+    // `ExistsJoin`.
+    for (const auto* expr : expression.getExistsExpressions()) {
+      add(dynamic_cast<const sparqlExpression::ExistsExpression&>(*expr)
+              .variable());
+    }
+    return AddVarsResult::Success;
+  }
+
+  // Strip all columns from `qet` that are not in `varsRequiredFromSubtree_`.
+  std::shared_ptr<QueryExecutionTree> stripSubtree(
+      std::shared_ptr<QueryExecutionTree> qet) const {
+    return QueryExecutionTree::makeTreeWithStrippedColumns(
+        std::move(qet), *varsRequiredFromSubtree_);
   }
 
   // Return all variables that are required from the subtree.

@@ -5,8 +5,8 @@
 #ifndef QLEVER_TEST_UTIL_CONFIGOPTIONHELPERS_H
 #define QLEVER_TEST_UTIL_CONFIGOPTIONHELPERS_H
 
-#include "util/ConfigManager/ConfigOption.h"
 #include "util/ConstexprUtils.h"
+#include "util/configManager/ConfigOption.h"
 
 /*
 @brief Call the function with each of the alternatives in

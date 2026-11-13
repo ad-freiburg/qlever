@@ -320,6 +320,8 @@ addLinkAndDiscoverTestNoLibs(SynchronizedTest)
 
 addLinkAndDiscoverTest(VectorWithMemoryLimitTest)
 
+addLinkAndDiscoverTest(ContainersWithAllocatorTest)
+
 addLinkAndDiscoverTestNoLibs(AllocatorPmrTest)
 
 addLinkAndDiscoverTestNoLibs(AllocateSharedTest)
@@ -417,6 +419,8 @@ addLinkAndDiscoverTest(DateYearDurationTest qlever_util sparqlParser)
 addLinkAndDiscoverTest(DurationTest qlever_util)
 
 addLinkAndDiscoverTest(TripleComponentTest)
+
+addLinkAndDiscoverTest(IdBaseTest qlever_util)
 
 addLinkAndDiscoverTest(FoldedValueIdTest qlever_util)
 
@@ -570,6 +574,8 @@ endif ()
 
 addLinkAndDiscoverTest(AsyncResourcePoolTest)
 
+addLinkAndDiscoverTest(ThreadSafeReorderBufferTest)
+
 addLinkAndDiscoverTest(UniqueCleanupTest)
 
 addLinkAndDiscoverTest(WebSocketSessionTest http)
@@ -696,3 +702,5 @@ addLinkAndDiscoverTest(MetricsTest metrics)
 addLinkAndDiscoverTest(InstrumentedExecutorTest metrics)
 
 addLinkAndDiscoverTest(ResourceMonitorTest qlever_util)
+
+addLinkAndDiscoverTest(KernelBugWorkaroundTest qlever_util)
