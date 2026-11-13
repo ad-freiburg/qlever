@@ -102,6 +102,22 @@ struct RuntimeParameters {
       0, "rebuild-max-concurrent-permutation-pairs"};
   Duration<std::chrono::seconds> defaultQueryTimeout_{std::chrono::seconds(30),
                                                       "default-query-timeout"};
+  // When all threads of the query thread pool (`-j`, `NUM_THREADS` in the
+  // Qleverfile) are busy, a query waits at most this long for one of them to
+  // become free. After that, it is rejected with the HTTP status code
+  // `query-queue-full-status-code` and a `Retry-After` header of
+  // `query-queue-full-retry-after`. A value of 0 means "wait indefinitely".
+  // Queries with a valid access token always wait indefinitely.
+  //
+  // NOTE: Without the limit, the queries of an overloaded server pile up in
+  // the queue of the pool, where each of them uses up its timeout without
+  // doing any work, and the clients see slow answers instead of a fast
+  // rejection that they can react to.
+  Duration<std::chrono::milliseconds> queryQueueMaxWait_{
+      std::chrono::milliseconds(1000), "query-queue-max-wait"};
+  SizeT queryQueueFullStatusCode_{429, "query-queue-full-status-code"};
+  Duration<std::chrono::seconds> queryQueueFullRetryAfter_{
+      std::chrono::seconds(5), "query-queue-full-retry-after"};
   SizeT lazyIndexScanMaxSizeMaterialization_{
       1'000'000, "lazy-index-scan-max-size-materialization"};
   Bool useBinsearchTransitivePath_{true, "use-binsearch-transitive-path"};

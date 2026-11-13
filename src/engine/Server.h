@@ -29,6 +29,7 @@
 #include "libqlever/Qlever.h"
 #include "libqlever/QleverTypes.h"
 #include "util/AllocatorWithLimit.h"
+#include "util/AsioHelpers.h"
 #include "util/ParseException.h"
 #include "util/TypeTraits.h"
 #include "util/http/HttpUtils.h"
@@ -56,6 +57,11 @@ namespace ad_utility {
 class IndexRebuildIdTracker;
 }
 
+// Thrown when a query has waited longer than `query-queue-max-wait` for a free
+// thread of the query thread pool. The query is then rejected without being
+// run (see `Server::computeInNewThread`).
+using QueryQueueFullError = ad_utility::ThreadPoolQueueDeadlineError;
+
 //! The HTTP Server used.
 class Server {
   using json = nlohmann::json;
@@ -70,6 +76,7 @@ class Server {
       absl::AnyInvocable<std::shared_ptr<QueryExecutionContext>(
           SharedIndexAndView)>;
   FRIEND_TEST(ServerTest, getQueryId);
+  FRIEND_TEST(ServerTest, queryQueueFull);
   FRIEND_TEST(ServerTest, createMessageSender);
   FRIEND_TEST(ServerTest, configurePinnedResultWithName);
   FRIEND_TEST(IndexRebuilder, serverIntegration);
@@ -402,8 +409,15 @@ class Server {
       const ParamValueMap& params, ParsedQuery&& query,
       const ad_utility::Timer& requestTimer,
       ad_utility::SharedCancellationHandle cancellationHandle,
-      QueryExecutionContext& qec, const RequestT& request, SendT&& send,
+      std::optional<TimeLimit> maxQueueWait, QueryExecutionContext& qec,
+      const RequestT& request, SendT&& send,
       std::optional<PlannedQuery>& plannedQuery);
+
+  // Return how long a query may wait for a free thread of the
+  // `queryThreadPool_` before it is rejected (see the runtime parameter
+  // `query-queue-max-wait`), or `std::nullopt` if it may wait indefinitely
+  // (the access token is valid, or the parameter is 0).
+  static std::optional<TimeLimit> queryQueueMaxWait(bool accessTokenOk);
   // For an executed update create a JSON with some stats on the update (timing,
   // number of changed triples, etc.).
   static nlohmann::ordered_json createResponseMetadataForUpdate(
@@ -449,12 +463,15 @@ class Server {
       ad_utility::websocket::QueryOperation operationType,
       std::string_view clientIp = {});
   /// Invoke `function` on `threadPool_`, and return an awaitable to wait for
-  /// its completion, wrapping the result.
+  /// its completion, wrapping the result. If `maxQueueWait` is given and no
+  /// thread of the pool has picked the function up within that time, throw a
+  /// `QueryQueueFullError` right away and let the pool skip the function.
   CPP_template(typename Function, typename T = std::invoke_result_t<Function>)(
       requires ql::concepts::invocable<Function>)
-  Awaitable<T> computeInNewThread(boost::asio::static_thread_pool& threadPool,
-                                  Function function,
-                                  SharedCancellationHandle handle);
+  Awaitable<T> computeInNewThread(
+      boost::asio::static_thread_pool& threadPool, Function function,
+      SharedCancellationHandle handle,
+      std::optional<TimeLimit> maxQueueWait = std::nullopt);
 
   /// This method extracts a client-defined query id from the passed HTTP
   /// request if it is present. If it is not present or empty, a new
@@ -527,7 +544,8 @@ class Server {
   Awaitable<void> sendStreamableResponse(
       const RequestT& request, SendT& send, ad_utility::MediaType mediaType,
       const PlannedQuery plannedQuery, const ad_utility::Timer requestTimer,
-      SharedCancellationHandle cancellationHandle);
+      SharedCancellationHandle cancellationHandle,
+      std::optional<TimeLimit> maxQueueWait);
 
   FRIEND_TEST(MaterializedViewsTest, serverIntegration);
 

@@ -10,6 +10,8 @@
 
 #include <absl/strings/str_join.h>
 
+#include <boost/beast/http/status.hpp>
+
 #include "backports/algorithm.h"
 #include "backports/reflection.h"
 #include "util/Algorithm.h"
@@ -32,6 +34,9 @@ RuntimeParameters::RuntimeParameters() {
   add(maxNumThreadsPerQuery_);
   add(rebuildIndexMaxNumThreads_);
   add(rebuildMaxConcurrentPermutationPairs_);
+  add(queryQueueMaxWait_);
+  add(queryQueueFullStatusCode_);
+  add(queryQueueFullRetryAfter_);
   add(lazyIndexScanMaxSizeMaterialization_);
   add(useBinsearchTransitivePath_);
   add(groupByHashMapEnabled_);
@@ -124,6 +129,23 @@ RuntimeParameters::RuntimeParameters() {
   permutationWriterNumBlocksInFlight_.setParameterConstraint(
       mustBeStrictlyPositive);
   sortNumTasksInFlight_.setParameterConstraint(mustBeStrictlyPositive);
+
+  // The status code for a rejected query must be an error code that Boost.Beast
+  // knows (an unknown code would be sent as status 0).
+  queryQueueFullStatusCode_.setParameterConstraint(
+      [](size_t value, std::string_view parameterName) {
+        namespace http = boost::beast::http;
+        auto status = http::int_to_status(static_cast<unsigned>(value));
+        auto statusClass = http::to_status_class(status);
+        if (status == http::status::unknown ||
+            (statusClass != http::status_class::client_error &&
+             statusClass != http::status_class::server_error)) {
+          throw std::runtime_error{absl::StrCat(
+              "Parameter ", parameterName,
+              " must be a known HTTP status code of class 4xx or 5xx, was ",
+              value)};
+        }
+      });
 }
 
 // _____________________________________________________________________________
