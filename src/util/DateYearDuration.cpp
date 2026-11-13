@@ -68,7 +68,11 @@ std::pair<std::string, const char*> DateYearOrDuration::toStringAndType()
 
   switch (getType()) {
     case Type::DateTime:
-      return impl(F{"%d-01-01T00:00:00"}, XSD_DATETIME_TYPE);
+      // NOTE: For years outside the range of the `Date` class, only the year
+      // is stored, so the original timezone is not available. Export the
+      // canonical UTC form (with the `Z`), consistent with the export of
+      // dates within the range (where a `Date` stores its timezone).
+      return impl(F{"%d-01-01T00:00:00Z"}, XSD_DATETIME_TYPE);
     case Type::Date:
       return impl(F{"%d-01-01"}, XSD_DATE_TYPE);
     case Type::YearMonth:
