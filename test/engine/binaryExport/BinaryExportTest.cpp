@@ -157,7 +157,7 @@ TEST(ExportBatch, minimumSizesAndFormat) {
   // The minimum size of the strings, the strings are sent at the end of the
   // batch. A string is only counted once per batch.
   {
-    LocalVocab localVocab;
+    LocalVocab localVocab{ad_utility::testing::makeAllocator()};
     auto word = [&](std::string s) {
       return localVocabId(localVocab, std::move(s), *qec);
     };

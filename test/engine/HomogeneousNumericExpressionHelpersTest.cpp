@@ -100,7 +100,7 @@ class HomogeneousNumericExpressionHelpersTest : public ::testing::Test {
  protected:
   QueryExecutionContext* qec_ = ad_utility::testing::getQec();
   VariableToColumnMap variableToColumnMap_;
-  LocalVocab localVocab_;
+  LocalVocab localVocab_{ad_utility::testing::makeAllocator()};
   IdTable table_{qec_->getAllocator()};
 
   EvaluationContext context_{

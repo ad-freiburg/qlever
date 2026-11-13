@@ -8,6 +8,7 @@
 
 #include <gtest/gtest.h>
 
+#include "./util/LocalVocabTestHelpers.h"
 #include "engine/ConstructDeduplicator.h"
 #include "index/LocalVocab.h"
 #include "index/LocalVocabEntry.h"
@@ -16,6 +17,8 @@
 #include "util/IndexTestHelpers.h"
 #include "util/LocalVocabEntryTestHelpers.h"
 #include "util/memorySize/MemorySize.h"
+
+using ad_utility::testing::makeLocalVocab;
 
 namespace {
 
@@ -48,7 +51,8 @@ PrecomputedConstant makeConstant(Id dedupId) {
 
 // Build a minimal template wrapping a single, non-blank-node triple.
 PreprocessedConstructTemplate makeSingleTripleTemplate() {
-  PreprocessedConstructTemplate tmpl;
+  PreprocessedConstructTemplate tmpl{.localVocabForConstants_ =
+                                         makeLocalVocab()};
   tmpl.preprocessedTriples_ = {allSameVarTriple};
   tmpl.tripleContainsBlankNode_ = {false};
   return tmpl;
@@ -79,7 +83,7 @@ class ConstructDeduplicatorTest : public ::testing::Test {
   // `ctx()` recomputes a full-table `BatchEvaluationContext`; the
   // `LocalVocabRow` instance must outlive the returned context.
   struct LocalVocabRow {
-    LocalVocab vocab_;
+    LocalVocab vocab_ = makeLocalVocab();
     IdTable table_;
     // The sole id in the table (a `LocalVocabIndex` into `vocab_`).
     Id id() const { return table_(0, 0); }
@@ -89,7 +93,7 @@ class ConstructDeduplicatorTest : public ::testing::Test {
   // Build a `LocalVocabRow` for a fresh literal `s` on `qec_`, bundling the
   // owning `LocalVocab` and its one-row `IdTable`.
   LocalVocabRow makeLocalVocabRow(std::string_view s) {
-    LocalVocab vocab;
+    LocalVocab vocab = makeLocalVocab();
     const Id id = makeLocalVocabIndex(vocab, s);
     return LocalVocabRow{.vocab_ = std::move(vocab), .table_ = makeIdTable(id)};
   }
@@ -194,7 +198,7 @@ TEST_F(ConstructDeduplicatorTest, localVocabTermInIndexVocabUsesVocabIndex) {
 
   // `<s>` is part of the index built by the fixture, so it is in the index
   // vocabulary.
-  LocalVocab vocab;
+  LocalVocab vocab = makeLocalVocab();
   const Id localId =
       Id::makeFromLocalVocabIndex(vocab.getIndexAndAddIfNotContained(
           ad_utility::testing::iriLocalVocabEntry(
@@ -304,12 +308,13 @@ TEST_F(ConstructDeduplicatorTest, lruDoesNotResetMidKey) {
   ConstructDeduplicator deduplicator{DeduplicationMode::lru(10), *qec_,
                                      ad_utility::MemorySize::bytes(1)};
 
-  PreprocessedConstructTemplate tmpl;
+  PreprocessedConstructTemplate tmpl{.localVocabForConstants_ =
+                                         makeLocalVocab()};
   tmpl.preprocessedTriples_ = {PreprocessedTriple{
       PrecomputedVariable{0}, PrecomputedVariable{1}, PrecomputedVariable{2}}};
   tmpl.tripleContainsBlankNode_ = {false};
 
-  LocalVocab v;
+  LocalVocab v = makeLocalVocab();
   IdTable table{3, ad_utility::testing::makeAllocator()};
   table.push_back({makeLocalVocabIndex(v, "a"), makeLocalVocabIndex(v, "b"),
                    makeLocalVocabIndex(v, "c")});

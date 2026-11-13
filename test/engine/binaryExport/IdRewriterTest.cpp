@@ -22,6 +22,7 @@
 #include "../../util/IdTableHelpers.h"
 #include "../../util/IndexTestHelpers.h"
 #include "../../util/LocalVocabEntryTestHelpers.h"
+#include "../../util/LocalVocabTestHelpers.h"
 #include "engine/binaryExport/BinaryExport.h"
 #include "engine/binaryExport/BinaryFormat.h"
 #include "engine/binaryExport/BlankNodeRewriter.h"
@@ -31,6 +32,7 @@
 #include "index/ExportIds.h"
 
 using namespace qlever::binary_export;
+using ad_utility::testing::makeLocalVocab;
 
 namespace {
 // The `Id` with which the exporter refers to the `i`-th transmitted string of
@@ -287,7 +289,7 @@ TEST(EncodedIriRewriter, rewrite) {
   EncodedIriRewriter rewriter{index,
                               {prefixPattern("<http://other.org/"),
                                prefixPattern("<http://example.org/")}};
-  LocalVocab localVocab;
+  LocalVocab localVocab = makeLocalVocab();
   auto local = manager.encode("<http://example.org/42>").value();
   auto [localPrefixIdx, payload] =
       EncodedIriManager::splitIntoPrefixIdxAndPayload(local);
@@ -311,7 +313,7 @@ TEST(EncodedIriRewriter, rewrite) {
   // After `invalidateCache`, the IRI is decoded again (into a new local
   // vocab).
   rewriter.invalidateCache();
-  LocalVocab nextLocalVocab;
+  LocalVocab nextLocalVocab = makeLocalVocab();
   Id rewrittenAgain = rewriter(remoteOther, nextLocalVocab);
   EXPECT_EQ(nextLocalVocab.size(), 1);
   EXPECT_EQ(rewrittenAgain.getLocalVocabIndex()->toStringRepresentation(),
@@ -368,7 +370,7 @@ TEST(EncodedIriRewriter, overlappingLocalPatterns) {
   // the plain prefix), no matter with which pattern the remote instance
   // encoded them.
   EncodedIriRewriter rewriter{index, remoteManager.patterns_};
-  LocalVocab localVocab;
+  LocalVocab localVocab = makeLocalVocab();
   for (std::string iri :
        {"<http://example.org/5>", "<http://example.org/300>"}) {
     EXPECT_EQ(rewriter(remoteManager.encode(iri).value(), localVocab),
@@ -382,7 +384,8 @@ TEST(EncodedIriRewriter, overlappingLocalPatterns) {
 // words) part of a local vocab.
 TEST(BlankNodeRewriter, rewrite) {
   BlankNodeRewriter rewriter{
-      ad_utility::testing::getQec()->getIndex().getBlankNodeManager()};
+      ad_utility::testing::getQec()->getIndex().getBlankNodeManager(),
+      ad_utility::testing::makeAllocator()};
   auto remote = [](uint64_t i) {
     return Id::makeFromBlankNodeIndex(BlankNodeIndex::make(i));
   };
@@ -394,7 +397,7 @@ TEST(BlankNodeRewriter, rewrite) {
   EXPECT_EQ(rewriter(remote(1)), first);
 
   // Each local vocab contains all the blank nodes so far, but no words.
-  LocalVocab vocab;
+  LocalVocab vocab = makeLocalVocab();
   rewriter.addBlankNodesTo(vocab);
   EXPECT_TRUE(vocab.empty());
   EXPECT_TRUE(vocab.isBlankNodeIndexContained(first.getBlankNodeIndex()));
@@ -402,7 +405,7 @@ TEST(BlankNodeRewriter, rewrite) {
 
   Id third = rewriter(remote(3));
   EXPECT_EQ(rewriter(remote(2)), second);
-  LocalVocab nextVocab;
+  LocalVocab nextVocab = makeLocalVocab();
   rewriter.addBlankNodesTo(nextVocab);
   EXPECT_TRUE(nextVocab.isBlankNodeIndexContained(first.getBlankNodeIndex()));
   EXPECT_TRUE(nextVocab.isBlankNodeIndexContained(third.getBlankNodeIndex()));
@@ -426,7 +429,7 @@ TEST(IdRewriter, roundTripBetweenIndices) {
   const Index& indexB = qecB->getIndex();
   auto getIdA = ad_utility::testing::makeGetId(indexA);
   auto getIdB = ad_utility::testing::makeGetId(indexB);
-  LocalVocab localVocabA;
+  LocalVocab localVocabA = makeLocalVocab();
   auto localIdA = [&](std::string word) {
     return Id::makeFromLocalVocabIndex(localVocabA.getIndexAndAddIfNotContained(
         ad_utility::testing::localVocabEntryFromStringRepresentation(

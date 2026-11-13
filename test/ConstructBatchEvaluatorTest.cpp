@@ -61,7 +61,7 @@ class ConstructBatchEvaluatorTest : public ::testing::Test {
   Id idO_ = getId_("<o>");
   Id idQ_ = getId_("<q>");
 
-  LocalVocab localVocab_;
+  LocalVocab localVocab_{ad_utility::testing::makeAllocator()};
 
   // Evaluate all rows of the `IdTable` with the given variable columns in
   // one single batch.

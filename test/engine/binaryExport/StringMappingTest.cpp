@@ -12,6 +12,7 @@
 #include "../../util/IdTableHelpers.h"
 #include "../../util/IndexTestHelpers.h"
 #include "../../util/LocalVocabEntryTestHelpers.h"
+#include "../../util/LocalVocabTestHelpers.h"
 #include "engine/binaryExport/StringMapping.h"
 #include "global/Id.h"
 #include "index/IndexImpl.h"
@@ -19,6 +20,7 @@
 
 using namespace qlever::binary_export;
 using ad_utility::testing::localVocabEntryFromStringRepresentation;
+using ad_utility::testing::makeLocalVocab;
 
 namespace {
 // An index with a text index, to resolve all datatypes that point to strings.
@@ -170,7 +172,7 @@ TEST(TransmittedStringRewriter, roundTrip) {
   Id transmittedVocabId = mapping.remapId(vocabId);
   Id transmittedTestWord = mapping.remapId(getLocalVocabId(testWord));
 
-  LocalVocab localVocab;
+  LocalVocab localVocab = makeLocalVocab();
   TransmittedStringRewriter rewriter{mapping.takeStrings(), index, localVocab};
   // The word of the vocabulary becomes the same `VocabIndex` again (bitwise,
   // not only semantically), the other word is added to the `localVocab`.
@@ -193,7 +195,7 @@ TEST(TransmittedStringRewriter, encodesIris) {
   config.encodedPrefixesWithoutAngleBrackets = {"http://example.org/"};
   const auto& index = ad_utility::testing::getQec(config)->getIndex();
 
-  LocalVocab localVocab;
+  LocalVocab localVocab = makeLocalVocab();
   TransmittedStringRewriter rewriter{
       {"<http://example.org/42>"}, index, localVocab};
   EXPECT_EQ(rewriter(StringMapping::makeTransmittedId(0)),
@@ -206,7 +208,7 @@ TEST(TransmittedStringRewriter, encodesIris) {
 TEST(TransmittedStringRewriter, malformedStrings) {
   const auto& index = ad_utility::testing::getQec()->getIndex();
   for (std::string string : {"", "x", "<x", "\"", "\"abc", "abc\"", "@en"}) {
-    LocalVocab localVocab;
+    LocalVocab localVocab = makeLocalVocab();
     AD_EXPECT_THROW_WITH_MESSAGE(
         (TransmittedStringRewriter{std::vector<std::string>{string}, index,
                                    localVocab}),

@@ -216,7 +216,7 @@ auto testNaryExpressionImpl = [](auto&& makeExpression, auto const& expected,
   ad_utility::AllocatorWithLimit<Id> alloc{
       ad_utility::testing::makeAllocator()};
   VariableToColumnMap map;
-  LocalVocab localVocab;
+  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
   IdTable table{alloc};
 
   // Get the size of `operand`: size for a vector or a `SetOfIntervals`, 1

@@ -39,13 +39,15 @@ class ConstructTemplatePreprocessor : public ad_utility::NoCopyNoMove {
   // triples for specific result-table rows. Constant terms (IRIs/literals) are
   // resolved to a stable `ValueId` (their full-triple deduplication key
   // component) using `index`; constants not present in the vocabulary are
-  // assigned a fresh id in the returned template's `localVocabForConstants_`.
+  // assigned a fresh id in the returned template's `localVocabForConstants_`,
+  // which uses `allocator`.
   //
   // This is a thin factory over the internal single-use builder: it constructs
   // a `ConstructTemplatePreprocessor` and runs it once.
   static PreprocessedConstructTemplate preprocess(
       const Triples& templateTriples,
-      const VariableToColumnMap& variableColumns, const Index& index);
+      const VariableToColumnMap& variableColumns, const Index& index,
+      const LocalVocab::Allocator& allocator);
 
   // Preprocess a single `GraphTerm` into a `PreprocessedTerm`. Returns
   // `std::nullopt` if the term is undefined (e.g. an unbound variable).
@@ -77,9 +79,11 @@ class ConstructTemplatePreprocessor : public ad_utility::NoCopyNoMove {
   // Constructor for the full-template flow: constants go into `result_`'s own
   // vocab, which is returned alongside the template.
   ConstructTemplatePreprocessor(const VariableToColumnMap& variableColumns,
-                                const Index& index)
+                                const Index& index,
+                                const LocalVocab::Allocator& allocator)
       : variableColumns_{variableColumns},
         index_{index},
+        result_{{}, {}, {}, LocalVocab{allocator}},
         localVocab_{result_.localVocabForConstants_} {}
 
   // Constructor for the per-term flow: constants go into a caller-owned vocab.
@@ -88,6 +92,7 @@ class ConstructTemplatePreprocessor : public ad_utility::NoCopyNoMove {
                                 const Index& index, LocalVocab& localVocab)
       : variableColumns_{variableColumns},
         index_{index},
+        result_{{}, {}, {}, LocalVocab{localVocab.allocator()}},
         localVocab_{localVocab} {}
 
   // Run the preprocessing over all template triples and return the (moved-out)

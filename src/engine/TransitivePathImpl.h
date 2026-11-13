@@ -150,7 +150,7 @@ class TransitivePathImpl : public TransitivePathBase {
     // Technically we should pass the localVocab of `sub` here, but this will
     // just lead to a merge with itself later on in the pipeline.
     detail::TableColumnWithVocab<const decltype(nodes)&> tableInfo{
-        std::nullopt, nodes, LocalVocab{}};
+        std::nullopt, nodes, LocalVocab{allocator()}};
 
     NodeGenerator hull = transitiveHull(
         std::move(edges), sub->getCopyOfLocalVocab(), ql::span{&tableInfo, 1},
@@ -230,7 +230,7 @@ class TransitivePathImpl : public TransitivePathBase {
     ad_utility::Timer timer{ad_utility::Timer::Stopped};
     // `targetId` is only ever used for comparisons, and never stored in the
     // result, so we use a separate local vocabulary.
-    LocalVocab targetHelper;
+    LocalVocab targetHelper{allocator()};
     const auto& index = getIndex();
     std::optional<Id> targetId =
         target.isVariable()
@@ -284,7 +284,7 @@ class TransitivePathImpl : public TransitivePathBase {
             // Reset vocab to prevent merging the same vocab over and over
             // again.
             if (yieldOnce) {
-              mergedVocab = LocalVocab{};
+              mergedVocab = LocalVocab{allocator()};
             }
           }
         }
@@ -330,7 +330,7 @@ class TransitivePathImpl : public TransitivePathBase {
       return result;
     }
     // id -> var|id
-    LocalVocab helperVocab;
+    LocalVocab helperVocab{allocator()};
     Id startId =
         toValueId(TripleComponent{startSide.value_}, getIndex(), helperVocab);
     // Make sure we retrieve the Id from an IndexScan, so we don't have to pass

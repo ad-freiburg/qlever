@@ -6,6 +6,8 @@
 #ifndef QLEVER_TEST_ENGINE_VALUESFORTESTING_H
 #define QLEVER_TEST_ENGINE_VALUESFORTESTING_H
 
+#include "../util/AllocatorTestHelpers.h"
+#include "../util/LocalVocabTestHelpers.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/Result.h"
@@ -38,13 +40,13 @@ class ValuesForTesting : public Operation {
   // Create an operation that has as its result the given `table` and the given
   // `variables`. The number of variables must be equal to the number
   // of columns in the table.
-  explicit ValuesForTesting(QueryExecutionContext* ctx, IdTable table,
-                            std::vector<std::optional<Variable>> variables,
-                            bool handlesLimit = false,
-                            std::vector<ColumnIndex> sortedColumns = {},
-                            LocalVocab localVocab = LocalVocab{},
-                            std::optional<float> multiplicity = std::nullopt,
-                            bool forceFullyMaterialized = false)
+  explicit ValuesForTesting(
+      QueryExecutionContext* ctx, IdTable table,
+      std::vector<std::optional<Variable>> variables, bool handlesLimit = false,
+      std::vector<ColumnIndex> sortedColumns = {},
+      LocalVocab localVocab = ad_utility::testing::makeLocalVocab(),
+      std::optional<float> multiplicity = std::nullopt,
+      bool forceFullyMaterialized = false)
       : ValuesForTesting{
             ctx,
             std::move(table),
@@ -56,13 +58,13 @@ class ValuesForTesting : public Operation {
             multiplicity,
             forceFullyMaterialized} {}
 
-  explicit ValuesForTesting(QueryExecutionContext* ctx, IdTable table,
-                            std::vector<std::optional<Variable>> variables,
-                            bool handlesLimit,
-                            qlm::vector<ColumnIndex> sortedColumns,
-                            LocalVocab localVocab = LocalVocab{},
-                            std::optional<float> multiplicity = std::nullopt,
-                            bool forceFullyMaterialized = false)
+  explicit ValuesForTesting(
+      QueryExecutionContext* ctx, IdTable table,
+      std::vector<std::optional<Variable>> variables, bool handlesLimit,
+      qlm::vector<ColumnIndex> sortedColumns,
+      LocalVocab localVocab = ad_utility::testing::makeLocalVocab(),
+      std::optional<float> multiplicity = std::nullopt,
+      bool forceFullyMaterialized = false)
       : Operation{ctx},
         tables_{},
         variables_{std::move(variables)},
@@ -120,12 +122,11 @@ class ValuesForTesting : public Operation {
   }
 
   template <typename SortColumns = std::vector<ColumnIndex>>
-  explicit ValuesForTesting(QueryExecutionContext* ctx,
-                            std::vector<IdTable> tables,
-                            std::vector<std::optional<Variable>> variables,
-                            bool unlikelyToFitInCache = false,
-                            SortColumns sortedColumns = {},
-                            LocalVocab localVocab = LocalVocab{})
+  explicit ValuesForTesting(
+      QueryExecutionContext* ctx, std::vector<IdTable> tables,
+      std::vector<std::optional<Variable>> variables,
+      bool unlikelyToFitInCache = false, SortColumns sortedColumns = {},
+      LocalVocab localVocab = ad_utility::testing::makeLocalVocab())
       : ValuesForTesting{ctx,
                          liftToPairs(std::move(tables), std::move(localVocab)),
                          std::move(variables), unlikelyToFitInCache,
@@ -149,7 +150,7 @@ class ValuesForTesting : public Operation {
           });
       return {Result::LazyResult{lazyRange}, resultSortedOn()};
     }
-    LocalVocab aggregateLocalVocab;
+    LocalVocab aggregateLocalVocab{allocator()};
     IdTable table{tables()[0].numColumns(), tables()[0].getAllocator()};
     for (const auto& [idTable, localVocab] : tables_) {
       table.insertAtEnd(idTable);

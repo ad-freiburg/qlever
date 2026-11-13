@@ -13,6 +13,7 @@
 
 #include "./util/ColumnStrippingTestHelpers.h"
 #include "./util/IdTableHelpers.h"
+#include "./util/LocalVocabTestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "engine/Sort.h"
 #include "engine/StripColumns.h"
@@ -23,6 +24,8 @@
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 #include "util/Tie.h"
+
+using ad_utility::testing::makeLocalVocab;
 
 using namespace std::string_literals;
 using ad_utility::source_location;
@@ -421,7 +424,7 @@ TEST(Sort, externalSortMaterializedInput) {
                                                Variable{"?2"}};
   auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, std::move(inputTable), vars, false, std::vector<ColumnIndex>{},
-      LocalVocab{}, std::nullopt, true);
+      makeLocalVocab(), std::nullopt, true);
 
   // Create the `Sort` operation and get the result.
   Sort externalSort{qec, subtree, colIndices({0, 1, 2})};
@@ -517,7 +520,7 @@ TEST(Sort, inMemorySortMaterializedInput) {
                                                Variable{"?2"}};
   auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, std::move(inputTable), vars, false, std::vector<ColumnIndex>{},
-      LocalVocab{}, std::nullopt, true);
+      makeLocalVocab(), std::nullopt, true);
 
   // Create the `Sort` operation and get the result.
   Sort inMemorySort{qec, subtree, colIndices({0, 1, 2})};

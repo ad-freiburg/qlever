@@ -297,7 +297,11 @@ class Result : public ad_utility::NoCopy {
     for (const Result& table : subResults) {
       vocabs.push_back(&table.localVocab());
     }
-    return SharedLocalVocabWrapper{LocalVocab::merge(vocabs)};
+    AD_CONTRACT_CHECK(!vocabs.empty());
+    // The result only refers to the word sets of the `vocabs`, so it can use
+    // the allocator of any of them.
+    return SharedLocalVocabWrapper{
+        LocalVocab::merge(vocabs, vocabs.front()->allocator())};
   }
 
   // Get a (deep) copy of the local vocabulary from the given result. Use this

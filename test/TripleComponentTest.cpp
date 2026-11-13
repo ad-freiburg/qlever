@@ -276,7 +276,7 @@ TEST(TripleComponent, toValueId) {
   ASSERT_EQ(toValueId(tc, index).value(),
             getId(std::string{HAS_PATTERN_PREDICATE}));
 
-  auto lv = LocalVocab();
+  auto lv = LocalVocab{ad_utility::testing::makeAllocator()};
   auto expectLocalVocab = [&lv, &index](TripleComponent tc, size_t pos) {
     auto id = toValueId(std::move(tc), index, lv);
     ASSERT_TRUE(id.getDatatype() == Datatype::LocalVocabIndex);

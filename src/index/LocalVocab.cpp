@@ -10,15 +10,16 @@
 
 // _____________________________________________________________________________
 LocalVocab LocalVocab::clone() const {
-  LocalVocab result;
+  LocalVocab result{allocator_};
   result.mergeWith(*this);
   AD_CORRECTNESS_CHECK(result.size_ == size_);
   return result;
 }
 
 // _____________________________________________________________________________
-LocalVocab LocalVocab::merge(ql::span<const LocalVocab*> vocabs) {
-  LocalVocab result;
+LocalVocab LocalVocab::merge(ql::span<const LocalVocab*> vocabs,
+                             Allocator allocator) {
+  LocalVocab result{std::move(allocator)};
   result.mergeWith(vocabs | ql::views::transform(ad_utility::dereference));
   return result;
 }
@@ -147,7 +148,7 @@ std::vector<LocalVocabEntry> LocalVocab::getAllWordsForTesting() const {
     }
   };
   copyWords(primaryWordSet());
-  for (const auto& previous : otherWordSets_) {
+  for (const auto& previous : *otherWordSets_) {
     copyWords(*previous);
   }
   return result;
@@ -178,11 +179,11 @@ bool LocalVocab::isBlankNodeIndexContained(
 // _____________________________________________________________________________
 LocalVocab::LifetimeExtender LocalVocab::getLifetimeExtender() const {
   std::vector<std::shared_ptr<const Set>> wordSets;
-  wordSets.reserve(otherWordSets_.size() + 1);
+  wordSets.reserve(otherWordSets_->size() + 1);
   if (!primaryWordSet_->empty()) {
     wordSets.emplace_back(primaryWordSet_);
   }
-  ql::ranges::copy(otherWordSets_, std::back_inserter(wordSets));
+  ql::ranges::copy(*otherWordSets_, std::back_inserter(wordSets));
   return LifetimeExtender{std::move(wordSets)};
 }
 
@@ -216,5 +217,5 @@ bool LocalVocab::isLocalVocabIndexContained(LocalVocabIndex lvi) const {
     return ql::ranges::any_of(
         *set, [lvi](const auto& entry) { return &entry == lvi; });
   };
-  return c(primaryWordSet_) || ql::ranges::any_of(otherWordSets_, c);
+  return c(primaryWordSet_) || ql::ranges::any_of(*otherWordSets_, c);
 }

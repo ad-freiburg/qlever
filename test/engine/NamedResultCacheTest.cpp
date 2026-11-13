@@ -8,9 +8,12 @@
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/LocalVocabEntryTestHelpers.h"
+#include "../util/LocalVocabTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
 #include "engine/NamedResultCache.h"
 #include "index/LocalVocabEntry.h"
+
+using ad_utility::testing::makeLocalVocab;
 
 using ad_utility::testing::colIndices;
 using ad_utility::testing::iriLocalVocabEntry;
@@ -30,7 +33,7 @@ TEST(NamedResultCache, basicWorkflow) {
   VariableToColumnMap varColMap{{V{"?x"}, makeAlwaysDefinedColumn(0)},
                                 {V{"?y"}, makeAlwaysDefinedColumn(1)}};
 
-  LocalVocab localVocab;
+  LocalVocab localVocab = makeLocalVocab();
   auto* qec = ad_utility::testing::getQec();
   localVocab.getIndexAndAddIfNotContained(
       iriLocalVocabEntry("<bliBlaBlubb>", qec->getLocalVocabContext()));
@@ -149,7 +152,7 @@ TEST(NamedResultCache, E2E) {
   auto result = qet->getResult(false);
 
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
-  LocalVocab dummyVocab;
+  LocalVocab dummyVocab = makeLocalVocab();
   auto notInVocab =
       Id::makeFromLocalVocabIndex(dummyVocab.getIndexAndAddIfNotContained(
           iriLocalVocabEntry("<notInVocab>", qec->getLocalVocabContext())));

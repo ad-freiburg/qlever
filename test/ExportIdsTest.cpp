@@ -12,6 +12,7 @@
 
 #include <gmock/gmock.h>
 
+#include "./util/LocalVocabTestHelpers.h"
 #include "engine/IndexScan.h"
 #include "index/ExportIds.h"
 #include "index/LocalVocabEntry.h"
@@ -21,6 +22,8 @@
 #include "util/IdTestHelpers.h"
 #include "util/IndexTestHelpers.h"
 #include "util/ParseableDuration.h"
+
+using ad_utility::testing::makeLocalVocab;
 
 using namespace std::string_literals;
 using namespace std::chrono_literals;
@@ -50,7 +53,7 @@ TEST(ExportIds, idToLiteralFunctionality) {
               cases) {
         for (const auto& [onlyLiteralsWithXsdString, expected] : cases) {
           auto result = ql::exportIds::idToLiteral(
-              qec->getIndex(), id, LocalVocab{}, onlyLiteralsWithXsdString);
+              qec->getIndex(), id, makeLocalVocab(), onlyLiteralsWithXsdString);
           if (expected) {
             EXPECT_THAT(result,
                         ::testing::Optional(::testing::ResultOf(
@@ -132,9 +135,9 @@ TEST(ExportIds, idToLiteralOrIriFunctionality) {
            "\"true\"^^<http://www.w3.org/2001/XMLSchema#boolean>")}},
       {ValueId::makeUndefined(), std::nullopt}};
   for (const auto& [valueId, expRes] : expected) {
-    ASSERT_EQ(
-        ql::exportIds::idToLiteralOrIri(qec->getIndex(), valueId, LocalVocab{}),
-        expRes);
+    ASSERT_EQ(ql::exportIds::idToLiteralOrIri(qec->getIndex(), valueId,
+                                              makeLocalVocab()),
+              expRes);
   }
 }
 
@@ -222,7 +225,7 @@ TEST(ExportIds, GetLiteralOrIriFromVocabIndexWithEncodedIris) {
   const auto& encodedIriManager = qec->getIndex().encodedIriManager();
 
   // Test driver lambda to reduce code duplication
-  LocalVocab emptyLocalVocab;
+  LocalVocab emptyLocalVocab = makeLocalVocab();
   auto testEncodedIri = [&](const std::string& iri) {
     // Encode the IRI
     auto encodedIdOpt = encodedIriManager.encode(iri);
@@ -270,7 +273,7 @@ TEST(ExportIds, idsToStringAndTypeBatchMatchesIndividualLookups) {
       "<s> <p> 3.14 .";
   auto qec = ad_utility::testing::getQec(kg);
   const Index& index = qec->getIndex();
-  LocalVocab localVocab{};
+  LocalVocab localVocab = makeLocalVocab();
   auto getId = ad_utility::testing::makeGetId(index);
 
   // Collect a mix of VocabIndex IDs (IRIs, literal) and non-VocabIndex IDs
@@ -304,7 +307,7 @@ TEST(ExportIds, idsToStringAndTypeBatchMatchesIndividualLookups) {
 // Empty span returns an empty vector.
 TEST(ExportIds, idsToStringAndTypeEmptyInput) {
   auto qec = ad_utility::testing::getQec("<s> <p> <o>");
-  LocalVocab localVocab{};
+  LocalVocab localVocab = makeLocalVocab();
   auto result = ql::exportIds::idsToStringAndType(
       qec->getIndex(), ql::span<const Id>{}, localVocab);
   EXPECT_TRUE(result.empty());
@@ -316,7 +319,7 @@ using ResolveResult =
 // A shared empty `LocalVocab` for the vocab oracle (whose lookup takes no
 // `LocalVocab`, so the per-ID oracle is fed an empty one).
 inline const LocalVocab& emptyLocalVocab() {
-  static const LocalVocab empty{};
+  static const LocalVocab empty = makeLocalVocab();
   return empty;
 }
 
@@ -604,7 +607,7 @@ TEST(ExportIds, resolveNonVocabIndexIds) {
 
   // Populate a `LocalVocab` with a literal so the `LocalVocabIndex` resolution
   // path is exercised, not just the values encoded directly in the ID bits.
-  LocalVocab localVocab{};
+  LocalVocab localVocab = makeLocalVocab();
   auto localVocabIndex = localVocab.getIndexAndAddIfNotContained(
       LocalVocabEntry::literalWithoutQuotes("localLit",
                                             qec->getLocalVocabContext()));
