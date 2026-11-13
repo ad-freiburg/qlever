@@ -5,6 +5,8 @@
 #ifndef QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_QUERYREWRITEEXPRESSIONHELPERS_H
 #define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_QUERYREWRITEEXPRESSIONHELPERS_H
 
+#include <absl/functional/function_ref.h>
+
 #include "engine/SpatialJoinConfig.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "parser/TripleComponent.h"
@@ -46,9 +48,15 @@ struct GeoDistanceCall : public GeoFunctionCall {
 
 // Same as `getGeoFunctionExpressionParameters`, but with special handling for
 // the unit of measurement associated with a distance. Also implemented in
-// `GeoDistanceExpression.cpp`.
+// `GeoDistanceExpression.cpp`. A unit given as a variable is resolved with
+// `constantOfVariable`, which returns the constant value of a variable if it is
+// known, by default never. An IRI or literal that is not a unit gives
+// `UNKNOWN`.
 std::optional<GeoDistanceCall> getGeoDistanceExpressionParameters(
-    const SparqlExpression& expr);
+    const SparqlExpression& expr,
+    absl::FunctionRef<std::optional<TripleComponent>(const Variable&)>
+        constantOfVariable =
+            [](const Variable&) { return std::optional<TripleComponent>{}; });
 
 // Helper struct for `getDe9imRelationExpressionParameters`
 struct De9imRelationCall : public GeoFunctionCall {
