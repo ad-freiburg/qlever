@@ -276,6 +276,14 @@ TEST_F(ServiceTest, computeResult) {
         "SERVICE responded with HTTP status code: 400, Bad Request",
         boost::beast::http::status::bad_request,
         "application/sparql-results+json");
+    // The quoted first 100 bytes of the response end within the two-byte
+    // character `ö`, which is replaced by U+FFFD.
+    std::string cutResponse = "x";
+    for (size_t j = 0; j < 60; ++j) {
+      cutResponse += "ö";
+    }
+    expectThrowOrSilence(cutResponse, "ö\uFFFD'",
+                         boost::beast::http::status::bad_request);
     // contentType doesn't match
     expectThrowOrSilence(
         genJsonResult({"x", "y"}, {{"bla", "bli"}, {"blu"}, {"bli", "blu"}}),
