@@ -16,7 +16,6 @@
 #include <boost/asio/thread_pool.hpp>
 #include <boost/asio/use_future.hpp>
 #include <chrono>
-#include <deque>
 #include <fstream>
 #include <future>
 #include <iterator>
@@ -173,7 +172,12 @@ TEST(IndexRebuilder, materializeLocalVocab) {
   auto k = getId("<k>");
   auto l = makeVocabEntry("<l>");
   auto m = makeVocabEntry("<m>");
-  std::vector<LocalVocabIndex> entries{&b, &d, &f, &h, &j, &l, &m};
+  LocalVocab localVocab;
+  auto add = [&localVocab](const LocalVocabEntry& entry) {
+    return localVocab.getIndexAndAddIfNotContained(entry);
+  };
+  std::vector<LocalVocabIndex> entries{add(b), add(d), add(f), add(h),
+                                       add(j), add(l), add(m)};
 
   auto [insertionPositions, localVocabMapping] =
       materializeLocalVocab(entries, oldIndex.getVocab(), vocabPrefix);
@@ -185,8 +189,10 @@ TEST(IndexRebuilder, materializeLocalVocab) {
           k.getVocabIndex(),
           Id::fromBits(l.positionInVocab().upperBound_.get()).getVocabIndex(),
           Id::fromBits(l.positionInVocab().upperBound_.get()).getVocabIndex()));
-  auto toBits = [](const LocalVocabEntry& entry) {
-    return Id::makeFromLocalVocabIndex(&entry).getBits();
+  auto toBits = [&localVocab](const LocalVocabEntry& entry) {
+    return Id::makeFromLocalVocabIndex(
+               localVocab.getIndexOrNullopt(entry).value())
+        .getBits();
   };
   EXPECT_THAT(localVocabMapping,
               ::testing::UnorderedElementsAre(
@@ -247,15 +253,14 @@ TEST(IndexRebuilder, materializeLocalVocabProgressBatches) {
     deleteVocabFiles(vocabPrefix + VOCAB_SUFFIX, type.value());
   }};
 
-  // A `deque` is used for stable addresses, because `materializeLocalVocab`
-  // takes pointers to the entries.
-  std::deque<LocalVocabEntry> entryStorage;
+  // `materializeLocalVocab` takes pointers to the entries, which are stored in
+  // a `LocalVocab`.
+  LocalVocab localVocab;
   std::vector<LocalVocabIndex> entries;
   for (size_t i = 0; i < numEntries; ++i) {
-    entryStorage.push_back(
+    entries.push_back(localVocab.getIndexAndAddIfNotContained(
         localVocabEntry(ad_utility::testing::iri(absl::StrFormat("<z%06d>", i)),
-                        oldIndex.getLocalVocabContext()));
-    entries.push_back(&entryStorage.back());
+                        oldIndex.getLocalVocabContext())));
   }
 
   std::vector<size_t> reportedBatches;
@@ -430,8 +435,9 @@ TEST(IndexRebuilder, readIndexAndRemap) {
             iriLocalVocabEntry("<a2>", index.getLocalVocabContext());
         LocalVocabEntry entry2 =
             iriLocalVocabEntry("<d2>", index.getLocalVocabContext());
-        auto a2 = Id::makeFromLocalVocabIndex(&entry1);
-        auto d2 = Id::makeFromLocalVocabIndex(&entry2);
+        auto getLocalVocabId = ad_utility::testing::makeGetLocalVocabId();
+        auto a2 = getLocalVocabId(entry1);
+        auto d2 = getLocalVocabId(entry2);
         deltaTriples.insertTriples(
             cancellationHandle,
             {IdTriple<0>{std::array{V(0), a2, Id::makeFromInt(1337), g}},
@@ -444,7 +450,7 @@ TEST(IndexRebuilder, readIndexAndRemap) {
   auto blockMetadataRanges =
       permutation.getAugmentedMetadataForPermutation(*state);
 
-  ql::ranges::sort(vocabEntries, {}, [](const LocalVocabEntry* entry) {
+  ql::ranges::sort(vocabEntries, {}, [](LocalVocabIndex entry) {
     return Id::makeFromLocalVocabIndex(entry);
   });
 
@@ -607,12 +613,20 @@ TEST(IndexRebuilder, materializeToIndex) {
        {std::pair{false, false}, std::pair{false, true},
         std::pair{true, true}}) {
     // Also exercise the fully sequential processing of the permutation pairs
-    // (`rebuild-max-concurrent-permutation-pairs = 1`); the result must be
-    // the same as with the default (0 = no limit).
-    for (size_t maxConcurrentPairs : {size_t{0}, size_t{1}}) {
+    // (`rebuild-max-concurrent-permutation-pairs = 1`) and the limits of the
+    // threads of the whole rebuild (`rebuild-index-max-num-threads`); the
+    // result must be the same as with the defaults (0 = no limit). In
+    // particular, a limit of 1 with all pairs in parallel lets all the scans
+    // and writers of the rebuild share a single thread, which must not
+    // deadlock.
+    for (auto [maxConcurrentPairs, maxNumThreads] :
+         {std::pair<size_t, size_t>{0, 0}, std::pair<size_t, size_t>{1, 0},
+          std::pair<size_t, size_t>{0, 1}, std::pair<size_t, size_t>{0, 2}}) {
       auto cleanupMaxPairs = setRuntimeParameterForTest<
           &RuntimeParameters::rebuildMaxConcurrentPermutationPairs_>(
           maxConcurrentPairs);
+      auto cleanupMaxNumThreads = setRuntimeParameterForTest<
+          &RuntimeParameters::rebuildIndexMaxNumThreads_>(maxNumThreads);
       ad_utility::testing::TestIndexConfig config;
       config.turtleInput = "<a> <b> <c> . <d> <e> _:f .";
       config.loadAllPermutations = loadAllPermutations;
@@ -891,26 +905,6 @@ void cleanDirsWithPrefix(std::string_view prefix) {
   }
 }
 }  // namespace
-
-// _____________________________________________________________________________
-// Recomputing the statistics must give exactly the same result, no matter by
-// how many threads each of its scans is limited (0 means "no limit"). This
-// exercises both branches of the translation of the runtime parameter
-// `rebuild-index-scan-num-threads` to a concurrency-limited executor.
-TEST(IndexRebuilder, rebuildIndexScanNumThreads) {
-  auto index = ad_utility::testing::makeTestIndex(gtestCurrentTestName(),
-                                                  "<a> <b> <c> .");
-  auto state =
-      index.deltaTriplesManager().getCurrentLocatedTriplesSharedState();
-  auto recomputeStatistics = [&](size_t maxNumThreads) {
-    auto cleanup = setRuntimeParameterForTest<
-        &RuntimeParameters::rebuildIndexScanNumThreads_>(maxNumThreads);
-    return index.getImpl().recomputeStatistics(state, executor());
-  };
-  auto statsUnlimited = recomputeStatistics(0);
-  EXPECT_EQ(recomputeStatistics(1), statsUnlimited);
-  EXPECT_EQ(recomputeStatistics(2), statsUnlimited);
-}
 
 // _____________________________________________________________________________
 // All of the server-integration tests below are compiled out under

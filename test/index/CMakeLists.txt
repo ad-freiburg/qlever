@@ -1,6 +1,7 @@
 add_subdirectory(vocabulary)
-add_subdirectory(vocabulary_merger)
+add_subdirectory(vocabularyMerger)
 add_subdirectory(compressedRelationWriter)
+add_subdirectory(chunkwisePermutationWriter)
 addLinkAndDiscoverTest(PatternCreatorTest index)
 addLinkAndDiscoverTest(ScanSpecificationTest index)
 addLinkAndDiscoverTestNoLibs(KeyOrderTest)
@@ -8,9 +9,14 @@ addLinkAndDiscoverTestNoLibs(EncodedIriManagerTest vocabulary)
 addLinkAndDiscoverTestNoLibs(EncodedIriPatternTest vocabulary)
 addLinkAndDiscoverTestNoLibs(NibbleEncodingTest vocabulary)
 addLinkAndDiscoverTest(GraphNameManagerTest index)
-addLinkAndDiscoverTest(IndexFormatConverterTest index engine)
+# TODO<pas-kes>: Implement new IndexFormatConverter
+# The converter reads the packed 64-bit `Id`s of the legacy index format, so its
+# test is only meaningful for the legacy `ValueId`.
+if (NOT USE_SPLIT_LAYOUT)
+    addLinkAndDiscoverTest(IndexFormatConverterTest index engine)
+endif ()
 # Emscripten tests cannot access the host filesystem, so embed the test data.
-if (EMSCRIPTEN)
+if (EMSCRIPTEN AND NOT USE_SPLIT_LAYOUT)
     if (SINGLE_TEST_BINARY)
         set(target QLeverAllUnitTestsMain)
     else ()

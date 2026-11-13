@@ -20,6 +20,7 @@
 #include "global/RuntimeParameters.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "libqlever/Qlever.h"
+#include "util/KernelBugWorkaround.h"
 #include "util/ProgramOptionsHelpers.h"
 #include "util/ReadableNumberFacet.h"
 #include "util/ResourceMonitor.h"
@@ -187,6 +188,8 @@ int main(int argc, char** argv) {
   ad_utility::ReadableNumberFacet facet(1);
   std::locale locWithNumberGrouping(loc, &facet);
   ad_utility::Log::imbue(locWithNumberGrouping);
+  // Avoid a bug of some Linux kernels on arm64, see `KernelBugWorkaround.h`.
+  ad_utility::kernelBugWorkaround::applyIfNeeded();
 
   qlever::IndexBuilderConfig config;
   std::vector<string> filetype;
@@ -288,6 +291,12 @@ int main(int argc, char** argv) {
       ", the default is `lowercase`.");
   add("has-word-normalization", po::value(&config.hasWordNormalization_),
       hasWordNormalizationDescription.c_str());
+  add("has-word-restrict-predicates",
+      po::value(&config.hasWordRestrictPredicates_)->composing()->multitoken(),
+      "Space-separated list of predicate IRIs in angle brackets. If "
+      "specified, the `ql:has-word` triples are only added for literals that "
+      "are the object of a triple with one of these predicates. Requires "
+      "`--add-has-word-triples`.");
   auto msg = absl::StrCat(
       "The vocabulary implementation for strings in qlever, can be any of ",
       ad_utility::VocabularyType::getListOfValuesForIndexBuilding());

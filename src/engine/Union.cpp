@@ -17,8 +17,13 @@ const size_t Union::NO_COLUMN = std::numeric_limits<size_t>::max();
 
 Union::Union(QueryExecutionContext* qec,
              const std::shared_ptr<QueryExecutionTree>& t1,
+             const std::shared_ptr<QueryExecutionTree>& t2)
+    : Union{qec, t1, t2, qlm::vector<ColumnIndex>{qec->getAllocator()}} {}
+
+Union::Union(QueryExecutionContext* qec,
+             const std::shared_ptr<QueryExecutionTree>& t1,
              const std::shared_ptr<QueryExecutionTree>& t2,
-             std::vector<ColumnIndex> targetOrder)
+             qlm::vector<ColumnIndex> targetOrder)
     : Operation(qec), targetOrder_{std::move(targetOrder)} {
   AD_CONTRACT_CHECK(t1 && t2);
   _subtrees[0] = t1;
@@ -91,6 +96,39 @@ std::vector<ColumnIndex> Union::sortOrderForSubtree(size_t subtreeIndex) const {
   return specificSortOrder;
 }
 
+// _____________________________________________________________________________
+bool Union::isDecidingColumn(ColumnIndex column) const {
+  auto [leftColumn, rightColumn] = _columnOrigins.at(column);
+  if (leftColumn != NO_COLUMN && rightColumn != NO_COLUMN) {
+    return false;
+  }
+  bool missingInLeft = leftColumn == NO_COLUMN;
+  const auto& info = _subtrees.at(missingInLeft ? 1 : 0)
+                         ->getVariableAndInfoByColumnIndex(
+                             missingInLeft ? rightColumn : leftColumn)
+                         .second;
+  return info.mightContainUndef_ ==
+         ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
+}
+
+// _____________________________________________________________________________
+bool Union::isSortedByConcatenation() const {
+  if (targetOrder_.empty()) {
+    return true;
+  }
+  ColumnIndex firstColumn = targetOrder_.at(0);
+  return _columnOrigins.at(firstColumn).at(0) == NO_COLUMN &&
+         isDecidingColumn(firstColumn);
+}
+
+// _____________________________________________________________________________
+ql::span<const ColumnIndex> Union::comparatorOrder() const {
+  auto end = ql::ranges::find_if(targetOrder_, [this](ColumnIndex column) {
+    return isDecidingColumn(column);
+  });
+  return {targetOrder_.begin(), end == targetOrder_.end() ? end : end + 1};
+}
+
 std::string Union::getCacheKeyImpl() const {
   std::ostringstream os;
   os << "{\n";
@@ -119,7 +157,7 @@ size_t Union::getResultWidth() const {
   return _columnOrigins.size();
 }
 
-std::vector<ColumnIndex> Union::resultSortedOn() const { return targetOrder_; }
+qlm::vector<ColumnIndex> Union::resultSortedOn() const { return targetOrder_; }
 
 // _____________________________________________________________________________
 VariableToColumnMap Union::computeVariableToColumnMap() const {
@@ -214,8 +252,7 @@ size_t Union::getCostEstimate() {
   // Magic value that is empirically determined (using commit 59391af) such that
   // costs of distributively applied joins roughly match the actual time.
   uint64_t timeEstimate = std::max(uint64_t{1}, elementsToCopy / 10);
-  if (!targetOrder_.empty() &&
-      _columnOrigins.at(targetOrder_.at(0)).at(0) != NO_COLUMN) {
+  if (!isSortedByConcatenation()) {
     // A sorted UNION is rather expensive the factor 63 is an empirically
     // determined average factor (using commit 59391af) under the assumption
     // that the left and right side are equivalent and thus the whole range
@@ -235,10 +272,9 @@ Result Union::computeResult(bool requestLaziness) {
   std::shared_ptr<const Result> subRes2 =
       _subtrees[1]->getResult(requestLaziness);
 
-  // If first sort column is not present in left child, we can fall back to the
-  // cheap computation because it orders the left child first.
-  if (!targetOrder_.empty() &&
-      _columnOrigins.at(targetOrder_.at(0)).at(0) != NO_COLUMN) {
+  // Merge the two sorted children, unless their concatenation is already
+  // sorted (then the cheap computation below is enough).
+  if (!isSortedByConcatenation()) {
     auto generator = computeResultKeepOrder(requestLaziness, std::move(subRes1),
                                             std::move(subRes2));
     return requestLaziness ? Result{std::move(generator), resultSortedOn()}
@@ -393,7 +429,7 @@ std::unique_ptr<Operation> Union::cloneImpl() const {
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Union::cloneWithNewChildren(
-    std::vector<std::shared_ptr<QueryExecutionTree>> children) const {
+    qlm::vector<std::shared_ptr<QueryExecutionTree>> children) const {
   return std::make_unique<Union>(_executionContext, std::move(children.at(0)),
                                  std::move(children.at(1)), targetOrder_);
 }
@@ -419,7 +455,7 @@ Union::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   //
   // NOTE 2: `UNION` doesn't change any values, so (unlike for joins) it doesn't
   // matter whether the variables might be `UNDEF` in a child.
-  std::vector<std::shared_ptr<QueryExecutionTree>> children;
+  qlm::vector<std::shared_ptr<QueryExecutionTree>> children{allocator()};
   for (const auto& subtree : _subtrees) {
     auto result = subtree->makeTreeWithBindColumn(bind);
     if (!result.has_value()) {
@@ -470,10 +506,12 @@ void Union::onLimitOffsetChanged(const LimitOffsetClause&,
 
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>> Union::makeSortedTree(
-    const std::vector<ColumnIndex>& sortColumns) const {
+    ql::span<const ColumnIndex> sortColumns) const {
   AD_CONTRACT_CHECK(!isSortedBy(sortColumns));
   return ad_utility::makeExecutionTree<Union>(
-      _executionContext, _subtrees.at(0), _subtrees.at(1), sortColumns);
+      _executionContext, _subtrees.at(0), _subtrees.at(1),
+      qlm::vector<ColumnIndex>{sortColumns.begin(), sortColumns.end(),
+                               allocator()});
 }
 
 // _____________________________________________________________________________
@@ -491,12 +529,12 @@ Result::LazyResult Union::computeResultKeepOrder(
   Range leftRange = toRange(result1);
   Range rightRange = toRange(result2);
 
-  auto end = ql::ranges::find_if(targetOrder_, [this](ColumnIndex index) {
-    const auto& [left, right] = _columnOrigins.at(index);
-    return left == NO_COLUMN || right == NO_COLUMN;
-  });
-  ql::span trimmedTargetOrder{targetOrder_.begin(),
-                              end == targetOrder_.end() ? end : end + 1};
+  // NOTE: The comparison has to consider all columns of `targetOrder_` up to
+  // the first deciding column (see `isDecidingColumn`). A column that is
+  // missing in one of the inputs, but can be UNDEF in the other input, is not
+  // deciding, because two UNDEFs are equal and the following columns then
+  // still decide.
+  ql::span<const ColumnIndex> trimmedTargetOrder = comparatorOrder();
 
   auto applyPermutation = [this](IdTable idTable,
                                  const std::vector<ColumnIndex>& permutation) {

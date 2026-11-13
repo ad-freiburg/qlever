@@ -11,6 +11,7 @@
 #include <absl/strings/str_join.h>
 
 #include "backports/algorithm.h"
+#include "backports/reflection.h"
 #include "util/Algorithm.h"
 
 // _____________________________________________________________________________
@@ -29,8 +30,7 @@ RuntimeParameters::RuntimeParameters() {
   add(cacheMaxSizeSingleEntry_);
   add(lazyIndexScanNumBlocksInFlight_);
   add(maxNumThreadsPerQuery_);
-  add(rebuildIndexScanNumThreads_);
-  add(rebuildPermutationWriterNumThreads_);
+  add(rebuildIndexMaxNumThreads_);
   add(rebuildMaxConcurrentPermutationPairs_);
   add(lazyIndexScanMaxSizeMaterialization_);
   add(useBinsearchTransitivePath_);
@@ -59,7 +59,7 @@ RuntimeParameters::RuntimeParameters() {
   add(spatialJoinTmpDir_);
   add(enableDistributiveUnion_);
   add(treatDefaultGraphAsNamedGraph_);
-  add(sparqlResultsJsonWithTime_);
+  add(sparqlResultsJsonWithMeta_);
   add(materializedViewWriterMemory_);
   add(defaultQueryTimeout_);
   add(sortInMemoryThreshold_);
@@ -73,6 +73,26 @@ RuntimeParameters::RuntimeParameters() {
   add(disableCaching_);
   add(logLevel_);
   add(constructDeduplication_);
+
+#ifdef QLEVER_HAS_REFLECTION
+  // Check that all the parameters above were added. Without reflection, this
+  // is only checked by the hand-written list in `RuntimeParametersTest`.
+  static constexpr auto members =
+      std::define_static_array(std::meta::nonstatic_data_members_of(
+          ^^RuntimeParameters, std::meta::access_context::unchecked()));
+  template for (constexpr auto member : members) {
+    using Type = typename[:std::meta::type_of(member):];
+    if constexpr (std::is_base_of_v<ad_utility::ParameterBase, Type>) {
+      const ad_utility::ParameterBase* parameter = &this->[:member:];
+      static constexpr std::string_view name = std::meta::identifier_of(member);
+      AD_CORRECTNESS_CHECK(
+          ad_utility::contains(runtimeMap_ | ql::views::values, parameter),
+          "The runtime parameter `", name,
+          "` was not registered via `add()` in the constructor of "
+          "`RuntimeParameters`");
+    }
+  }
+#endif
 
   // Propagate runtime log level changes immediately to the global atomic in
   // Log.h. The action fires once immediately on registration, so the atomic is

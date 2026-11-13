@@ -35,11 +35,23 @@
 #include "util/Executor.h"
 #include "util/File.h"
 #include "util/Iterators.h"
-#include "util/MemorySize/MemorySize.h"
 #include "util/RecyclingPool.h"
 #include "util/Synchronized.h"
 #include "util/TaskQueueOnExecutor.h"
 #include "util/Timer.h"
+#include "util/compressionUsingZstd/ZstdContext.h"
+#include "util/memorySize/MemorySize.h"
+
+// The writer of a single chunk of a parallel merge and the state that all such
+// writers share (see `index/chunkwisePermutationWriter/ChunkWriter.h`), and the
+// consolidation of the results of the chunks (see `BoundaryConsolidator.h`
+// there), which need access to the internals of the `CompressedRelationWriter`
+// below.
+namespace chunkwisePermutationWriter {
+class BoundaryConsolidator;
+class ChunkWriter;
+struct ChunkWriterContext;
+}  // namespace chunkwisePermutationWriter
 
 /// Manage the compression and serialization of relations during the index
 /// build.
@@ -54,6 +66,9 @@ class CompressedRelationWriter {
   // why the `outfile_` has to be empty when this writer is constructed (this
   // is checked there).
   std::atomic<off_t> nextOffset_{0};
+  // The ZSTD context and compression buffer of each thread that compresses
+  // blocks, see `compressAndWriteColumn`.
+  ad_utility::ThreadLocalZstdContext zstdContext_;
   ad_utility::Synchronized<std::vector<CompressedBlockMetadataNoBlockIndex>>
       blockBuffer_;
   // The actual number of columns that is stored by this writer. Is 2 if there
@@ -450,6 +465,9 @@ class CompressedRelationWriter {
   // compressed and written, as determined by the runtime parameter
   // `permutation-writer-num-blocks-in-flight`.
   static size_t getNumBlocksInFlight();
+  friend class chunkwisePermutationWriter::BoundaryConsolidator;
+  friend class chunkwisePermutationWriter::ChunkWriter;
+  friend struct chunkwisePermutationWriter::ChunkWriterContext;
   FRIEND_TEST(CompressedRelationWriter,
               isInitializedWithCorrectNumberOfTasksInFlight);
   FRIEND_TEST(CompressedRelationWriter, writeLargeRelationBlockInSlices);

@@ -11,6 +11,7 @@
 
 #include <memory>
 
+#include "backports/span.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/Result.h"
 #include "engine/RuntimeInformation.h"
@@ -127,7 +128,7 @@ class Operation : public std::enable_shared_from_this<Operation> {
   mutable ad_utility::CopyableMutex _resultSortedColumnsMutex;
 
   // Store the list of columns by which the result is sorted.
-  mutable std::optional<std::vector<ColumnIndex>> _resultSortedColumns =
+  mutable std::optional<qlm::vector<ColumnIndex>> _resultSortedColumns =
       std::nullopt;
 
   // True if this operation does not handle limits/offsets itself and the
@@ -192,7 +193,7 @@ class Operation : public std::enable_shared_from_this<Operation> {
   /**
    * @return A list of columns on which the result of this operation is sorted.
    */
-  const std::vector<ColumnIndex>& getResultSortedOn() const;
+  const qlm::vector<ColumnIndex>& getResultSortedOn() const;
 
   const Index& getIndex() const { return _executionContext->getIndex(); }
 
@@ -279,6 +280,13 @@ class Operation : public std::enable_shared_from_this<Operation> {
   virtual size_t getResultWidth() const = 0;
 
   virtual size_t getCostEstimate() = 0;
+
+  // The costs that `getCostEstimate` charges for the children (in the order of
+  // `getChildren()`). By default, these are the cost estimates of the children,
+  // but they can be lower, e.g. because a join reads only some blocks of an
+  // index scan. `createRuntimeInfoFromEstimates` shows these costs in the
+  // runtime information of the children.
+  virtual std::vector<size_t> getCostEstimatesChargedForChildren();
 
   virtual uint64_t getSizeEstimate() final;
 
@@ -535,10 +543,9 @@ class Operation : public std::enable_shared_from_this<Operation> {
   //    see QleverTest.cpp.
   virtual void getExternalValues(std::vector<ExternalValues*>& externalValues);
 
-  // Helper function to check hif the result of this operation is
-  // already sorted accordigngly.
-  virtual bool isSortedBy(
-      const std::vector<ColumnIndex>& sortColumns) const final;
+  // Return true iff the result of this operation is sorted by `sortColumns`
+  // (that is, iff `sortColumns` is a prefix of `resultSortedOn()`).
+  virtual bool isSortedBy(ql::span<const ColumnIndex> sortColumns) const final;
 
   // Try to create a version of this operation that is sorted on the given
   // `sortColumns`. The default implementation returns `std::nullopt`, assuming
@@ -546,7 +553,7 @@ class Operation : public std::enable_shared_from_this<Operation> {
   // override this function if they are able to provide more efficient
   // implementations.
   virtual std::optional<std::shared_ptr<QueryExecutionTree>> makeSortedTree(
-      const std::vector<ColumnIndex>& sortColumns) const;
+      ql::span<const ColumnIndex> sortColumns) const;
 
   // Return true iff the result of this operation is guaranteed to contain no
   // two rows that agree on all columns in `distinctIndices`. In other words,
@@ -554,13 +561,13 @@ class Operation : public std::enable_shared_from_this<Operation> {
   // no-op. Any result with at most one row is trivially distinct wrt any
   // columns; beyond that, the per-class `isDistinctByImpl` decides.
   virtual bool isDistinctBy(
-      const std::vector<ColumnIndex>& distinctIndices) const final;
+      ql::span<const ColumnIndex> distinctIndices) const final;
 
   // Per-class component of `isDistinctBy` (see above). The default
   // conservatively returns `false`. Subclasses that can guarantee distinctness
   // (e.g. a full `IndexScan` for `?s ?p ?o`) should override this.
   virtual bool isDistinctByImpl(
-      const std::vector<ColumnIndex>& distinctIndices) const;
+      ql::span<const ColumnIndex> distinctIndices) const;
 
   // Try to create a version of this operation with a `DISTINCT` over the given
   // `distinctIndices` pushed down into the tree, if that makes the operation
@@ -573,7 +580,7 @@ class Operation : public std::enable_shared_from_this<Operation> {
   // only be called on operations that are not already distinct wrt
   // `distinctIndices`.
   virtual std::optional<std::shared_ptr<QueryExecutionTree>> makeDistinctTree(
-      const std::vector<ColumnIndex>& distinctIndices) const;
+      ql::span<const ColumnIndex> distinctIndices) const;
 
   // Try to create a version of this operation that only contains the given
   // `variables`, and therefore strips away all other columns. The default
@@ -617,14 +624,14 @@ class Operation : public std::enable_shared_from_this<Operation> {
   // `pushDownBindToAnyChild` or `pushDownBindToChild` have to override this.
   // The default implementation throws.
   virtual std::unique_ptr<Operation> cloneWithNewChildren(
-      std::vector<std::shared_ptr<QueryExecutionTree>> children) const;
+      qlm::vector<std::shared_ptr<QueryExecutionTree>> children) const;
 
  protected:
   /**
    * @brief Compute and return the columns on which the result will be sorted
    * @return The columns on which the result will be sorted.
    */
-  [[nodiscard]] virtual std::vector<ColumnIndex> resultSortedOn() const = 0;
+  [[nodiscard]] virtual qlm::vector<ColumnIndex> resultSortedOn() const = 0;
 
   // get access to the generated warnings of this operation.
   const ThreadsafeWarnings& getWarnings() const { return warnings_; }
@@ -657,9 +664,9 @@ class Operation : public std::enable_shared_from_this<Operation> {
   // `children` (which must be the children of this operation, in the order of
   // `getChildren()`) unchanged, and return `cloneWithNewChildren` of the
   // result. The push down is refused if it would change the values the `BIND`
-  // expression sees, or if any child contains the `BIND`'s target. The other
-  // `children` may be `nullptr` (they are then ignored), but the chosen child
-  // must not be.
+  // expression sees, if any child contains the `BIND`'s target, or if the
+  // `BIND` expression is a constant. The other `children` may be `nullptr`
+  // (they are then ignored), but the chosen child must not be.
   //
   // NOTE 1: Each variable of the expression must be contained in the chosen
   // child, and if it might be `UNDEF` there, no other child may contain it.
@@ -669,9 +676,14 @@ class Operation : public std::enable_shared_from_this<Operation> {
   // NOTE 2: A child can only contain the target if its variables are not
   // visible outside of this operation (e.g. the right child of `MINUS`). After
   // the push down, the target would then wrongly become a join column.
+  //
+  // NOTE 3: A constant `BIND` on top of this operation is computed only for the
+  // rows of its result. Pushed down, it would be computed for all rows of the
+  // child (e.g. for a whole relation as a constant column of an `IndexScan`)
+  // and then copied by this operation.
   std::optional<std::shared_ptr<QueryExecutionTree>> pushDownBindToChild(
       const parsedQuery::Bind& bind,
-      std::vector<std::shared_ptr<QueryExecutionTree>> children,
+      qlm::vector<std::shared_ptr<QueryExecutionTree>> children,
       size_t childIndex) const;
 
   // Opt-in helper for implementing `makeTreeWithBindColumn`: Push the `bind`
@@ -681,7 +693,7 @@ class Operation : public std::enable_shared_from_this<Operation> {
   // `makeTreeWithBindColumn` override.
   std::optional<std::shared_ptr<QueryExecutionTree>> pushDownBindToAnyChild(
       const parsedQuery::Bind& bind,
-      std::vector<std::shared_ptr<QueryExecutionTree>> children) const;
+      qlm::vector<std::shared_ptr<QueryExecutionTree>> children) const;
 
  private:
   //! Compute the result of the query-subtree rooted at this element..

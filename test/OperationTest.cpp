@@ -23,6 +23,7 @@
 #include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "global/RuntimeParameters.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
@@ -178,7 +179,7 @@ TEST(OperationTest, limitPushdownClonesOnlySharedChildren) {
 
   testPushdown([qec](auto children) {
     return std::make_unique<Sort>(qec, std::move(children.at(0)),
-                                  std::vector<ColumnIndex>{0});
+                                  colIndices({0}));
   });
   testPushdown([qec](auto children) {
     using namespace sparqlExpression;
@@ -382,8 +383,8 @@ TEST_F(OperationTestFixture, verifyCachePreventsInProgressState) {
 TEST_F(OperationTestFixture, getPrecomputedResultBecauseSiblingOfService) {
   // If a precomputedResult is set, it will be returned by `getResult`
   auto idTable = makeIdTableFromVector({{1, 6, 0}, {2, 5, 0}, {3, 4, 0}});
-  auto result = std::make_shared<const Result>(
-      idTable.clone(), std::vector<ColumnIndex>{0}, LocalVocab{});
+  auto result = std::make_shared<const Result>(idTable.clone(), colIndices({0}),
+                                               LocalVocab{});
   operation.precomputedResultBecauseSiblingOfService() =
       std::make_optional(result);
   EXPECT_EQ(operation.getResult(), result);
@@ -648,7 +649,7 @@ TEST(Operation, updateRuntimeInformationUpdatesOptimizedOutChildren) {
             ad_utility::makeExecutionTree<ValuesForTesting>(
                 qec, makeIdTableFromVector({{1}}),
                 std::vector<std::optional<Variable>>{Variable{"?x"}}),
-            {0}};
+            colIndices({0})};
   // The child of the `Sort` was optimized out, but its own child is only
   // computed afterwards.
   auto& childRti = sort.getChildren().at(0)->getRootOperation()->runtimeInfo();
@@ -1226,8 +1227,8 @@ TEST(OperationTest, isDeterministicPropagatesFromChildren) {
   EXPECT_FALSE(randBindTree->getRootOperation()->isDeterministic());
 
   // Wrapping it in a Sort still yields non-deterministic.
-  auto sortedTree = ad_utility::makeExecutionTree<Sort>(
-      qec, randBindTree, std::vector<ColumnIndex>{});
+  auto sortedTree =
+      ad_utility::makeExecutionTree<Sort>(qec, randBindTree, colIndices({}));
   EXPECT_FALSE(sortedTree->getRootOperation()->isDeterministic());
 }
 

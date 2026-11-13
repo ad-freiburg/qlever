@@ -84,7 +84,9 @@ bool Describe::knownEmptyResult() { return false; }
 
 // The result cannot easily be sorted, as it involves recursive expanding of
 // graphs.
-std::vector<ColumnIndex> Describe::resultSortedOn() const { return {}; }
+qlm::vector<ColumnIndex> Describe::resultSortedOn() const {
+  return qlm::vector<ColumnIndex>{allocator()};
+}
 
 // The result always has three variables `?subject`, `?predicate`, `?object`.
 //
@@ -173,7 +175,7 @@ IdTable Describe::makeAndExecuteJoinWithFullIndex(
       VariableToColumnMap{
           {subjectVar,
            ColumnIndexAndTypeInfo{0, ColumnIndexAndTypeInfo::AlwaysDefined}}},
-      std::vector<ColumnIndex>{}, LocalVocab{},
+      qlm::vector<ColumnIndex>{allocator()}, LocalVocab{},
       absl::StrCat("INTERNAL DESCRIBE ", uniqueCounter++));
   SparqlTripleSimple triple{subjectVar, V{"?predicate"}, V{"?object"}};
   auto activeGraphs = describe_.datasetClauses_.activeDefaultGraphs();

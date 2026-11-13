@@ -17,9 +17,10 @@
 #include "util/Generator.h"
 #include "util/IoUringManager.h"
 #include "util/Iterators.h"
-#include "util/Serializer/Serializer.h"
+#include "util/ThreadLocalMember.h"
 #include "util/ThreadSafeQueue.h"
 #include "util/UninitializedAllocator.h"
+#include "util/serializer/Serializer.h"
 
 // On-disk vocabulary of strings. Each entry is a pair of <ID, String>. The IDs
 // are ascending, but not (necessarily) contiguous. If the strings are sorted,
@@ -41,10 +42,12 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   // The number of words stored in the vocabulary.
   size_t size_ = 0;
 
-  // A unique id of this vocabulary, assigned by `open`. Identifies the
-  // vocabulary in the read-ahead of `operator[]`; unlike the address, it is
-  // never reused.
-  uint64_t id_ = 0;
+  // The read-ahead state of `operator[]` (see below), one per thread. It is
+  // created by `open`, s.t. reopening a vocabulary discards all cached words.
+  // It is held via a pointer, because a `ThreadLocalMember` cannot be moved.
+  struct ReadAheadState;
+  std::unique_ptr<ad_utility::ThreadLocalMember<ReadAheadState>>
+      readAheadStates_;
 
   // Pool of persistent `BatchIoManager`s for `lookupBatch`.
   mutable std::unique_ptr<ad_utility::data_structures::ThreadSafeQueue<
@@ -135,11 +138,14 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   size_t size() const { return size_; }
 
   // Default constructor for an empty vocabulary.
-  VocabularyOnDisk() = default;
+  VocabularyOnDisk();
 
-  // `VocabularyOnDisk` is movable, but not copyable.
-  VocabularyOnDisk(VocabularyOnDisk&&) noexcept = default;
-  VocabularyOnDisk& operator=(VocabularyOnDisk&&) noexcept = default;
+  // `VocabularyOnDisk` is movable, but not copyable. The special member
+  // functions are defined in the `.cpp` file, where `ReadAheadState` is a
+  // complete type.
+  VocabularyOnDisk(VocabularyOnDisk&&) noexcept;
+  VocabularyOnDisk& operator=(VocabularyOnDisk&&) noexcept;
+  ~VocabularyOnDisk();
 
   // The offset of a word in `file_` and its size in number of bytes.
   struct OffsetAndSize {
@@ -199,14 +205,12 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   // Read the word at the `idx` with two small reads (its offsets and its data).
   std::string readWord(uint64_t idx) const;
 
-  // The read-ahead state of `operator[]` for a single thread, defined and used
-  // only in the `.cpp` file.
-  //
-  // NOTE: It is a nested class and not a class in an anonymous namespace of the
-  // `.cpp` file, because a nested class is a member of `VocabularyOnDisk` and
-  // can therefore use its private members (`id_`, `readWord`,
+  // NOTE: `ReadAheadState` (declared above), the read-ahead state of
+  // `operator[]` for a single thread, is defined and used only in the `.cpp`
+  // file. It is a nested class and not a class in an anonymous namespace of
+  // the `.cpp` file, because a nested class is a member of `VocabularyOnDisk`
+  // and can therefore use its private members (`readWord`,
   // `readConsecutiveOffsets`, `readConsecutiveWordBatch`).
-  struct ReadAheadState;
 
   // Helper for `scanAll`: return a lazy input range that reads the word offsets
   // from the `.offsets` file in batches of at most

@@ -13,9 +13,9 @@
 #include "engine/sparqlExpressions/ExistsExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/ChunkedForLoop.h"
-#include "util/JoinAlgorithms/IndexNestedLoopJoin.h"
-#include "util/JoinAlgorithms/JoinAlgorithms.h"
 #include "util/VectorWithMemoryLimit.h"
+#include "util/joinAlgorithms/IndexNestedLoopJoin.h"
+#include "util/joinAlgorithms/JoinAlgorithms.h"
 
 // _____________________________________________________________________________
 ExistsJoin::ExistsJoin(QueryExecutionContext* qec,
@@ -75,7 +75,7 @@ size_t ExistsJoin::getResultWidth() const {
 }
 
 // ____________________________________________________________________________
-std::vector<ColumnIndex> ExistsJoin::resultSortedOn() const {
+qlm::vector<ColumnIndex> ExistsJoin::resultSortedOn() const {
   if (rightIndexNestedLoopJoinIsPossible()) {
     return left_->getRootOperation()->getChildren().at(0)->resultSortedOn();
   }
@@ -88,12 +88,12 @@ std::optional<std::shared_ptr<QueryExecutionTree>>
 ExistsJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   // The `BIND` can only be pushed into the left child, as only its columns are
   // part of the result.
-  return pushDownBindToChild(bind, {left_, right_}, 0);
+  return pushDownBindToChild(bind, {{left_, right_}, allocator()}, 0);
 }
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> ExistsJoin::cloneWithNewChildren(
-    std::vector<std::shared_ptr<QueryExecutionTree>> children) const {
+    qlm::vector<std::shared_ptr<QueryExecutionTree>> children) const {
   return std::make_unique<ExistsJoin>(
       _executionContext, std::move(children.at(0)), std::move(children.at(1)),
       existsVariable_);

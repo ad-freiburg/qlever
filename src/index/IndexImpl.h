@@ -52,11 +52,11 @@
 #include "util/File.h"
 #include "util/Forward.h"
 #include "util/Iterators.h"
-#include "util/MemorySize/MemorySize.h"
 #include "util/ProgressBar.h"
 #include "util/RegexSet.h"
 #include "util/TransparentFunctors.h"
 #include "util/json.h"
+#include "util/memorySize/MemorySize.h"
 
 // Forward declaration, see `PartialVocabularyBuilder.h`.
 namespace qlever::partialVocabularyBuilder {
@@ -149,6 +149,11 @@ class IndexImpl {
   // triples.
   ad_utility::HasWordNormalization hasWordNormalization_{
       ad_utility::HasWordNormalization::Lowercase};
+
+  // If not empty, the `ql:has-word` triples are only added for literals that
+  // are the object of a triple with one of these predicates (IRIs in the format
+  // of `Iri::toStringRepresentation`, sorted and without duplicates).
+  std::vector<std::string> hasWordRestrictPredicates_;
 
   size_t numTriplesPerBatch_ = NUM_TRIPLES_PER_PARTIAL_VOCAB;
 
@@ -453,6 +458,10 @@ class IndexImpl {
     hasWordNormalization_ = normalization;
   }
 
+  // Set the `hasWordRestrictPredicates_`. Throw if one of them is not a valid
+  // IRI in angle brackets.
+  void setHasWordRestrictPredicates(const std::vector<std::string>& predicates);
+
   // __________________________________________________________________________
   NumNormalAndInternal numDistinctSubjects() const;
 
@@ -603,6 +612,8 @@ class IndexImpl {
   bool& loadAllPermutations();
 
   bool& addHasWordTriples();
+
+  bool addHasWordTriples() const;
 
   bool& doNotLoadPermutations();
 
@@ -847,8 +858,7 @@ class IndexImpl {
   // `permutation` specifies which permutation to write.
   // `internal` specifies whether this is an internal permutation and adjusts
   // the filename of the generated file on disk accordingly.
-  // The blocks are compressed and written on the `executor`, by at most
-  // `rebuild-permutation-writer-num-threads` threads at the same time.
+  // The blocks are compressed and written on the `executor`.
   // Return the number of distinct values on the first column of the written
   // permutation. (Predicates for PSO/POS, Subjects for SPO/SOP, Objects for
   // OSP/OPS) and the metadata for the written permutation.
@@ -932,6 +942,7 @@ class IndexImpl {
   FRIEND_TEST(IndexImpl, loadConfigFromOldIndex);
   FRIEND_TEST(IndexImpl, dateOfIndexBuild);
   FRIEND_TEST(IndexImpl, hasWordNormalizationOfBuiltAndLoadedIndex);
+  FRIEND_TEST(IndexImpl, hasWordRestrictPredicatesOfBuiltAndLoadedIndex);
 
   bool isLiteral(std::string_view object) const;
 
@@ -943,6 +954,27 @@ class IndexImpl {
   //    together with their term frequencies
   // 3. If the IRI or literal can be encoded directly into an `Id`, do so
   ProcessedTriple processTriple(TurtleTriple&& triple) const;
+
+  // Return the distinct words of the `content` of a literal together with their
+  // term frequencies. These are the words of the `ql:has-word` triples of the
+  // literal, normalized according to `hasWordNormalization_`.
+  ad_utility::HashMap<std::string, size_t> computeHasWordFrequencies(
+      std::string_view content) const;
+
+  // Return true if the `ql:has-word` triples are added for the literals that
+  // are the object of a triple with the predicate returned by `getPredicate`
+  // (in the format of `Iri::toStringRepresentation`), see
+  // `hasWordRestrictPredicates_`.
+  //
+  // NOTE: `getPredicate` is only called if the `ql:has-word` triples are
+  // restricted to certain predicates, so that the predicate is decoded only
+  // when needed.
+  template <typename GetPredicate>
+  bool hasWordTriplesForPredicate(const GetPredicate& getPredicate) const {
+    return hasWordRestrictPredicates_.empty() ||
+           ql::ranges::binary_search(hasWordRestrictPredicates_,
+                                     getPredicate());
+  }
 
  protected:
   /**
@@ -1121,9 +1153,8 @@ class IndexImpl {
                             const IdTable& table);
 
   // Recompute the statistics about the index based on the passed located
-  // triples shared state. The permutations are scanned on the `executor`, each
-  // scan by at most `rebuild-index-scan-num-threads` threads at the
-  // same time. `progress` is called (possibly from several threads) with the
+  // triples shared state. The permutations are scanned on the `executor`.
+  // `progress` is called (possibly from several threads) with the
   // number of newly scanned rows; this is used by the index rebuild for
   // progress reporting and defaults to a no-op.
   nlohmann::json recomputeStatistics(

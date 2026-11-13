@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "backports/algorithm.h"
+#include "engine/idTable/IdColumnByteIO.h"
 #include "engine/idTable/IdTable.h"
 #include "util/CompressedBlockFile.h"
 #include "util/Exception.h"
@@ -59,10 +60,11 @@ BlockMetadata writeBlock(CompressedBlockFile& file, const Table& table,
   metadata.numRows_ = endRow - beginRow;
   metadata.columns_.reserve(table.numColumns());
   for (const auto& column : table.getColumns()) {
-    static_assert(sizeof(column[0]) == BYTES_PER_ID_COLUMN_ENTRY);
     metadata.columns_.push_back(
-        file.appendBlock(column.data() + beginRow,
-                         (endRow - beginRow) * BYTES_PER_ID_COLUMN_ENTRY));
+        idColumnByteIO::encode(column.subspan(beginRow, endRow - beginRow),
+                               [&file](const auto& chunks) {
+                                 return file.appendBlockFromChunks(chunks);
+                               }));
   }
   return metadata;
 }
@@ -82,7 +84,10 @@ IdTableStatic<NumCols> readBlock(const CompressedBlockFile& file,
   for (auto [columnMetadata, column] :
        ::ranges::views::zip(metadata.columns_, block.getColumns())) {
     AD_CORRECTNESS_CHECK(column.size() == metadata.numRows_);
-    file.readBlock(columnMetadata, column.data());
+    idColumnByteIO::decode(
+        column, [&file, &columnMetadata = columnMetadata](const auto& buffers) {
+          file.readBlockIntoChunks(columnMetadata, buffers);
+        });
   }
   return block;
 }

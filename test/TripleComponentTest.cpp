@@ -91,6 +91,30 @@ TEST(TripleComponent, setAndGetId) {
   ASSERT_EQ(tcConst.getId(), id);
 }
 
+// Test that a `TripleComponent` constructed from a `LiteralOrIri` holds the
+// contained `Iri` or `Literal`.
+TEST(TripleComponent, constructFromLiteralOrIri) {
+  using ad_utility::triple_component::LiteralOrIri;
+  TripleComponent iri{LiteralOrIri::fromStringRepresentation("<x>")};
+  ASSERT_TRUE(iri.isIri());
+  EXPECT_EQ(iri.getIri().toStringRepresentation(), "<x>");
+
+  TripleComponent literal{LiteralOrIri::fromStringRepresentation("\"abc\"@en")};
+  ASSERT_TRUE(literal.isLiteral());
+  EXPECT_EQ(literal.getLiteral().toStringRepresentation(), "\"abc\"@en");
+}
+
+// Test that `getNumber` returns the value of an integer or a double (also as an
+// `Id`), and `std::nullopt` for every other value.
+TEST(TripleComponent, getNumber) {
+  EXPECT_EQ(TripleComponent{-42}.getNumber(), -42.0);
+  EXPECT_EQ(TripleComponent{0.5}.getNumber(), 0.5);
+  EXPECT_EQ(TripleComponent{I(-42)}.getNumber(), -42.0);
+  EXPECT_EQ(TripleComponent{D(0.5)}.getNumber(), 0.5);
+  EXPECT_EQ(TripleComponent{lit("\"500\"")}.getNumber(), std::nullopt);
+  EXPECT_EQ(TripleComponent{Id::makeFromBool(true)}.getNumber(), std::nullopt);
+}
+
 TEST(TripleComponent, assignmentOperator) {
   TripleComponent object;
   object = -12.435;
