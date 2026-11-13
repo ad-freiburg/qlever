@@ -205,7 +205,7 @@ std::optional<std::vector<p::Bind>> getConstantBinds(
 // NOTE: The Cartesian product would copy all rows of the remaining subtree,
 // while a `Bind` only adds a column to them.
 std::optional<std::shared_ptr<QueryExecutionTree>> addConstantsAsColumns(
-    const std::vector<std::shared_ptr<QueryExecutionTree>>& subtrees) {
+    const CartesianProductJoin::Children& subtrees) {
   // Split the `subtrees` into the `BIND`s of the constants and the single
   // remaining subtree, return `std::nullopt` if there is no such split.
   std::vector<p::Bind> binds;
