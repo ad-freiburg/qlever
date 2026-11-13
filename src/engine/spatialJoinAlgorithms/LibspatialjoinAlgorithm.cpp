@@ -452,8 +452,7 @@ Result LibspatialjoinAlgorithm::run() {
   // first geometry from the left and the second from the right side (QLever's
   // callbacks rely on this, see #3068).
   ad_utility::Timer tSweep{ad_utility::Timer::Started};
-  // The check for empty children is required to mitigate a libspatialjoin bug,
-  // but also for performance reasons.
+  // Skip the sweep if one side has no valid geometry (it cannot have a result).
   if (nonEmptyChildren) {
     sj::Sweeper sweeper(sweeperCfg, &cache);
     sweeper.sweep(&events[0], &events[1]);

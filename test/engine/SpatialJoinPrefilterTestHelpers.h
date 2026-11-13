@@ -293,8 +293,8 @@ inline void runParsingAndSweeper(
         numGeomInvalidLeft, numThreadsLeft, storedRowsLeft] =
       sjAlgo.parse({prepared.idTableLeft_, prepared.leftJoinCol_, std::nullopt},
                    {store, storeId, std::nullopt, eventsLeft}, 1, std::nullopt);
-  // Due to problems in `Sweeper` when a side is empty, we don't use
-  // `store.setFilterBox(box);` here.
+  // Only the prefilter of the parser is tested here, so the filter box of the
+  // store (see `LibspatialjoinAlgorithm::run`) is not set.
 
   // Run second parsing step (right side)
   std::optional<util::geo::I32Box> prefilterBox = std::nullopt;
@@ -310,6 +310,8 @@ inline void runParsingAndSweeper(
   store.flush();
   eventsLeft.finalize(1);
   eventsRight.finalize(1);
+  eventsLeft.duplicatesToReferences(cache);
+  eventsRight.duplicatesToReferences(cache);
 
   // Check counters
   size_t numSkipped = numGeomDroppedLeft + numGeomDroppedRight;
