@@ -15,7 +15,7 @@
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/CompactStringVector.h"
 #include "util/Exception.h"
-#include "util/Serializer/Serializer.h"
+#include "util/serializer/Serializer.h"
 
 //! A vocabulary. Wraps a `CompactVectorOfStrings<char>`
 //! and provides additional methods for reading and writing to/from file,
@@ -47,7 +47,7 @@ class VocabularyInMemory
 
   // Build a vocabulary as a non-owning, zero-copy view directly into the
   // buffer of `serializer`, which must support zero-copy deserialization
-  // (see `ZeroCopyReadSerializer` in `util/Serializer/Serializer.h`). The
+  // (see `ZeroCopyReadSerializer` in `util/serializer/Serializer.h`). The
   // returned vocabulary is only valid as long as the memory backing
   // `serializer`'s buffer is valid and unchanged.
   CPP_template(typename S)(

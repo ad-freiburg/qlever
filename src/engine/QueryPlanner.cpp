@@ -1864,12 +1864,10 @@ QueryPlanner::FiltersAndOptionalSubstitutes QueryPlanner::seedFilterSubstitutes(
 QueryPlanner::FiltersAndOptionalSubstitutes
 QueryPlanner::wrapFiltersWithoutSubstitutes(
     const std::vector<SparqlFilter>& filters) const {
-  FiltersAndOptionalSubstitutes plans{allocator()};
-  plans.reserve(filters.size());
-  for (const auto& filter : filters) {
-    plans.push_back({filter, std::nullopt});
-  }
-  return plans;
+  return filters | ql::views::transform([](const auto& filter) {
+           return FilterAndOptionalSubstitute{filter, std::nullopt};
+         }) |
+         ::ranges::to<qlm::vector>(allocator());
 }
 
 // _____________________________________________________________________________

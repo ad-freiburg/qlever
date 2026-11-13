@@ -28,7 +28,7 @@
 #include "index/vocabulary/EncodedIriManager.h"
 #include "index/vocabulary/EncodedIriPattern.h"
 #include "util/Executor.h"
-#include "util/MemorySize/MemorySize.h"
+#include "util/memorySize/MemorySize.h"
 
 // Several useful functions to quickly set up an `Index` and a
 // `QueryExecutionContext` that store a small example knowledge graph. Those can
@@ -187,8 +187,9 @@ struct TestIndexConfig {
       contentsOfWordsFileAndDocsfile, parserBufferSize, scoringMetric,
       bAndKParam, indexType, vocabularyType,
       encodedPrefixesWithoutAngleBrackets, encodedIriPatterns,
-      addHasWordTriples, hasWordRestrictPredicates, secondaryVocabWords,
-      numThreads, parseInParallel, additionalSettings, geoPointEncoding)
+      addHasWordTriples, hasWordNormalization, hasWordRestrictPredicates,
+      secondaryVocabWords, numThreads, parseInParallel, additionalSettings,
+      geoPointEncoding)
 };
 
 // Create a test index at the given `indexBasename` and with the given `config`.

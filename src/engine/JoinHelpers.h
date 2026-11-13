@@ -27,8 +27,8 @@
 #include "util/Generators.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
-#include "util/JoinAlgorithms/JoinColumnMapping.h"
 #include "util/TypeTraits.h"
+#include "util/joinAlgorithms/JoinColumnMapping.h"
 
 namespace qlever::joinHelpers {
 

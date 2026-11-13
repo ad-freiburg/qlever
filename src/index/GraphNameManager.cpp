@@ -10,7 +10,7 @@
 #include "index/GraphNameManager.h"
 
 #include "backports/filesystem.h"
-#include "util/Serializer/FileSerializer.h"
+#include "util/serializer/FileSerializer.h"
 
 // _____________________________________________________________________________
 GraphNameManager::GraphNameManager(std::string prefixWithoutBraces,

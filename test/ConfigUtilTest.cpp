@@ -4,9 +4,9 @@
 
 #include <gtest/gtest.h>
 
-#include "util/ConfigManager/ConfigUtil.h"
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"
+#include "util/configManager/ConfigUtil.h"
 #include "util/json.h"
 
 TEST(ConfigUtilTest, isNameInShortHand) {

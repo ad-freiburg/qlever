@@ -19,7 +19,7 @@
 #include "engine/NamedResultCache.h"
 #include "engine/NamedResultCacheSerializer.h"
 #include "index/LocalVocabEntry.h"
-#include "util/Serializer/ByteBufferSerializer.h"
+#include "util/serializer/ByteBufferSerializer.h"
 
 using namespace ad_utility::serialization;
 using ad_utility::testing::colIndices;
