@@ -17,8 +17,8 @@
 #include "backports/algorithm.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
-#include "util/MemorySize/MemorySize.h"
 #include "util/NoCopyNoMove.h"
+#include "util/memorySize/MemorySize.h"
 #include "util/parallelBlockMerge/RunsInputPolicy.h"
 
 namespace ad_utility::parallelBlockMerge {

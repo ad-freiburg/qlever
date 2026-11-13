@@ -10,8 +10,11 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <range/v3/range/conversion.hpp>
+#include <type_traits>
 #include <vector>
 
+#include "backports/algorithm.h"
 #include "backports/concepts.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/GTestHelpers.h"
@@ -105,4 +108,13 @@ TEST(VectorWithMemoryLimit, memoryLimitIsEnforced) {
   // Allocate 16 bytes -> fails (allocate before freeing the old 8).
   EXPECT_THROW(v.push_back(1),
                ad_utility::detail::AllocationExceedsLimitException);
+}
+
+// Test that `::ranges::to<VectorWithMemoryLimit>` deduces the element type,
+// also when the allocator is for a different element type.
+TEST(VectorWithMemoryLimit, rangesToDeducesElementType) {
+  auto v = ql::views::iota(int64_t{3}, int64_t{6}) |
+           ::ranges::to<VectorWithMemoryLimit>(makeAllocator<char>(1_MB));
+  static_assert(std::is_same_v<decltype(v), VectorWithMemoryLimit<int64_t>>);
+  EXPECT_THAT(v, ::testing::ElementsAre(3, 4, 5));
 }

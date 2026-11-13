@@ -22,7 +22,7 @@
 #include "index/GraphComputation.h"
 #include "index/compressedRelationWriter/CompressedRelationHelpersImpl.h"
 #include "index/compressedRelationWriter/CompressedRelationPermutationWriterImpl.h"
-#include "util/CompressionUsingZstd/ZstdWrapper.h"
+#include "util/compressionUsingZstd/ZstdWrapper.h"
 #include "util/views/AsyncTransformView.h"
 
 // ____________________________________________________________________________

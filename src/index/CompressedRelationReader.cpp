@@ -24,11 +24,11 @@
 #include "index/LocatedTriples.h"
 #include "index/compressedRelationWriter/CompressedRelationWriter.h"
 #include "util/Algorithm.h"
-#include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/HashSet.h"
 #include "util/Iterators.h"
 #include "util/Timer.h"
 #include "util/Views.h"
+#include "util/compressionUsingZstd/ZstdWrapper.h"
 #include "util/views/AsyncTransformView.h"
 
 using namespace std::chrono_literals;

@@ -29,14 +29,12 @@
 #include "engine/idTable/IdTable.h"
 #include "util/AsyncStream.h"
 #include "util/CancellationHandle.h"
-#include "util/CompressionUsingZstd/ZstdContext.h"
 #include "util/ExceptionHandling.h"
 #include "util/File.h"
 #include "util/GlobalExecutor.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
 #include "util/Log.h"
-#include "util/MemorySize/MemorySize.h"
 #include "util/NoCopyNoMove.h"
 #include "util/ParallelExecutor.h"
 #include "util/Synchronized.h"
@@ -44,6 +42,8 @@
 #include "util/UniqueCleanup.h"
 #include "util/Views.h"
 #include "util/blockSort/BlockIndirectSort.h"
+#include "util/compressionUsingZstd/ZstdContext.h"
+#include "util/memorySize/MemorySize.h"
 #include "util/parallelBlockMerge/ParallelBlockMerge.h"
 #include "util/views/ChunkedIotaView.h"
 
@@ -263,12 +263,10 @@ class CompressedExternalIdTableWriter {
   template <size_t N = 0>
   std::vector<InputRangeTypeErased<IdTableStatic<N>>> getAllGenerators() {
     file_.wlock()->flush();
-    std::vector<InputRangeTypeErased<IdTableStatic<N>>> result;
-    result.reserve(startOfSingleIdTables_.size());
-    for (auto i : ql::views::iota(0u, startOfSingleIdTables_.size())) {
-      result.push_back(makeGeneratorForIdTable<N>(i));
-    }
-    return result;
+    return ad_utility::integerRange(startOfSingleIdTables_.size()) |
+           ql::views::transform(
+               [this](size_t i) { return makeGeneratorForIdTable<N>(i); }) |
+           ::ranges::to_vector;
   }
 
   // The number of `IdTable`s (= presorted runs) that have been written.

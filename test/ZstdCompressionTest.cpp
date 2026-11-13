@@ -11,9 +11,9 @@
 
 #include "../test/util/GTestHelpers.h"
 #include "util/CompilerWarnings.h"
-#include "util/CompressionUsingZstd/ZstdContext.h"
-#include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/Random.h"
+#include "util/compressionUsingZstd/ZstdContext.h"
+#include "util/compressionUsingZstd/ZstdWrapper.h"
 #include "util/jthread.h"
 
 using ::testing::HasSubstr;

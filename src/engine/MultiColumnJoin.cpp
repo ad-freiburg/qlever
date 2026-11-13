@@ -10,7 +10,7 @@
 #include "engine/JoinHelpers.h"
 #include "global/Constants.h"
 #include "index/IdTableUtils.h"
-#include "util/JoinAlgorithms/JoinAlgorithms.h"
+#include "util/joinAlgorithms/JoinAlgorithms.h"
 
 using std::endl;
 using std::string;
@@ -208,8 +208,7 @@ void MultiColumnJoin::computeSizeEstimateAndMultiplicities() {
 // _______________________________________________________________________
 void MultiColumnJoin::computeMultiColumnJoin(
     const IdTableView<0>& left, const IdTableView<0>& right,
-    const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
-    IdTable* result) {
+    ql::span<const std::array<ColumnIndex, 2>> joinColumns, IdTable* result) {
   // check for trivial cases
   if (left.empty() || right.empty()) {
     return;
@@ -329,12 +328,12 @@ bool MultiColumnJoin::columnOriginatesFromGraphOrUndef(
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 MultiColumnJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
-  return pushDownBindToAnyChild(bind, {_left, _right});
+  return pushDownBindToAnyChild(bind, {{_left, _right}, allocator()});
 }
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> MultiColumnJoin::cloneWithNewChildren(
-    std::vector<std::shared_ptr<QueryExecutionTree>> children) const {
+    qlm::vector<std::shared_ptr<QueryExecutionTree>> children) const {
   return std::make_unique<MultiColumnJoin>(
       _executionContext, std::move(children.at(0)), std::move(children.at(1)));
 }

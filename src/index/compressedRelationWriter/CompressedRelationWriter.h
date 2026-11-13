@@ -32,15 +32,15 @@
 #include "index/KeyOrder.h"
 #include "index/compressedRelationWriter/SmallRelationsBlockBuilder.h"
 #include "util/AllocatorWithLimit.h"
-#include "util/CompressionUsingZstd/ZstdContext.h"
 #include "util/Executor.h"
 #include "util/File.h"
 #include "util/Iterators.h"
-#include "util/MemorySize/MemorySize.h"
 #include "util/RecyclingPool.h"
 #include "util/Synchronized.h"
 #include "util/TaskQueueOnExecutor.h"
 #include "util/Timer.h"
+#include "util/compressionUsingZstd/ZstdContext.h"
+#include "util/memorySize/MemorySize.h"
 
 // The writer of a single chunk of a parallel merge and the state that all such
 // writers share (see `index/chunkwisePermutationWriter/ChunkWriter.h`), and the

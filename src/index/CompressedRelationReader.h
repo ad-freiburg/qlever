@@ -32,12 +32,12 @@
 #include "parser/data/LimitOffsetClause.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/CancellationHandle.h"
-#include "util/CompressionUsingZstd/ZstdContext.h"
 #include "util/Executor.h"
 #include "util/File.h"
 #include "util/Generator.h"
 #include "util/HashSet.h"
 #include "util/Iterators.h"
+#include "util/compressionUsingZstd/ZstdContext.h"
 
 class LocatedTriplesPerBlock;
 

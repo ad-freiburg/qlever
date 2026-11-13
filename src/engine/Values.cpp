@@ -105,6 +105,12 @@ void Values::computeMultiplicities() {
     multiplicities_.resize(1, 1);
     return;
   }
+  if (parsedValues_._values.empty()) {
+    // If there are variables but no rows, every column gets multiplicity 1 (the
+    // general formula below would divide zero rows by zero distinct values).
+    multiplicities_.resize(parsedValues_._variables.size(), 1);
+    return;
+  }
   multiplicities_.resize(parsedValues_._variables.size());
   ad_utility::HashSet<TripleComponent> distinctValues;
   size_t numValues = parsedValues_._values.size();
