@@ -19,9 +19,9 @@
 #include <tuple>
 #include <vector>
 
-#include "./vocabulary_merger/VocabularyMergerTestHelpers.h"
+#include "./vocabularyMerger/VocabularyMergerTestHelpers.h"
 #include "index/ConstantsIndexBuilding.h"
-#include "index/vocabulary_merger/PartialVocabularyFile.h"
+#include "index/vocabularyMerger/PartialVocabularyFile.h"
 #include "util/parallelBlockMerge/InMemoryBlockStorage.h"
 #include "util/parallelBlockMerge/ParallelBlockMerge.h"
 #include "util/parallelBlockMerge/RunsInputPolicy.h"

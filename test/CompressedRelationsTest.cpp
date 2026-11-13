@@ -30,8 +30,8 @@
 #include "util/LocalVocabEntryTestHelpers.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/RuntimeParametersTestHelpers.h"
-#include "util/Serializer/ByteBufferSerializer.h"
 #include "util/SourceLocation.h"
+#include "util/serializer/ByteBufferSerializer.h"
 
 // Multi-threaded, to exercise the concurrency of the tested code.
 static constexpr auto executor = &ad_utility::testing::multiThreadExecutor;
@@ -1835,7 +1835,8 @@ TEST(CompressedRelationReader, ensureDummyBlockWith6ColumnsDoesntCauseIssues) {
       [cancellationHandle, &index](DeltaTriples& deltaTriples) {
         LocalVocabEntry entry = ad_utility::testing::iriLocalVocabEntry(
             "<zzz>", index.getLocalVocabContext());
-        Id id = Id::makeFromLocalVocabIndex(&entry);
+        auto getLocalVocabId = ad_utility::testing::makeGetLocalVocabId();
+        Id id = getLocalVocabId(entry);
         // Insert a single triple at the end.
         deltaTriples.insertTriples(cancellationHandle,
                                    {IdTriple{{id, id, id, id}}});

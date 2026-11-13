@@ -18,8 +18,8 @@
 #include "index/chunkwisePermutationWriter/Options.h"
 #include "index/compressedRelationWriter/CompressedRelationHelpersImpl.h"
 #include "index/compressedRelationWriter/CompressedRelationWriter.h"
-#include "util/MemorySize/MemorySize.h"
 #include "util/NoCopyNoMove.h"
+#include "util/memorySize/MemorySize.h"
 
 namespace chunkwisePermutationWriter {
 
