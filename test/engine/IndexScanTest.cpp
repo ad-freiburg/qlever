@@ -1074,12 +1074,13 @@ TEST(IndexScan, checkEvaluationWithPrefilteringOnSeveralChunks) {
   auto& index = const_cast<Index&>(qec->getIndex());
   auto getId = ad_utility::testing::makeGetId(index);
   index.deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
-    LocalVocabEntry p0 = LocalVocabEntry::fromIriref(
-        "<P0>", index.getImpl().getLocalVocabContext());
+    LocalVocab localVocab;
+    Id p0 = Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
+        iriLocalVocabEntry("<P0>", index.getLocalVocabContext())));
     deltaTriples.insertTriples(
         std::make_shared<ad_utility::CancellationHandle<>>(),
-        {IdTriple{{Id::makeFromLocalVocabIndex(&p0), getId("<price_tag>"), I(0),
-                   qlever::specialIds().at(DEFAULT_GRAPH_IRI)}}});
+        {IdTriple<>{{p0, getId("<price_tag>"), I(0),
+                     qlever::specialIds().at(DEFAULT_GRAPH_IRI)}}});
   });
   qec->setLocatedTriplesForEvaluation(
       index.deltaTriplesManager().getCurrentLocatedTriplesSharedState());

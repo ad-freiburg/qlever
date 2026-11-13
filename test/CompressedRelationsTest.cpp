@@ -1687,9 +1687,10 @@ TEST(CompressedRelationReader, getResultSizeOfScanIsCancellable) {
   ASSERT_EQ(blocks.size(), 3);
   auto locatedTriples = makeLocatedTriplesPerBlock(
       blocks, {IdTriple<>{{V(1), V(0), V(17), g}}}, true);
+  auto augmentedMetadata = locatedTriples.getAugmentedMetadataForTesting();
   CompressedRelationReader::ScanSpecAndBlocks scanSpecAndBlocks{
       ScanSpecification{V(1), std::nullopt, std::nullopt},
-      getBlockMetadataRangesfromVec(locatedTriples.getAugmentedMetadata())};
+      getBlockMetadataRangesfromVec(augmentedMetadata)};
 
   // With a handle that is not cancelled, the inserted triple is counted.
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
