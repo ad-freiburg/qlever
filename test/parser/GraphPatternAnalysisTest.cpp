@@ -95,8 +95,7 @@ TEST(BasicGraphPatternsInvariantToTest, NotInvariant) {
   SparqlTripleSimple example{Variable{"?s"}, Variable{"?p"}, Variable{"?o"}};
   auto triple = SparqlTriple::fromSimple(example);
   auto allocator = ad_utility::testing::makeAllocator();
-  parsedQuery::BasicGraphPattern bgp{
-      qlm::vector<SparqlTriple>{{triple}, allocator}};
+  parsedQuery::BasicGraphPattern bgp{{{triple}, allocator}};
   EXPECT_FALSE(invariantTo(bgp));
 
   parsedQuery::Optional optional{parsedQuery::GraphPattern{allocator}};

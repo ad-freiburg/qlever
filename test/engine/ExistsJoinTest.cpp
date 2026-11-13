@@ -845,10 +845,10 @@ TEST(ExistsJoin, addExistsJoinsToSubtreeDoesntCollideForHiddenVariables) {
 
   ParsedQuery query;
   query._rootGraphPattern._graphPatterns.push_back(
-      parsedQuery::BasicGraphPattern{qlm::vector<SparqlTriple>{
-          {SparqlTriple{TripleComponent{Variable{"?a"}}, iri("<something>"),
-                        TripleComponent{Variable{"?b"}}}},
-          qec->getAllocator()}});
+      parsedQuery::BasicGraphPattern{
+          {{SparqlTriple{TripleComponent{Variable{"?a"}}, iri("<something>"),
+                         TripleComponent{Variable{"?b"}}}},
+           qec->getAllocator()}});
   // Only add ?a (and select it via `*`, exactly as the parser does) to see if
   // ?b remains hidden.
   query.selectClause().setAsterisk();
@@ -880,10 +880,10 @@ TEST(ExistsJoin, addExistsJoinsToSubtreeSkipsAlreadyHandledExists) {
 
   ParsedQuery query;
   query._rootGraphPattern._graphPatterns.push_back(
-      parsedQuery::BasicGraphPattern{qlm::vector<SparqlTriple>{
-          {SparqlTriple{TripleComponent{Variable{"?a"}}, iri("<something>"),
-                        TripleComponent{Variable{"?b"}}}},
-          qec->getAllocator()}});
+      parsedQuery::BasicGraphPattern{
+          {{SparqlTriple{TripleComponent{Variable{"?a"}}, iri("<something>"),
+                         TripleComponent{Variable{"?b"}}}},
+           qec->getAllocator()}});
   // Select the visible variables via `*`, exactly as the parser does.
   query.selectClause().setAsterisk();
   query.selectClause().addVisibleVariable(Variable{"?a"});
@@ -916,10 +916,10 @@ TEST(ExistsJoin, cacheKeyDiffersForDifferentJoinColumns) {
 
   ParsedQuery query;
   query._rootGraphPattern._graphPatterns.push_back(
-      parsedQuery::BasicGraphPattern{qlm::vector<SparqlTriple>{
-          {SparqlTriple{TripleComponent{Variable{"?a"}}, iri("<something>"),
-                        TripleComponent{Variable{"?b"}}}},
-          qec->getAllocator()}});
+      parsedQuery::BasicGraphPattern{
+          {{SparqlTriple{TripleComponent{Variable{"?a"}}, iri("<something>"),
+                         TripleComponent{Variable{"?b"}}}},
+           qec->getAllocator()}});
 
   // Select the visible variables via `*`, exactly as the parser does.
   query.selectClause().setAsterisk();

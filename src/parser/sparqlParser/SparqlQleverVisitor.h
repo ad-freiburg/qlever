@@ -818,6 +818,16 @@ class SparqlQleverVisitor {
   const parsedQuery::DatasetClauses& setAndGetDatasetClauses(
       const std::vector<DatasetClause>& clauses);
 
+  // Make a `GraphPatternOperation` that matches all triples in the given graph.
+  GraphPatternOperation makeAllTripleGraphPattern(
+      TripleComponent::Iri graphIri) const;
+
+  // Make a `GraphPatternOperation` that matches all triples in either all
+  // graphs, or just named graphs, depending on the value of `behaviour`.
+  GraphPatternOperation makeAllTripleGraphPattern(
+      Variable graphVariable,
+      parsedQuery::GroupGraphPattern::GraphVariableBehaviour behaviour) const;
+
   // Construct a `ParsedQuery` that clears the given graph equivalent to
   // `DELETE WHERE { GRAPH graph { ?s ?p ?o } }`.
   ParsedQuery makeClear(const GraphRefAll& graph);
