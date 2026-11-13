@@ -29,7 +29,7 @@ sparqlExpression::GroupConcatExpression::evaluate(
       // TODO<joka921> Make this a configurable constant.
       result.reserve(20000);
       bool firstIteration = true;
-      for (auto& inp : generator) {
+      for (auto&& inp : generator) {
         auto literal = detail::LiteralValueGetterWithoutStrFunction{}(
             std::move(inp), context);
         if (firstIteration) {

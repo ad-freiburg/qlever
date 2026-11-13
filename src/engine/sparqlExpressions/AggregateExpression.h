@@ -48,11 +48,11 @@ inline auto getUniqueElements = [](const EvaluationContext* context,
   // see the duplicates that are skipped here, so we have to check here, too.
   return ad_utility::ForceInputView(
       std::move(operandGenerator) |
-      ::ranges::views::filter(
-          [set = std::move(uniqueHashSet), context](auto& operand) mutable {
-            context->cancellationHandle_->throwIfCancelled();
-            return set.insert(operand).second;
-          }));
+      ::ranges::views::filter([set = std::move(uniqueHashSet),
+                               context](const auto& operand) mutable {
+        context->cancellationHandle_->throwIfCancelled();
+        return set.insert(operand).second;
+      }));
 };
 
 // Class for a SPARQL expression that aggregates a given set of values to a

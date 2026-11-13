@@ -113,9 +113,11 @@ constexpr NumericType numericTypeForDatatype(Datatype type) {
 //
 // Count all datatypes in one pass over the column. Blocks aggregate repeated
 // histogram updates; the individual steps and their motivation are below.
-template <bool IncludeDates = false>
-inline NumericOperandClassification classifyNumericOperand(
-    ConstIdColumnRef values, const EvaluationContext* context) {
+CPP_template(bool IncludeDates = false, typename IdRange)(
+    requires ql::ranges::random_access_range<IdRange> &&
+    ad_utility::isSimilar<ql::ranges::range_value_t<IdRange>, Id>)
+inline NumericOperandClassification
+    classifyNumericValues(IdRange values, const EvaluationContext* context) {
   if (values.empty()) {
     return {};
   }
@@ -235,9 +237,11 @@ inline NumericOperandClassification classifyNumericOperand(
 
   if constexpr (ad_utility::isSimilar<OperandType, ValueId>) {
     return classifyNumericOperand<IncludeDates>(operand);
+  } else if constexpr (ql::ranges::contiguous_range<OperandType>) {
+    return classifyNumericValues<IncludeDates>(ql::span<const ValueId>{operand},
+                                               context);
   } else {
-    return classifyNumericOperand<IncludeDates>(
-        ConstIdColumnRef{operand.data(), operand.size()}, context);
+    return classifyNumericValues<IncludeDates>(operand, context);
   }
 }
 
