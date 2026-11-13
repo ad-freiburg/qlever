@@ -56,33 +56,25 @@
 // (small) consolidation step, which runs in order on the thread that drives
 // the merge:
 //
-// * Every chunk handles all the relations that start and end inside of it
-//   exactly like the classical writer does: small relations are batched into
-//   blocks of small relations, large relations are written as blocks of their
-//   own, and the twin of a large relation is sorted with a twin sorter that is
-//   private to the chunk (and that merges serially, in the thread of the
-//   chunk). The metadata of these relations is collected per chunk.
+// * Every chunk handles the relations that start and end inside of it exactly
+//   like the classical writer does (small relations are batched into shared
+//   blocks, large relations are written as blocks of their own, and the twin
+//   of a large relation is sorted by a twin sorter that is private to the
+//   chunk), and collects their metadata.
 // * The first and the last relation of a chunk may continue in the neighboring
-//   chunks, so the chunk returns them as a `BoundaryPart` (see `ChunkWriter.h`)
-//   instead of writing them: for a small part all the rows are kept in memory,
-//   for a large part the chunk writes the complete blocks in its middle
-//   directly and keeps only the rows before the first and after the last of
-//   those blocks in memory, together with its twin sorter. A relation may also
-//   span several complete chunks, each of which then consists of a single such
-//   part.
-// * The twin of a relation that crosses the boundaries of chunks needs the
-//   rows of all its parts, so a chunk doesn't merge the twin sorter of such a
-//   part, but only hands over its sorted runs on disk (see
-//   `BoundaryPart::twinRuns_`). The consolidation then sorts the complete twin
-//   with a single parallel merge over the runs of all the parts (see
-//   `BoundaryConsolidator::writeTwinOfBoundaryRelation`).
+//   chunks, so the chunk returns them as `BoundaryPart`s (see `ChunkWriter.h`)
+//   instead of writing them. A part keeps only the rows of its incomplete
+//   blocks in memory, and the sorted runs of its twin rows on disk (see
+//   `BoundaryPart::twinRuns_`). A relation may also span several complete
+//   chunks, each of which is then a single such part.
 // * The consolidation on the driving thread concatenates the parts of a
-//   relation in chunk order: the rows that two adjacent parts keep in memory
-//   are written as blocks (such that triples which are equal when disregarding
-//   the graph never end up in different blocks), the counts are folded, the
-//   twin rows of all the parts are merged with a single parallel merge over the
-//   runs of all their twin sorters, and the metadata of the relation is emitted
-//   at the right place in the sequence of all relations.
+//   relation in chunk order: it writes the rows that adjacent parts keep in
+//   memory as blocks (such that triples which are equal when disregarding the
+//   graph never end up in different blocks), folds the counts, sorts the
+//   complete twin with a single parallel merge over the runs of all the parts
+//   (see `BoundaryConsolidator::writeTwinOfBoundaryRelation`), and emits the
+//   metadata of the relation at the right place in the sequence of all
+//   relations.
 //
 // IMPORTANT: The callbacks that are invoked for the input blocks (see
 // `ConcurrentBlockCallback`) are invoked concurrently and in an arbitrary order

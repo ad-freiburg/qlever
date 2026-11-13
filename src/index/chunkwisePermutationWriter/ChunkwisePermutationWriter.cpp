@@ -84,9 +84,9 @@ std::shared_ptr<ChunkwisePermutationWriter> ChunkwisePermutationWriter::create(
 
 // _____________________________________________________________________________
 ChunkWriter& ChunkwisePermutationWriter::chunkWriter(size_t chunkIndex) {
-  // NOTE: The vector is never resized, and the slot of a
-  // chunk is only ever touched by the (single) operation of that chunk which
-  // is currently in flight, so no lock is needed here.
+  // NOTE: The vector is never resized, and the slot of a chunk is only ever
+  // touched by the (single) operation of that chunk which is currently in
+  // flight, so no lock is needed here.
   auto& writer = chunkWriters_.at(chunkIndex);
   if (writer == nullptr) {
     writer = std::make_unique<ChunkWriter>(context_, chunkIndex, numChunks_);
