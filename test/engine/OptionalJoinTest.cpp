@@ -29,7 +29,7 @@
 #include "engine/operation/NeutralOptional.h"
 #include "engine/operation/OptionalJoin.h"
 #include "index/TripleComponentConversions.h"
-#include "util/JoinAlgorithms/IndexNestedLoopJoin.h"
+#include "util/joinAlgorithms/IndexNestedLoopJoin.h"
 
 using ad_utility::testing::makeAllocator;
 using namespace ad_utility::testing;

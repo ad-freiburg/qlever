@@ -20,8 +20,8 @@
 #include "engine/operation/IndexScan.h"
 #include "engine/operation/Operation.h"
 #include "util/ContainersWithAllocator.h"
-#include "util/JoinAlgorithms/JoinColumnMapping.h"
 #include "util/TypeTraits.h"
+#include "util/joinAlgorithms/JoinColumnMapping.h"
 
 class JoinImpl : public Operation {
  private:

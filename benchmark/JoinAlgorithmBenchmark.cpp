@@ -45,18 +45,18 @@
 #include "global/Id.h"
 #include "index/IdTableUtils.h"
 #include "util/Algorithm.h"
-#include "util/ConfigManager/ConfigManager.h"
-#include "util/ConfigManager/ConfigOptionProxy.h"
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
 #include "util/HashMap.h"
 #include "util/HashSet.h"
 #include "util/Log.h"
-#include "util/MemorySize/MemorySize.h"
 #include "util/Random.h"
 #include "util/StringUtils.h"
 #include "util/TypeTraits.h"
+#include "util/configManager/ConfigManager.h"
+#include "util/configManager/ConfigOptionProxy.h"
+#include "util/memorySize/MemorySize.h"
 
 using namespace std::string_literals;
 

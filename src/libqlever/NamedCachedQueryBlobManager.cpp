@@ -28,9 +28,9 @@
 #include "libqlever/CanonicalRowOrder.h"
 #include "libqlever/NamedCacheSecondaryVocabRewriter.h"
 #include "libqlever/Qlever.h"
-#include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/Log.h"
 #include "util/Random.h"
+#include "util/compressionUsingZstd/ZstdWrapper.h"
 #include "util/json.h"
 
 namespace qlever {

@@ -29,8 +29,8 @@
 #include "util/LocalVocabEntryTestHelpers.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/RuntimeParametersTestHelpers.h"
-#include "util/Serializer/ByteBufferSerializer.h"
 #include "util/SourceLocation.h"
+#include "util/serializer/ByteBufferSerializer.h"
 
 // Multi-threaded, to exercise the concurrency of the tested code.
 static constexpr auto executor = &ad_utility::testing::multiThreadExecutor;

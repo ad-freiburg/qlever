@@ -25,9 +25,9 @@
 #include "index/vocabulary/StringSortComparator.h"
 #include "util/GlobalExecutor.h"
 #include "util/KernelBugWorkaround.h"
-#include "util/MemorySize/MemorySize.h"
 #include "util/ProgramOptionsHelpers.h"
 #include "util/Timer.h"
+#include "util/memorySize/MemorySize.h"
 
 namespace po = boost::program_options;
 
