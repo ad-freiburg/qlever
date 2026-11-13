@@ -61,7 +61,6 @@ void WKTParser::processQueue(size_t t) {
   std::vector<SpatialJoinParseJob> batch;
   size_t prefilterCounter = 0;
   size_t parseCounter = 0;
-
   while ((batch = _jobs.get()).size()) {
     sj::WriteBatch w;
     for (auto& job : batch) {
