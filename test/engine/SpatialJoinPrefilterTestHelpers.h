@@ -453,7 +453,7 @@ inline void checkSweeperTestResult(
 
 // Construct a bounding box for a list of geometries simply by computing the
 // bounding box of a geometry collection with all geometries. Use to compute the
-// expected bounding box after adding the geometries to `Sweeper`.
+// expected bounding box after adding the geometries to the `GeometryStore`.
 inline util::geo::DBox makeAggregatedBoundingBox(
     const std::vector<std::string>& wktGeometries) {
   std::vector<std::string> wktWithoutDatatype;

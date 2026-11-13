@@ -42,16 +42,23 @@ class LibspatialjoinAlgorithm : public SpatialJoinAlgorithmBase {
 
   Result run() override;
 
-  // This helper functions parses WKT geometries from the given `column` in
-  // `idTable` and adds them to `store`, calling `metaCb` for each of them
-  // (usually the `addCb` of the `sj::SweepEventList` of one side of the spatial
-  // join). The parsing is multithreaded, using up to `numThreads` threads. If a
-  // `prefilterBox` is given, geometries not intersecting this box will neither
-  // be parsed nor added to `store`. The function returns the aggregated
-  // bounding box of all added geometries, which may be used as a prefilter at
-  // next call and the number of geometries added. This function is only
-  // `public` for testing purposes and should otherwise not be used outside of
-  // this class.
+  // Parse the WKT geometries from the given `column` in `idTable`, add them to
+  // `store` and call `metaCb` for each of them (usually the `addCb` of the
+  // `sj::SweepEventList` of one side of the spatial join), using up to
+  // `numThreads` threads. Return the bounding box of all added geometries and
+  // the counters described in `ParseMetadata`. This function is only `public`
+  // for testing purposes and should otherwise not be used outside of this
+  // class.
+  //
+  // NOTE 1: If a `prefilterBox` is given, geometries whose precomputed
+  // bounding box (from the `GeoVocabulary` or the bounding box columns) does
+  // not intersect it are neither parsed nor added to `store`, unless the box is
+  // too large (see `maxAreaPrefilterBox`). The same holds for `GeoPoint`s
+  // outside of it, regardless of the size of the box. All other geometries are
+  // parsed (see the filter box of `store` in `run()`).
+  //
+  // NOTE 2: For a proximity search, the bounding box of each geometry is
+  // padded by half the distance (see `sj::GeometryStore::add`).
   struct ParseInput {
     const IdTableView<0>* idTable_;
     ColumnIndex geomsCol_;
