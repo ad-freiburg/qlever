@@ -34,9 +34,13 @@ namespace qlever::binary_export {
 //
 // NOTE: The result is never sorted. Even if the exporting instance sends
 // sorted rows, their order in general doesn't survive the conversion of the
-// IDs (see below): the IDs of the strings depend on the vocabulary of the local
-// index, the IDs of the encoded IRIs on its prefixes, and the blank nodes get
-// new IDs.
+// `Id`s (see below). The two instances may encode IRIs with different prefixes
+// (and encoded IRIs are not ordered consistently with the IRIs of the
+// vocabulary), encode `GeoPoint`s differently (see `GeoPointEncodingEnum`),
+// or sort their vocabularies by different locales. A word that is part of the
+// secondary vocabulary on only one side also changes its position, since the
+// words of the secondary vocabulary are ordered after all the words of the
+// main vocabulary (see `LocalVocabEntry`). Finally, blank nodes get new IDs.
 //
 // The strings (literals and IRIs) of the result, as well as the IRIs that are
 // encoded with a pattern that doesn't exist in the local index, are converted
