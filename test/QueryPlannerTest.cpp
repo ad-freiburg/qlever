@@ -2992,6 +2992,21 @@ TEST(QueryPlanner, emptyGraphPattern) {
 }
 
 // _____________________________________________________________________________
+TEST(QueryPlanner, graphIriInsideGraphVariable) {
+  auto scan = h::IndexScanFromStrings;
+  using Graphs = ad_utility::HashSet<std::string>;
+  h::expect("SELECT * { GRAPH ?g { GRAPH <g1> { ?x <p> ?y } } }",
+            h::CartesianProductJoin(
+                h::DistinctGraphs(),
+                scan("?x", "<p>", "?y", {}, Graphs{"<g1>"})));
+  h::expect(
+      "SELECT * { GRAPH ?g { ?a <q> ?b . GRAPH <g1> { ?x <p> ?y } } }",
+      h::CartesianProductJoin(
+          scan("?a", "<q>", "?b", {}, NamedTag{}, {Variable{"?g"}}, {3}),
+          scan("?x", "<p>", "?y", {}, Graphs{"<g1>"})));
+}
+
+// _____________________________________________________________________________
 TEST(QueryPlanner, graphSubqueryWithoutScan) {
   h::expect(
       "SELECT ?x WHERE { GRAPH ?g { { SELECT ?x WHERE { VALUES ?x { 1 } } } } "

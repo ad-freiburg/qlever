@@ -3278,6 +3278,7 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
         datasetBackup = std::exchange(
             activeDatasets,
             activeDatasets.getDatasetClauseForGraphClause(*graphIri));
+        planner_.activeGraphVariable_ = std::nullopt;
       } else if (const auto* graphPair = std::get_if<std::pair<
                      Variable, p::GroupGraphPattern::GraphVariableBehaviour>>(
                      &arg.graphSpec_)) {
