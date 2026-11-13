@@ -108,8 +108,7 @@ namespace {
 // `createNaryExpression` below to turn a compile-time `N` into that many moved
 // arguments.
 template <typename F, size_t... Idxs>
-ExpressionPtr invokeWithMovedArgs(F& function,
-                                  qlm::vector<ExpressionPtr>& argList,
+ExpressionPtr invokeWithMovedArgs(F& function, ql::span<ExpressionPtr> argList,
                                   std::index_sequence<Idxs...>) {
   return function(std::move(argList[Idxs])...);
 }

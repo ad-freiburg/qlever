@@ -232,8 +232,7 @@ TEST_F(MaterializedViewsTest, ParserConfigChecks) {
     auto trace = generateLocationTrace(location);
     EncodedIriManager encodedIriManager;
     AD_EXPECT_THROW_WITH_MESSAGE(
-        SparqlParser::parseQuery(&encodedIriManager,
-                                 ad_utility::testing::makeAllocator(),
+        SparqlParser::parseQuery(&encodedIriManager, makeAllocator(),
                                  std::move(query), {}),
         ::testing::HasSubstr(expectedError));
   };
@@ -269,8 +268,7 @@ TEST_F(MaterializedViewsTest, MetadataDependentConfigChecks) {
 
     // Parse query.
     EncodedIriManager encodedIriManager;
-    auto parsed = SparqlParser::parseQuery(&encodedIriManager,
-                                           ad_utility::testing::makeAllocator(),
+    auto parsed = SparqlParser::parseQuery(&encodedIriManager, makeAllocator(),
                                            std::move(query), {});
     ASSERT_TRUE(parsed.hasSelectClause());
     ASSERT_EQ(parsed.children().size(), 1);
