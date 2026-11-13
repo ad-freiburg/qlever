@@ -19,8 +19,8 @@
 #include "util/HashSet.h"
 #include "util/LocalVocabEntryTestHelpers.h"
 #include "util/Random.h"
-#include "util/Serializer/ByteBufferSerializer.h"
-#include "util/Serializer/Serializer.h"
+#include "util/serializer/ByteBufferSerializer.h"
+#include "util/serializer/Serializer.h"
 
 using ad_utility::testing::iriLocalVocabEntry;
 using ad_utility::testing::localVocabEntry;
@@ -363,11 +363,8 @@ TEST_F(ValueIdTest, IndexOrdering) {
 
 TEST_F(ValueIdTest, DoubleOrdering) {
   auto ids = makeRandomDoubleIds();
-  std::vector<double> doubles;
-  doubles.reserve(ids.size());
-  for (auto id : ids) {
-    doubles.push_back(id.getDouble());
-  }
+  auto doubles =
+      ids | ql::views::transform(&ValueId::getDouble) | ::ranges::to_vector;
   std::sort(ids.begin(), ids.end());
 
   // The sorting of `double`s is broken as soon as NaNs are present. We remove
@@ -419,11 +416,8 @@ TEST_F(ValueIdTest, DoubleOrdering) {
 TEST_F(ValueIdTest, SignedIntegerOrdering) {
   std::vector<ValueId> ids;
   addIdsFromGenerator(nonOverflowingNBitGenerator, &ValueId::makeFromInt, ids);
-  std::vector<int64_t> integers;
-  integers.reserve(ids.size());
-  for (auto id : ids) {
-    integers.push_back(id.getInt());
-  }
+  auto integers =
+      ids | ql::views::transform(&ValueId::getInt) | ::ranges::to_vector;
 
   std::sort(ids.begin(), ids.end());
   std::sort(integers.begin(), integers.end());
@@ -525,9 +519,10 @@ TEST_F(ValueIdTest, toDebugString) {
   test(ValueId::makeBoolFromZeroOrOne(false), "B:false");
   test(ValueId::makeBoolFromZeroOrOne(true), "B:true");
   test(makeVocabId(15), "V:15");
+  auto getLocalVocabId = ad_utility::testing::makeGetLocalVocabId();
   auto str = LocalVocabEntry::literalWithoutQuotes(
       "SomeValue", qec_->getLocalVocabContext());
-  test(ValueId::makeFromLocalVocabIndex(&str), "L:\"SomeValue\"");
+  test(getLocalVocabId(str), "L:\"SomeValue\"");
   test(makeTextRecordId(37), "T:37");
   test(makeWordVocabId(42), "W:42");
   test(makeBlankNodeId(27), "B:27");
@@ -693,11 +688,11 @@ TEST(ValueId, compareThreeWayWithLocalVocabIndex) {
   // `entryInVocab` is of type `VocabIndex`, and `<zzz>` is stored in the
   // secondary vocabulary, so the position of `entryInSecondaryVocab` is of type
   // `SecondaryVocabIndex`.
+  auto getLocalVocabId = ad_utility::testing::makeGetLocalVocabId();
   LocalVocabEntry entryInVocab = iriLocalVocabEntry("<b>", ctx);
   LocalVocabEntry entryInSecondaryVocab = iriLocalVocabEntry("<zzz>", ctx);
-  ValueId localVocabId = ValueId::makeFromLocalVocabIndex(&entryInVocab);
-  ValueId localVocabIdSecondary =
-      ValueId::makeFromLocalVocabIndex(&entryInSecondaryVocab);
+  ValueId localVocabId = getLocalVocabId(entryInVocab);
+  ValueId localVocabIdSecondary = getLocalVocabId(entryInSecondaryVocab);
   ValueId secondaryVocabId =
       ValueId::makeFromSecondaryVocabIndex(SecondaryVocabIndex::make(0));
   // `Int` is a datatype that is smaller than `LocalVocabIndex` and `Date` is

@@ -37,7 +37,7 @@
 #include "parser/TripleComponent.h"
 #include "util/CompactStringVector.h"
 #include "util/LocalVocabEntryTestHelpers.h"
-#include "util/Serializer/ByteBufferSerializer.h"
+#include "util/serializer/ByteBufferSerializer.h"
 
 using ad_utility::testing::iriLocalVocabEntry;
 
@@ -116,11 +116,9 @@ class SecondaryVocabIndexTest : public ::testing::Test {
     return iriLocalVocabEntry(iriref, context_);
   }
 
-  // The `Id` that refers to the given entry. NOTE: The entry has to outlive the
-  // returned `Id`, which only stores a pointer to it.
-  static Id idOf(const LocalVocabEntry& entry) {
-    return Id::makeFromLocalVocabIndex(&entry);
-  }
+  // The `Id` that refers to (a copy of) the given entry.
+  decltype(ad_utility::testing::makeGetLocalVocabId()) idOf =
+      ad_utility::testing::makeGetLocalVocabId();
 };
 
 // _____________________________________________________________________________
@@ -627,12 +625,13 @@ TEST(SecondaryVocabIndex, localVocabEntryWithoutSecondaryVocabulary) {
     return iriLocalVocabEntry(iriref, context);
   };
 
+  auto getLocalVocabId = ad_utility::testing::makeGetLocalVocabId();
   auto entryB = entry("<b>");
   auto position = entryB.positionInVocab();
   EXPECT_EQ(position.lowerBound_, position.upperBound_);
   EXPECT_EQ(Id::fromBits(position.lowerBound_.get()), getId("<c>"));
-  EXPECT_LT(Id::makeFromLocalVocabIndex(&entryB), getId("<c>"));
-  EXPECT_LT(getId("<a>"), Id::makeFromLocalVocabIndex(&entryB));
+  EXPECT_LT(getLocalVocabId(entryB), getId("<c>"));
+  EXPECT_LT(getId("<a>"), getLocalVocabId(entryB));
 
   // Without a secondary vocabulary, two entries are compared by their string
   // values alone, without looking up their positions (see the documentation of

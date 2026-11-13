@@ -7,7 +7,7 @@
 
 #include <string>
 
-#include "util/MemorySize/MemorySize.h"
+#include "util/memorySize/MemorySize.h"
 
 // Callables that determine the actual size (in terms of memory used on stack +
 // heap) for various types. They are used to limit the memory consumption of
