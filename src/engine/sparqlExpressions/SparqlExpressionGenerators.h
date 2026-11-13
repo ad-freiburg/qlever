@@ -24,6 +24,7 @@
 #include "engine/idTable/IdTable.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/Generator.h"
+#include "util/IsProxy.h"
 
 namespace sparqlExpression::detail {
 
@@ -90,7 +91,15 @@ CPP_template(typename T, typename Transformation = ql::identity)(
 auto resultGeneratorImpl(T&& vector, size_t numItems,
                          Transformation transformation = {}) {
   AD_CONTRACT_CHECK(numItems == vector.size());
-  return AD_FWD(vector) | ql::views::transform(std::move(transformation));
+  if constexpr (qlever::isProxy<
+                    std::decay_t<ql::ranges::range_reference_t<T>>>) {
+    // A split column, its elements are passed on as the `Id`s they refer to.
+    return AD_FWD(vector) |
+           ql::views::transform([transformation = std::move(transformation)](
+                                    Id id) { return transformation(id); });
+  } else {
+    return AD_FWD(vector) | ql::views::transform(std::move(transformation));
+  }
 }
 
 #ifdef QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17

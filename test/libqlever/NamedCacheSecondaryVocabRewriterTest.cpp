@@ -435,7 +435,7 @@ TEST(NamedCacheSecondaryVocabRewriter, canonicalizeWithoutCopy) {
   EXPECT_EQ(view, makeIdTableFromVector({{4, 1}, {3, 2}},
                                         ad_utility::testing::IntId));
   auto original = ExplicitIdTableOperation::viewOf(sorted.result_);
-  EXPECT_EQ(view.getColumn(0).data(), original.getColumn(2).data());
+  EXPECT_EQ(memoryOf(view.getColumn(0)), memoryOf(original.getColumn(2)));
   EXPECT_THAT(canonical.value_.resultSortedOn_, ElementsAre(1));
 
   // A table that is not in canonical order is copied and sorted.

@@ -10,12 +10,15 @@
 
 #include <array>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include "./util/AllocatorTestHelpers.h"
 #include "./util/GTestHelpers.h"
+#include "./util/IdTableHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "engine/idTable/IdTable.h"
+#include "engine/idTable/splitLayout/IdColumnVector.h"
 #include "global/Id.h"
 #include "util/CompilerWarnings.h"
 #include "util/TypeIdentity.h"
@@ -24,6 +27,13 @@ using namespace ad_utility::testing;
 using ad_utility::use_type_identity::ti;
 namespace {
 auto V = ad_utility::testing::VocabId;
+
+// An `IdTable` whose columns have the split layout (two arrays per column). The
+// split columns also work with the legacy `Id`, so all the tests that run for
+// this type test the split columns without `USE_SPLIT_LAYOUT`.
+using SplitColumnIdTable = columnBasedIdTable::IdTable<
+    Id, 0,
+    columnBasedIdTable::splitLayout::IdColumnVector<detail::DefaultAllocator>>;
 
 // A storage type that only differs from a plain `std::vector` in that it has an
 // additional constructor that takes (and ignores) the arguments that the old
@@ -259,7 +269,9 @@ void runTestForDifferentTypes(T testCase, std::string testCaseName) {
     }
     allocators.emplace_back(makeAllocator());
   }
+  std::vector splitAllocators{allocators};
   testCase(ti<IdTable>, V, std::move(allocators));
+  testCase(ti<SplitColumnIdTable>, V, std::move(splitAllocators));
   testCase(ti<BufferedTable>, V, std::move(buffers));
   auto makeInt = [](auto el) { return static_cast<int>(el); };
   testCase(ti<IntTable>, makeInt);
@@ -1268,19 +1280,19 @@ TEST(IdTable, moveOrCloneOnView) {
   // `moveOrClone()` on a view (lvalue) returns a deep-owned clone, not a view.
   IdTable cloned = view.moveOrClone();
   EXPECT_EQ(cloned, table);
-  EXPECT_NE(&cloned(0, 0), &table(0, 0));
+  EXPECT_NE(memoryOf(cloned.getColumn(0)), memoryOf(table.getColumn(0)));
 
   // `moveOrClone()` on a view rvalue also returns a deep-owned clone, since
   // views cannot transfer ownership.
   IdTable cloned2 = std::move(view).moveOrClone();
   EXPECT_EQ(cloned2, table);
-  EXPECT_NE(&cloned2(0, 0), &table(0, 0));
+  EXPECT_NE(memoryOf(cloned2.getColumn(0)), memoryOf(table.getColumn(0)));
 }
 
 // ____________________________________________________________________________
 TEST(IdTable, fromColumns) {
-  std::vector<Id> col0{V(1), V(2), V(3)};
-  std::vector<Id> col1{V(4), V(5), V(6)};
+  auto col0 = makeIdColumn({V(1), V(2), V(3)});
+  auto col1 = makeIdColumn({V(4), V(5), V(6)});
   auto allocator = makeAllocator();
 
   IdTableView<0>::ViewSpans columns{col0, col1};
@@ -1291,11 +1303,11 @@ TEST(IdTable, fromColumns) {
   for (size_t i = 0; i < 3; ++i) {
     EXPECT_EQ(view(i, 0), col0[i]);
     EXPECT_EQ(view(i, 1), col1[i]);
-    // The view must not copy the data: its elements are the very same
-    // objects as those in `col0`/`col1`.
-    EXPECT_EQ(&view(i, 0), &col0[i]);
-    EXPECT_EQ(&view(i, 1), &col1[i]);
   }
+  // The view must not copy the data: its columns are the very same memory as
+  // `col0`/`col1`.
+  EXPECT_EQ(memoryOf(view.getColumn(0)), memoryOf(col0));
+  EXPECT_EQ(memoryOf(view.getColumn(1)), memoryOf(col1));
 
   // The `columns` and the passed in `numColumns` must be consistent.
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -1320,22 +1332,26 @@ TEST(IdTable, fromColumns) {
   for (size_t i = 0; i < 3; ++i) {
     EXPECT_EQ(staticView(i, 0), col0[i]);
     EXPECT_EQ(staticView(i, 1), col1[i]);
-    EXPECT_EQ(&staticView(i, 0), &col0[i]);
-    EXPECT_EQ(&staticView(i, 1), &col1[i]);
   }
+  EXPECT_EQ(memoryOf(staticView.getColumn(0)), memoryOf(col0));
+  EXPECT_EQ(memoryOf(staticView.getColumn(1)), memoryOf(col1));
 }
 
 // ____________________________________________________________________________
-// Typed test fixture for `subView`, covering both owned `IdTable` and
-// `IdTableView<0>`.
+// Typed test fixture for `subView`, covering the owned `IdTable`, an
+// `IdTableView<0>` and an `IdTable` with split columns.
 template <typename T>
 class IdTableSubViewTest : public testing::Test {};
-using SubViewTestTypes = testing::Types<IdTable, IdTableView<0>>;
+using SubViewTestTypes =
+    testing::Types<IdTable, IdTableView<0>, SplitColumnIdTable>;
 TYPED_TEST_SUITE(IdTableSubViewTest, SubViewTestTypes);
 
 TYPED_TEST(IdTableSubViewTest, subView) {
   auto alloc = ad_utility::makeUnlimitedAllocator<Id>();
-  IdTable table{2, alloc};
+  // The table that owns the data: a view refers to an `IdTable`.
+  using Table = std::conditional_t<std::is_same_v<TypeParam, IdTableView<0>>,
+                                   IdTable, TypeParam>;
+  Table table{2, alloc};
   for (int i = 0; i < 5; ++i) {
     table.push_back({V(i * 10), V(i * 10 + 1)});
   }
@@ -1347,7 +1363,9 @@ TYPED_TEST(IdTableSubViewTest, subView) {
     auto fullView = target.subView(0, 5);
     EXPECT_EQ(fullView.numRows(), 5u);
     EXPECT_EQ(fullView.numColumns(), 2u);
-    EXPECT_EQ(fullView, table);
+    // A view can only be compared with an `IdTable` of the default columns,
+    // so the comparison uses a copy of the view.
+    EXPECT_EQ(fullView.clone(), table);
 
     // Empty sub-view: `subView(0, 0)` must have zero rows.
     auto emptyView = target.subView(0, 0);
@@ -1368,8 +1386,18 @@ TYPED_TEST(IdTableSubViewTest, subView) {
     EXPECT_EQ(sliceView(1, 0), V(20));
 
     // `subView` is non-owning: data pointers point into the original table.
-    EXPECT_EQ(&sliceView(0, 0), &table(1, 0));
-    EXPECT_EQ(&sliceView(1, 0), &table(2, 0));
+    if constexpr (std::is_reference_v<typename Table::reference>) {
+      EXPECT_EQ(&sliceView(0, 0), &table(1, 0));
+      EXPECT_EQ(&sliceView(1, 0), &table(2, 0));
+    } else {
+      // The entries of split columns (also of `IdTable` with
+      // `USE_SPLIT_LAYOUT`) are proxies without an address, so the pointers of
+      // their two arrays are compared.
+      EXPECT_EQ(sliceView.getColumn(0).rawPayloads().data(),
+                table.getColumn(0).rawPayloads().data() + 1);
+      EXPECT_EQ(sliceView.getColumn(0).rawDatatypes().data(),
+                table.getColumn(0).rawDatatypes().data() + 1);
+    }
 
     // Out-of-range access must trigger a contract check.
     EXPECT_ANY_THROW(target.subView(3, 3));  // offset + size > numRows.
@@ -1377,7 +1405,7 @@ TYPED_TEST(IdTableSubViewTest, subView) {
   };
 
   if constexpr (std::is_same_v<TypeParam, IdTableView<0>>) {
-    auto view = table.asStaticView<0>();
+    auto view = table.template asStaticView<0>();
     runTests(view);
   } else {
     runTests(table);
@@ -1414,14 +1442,14 @@ struct TableReturningProxies {
 
 // Test that `operator[]` of the `RowReference` (which uses
 // `operatorBracketImpl`) returns exactly what the element access of the table
-// returns: an `IdRef` for the `IdTable`, and the proxy for a table that returns
-// proxies by value.
+// returns: the `reference` of the `IdTable`, and the proxy for a table that
+// returns proxies by value.
 TEST(IdTable, rowReferenceOperatorBracket) {
-  // The `IdTable` returns references.
+  // The `IdTable` returns its `reference`.
   IdTable idTable{2, makeAllocator()};
   idTable.push_back({V(1), V(2)});
   IdTable::row_reference row = idTable[0];
-  static_assert(std::is_same_v<decltype(row[0]), IdRef>);
+  static_assert(std::is_same_v<decltype(row[0]), IdTable::reference>);
   row[1] = V(20);
   EXPECT_EQ(idTable(0, 1), V(20));
 
@@ -1519,27 +1547,30 @@ struct TableWithMutableAndConstProxies {
 // and that `operator[]` only gives const access, also if the table has a
 // mutable element access.
 TEST(IdTable, rowReferenceReferenceTypedefs) {
+  // The element types of the `IdTable` (`Id&` without the split layout).
+  using Ref = IdTable::reference;
+  using ConstRef = IdTable::const_reference;
   using Row = IdTable::row_reference;
-  static_assert(std::is_same_v<Row::reference, IdRef>);
-  static_assert(std::is_same_v<Row::const_reference, ConstIdRef>);
+  static_assert(std::is_same_v<Row::reference, Ref>);
+  static_assert(std::is_same_v<Row::const_reference, ConstRef>);
 
   // A const row reference only has const access, so both typedefs are const.
   using ConstRow = IdTable::const_row_reference;
-  static_assert(std::is_same_v<ConstRow::reference, ConstIdRef>);
-  static_assert(std::is_same_v<ConstRow::const_reference, ConstIdRef>);
+  static_assert(std::is_same_v<ConstRow::reference, ConstRef>);
+  static_assert(std::is_same_v<ConstRow::const_reference, ConstRef>);
 
   IdTable idTable{2, makeAllocator()};
   idTable.push_back({V(1), V(2)});
   Row row = idTable[0];
   const Row& constRow = row;
-  static_assert(std::is_same_v<decltype(row[0]), IdRef>);
-  static_assert(std::is_same_v<decltype(constRow[0]), ConstIdRef>);
+  static_assert(std::is_same_v<decltype(row[0]), Ref>);
+  static_assert(std::is_same_v<decltype(constRow[0]), ConstRef>);
   EXPECT_EQ(constRow[1], V(2));
 
   // A view has no mutable element access, so both typedefs are const.
   using ViewRow = IdTableView<0>::const_row_reference;
-  static_assert(std::is_same_v<ViewRow::reference, ConstIdRef>);
-  static_assert(std::is_same_v<ViewRow::const_reference, ConstIdRef>);
+  static_assert(std::is_same_v<ViewRow::reference, ConstRef>);
+  static_assert(std::is_same_v<ViewRow::const_reference, ConstRef>);
 
   // A table that only has a const element access, which returns proxies by
   // value (see above), has the proxy for both typedefs.
@@ -1551,14 +1582,13 @@ TEST(IdTable, rowReferenceReferenceTypedefs) {
   // The base class of the `RowReference` only allows mutable access for
   // rvalues, all other values (also a const rvalue) get const access.
   using Restricted = Row::Base;
+  static_assert(std::is_same_v<decltype(std::declval<Restricted&&>()[0]), Ref>);
   static_assert(
-      std::is_same_v<decltype(std::declval<Restricted&&>()[0]), IdRef>);
+      std::is_same_v<decltype(std::declval<Restricted&>()[0]), ConstRef>);
   static_assert(
-      std::is_same_v<decltype(std::declval<Restricted&>()[0]), ConstIdRef>);
-  static_assert(std::is_same_v<decltype(std::declval<const Restricted&>()[0]),
-                               ConstIdRef>);
+      std::is_same_v<decltype(std::declval<const Restricted&>()[0]), ConstRef>);
   static_assert(std::is_same_v<decltype(std::declval<const Restricted&&>()[0]),
-                               ConstIdRef>);
+                               ConstRef>);
   Restricted restricted{&idTable, 0};
   std::move(restricted)[1] = V(7);
   EXPECT_EQ(restricted[1], V(7));

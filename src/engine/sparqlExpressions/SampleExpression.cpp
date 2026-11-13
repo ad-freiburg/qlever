@@ -30,7 +30,7 @@ ExpressionResult SampleExpression::evaluate(EvaluationContext* context) const {
       AD_CORRECTNESS_CHECK(context->_endIndex > context->_beginIndex);
       ConstIdColumnRef idOfFirst = detail::getIdsFromVariable(
           childResult, context, context->_beginIndex, context->_endIndex);
-      return ExpressionResult{idOfFirst[0]};
+      return ExpressionResult{Id{idOfFirst[0]}};
     } else {
       static_assert(isConstantResult<T>);
       return childResult;

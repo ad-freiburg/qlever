@@ -16,6 +16,7 @@
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "util/Forward.h"
+#include "util/IsProxy.h"
 
 namespace sparqlExpression::detail {
 
@@ -68,7 +69,12 @@ auto makeIndexedValueGetter(Operand&& operand, EvaluationContext* context) {
     // getter as lvalues. This is irrelevant for the currently used value
     // getters, but should be revisited for move-sensitive value types.
     return [&operand, context](size_t i) {
-      return ValueGetter{}(operand[i], context);
+      if constexpr (qlever::isProxy<std::decay_t<decltype(operand[i])>>) {
+        // An element of a split column, as the `Id` it refers to.
+        return ValueGetter{}(Id{operand[i]}, context);
+      } else {
+        return ValueGetter{}(operand[i], context);
+      }
     };
   } else {
     // The converted constant is returned as a const rvalue reference, so that

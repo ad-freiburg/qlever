@@ -12,6 +12,7 @@
 #include "./SparqlExpressionTestHelpers.h"
 #include "./printers/LocalVocabEntryPrinters.h"
 #include "./util/GTestHelpers.h"
+#include "./util/IdTableHelpers.h"
 #include "./util/ParsedQueryTestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
@@ -851,7 +852,8 @@ TEST(SparqlExpression, sharedDateDispatchBypassesVariants) {
   context._endIndex = 2;
   const Id date = Dat(DateYearOrDuration::parseXsdDate, "2020-01-01");
   V<Id> dates{{date, date}, alloc};
-  ConstIdColumnRef column{dates.data(), dates.size()};
+  auto dateColumn = makeIdColumn({date, date});
+  ConstIdColumnRef column{dateColumn};
   auto result =
       hn::evaluateHomogeneousNumericOperation<TypedOnly, DateYearOrDuration,
                                               DateYearOrDuration>(

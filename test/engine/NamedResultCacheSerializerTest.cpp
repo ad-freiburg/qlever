@@ -8,6 +8,8 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <type_traits>
+
 #include "../QueryPlannerTestHelpers.h"
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
@@ -178,8 +180,16 @@ TEST_F(NamedResultCacheSerializerTest, ValueSerializationZeroCopy) {
 
   ASSERT_TRUE(
       std::holds_alternative<IdTableView<0>>(deserializedValue.result_));
-  EXPECT_THAT(ExplicitIdTableOperation::viewOf(deserializedValue.result_),
-              matchesIdTable(table));
+  const auto view = ExplicitIdTableOperation::viewOf(deserializedValue.result_);
+  EXPECT_THAT(view, matchesIdTable(table));
+  // The columns of the view (of both layouts) lie in the buffer of the
+  // serializer, so no column was copied.
+  const auto& buffer = readSerializer.data();
+  for (const auto& column : view.getColumns()) {
+    const char* firstByte = memoryOf(column);
+    EXPECT_TRUE(firstByte >= buffer.data() &&
+                firstByte < buffer.data() + buffer.size());
+  }
   EXPECT_THAT(deserializedValue.varToColMap_,
               UnorderedElementsAreArray(varColMap));
   EXPECT_THAT(deserializedValue.resultSortedOn_, ElementsAre(0, 1));
@@ -548,8 +558,8 @@ TEST_F(NamedResultCacheSerializerTest, WriteValueWithReplacedColumns) {
   // The replaced columns have the same shape as the table of the `value`, but
   // different `Id`s. The sort order is shortened, because the replacement
   // invalidates the sortedness of the second column.
-  std::vector<std::vector<Id>> replacedColumns{{V(1), V(2), V(3)},
-                                               {V(4), V(5), V(6)}};
+  std::vector<::detail::IdVector> replacedColumns{
+      makeIdColumn({V(1), V(2), V(3)}), makeIdColumn({V(4), V(5), V(6)})};
   std::vector<ColumnIndex> shortenedSortOrder{0};
 
   ByteBufferWriteSerializer writer;
@@ -573,13 +583,15 @@ TEST_F(NamedResultCacheSerializerTest, WriteValueWithReplacedColumns) {
 
   // The number of the columns and the number of rows in each column have to
   // agree with the table of the `value`.
-  std::vector<std::vector<Id>> tooFewColumns{{V(1), V(2), V(3)}};
+  std::vector<::detail::IdVector> tooFewColumns{
+      makeIdColumn({V(1), V(2), V(3)})};
   AD_EXPECT_THROW_WITH_MESSAGE(
       namedResultCacheSerializer::writeValue(
           writer, value, tooFewColumns, shortenedSortOrder, false,
           namedResultCacheSerializer::formatVersion),
       ::testing::HasSubstr("resultView.numColumns()"));
-  std::vector<std::vector<Id>> tooFewRows{{V(1), V(2)}, {V(4), V(5)}};
+  std::vector<::detail::IdVector> tooFewRows{makeIdColumn({V(1), V(2)}),
+                                             makeIdColumn({V(4), V(5)})};
   AD_EXPECT_THROW_WITH_MESSAGE(
       namedResultCacheSerializer::writeValue(
           writer, value, tooFewRows, shortenedSortOrder, false,

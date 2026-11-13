@@ -55,8 +55,17 @@ ConstIdColumnRef graphsOf(const IdTable& matches, Id id) {
   auto matching = ql::ranges::equal_range(ids, id);
   size_t numMatches = ql::ranges::size(matching);
   if (matches.numColumns() == 1) {
-    static const IdColumn undefinedColumn{Id::makeUndefined()};
-    return ConstIdColumnRef{undefinedColumn}.first(numMatches == 0u ? 0u : 1u);
+    // A column with a single undefined `Id`. It is a column of an `IdTable`,
+    // so that it has the type of the graph column below in both layouts.
+    static const ConstIdColumnRef undefinedColumn = [] {
+      static const IdTable table = [] {
+        IdTable result{1, ad_utility::makeUnlimitedAllocator<Id>()};
+        result.push_back({Id::makeUndefined()});
+        return result;
+      }();
+      return table.getColumn(0);
+    }();
+    return undefinedColumn.first(numMatches == 0u ? 0u : 1u);
   }
   return matches.getColumn(1).subspan(matching.begin() - ids.begin(),
                                       numMatches);

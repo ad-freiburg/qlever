@@ -10,12 +10,14 @@
 #include <gtest/gtest.h>
 
 #include <array>
+#include <list>
 #include <map>
 #include <memory>
 #include <tuple>
 #include <variant>
 #include <vector>
 
+#include "../util/IdTableHelpers.h"
 #include "../util/IdTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "backports/concepts.h"
@@ -121,6 +123,12 @@ class HomogeneousNumericExpressionHelpersTest : public ::testing::Test {
     context_._beginIndex = 0;
     context_._endIndex = table_.size();
   }
+
+  // The `ids` as a column that lives as long as the test.
+  ConstIdColumnRef column(ql::span<const Id> ids) {
+    return columns_.emplace_back(makeIdColumn({ids.begin(), ids.end()}));
+  }
+  std::list<::detail::IdVector> columns_;
 };
 
 // Test that `hasNonNumericOperand` rejects exactly the non-numeric `Id`s, and
@@ -224,50 +232,44 @@ TEST_F(HomogeneousNumericExpressionHelpersTest, ClassifySpan) {
   std::array<ValueId, 5> tiedWithNonNumeric{
       I(1), I(2), D(3.0), Id::makeFromBool(true), Id::makeFromBool(false)};
 
-  auto classification =
-      classifyNumericOperand(ConstIdColumnRef{ints}, &context_);
+  auto classification = classifyNumericOperand(column(ints), &context_);
   EXPECT_EQ(classification.homogeneousType_, NumericType::Int);
   EXPECT_EQ(classification.majorityType_, NumericType::Int);
 
-  classification = classifyNumericOperand(ConstIdColumnRef{doubles}, &context_);
+  classification = classifyNumericOperand(column(doubles), &context_);
   EXPECT_EQ(classification.homogeneousType_, NumericType::Double);
   EXPECT_EQ(classification.majorityType_, NumericType::Double);
 
-  classification =
-      classifyNumericOperand(ConstIdColumnRef{mostlyInts}, &context_);
+  classification = classifyNumericOperand(column(mostlyInts), &context_);
   EXPECT_EQ(classification.homogeneousType_, NumericType::Other);
   EXPECT_EQ(classification.majorityType_, NumericType::Int);
 
-  classification =
-      classifyNumericOperand(ConstIdColumnRef{mostlyDoubles}, &context_);
+  classification = classifyNumericOperand(column(mostlyDoubles), &context_);
   EXPECT_EQ(classification.homogeneousType_, NumericType::Other);
   EXPECT_EQ(classification.majorityType_, NumericType::Double);
 
-  classification = classifyNumericOperand(ConstIdColumnRef{tied}, &context_);
+  classification = classifyNumericOperand(column(tied), &context_);
   EXPECT_EQ(classification.homogeneousType_, NumericType::Other);
   EXPECT_EQ(classification.majorityType_, NumericType::Other);
 
-  classification = classifyNumericOperand(ConstIdColumnRef{empty}, &context_);
+  classification = classifyNumericOperand(column(empty), &context_);
   EXPECT_EQ(classification.homogeneousType_, NumericType::Other);
   EXPECT_EQ(classification.majorityType_, NumericType::Other);
 
-  classification =
-      classifyNumericOperand(ConstIdColumnRef{withNonNumeric}, &context_);
+  classification = classifyNumericOperand(column(withNonNumeric), &context_);
   EXPECT_EQ(classification.homogeneousType_, NumericType::Other);
   EXPECT_EQ(classification.majorityType_, NumericType::Int);
 
-  classification =
-      classifyNumericOperand(ConstIdColumnRef{withUndefined}, &context_);
+  classification = classifyNumericOperand(column(withUndefined), &context_);
   EXPECT_EQ(classification.homogeneousType_, NumericType::Other);
   EXPECT_EQ(classification.majorityType_, NumericType::Int);
 
-  classification =
-      classifyNumericOperand(ConstIdColumnRef{mostlyNonNumeric}, &context_);
+  classification = classifyNumericOperand(column(mostlyNonNumeric), &context_);
   EXPECT_EQ(classification.homogeneousType_, NumericType::Other);
   EXPECT_EQ(classification.majorityType_, NumericType::Other);
 
   classification =
-      classifyNumericOperand(ConstIdColumnRef{tiedWithNonNumeric}, &context_);
+      classifyNumericOperand(column(tiedWithNonNumeric), &context_);
   EXPECT_EQ(classification.homogeneousType_, NumericType::Other);
   EXPECT_EQ(classification.majorityType_, NumericType::Other);
 }
@@ -277,8 +279,8 @@ TEST_F(HomogeneousNumericExpressionHelpersTest, ClassifyOperands) {
   std::array<ValueId, 3> mostlyInts{I(1), I(2), D(3.0)};
   std::array<ValueId, 3> mostlyDoubles{I(1), D(2.0), D(3.0)};
 
-  auto intsSpan = ConstIdColumnRef{mostlyInts};
-  auto doublesSpan = ConstIdColumnRef{mostlyDoubles};
+  auto intsSpan = column(mostlyInts);
+  auto doublesSpan = column(mostlyDoubles);
 
   const auto classifications =
       classifyNumericOperands(&context_, intsSpan, doublesSpan, I(5));
@@ -302,7 +304,7 @@ TEST_F(HomogeneousNumericExpressionHelpersTest, GetHomogeneousNumericValue) {
 // _____________________________________________________________________________
 TEST_F(HomogeneousNumericExpressionHelpersTest, MakeHomogeneousNumericGetter) {
   std::array<ValueId, 3> ints{I(4), I(5), I(6)};
-  ConstIdColumnRef span{ints};
+  ConstIdColumnRef span = column(ints);
 
   auto vectorGetter = makeHomogeneousNumericGetter<int64_t>(span);
 
@@ -322,8 +324,8 @@ TEST_F(HomogeneousNumericExpressionHelpersTest,
   std::array<ValueId, 3> left{I(1), I(2), I(3)};
   std::array<ValueId, 3> right{I(4), I(5), I(6)};
 
-  auto leftSpan = ConstIdColumnRef{left};
-  auto rightSpan = ConstIdColumnRef{right};
+  auto leftSpan = column(left);
+  auto rightSpan = column(right);
 
   auto result = evaluateHomogeneousNumericOperation<TestAdd, int64_t, int64_t>(
       std::tie(leftSpan, rightSpan), &context_);
@@ -350,8 +352,8 @@ TEST_F(HomogeneousNumericExpressionHelpersTest,
   std::array<ValueId, 3> left{I(1), D(2.5), I(3)};
   std::array<ValueId, 3> right{I(4), I(5), D(6.5)};
 
-  auto leftSpan = ConstIdColumnRef{left};
-  auto rightSpan = ConstIdColumnRef{right};
+  auto leftSpan = column(left);
+  auto rightSpan = column(right);
 
   auto result = evaluateSpeculativeNumericOperation<
       TestNumericAdd, TestNumericValueGetter, TestNumericValueGetter, int64_t,
@@ -371,7 +373,7 @@ TEST_F(HomogeneousNumericExpressionHelpersTest,
 TEST_F(HomogeneousNumericExpressionHelpersTest,
        EvaluateSpeculativeNumericOperationVectorConstant) {
   std::array<ValueId, 3> left{I(1), D(2.5), I(3)};
-  auto leftSpan = ConstIdColumnRef{left};
+  auto leftSpan = column(left);
 
   auto result = evaluateSpeculativeNumericOperation<
       TestNumericAdd, TestNumericValueGetter, TestNumericValueGetter, int64_t,
@@ -391,7 +393,7 @@ TEST_F(HomogeneousNumericExpressionHelpersTest,
 TEST_F(HomogeneousNumericExpressionHelpersTest,
        EvaluateSpeculativeNumericOperationConstantVector) {
   std::array<ValueId, 3> right{I(1), D(2.5), I(3)};
-  auto rightSpan = ConstIdColumnRef{right};
+  auto rightSpan = column(right);
 
   auto result = evaluateSpeculativeNumericOperation<
       TestNumericAdd, TestNumericValueGetter, TestNumericValueGetter, int64_t,
@@ -413,8 +415,8 @@ TEST_F(HomogeneousNumericExpressionHelpersTest,
   std::array<ValueId, 3> left{D(1.5), D(2.5), I(3)};
   std::array<ValueId, 3> right{D(4.0), D(5.0), D(6.5)};
 
-  auto leftSpan = ConstIdColumnRef{left};
-  auto rightSpan = ConstIdColumnRef{right};
+  auto leftSpan = column(left);
+  auto rightSpan = column(right);
 
   auto result = evaluateSpeculativeNumericOperation<
       TestNumericAdd, TestNumericValueGetter, TestNumericValueGetter, double,
@@ -436,8 +438,8 @@ TEST_F(HomogeneousNumericExpressionHelpersTest,
   std::array<ValueId, 3> left{I(1), D(2.5), D(3.5)};
   std::array<ValueId, 3> right{I(4), I(5), D(6.5)};
 
-  auto leftSpan = ConstIdColumnRef{left};
-  auto rightSpan = ConstIdColumnRef{right};
+  auto leftSpan = column(left);
+  auto rightSpan = column(right);
 
   auto result = evaluateSpeculativeNumericOperation<
       TestNumericAdd, TestNumericValueGetter, TestNumericValueGetter, double,
@@ -474,8 +476,8 @@ TEST_F(HomogeneousNumericExpressionHelpersTest,
   std::array<ValueId, 3> first{I(1), I(2), I(3)};
   std::array<ValueId, 3> second{D(0.5), D(1.5), D(2.5)};
 
-  auto firstSpan = ConstIdColumnRef{first};
-  auto secondSpan = ConstIdColumnRef{second};
+  auto firstSpan = column(first);
+  auto secondSpan = column(second);
   auto constant = I(10);
 
   auto result = evaluateHomogeneousNumericOperation<TestAddThree, int64_t,
@@ -556,8 +558,7 @@ TEST_F(HomogeneousNumericExpressionHelpersTest, DateClassification) {
             NumericType::Date);
   auto check = [&](std::vector<Id> values, NumericType homogeneous,
                    NumericType majority) {
-    auto result =
-        classifyNumericOperand<true>(ConstIdColumnRef{values}, &context_);
+    auto result = classifyNumericOperand<true>(column(values), &context_);
     EXPECT_EQ(result.homogeneousType_, homogeneous);
     EXPECT_EQ(result.majorityType_, majority);
   };
@@ -574,13 +575,11 @@ TEST_F(HomogeneousNumericExpressionHelpersTest, DateClassification) {
   check({}, NumericType::Other, NumericType::Other);
   // Numeric-only classification still counts dates as competing values.
   std::vector<Id> values{I(1), I(2), date, date};
-  EXPECT_EQ(
-      classifyNumericOperand(ConstIdColumnRef{values}, &context_).majorityType_,
-      NumericType::Other);
+  EXPECT_EQ(classifyNumericOperand(column(values), &context_).majorityType_,
+            NumericType::Other);
   context_.cancellationHandle_->cancel(ad_utility::CancellationState::MANUAL);
-  EXPECT_THROW(
-      classifyNumericOperand<true>(ConstIdColumnRef{values}, &context_),
-      ad_utility::CancellationException);
+  EXPECT_THROW(classifyNumericOperand<true>(column(values), &context_),
+               ad_utility::CancellationException);
 }
 
 // Test the classifier against independent per-value frequency counts across
@@ -629,8 +628,8 @@ TEST_F(HomogeneousNumericExpressionHelpersTest, ClassificationBlockBoundaries) {
         expected.majorityType_ = type;
       }
     }
-    auto actual = classifyNumericOperand<IncludeDates>(ConstIdColumnRef{values},
-                                                       &context_);
+    auto actual =
+        classifyNumericOperand<IncludeDates>(column(values), &context_);
     EXPECT_EQ(actual.homogeneousType_, expected.homogeneousType_);
     EXPECT_EQ(actual.majorityType_, expected.majorityType_);
     EXPECT_EQ(actual.containsValueRejectedByGetter_,
@@ -662,16 +661,16 @@ TEST_F(HomogeneousNumericExpressionHelpersTest, SupportedMixedOperands) {
   const auto date =
       Id::makeFromDate(DateYearOrDuration::parseXsdDate("2020-01-01"));
   std::vector<Id> values{I(1), D(2), Id::makeFromBool(true), date};
-  EXPECT_FALSE(classifyNumericOperand<true>(ConstIdColumnRef{values}, &context_)
+  EXPECT_FALSE(classifyNumericOperand<true>(column(values), &context_)
                    .containsValueRejectedByGetter_);
-  EXPECT_TRUE(classifyNumericOperand(ConstIdColumnRef{values}, &context_)
+  EXPECT_TRUE(classifyNumericOperand(column(values), &context_)
                   .containsValueRejectedByGetter_);
   EXPECT_FALSE(classifyNumericOperand(Id::makeFromBool(true))
                    .containsValueRejectedByGetter_);
   EXPECT_FALSE(
       classifyNumericOperand<true>(date).containsValueRejectedByGetter_);
   values.push_back(Id::makeUndefined());
-  EXPECT_TRUE(classifyNumericOperand<true>(ConstIdColumnRef{values}, &context_)
+  EXPECT_TRUE(classifyNumericOperand<true>(column(values), &context_)
                   .containsValueRejectedByGetter_);
 }
 
