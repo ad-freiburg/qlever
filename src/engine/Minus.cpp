@@ -12,8 +12,8 @@
 #include "util/Algorithm.h"
 #include "util/ContainersWithAllocator.h"
 #include "util/Exception.h"
-#include "util/JoinAlgorithms/IndexNestedLoopJoin.h"
-#include "util/JoinAlgorithms/JoinAlgorithms.h"
+#include "util/joinAlgorithms/IndexNestedLoopJoin.h"
+#include "util/joinAlgorithms/JoinAlgorithms.h"
 
 using std::endl;
 using std::string;
