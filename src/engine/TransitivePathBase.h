@@ -253,13 +253,13 @@ class TransitivePathBase : public Operation {
   std::optional<ColumnIndex> getActualGraphColumnIndex(
       const std::shared_ptr<QueryExecutionTree>& tree) const;
 
-  // Return the number of distinct non-payload columns (start, target, graph)
-  // that are present in the input and will be joined given the passed `tree`.
-  // Depending on how many are given and if some are identical, return either 1,
-  // 2 or 3.
-  size_t numJoinColumnsWith(
-      const std::shared_ptr<QueryExecutionTree>& tree, ColumnIndex joinColumn,
-      std::optional<ColumnIndex> otherJoinColumn = std::nullopt) const;
+  // Return the indices of the payload columns of `op`, that is, all columns
+  // except the bound side columns `leftCol` and `rightCol` and the graph
+  // column, in ascending order.
+  std::vector<ColumnIndex> computePayloadColumns(
+      const std::shared_ptr<QueryExecutionTree>& op,
+      const std::optional<ColumnIndex>& leftCol,
+      const std::optional<ColumnIndex>& rightCol) const;
 
  public:
   std::string getDescriptor() const override;
@@ -313,24 +313,16 @@ class TransitivePathBase : public Operation {
       size_t& inputCol,
       std::shared_ptr<QueryExecutionTree> leftOrRightOp) const;
 
-  // Calculate the payload columns' correct offsets and set their indices in
-  // the `plan`. `leftCol` and/or `rightCol` are the sides to which the
-  // transitive path is bound. This method is called from within `bindSides`.
-  void computePayloadColumnOffsets(
+  // Add the variables of the `payloadCols` of `op` (see
+  // `computePayloadColumns`) to the variable columns of `plan`, after the two
+  // side columns and in the order of `op`. Called from `bindSides`.
+  static void setPayloadColumnIndices(
       const std::shared_ptr<QueryExecutionTree>& op,
-      const std::shared_ptr<TransitivePathBase>& plan,
-      std::optional<size_t> leftCol, std::optional<size_t> rightCol) const;
+      const std::vector<ColumnIndex>& payloadCols,
+      const std::shared_ptr<TransitivePathBase>& plan);
 
  public:
   size_t getCostEstimate() override;
-
-  // Get a list of indices of all payload columns (no side, no graph). The
-  // `leftCol` and `rightCol` indicate the columns that are actually used in the
-  // transitive path and are not payload.
-  std::vector<ColumnIndex> computePayloadColumns(
-      const std::shared_ptr<QueryExecutionTree>& op,
-      const std::optional<ColumnIndex>& leftCol,
-      const std::optional<ColumnIndex>& rightCol) const;
 
   /**
    * @brief Make a concrete TransitivePath object using the given parameters.

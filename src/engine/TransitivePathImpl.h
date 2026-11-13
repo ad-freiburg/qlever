@@ -116,9 +116,9 @@ class TransitivePathImpl : public TransitivePathBase {
 
     const auto& [tree, joinColumn] = startSide.treeAndCol_.value();
     size_t numberOfPayloadColumns =
-        tree->getResultWidth() -
-        numJoinColumnsWith(tree, joinColumn,
-                           targetSide.getJoinColumnIfPresent());
+        computePayloadColumns(tree, joinColumn,
+                              targetSide.getJoinColumnIfPresent())
+            .size();
     auto result = fillTableWithHull(std::move(hull), startSide.outputCol_,
                                     targetSide.outputCol_, yieldOnce,
                                     numberOfPayloadColumns);
