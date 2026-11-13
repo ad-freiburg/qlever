@@ -5,9 +5,11 @@
 #include "engine/IndexScan.h"
 
 #include <absl/container/inlined_vector.h>
+#include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
 
 #include <algorithm>
+#include <memory>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -301,24 +303,34 @@ IndexScan::getUpdatedQueryExecutionTreeWithPrefilterApplied(
 
   // Return a new `IndexScan` with updated `scanSpecAndBlocks_`, by
   // intersecting its block ranges with the block ranges from the applicable
-  // prefilters.
+  // prefilter.
   const auto& [sortedVar, colIndex] = sortedVarAndColIndex.value();
   auto it =
       ql::ranges::find(prefilterVariablePairs, sortedVar, ad_utility::second);
-  if (it != prefilterVariablePairs.end()) {
-    const auto& blockMetadataRanges =
-        prefilterExpressions::detail::logicalOps::getIntersectionOfBlockRanges(
-            it->first->evaluate(getIndex(),
-                                getScanSpecAndBlocks().getBlockMetadataSpan(),
-                                colIndex),
-            scanSpecAndBlocks_.blockMetadata_);
-
-    return makeCopyWithPrefilteredScanSpecAndBlocks(
-        {scanSpecAndBlocks_.scanSpec_, blockMetadataRanges});
+  if (it == prefilterVariablePairs.end()) {
+    // No prefilter applies.
+    return std::nullopt;
   }
 
-  // If no prefilter applies, return `std::nullopt`.
-  return std::nullopt;
+  // A prefilter that was already applied to this scan would not remove any
+  // further blocks, so skip the (block metadata walk of the) evaluation.
+  auto key = absl::StrCat(it->first->asString(0), " on ", sortedVar.name());
+  if (ad_utility::contains(appliedPrefilters_, key)) {
+    return std::nullopt;
+  }
+
+  const auto& blockMetadataRanges =
+      prefilterExpressions::detail::logicalOps::getIntersectionOfBlockRanges(
+          it->first->evaluate(getIndex(),
+                              getScanSpecAndBlocks().getBlockMetadataSpan(),
+                              colIndex),
+          scanSpecAndBlocks_.blockMetadata_);
+  auto copy = makeCopyWithPrefilteredScanSpecAndBlocks(
+      {scanSpecAndBlocks_.scanSpec_, blockMetadataRanges});
+  auto& copiedScan = dynamic_cast<IndexScan&>(*copy->getRootOperation());
+  copiedScan.appliedPrefilters_ = appliedPrefilters_;
+  copiedScan.appliedPrefilters_.push_back(std::move(key));
+  return copy;
 }
 
 // _____________________________________________________________________________
@@ -525,9 +537,60 @@ std::pair<bool, size_t> IndexScan::computeSizeEstimate() const {
   //
   // NOTE: Starting from C++20, we could use `std::midpoint` to compute the
   // mean of `lower` and `upper` in a safe way.
+  if (numVariables() == 2 && scanSpecAndBlocksIsPrefiltered_) {
+    if (auto estimate = sizeEstimateFromDroppedBlocks(); estimate.has_value()) {
+      return estimate.value();
+    }
+  }
   auto [lower, upper] = permutation().getSizeEstimateForScan(
       scanSpecAndBlocks_, locatedTriplesState());
   return {lower == upper, lower + (upper - lower) / 2};
+}
+
+// _____________________________________________________________________________
+std::optional<std::pair<bool, size_t>>
+IndexScan::sizeEstimateFromDroppedBlocks() const {
+  const auto& col0Id = scanSpecAndBlocks_.scanSpec_.col0Id();
+  AD_CORRECTNESS_CHECK(col0Id.has_value());
+  auto metadata = permutation().metaData().getMetaDataIfPresent(*col0Id);
+  if (!metadata.has_value()) {
+    return std::nullopt;
+  }
+  // All blocks of the relation, and the ranges of them that were kept.
+  auto allBlocks = getScanSpecAndBlocks().getBlockMetadataSpan();
+  const auto& keptRanges = scanSpecAndBlocks_.blockMetadata_;
+  size_t numKept = scanSpecAndBlocks_.sizeBlockMetadata_;
+  if (allBlocks.empty() || numKept == 0 ||
+      allBlocks.size() - numKept >= numKept) {
+    return std::nullopt;
+  }
+  if (permutation()
+          .getLocatedTriplesForPermutation(locatedTriplesState())
+          .containsLocatedTriplesInBlockRange(allBlocks.front().blockIndex_,
+                                              allBlocks.back().blockIndex_)) {
+    return std::nullopt;
+  }
+  // Subtract the rows of the dropped blocks (the gaps before, between, and
+  // after the kept ranges). A dropped block that also holds rows of a
+  // neighboring relation (possible for the first and last block of the
+  // relation) makes the estimate inexact.
+  size_t rows = metadata->numRows_;
+  bool exact = true;
+  auto dropBlocksBefore = [&](const CompressedBlockMetadata* it,
+                              const CompressedBlockMetadata* until) {
+    for (; it != until; ++it) {
+      rows -= std::min(rows, it->numRows_);
+      exact = exact && it->firstTriple_.col0Id_ == *col0Id &&
+              it->lastTriple_.col0Id_ == *col0Id;
+    }
+  };
+  const CompressedBlockMetadata* next = allBlocks.data();
+  for (const auto& range : keptRanges) {
+    dropBlocksBefore(next, std::to_address(range.begin()));
+    next = std::to_address(range.end());
+  }
+  dropBlocksBefore(next, allBlocks.data() + allBlocks.size());
+  return std::pair{exact, rows};
 }
 
 // _____________________________________________________________________________
