@@ -29,7 +29,7 @@ namespace ad_utility {
 // `util` is only included in this file (GeometryInfoHelpersImpl.h) and not in
 // `GeometryInfo.h`. In `SparqlExpressionValueGetters.h` `CRSTypeValueGetter`
 // can only be declared using `GeometryInfo.h`s forward declaration of
-// `util::geo::CRSType` and it's constant `crsTypeUnsupported`. We need to check
+// `util::geo::CRSType` and its constant `crsTypeUnsupported`. We need to check
 // that the constant actually matches `CRSType::UNSUPPORTED`.
 static_assert(crsTypeUnsupported == ::util::geo::CRSType::UNSUPPORTED);
 
