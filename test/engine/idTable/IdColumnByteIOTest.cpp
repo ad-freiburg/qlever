@@ -22,7 +22,7 @@
 #include "engine/idTable/splitLayout/IdColumnVector.h"
 #include "global/Id.h"
 #include "rdfTypes/GeoPoint.h"
-#include "util/CompressionUsingZstd/ZstdWrapper.h"
+#include "util/compressionUsingZstd/ZstdContext.h"
 
 using namespace ad_utility::idColumnByteIO;
 namespace splitLayout = columnBasedIdTable::splitLayout;
@@ -86,18 +86,21 @@ TYPED_TEST_SUITE(IdColumnByteIOTest, Columns);
 }  // namespace
 
 // Test that `decode` restores the `Id`s that `encode` was called with, when the
-// chunks go through `ZstdWrapper` like in all the callers, also for an empty
+// chunks go through `ZstdContext` like in all the callers, also for an empty
 // column. This also tests that `encode` returns the result of `useBytes`.
 TYPED_TEST(IdColumnByteIOTest, roundTrip) {
   using Column = TypeParam;
+  ad_utility::ZstdContext context;
+  std::vector<char> buffer;
   for (const auto& ids : {std::vector<Id>{}, sampleIds()}) {
     const auto source = Column::make(ids);
-    auto compressed = encode(Column::constView(source), [](const auto& chunks) {
-      return ZstdWrapper::compressChunks(chunks);
-    });
+    auto compressed = encode(Column::constView(source),
+                             [&context, &buffer](const auto& chunks) {
+                               return context.compressChunks(chunks, buffer);
+                             });
     auto target = Column::makeWithSize(ids.size());
-    decode(Column::view(target), [&compressed](const auto& buffers) {
-      ZstdWrapper::decompressChunks(compressed, buffers);
+    decode(Column::view(target), [&context, &compressed](const auto& buffers) {
+      context.decompressChunks(compressed, buffers);
     });
     for (size_t i = 0; i < ids.size(); ++i) {
       EXPECT_EQ(static_cast<Id>(target[i]).getBits(), ids[i].getBits()) << i;

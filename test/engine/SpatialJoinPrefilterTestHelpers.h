@@ -282,11 +282,9 @@ inline void runParsingAndSweeper(
   double withinDist = sjTask.maxDist_.value_or(-1);
   auto sweeperCfg = makeSweeperCfg(sjTask, results, resultDists, withinDist);
   std::string sweeperPath = qec->getIndex().getOnDiskBase() + ".spatialjoin";
-  sj::GeometryStore storeLeft(sweeperCfg, ".", sweeperPath, false);
-  sj::GeometryStore storeRight(sweeperCfg, ".", sweeperPath, false);
+  sj::GeometryStore store(sweeperCfg, ".", sweeperPath, false);
   sj::GeometryCache cache(sweeperCfg);
-  const uint8_t storeIdLeft = cache.addStore(&storeLeft);
-  const uint8_t storeIdRight = cache.addStore(&storeRight);
+  const uint8_t storeId = cache.addStore(&store);
   sj::SweepEventList eventsLeft(sweeperCfg, ".", sweeperPath);
   sj::SweepEventList eventsRight(sweeperCfg, ".", sweeperPath);
 
@@ -294,26 +292,22 @@ inline void runParsingAndSweeper(
   auto [aggBoundingBoxLeft, numGeomAddedLeft, numGeomDroppedLeft,
         numGeomInvalidLeft, numThreadsLeft] =
       sjAlgo.parse({prepared.idTableLeft_, prepared.leftJoinCol_, std::nullopt},
-                   storeLeft, eventsLeft.addCb(storeIdLeft), 1, std::nullopt);
+                   store, eventsLeft.addCb(storeId), 1, std::nullopt);
   // Due to problems in `Sweeper` when a side is empty, we don't use
-  // `storeRight.setFilterBox(box);` here.
+  // `store.setFilterBox(box);` here.
 
   // Run second parsing step (right side)
   std::optional<util::geo::I32Box> prefilterBox = std::nullopt;
   if (usePrefilter) {
-    // See `LibspatialjoinAlgorithm::run`.
-    auto paddedBoxLeft =
-        sj::padBox(aggBoundingBoxLeft, aggBoundingBoxLeft, sweeperCfg);
-    prefilterBox = sj::padBox(paddedBoxLeft, paddedBoxLeft, sweeperCfg);
+    prefilterBox = store.getPaddedBoundingBox(aggBoundingBoxLeft);
   }
   auto [aggBoundingBoxRight, numGeomAddedRight, numGeomDroppedRight,
         numGeomInvalidRight, numThreadsRight] =
       sjAlgo.parse(
-          {prepared.idTableRight_, prepared.rightJoinCol_, std::nullopt},
-          storeRight, eventsRight.addCb(storeIdRight), 1, prefilterBox);
+          {prepared.idTableRight_, prepared.rightJoinCol_, std::nullopt}, store,
+          eventsRight.addCb(storeId), 1, prefilterBox);
 
-  storeLeft.flush();
-  storeRight.flush();
+  store.flush();
   eventsLeft.finalize(1);
   eventsRight.finalize(1);
 

@@ -31,9 +31,9 @@
 #include "rdfTypes/GeometryInfo.h"
 #include "util/ExceptionHandling.h"
 #include "util/File.h"
-#include "util/Serializer/Serializer.h"
 #include "util/TypeTraits.h"
 #include "util/Views.h"
+#include "util/serializer/Serializer.h"
 
 namespace sj {
 class GeometryStore;

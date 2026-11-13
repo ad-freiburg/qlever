@@ -8,6 +8,7 @@
 #include <ranges>
 #include <vector>
 
+#include "../../util/GTestHelpers.h"
 #include "../../util/IdTableHelpers.h"
 #include "../../util/IndexTestHelpers.h"
 #include "../../util/LocalVocabEntryTestHelpers.h"
@@ -53,11 +54,12 @@ TEST(StringMapping, remapId) {
   LocalVocabEntry duplicateWord = localVocabEntryFromStringRepresentation(
       "<b>", index.getLocalVocabContext());
   StringMapping mapping{index};
+  auto getLocalVocabId = ad_utility::testing::makeGetLocalVocabId();
   Id id1 = Id::makeFromVocabIndex(VocabIndex::make(2));
-  Id id2 = Id::makeFromLocalVocabIndex(&testWord);
+  Id id2 = getLocalVocabId(testWord);
   Id id3 = Id::makeFromTextRecordIndex(TextRecordIndex::make(0));
   Id id4 = Id::makeFromWordVocabIndex(WordVocabIndex::make(0));
-  Id id5 = Id::makeFromLocalVocabIndex(&duplicateWord);
+  Id id5 = getLocalVocabId(duplicateWord);
 
   // The indices start at zero, a repeated ID keeps its index.
   binaryEq(mapping.remapId(id1), toMappedId(0));
@@ -115,9 +117,10 @@ TEST(StringMapping, takeStrings) {
   // IDs of all datatypes that point to strings.
   LocalVocabEntry testWord = localVocabEntryFromStringRepresentation(
       "\"abc\"", index.getLocalVocabContext());
+  auto getLocalVocabId = ad_utility::testing::makeGetLocalVocabId();
   Id id0 = Id::makeFromVocabIndex(VocabIndex::make(1));
   Id id1 = Id::makeFromVocabIndex(VocabIndex::make(2));
-  Id id2 = Id::makeFromLocalVocabIndex(&testWord);
+  Id id2 = getLocalVocabId(testWord);
   Id id3 = Id::makeFromTextRecordIndex(TextRecordIndex::make(0));
   Id id4 = Id::makeFromWordVocabIndex(WordVocabIndex::make(0));
 
@@ -140,4 +143,73 @@ TEST(StringMapping, takeStrings) {
   EXPECT_EQ(mapping.remapId(id1).getBits(),
             Id::makeFromLocalVocabIndex(nullptr).getBits());
   EXPECT_THAT(mapping.takeStrings(), ::testing::ElementsAre("<b>"));
+}
+
+// Test that `getTransmittedIndex` is the inverse of `makeTransmittedId`.
+TEST(StringMapping, transmittedIds) {
+  for (size_t index : {0ULL, 1ULL, 42ULL, 1ULL << 40}) {
+    Id id = StringMapping::makeTransmittedId(index);
+    EXPECT_EQ(id.getDatatype(), Datatype::LocalVocabIndex);
+    EXPECT_EQ(StringMapping::getTransmittedIndex(id), index);
+  }
+}
+
+// Test that the `TransmittedStringRewriter` resolves the IDs of a
+// `StringMapping` to the local IDs of their strings.
+TEST(TransmittedStringRewriter, roundTrip) {
+  auto* qec = getQecWithTextIndex();
+  const auto& index = qec->getIndex();
+  StringMapping mapping{index};
+
+  // A word of the vocabulary of the index, and a word that is not contained
+  // in it.
+  LocalVocabEntry testWord = localVocabEntryFromStringRepresentation(
+      "\"abc\"", index.getLocalVocabContext());
+  auto getLocalVocabId = ad_utility::testing::makeGetLocalVocabId();
+  Id vocabId = Id::makeFromVocabIndex(VocabIndex::make(1));
+  Id transmittedVocabId = mapping.remapId(vocabId);
+  Id transmittedTestWord = mapping.remapId(getLocalVocabId(testWord));
+
+  LocalVocab localVocab;
+  TransmittedStringRewriter rewriter{mapping.takeStrings(), index, localVocab};
+  // The word of the vocabulary becomes the same `VocabIndex` again (bitwise,
+  // not only semantically), the other word is added to the `localVocab`.
+  EXPECT_EQ(rewriter(transmittedVocabId).getBits(), vocabId.getBits());
+  Id localTestWord = rewriter(transmittedTestWord);
+  ASSERT_EQ(localTestWord.getDatatype(), Datatype::LocalVocabIndex);
+  EXPECT_EQ(localTestWord.getLocalVocabIndex()->toStringRepresentation(),
+            "\"abc\"");
+  EXPECT_EQ(localVocab.size(), 1);
+
+  // A string that is not part of the batch.
+  AD_EXPECT_THROW_WITH_MESSAGE(rewriter(StringMapping::makeTransmittedId(2)),
+                               ::testing::HasSubstr("not transmitted"));
+}
+
+// Test that a transmitted IRI that can be encoded locally becomes an encoded
+// IRI.
+TEST(TransmittedStringRewriter, encodesIris) {
+  ad_utility::testing::TestIndexConfig config;
+  config.encodedPrefixesWithoutAngleBrackets = {"http://example.org/"};
+  const auto& index = ad_utility::testing::getQec(config)->getIndex();
+
+  LocalVocab localVocab;
+  TransmittedStringRewriter rewriter{
+      {"<http://example.org/42>"}, index, localVocab};
+  EXPECT_EQ(rewriter(StringMapping::makeTransmittedId(0)),
+            index.encodedIriManager().encode("<http://example.org/42>"));
+  EXPECT_TRUE(localVocab.empty());
+}
+
+// Test that a transmitted string that is not the representation of an IRI or
+// a literal is rejected, instead of failing an internal assertion.
+TEST(TransmittedStringRewriter, malformedStrings) {
+  const auto& index = ad_utility::testing::getQec()->getIndex();
+  for (std::string string : {"", "x", "<x", "\"", "\"abc", "abc\"", "@en"}) {
+    LocalVocab localVocab;
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        (TransmittedStringRewriter{std::vector<std::string>{string}, index,
+                                   localVocab}),
+        ::testing::HasSubstr("malformed string"));
+  }
 }
