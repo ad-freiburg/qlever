@@ -2646,21 +2646,21 @@ QueryPlanner::getJoinColumnsForTransitivePath(const JoinColumns& jcs,
   auto transitivePathIndex = static_cast<size_t>(!leftSideTransitivePath);
   auto otherIndex = static_cast<size_t>(leftSideTransitivePath);
 
-  SideTuple colsLeft;
-  SideTuple colsRight;
+  // The left and the right side are the columns 0 and 1 of the transitive
+  // path, a pair for its graph column (index 2) is ignored.
+  TransitivePathJoinCols cols;
   for (const auto& jc : jcs) {
     size_t transCol = jc[transitivePathIndex];
     size_t otherCol = jc[otherIndex];
-
     if (transCol == 0) {
-      AD_CORRECTNESS_CHECK(!colsLeft.has_value());
-      colsLeft = std::make_tuple(transCol, otherCol);
+      AD_CORRECTNESS_CHECK(!cols.left.has_value());
+      cols.left = otherCol;
     } else if (transCol == 1) {
-      AD_CORRECTNESS_CHECK(!colsRight.has_value());
-      colsRight = std::make_tuple(transCol, otherCol);
+      AD_CORRECTNESS_CHECK(!cols.right.has_value());
+      cols.right = otherCol;
     }
   }
-  return TransitivePathJoinCols(colsLeft, colsRight);
+  return cols;
 #endif
 }
 
@@ -2690,31 +2690,15 @@ auto QueryPlanner::createJoinWithTransitivePath(
     return std::nullopt;
   }
 
-  // Get all columns that can be joined with each other. May either be zero, one
-  // or two pairs. Graph variable is ignored here.
-  auto joinCols = getJoinColumnsForTransitivePath(jcs, aTransPath != nullptr);
-
-  auto getColFromSideOrNullopt =
-      [](const auto& colsSide) -> std::optional<size_t> {
-    if (!colsSide.has_value()) {
-      return std::nullopt;
-    }
-    const auto& [colTransPath, colOther] = colsSide.value();
-    AD_CORRECTNESS_CHECK(colTransPath <= 1);
-    return colOther;
-  };
-  const auto& leftSideOther = getColFromSideOrNullopt(joinCols.left);
-  const auto& rightSideOther = getColFromSideOrNullopt(joinCols.right);
-
-  // If both sides are given, we need to ensure the join cols are not the same.
-  if (leftSideOther.has_value() && rightSideOther.has_value()) {
-    AD_CORRECTNESS_CHECK(std::get<0>(joinCols.left.value()) !=
-                         std::get<0>(joinCols.right.value()));
-  } else if (!leftSideOther.has_value() && !rightSideOther.has_value()) {
+  // The columns of `otherTree` that bind the left and the right side of the
+  // path. If only the graph variable is joined, the path is not bound.
+  auto [leftCol, rightCol] =
+      getJoinColumnsForTransitivePath(jcs, aTransPath != nullptr);
+  if (!leftCol.has_value() && !rightCol.has_value()) {
     return std::nullopt;
   }
   SubtreePlan plan = makeSubtreePlan(
-      transPathOperation->bindSides(otherTree, leftSideOther, rightSideOther));
+      transPathOperation->bindSides(otherTree, leftCol, rightCol));
   mergeSubtreePlanIds(plan, a, b);
   return plan;
 #endif
