@@ -547,6 +547,17 @@ TEST(IndexScan, makeTreeWithBindColumnOfConstant) {
                    ->makeTreeWithBindColumn(bindIri("<p>", V{"?o"}))
                    .has_value());
 
+  // A constant column added to a scan with stripped columns is kept, and
+  // comes after the remaining variables.
+  auto strippedWithConstant =
+      strippedTree.value()->makeTreeWithBindColumn(bindIri("<p>"));
+  ASSERT_TRUE(strippedWithConstant.has_value());
+  EXPECT_EQ(strippedWithConstant.value()
+                ->getRootOperation()
+                ->computeResultOnlyForTesting()
+                .idTableView(),
+            makeIdTableFromVector({{x, p}, {x, p}}));
+
   // Stripping a constant column removes it from the scan, keeping it yields
   // the column after the remaining variables.
   const auto& scanWithConstant =
