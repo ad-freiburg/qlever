@@ -75,12 +75,9 @@ updateClause::GraphUpdate::Triples GraphStoreProtocol::convertTriples(
         transformTc(std::move(triple.predicate_)),
         transformTc(std::move(triple.object_)), tripleGraph);
   };
-  qlm::vector<SparqlTripleSimpleWithGraph> convertedTriples{allocator};
-  convertedTriples.reserve(triples.size());
-  for (auto& triple : triples) {
-    convertedTriples.push_back(transformTurtleTriple(std::move(triple)));
-  }
-  return {std::move(convertedTriples), blankNodeAdder.localVocab_.clone()};
+  return {ad_utility::transform(std::move(triples), transformTurtleTriple,
+                                allocator),
+          blankNodeAdder.localVocab_.clone()};
 }
 
 // ____________________________________________________________________________
