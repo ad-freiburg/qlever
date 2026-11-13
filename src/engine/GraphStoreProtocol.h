@@ -207,7 +207,7 @@ class GraphStoreProtocol {
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
   static std::vector<ParsedQuery> transformPut(
       const RequestT& rawRequest, const GraphOrDefault& graph,
-      const Index& index, qlever::Allocator<Id> allocator) {
+      const Index& index, const qlever::Allocator<Id>& allocator) {
     std::string stringRepresentation =
         truncatedStringRepresentation("PUT", rawRequest);
 
@@ -225,8 +225,8 @@ class GraphStoreProtocol {
     };
 
     ParsedQuery drop = ad_utility::getSingleElement(SparqlParser::parseUpdate(
-        index.getBlankNodeManager(), &index.encodedIriManager(),
-        std::move(allocator), getDrop()));
+        index.getBlankNodeManager(), &index.encodedIriManager(), allocator,
+        getDrop()));
     drop._originalString = stringRepresentation;
 
     auto triples =
@@ -287,8 +287,7 @@ class GraphStoreProtocol {
       return {transformGet(operation.graph_, &index.encodedIriManager(),
                            std::move(allocator))};
     } else if (method == "PUT") {
-      return transformPut(rawRequest, operation.graph_, index,
-                          std::move(allocator));
+      return transformPut(rawRequest, operation.graph_, index, allocator);
     } else if (method == "DELETE") {
       return {transformDelete(operation.graph_, index, std::move(allocator))};
     } else if (method == "POST") {
