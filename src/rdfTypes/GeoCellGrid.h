@@ -35,6 +35,7 @@ namespace detail {
 enum class GeoCellGridSchemeEnum : uint8_t {
   Flat = 0,
 };
+QLEVER_ENUM_SIZE(GeoCellGridSchemeEnum, 1);
 }  // namespace detail
 
 // Wrapper around `detail::GeoCellGridSchemeEnum` that provides conversion to
@@ -44,7 +45,8 @@ class GeoCellGridScheme
  public:
   using Enum = detail::GeoCellGridSchemeEnum;
 
-  static constexpr std::array<std::pair<Enum, std::string_view>, 1>
+  static constexpr std::array<std::pair<Enum, std::string_view>,
+                              qlever::enumSize<Enum>>
       descriptions_{{{Enum::Flat, "flat"}}};
   static const GeoCellGridScheme Flat;
 
