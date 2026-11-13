@@ -54,7 +54,8 @@ static_assert([] {
   }
   return static_cast<size_t>(Datatype::TripleTermIndex) ==
              datatypesOfVersion1.size() &&
-         Datatype::MaxValue == Datatype::TripleTermIndex;
+         qlever::enumSize<Datatype> ==
+             static_cast<size_t>(Datatype::TripleTermIndex) + 1;
 }());
 
 // _____________________________________________________________________________

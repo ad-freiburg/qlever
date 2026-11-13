@@ -133,16 +133,14 @@ class IdBase {
 
   // A mapping that decides if a Datatype is bitwise comparable or not. See
   // `canBeComparedBitwise()` below.
-  static constexpr std::array<bool, 14> isTypeBitwiseComparable_{
-      true, true, true, true, true, false, true,
-      true, true, true, true, true, true,  true};
+  static constexpr std::array<bool, qlever::enumSize<Datatype>>
+      isTypeBitwiseComparable_{true, true, true, true, true, false, true,
+                               true, true, true, true, true, true,  true};
 
   // Constant to be used in `static_assert` statements to indicate that
   // behavior is relying on the local vocab entry to be the only datatype that
   // is not bitwise comparable.
   static constexpr bool isOnlyLocalVocabNotBitwiseComparable =
-      isTypeBitwiseComparable_.size() ==
-          static_cast<size_t>(Datatype::MaxValue) + 1 &&
       !isTypeBitwiseComparable_.at(
           static_cast<size_t>(Datatype::LocalVocabIndex));
 

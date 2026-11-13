@@ -32,7 +32,7 @@ constexpr std::array nonTrivialDatatypes{
 // trivial, and that both lists above cover all datatypes.
 TEST(DatatypeTest, isDatatypeTrivial) {
   EXPECT_EQ(trivialDatatypes.size() + nonTrivialDatatypes.size(),
-            static_cast<size_t>(MaxValue) + 1);
+            qlever::enumSize<Datatype>);
   for (const Datatype type : trivialDatatypes) {
     EXPECT_TRUE(isDatatypeTrivial(type));
   }
@@ -65,23 +65,24 @@ TEST(DatatypeTest, isListOfAllDatatypesInOrder) {
 // Test the string of each datatype. Note that `EncodedVal` is printed as
 // `EncodedIri`.
 TEST(DatatypeTest, toString) {
-  constexpr std::array<std::pair<Datatype, std::string_view>, 14> expected{{
-      {Undefined, "Undefined"},
-      {Bool, "Bool"},
-      {Int, "Int"},
-      {Double, "Double"},
-      {VocabIndex, "VocabIndex"},
-      {LocalVocabIndex, "LocalVocabIndex"},
-      {SecondaryVocabIndex, "SecondaryVocabIndex"},
-      {TextRecordIndex, "TextRecordIndex"},
-      {Date, "Date"},
-      {GeoPoint, "GeoPoint"},
-      {WordVocabIndex, "WordVocabIndex"},
-      {BlankNodeIndex, "BlankNodeIndex"},
-      {EncodedVal, "EncodedIri"},
-      {TripleTermIndex, "TripleTermIndex"},
-  }};
-  EXPECT_EQ(expected.size(), static_cast<size_t>(MaxValue) + 1);
+  constexpr std::array<std::pair<Datatype, std::string_view>,
+                       qlever::enumSize<Datatype>>
+      expected{{
+          {Undefined, "Undefined"},
+          {Bool, "Bool"},
+          {Int, "Int"},
+          {Double, "Double"},
+          {VocabIndex, "VocabIndex"},
+          {LocalVocabIndex, "LocalVocabIndex"},
+          {SecondaryVocabIndex, "SecondaryVocabIndex"},
+          {TextRecordIndex, "TextRecordIndex"},
+          {Date, "Date"},
+          {GeoPoint, "GeoPoint"},
+          {WordVocabIndex, "WordVocabIndex"},
+          {BlankNodeIndex, "BlankNodeIndex"},
+          {EncodedVal, "EncodedIri"},
+          {TripleTermIndex, "TripleTermIndex"},
+      }};
   for (const auto& [type, name] : expected) {
     EXPECT_EQ(toString(type), name);
   }
@@ -89,7 +90,7 @@ TEST(DatatypeTest, toString) {
 
 // Test that `toString` throws for a value that is not a datatype.
 TEST(DatatypeTest, invalidDatatypeEnumValue) {
-  EXPECT_ANY_THROW(toString(static_cast<Datatype>(2345)));
+  EXPECT_ANY_THROW(toString(static_cast<Datatype>(qlever::enumSize<Datatype>)));
 }
 
 // Test that appending a datatype preserves the numeric tag assignments used by

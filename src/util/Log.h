@@ -66,7 +66,8 @@ enum class LogLevelEnum {
   TIMING = QLEVER_TIMING,
   TRACE = QLEVER_TRACE
 };
-}
+QLEVER_ENUM_SIZE(LogLevelEnum, 7);
+}  // namespace detail
 
 // Log level wrapper using the `EnumWithStrings` CRTP base to provide string
 // conversion and JSON serialization (for `boost::program_options` support,
@@ -74,7 +75,8 @@ enum class LogLevelEnum {
 class LogLevel : public EnumWithStrings<LogLevel, detail::LogLevelEnum> {
  public:
   using Enum = detail::LogLevelEnum;
-  static constexpr std::array<std::pair<Enum, std::string_view>, 7>
+  static constexpr std::array<std::pair<Enum, std::string_view>,
+                              qlever::enumSize<Enum>>
       descriptions_{{{Enum::FATAL, "FATAL"},
                      {Enum::ERROR, "ERROR"},
                      {Enum::WARN, "WARN"},

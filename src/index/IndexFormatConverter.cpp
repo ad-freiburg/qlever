@@ -116,7 +116,8 @@ static_assert(isStrictlyAscending(datatypesOfSourceFormat));
 // them.
 static_assert(datatypesOfSourceFormat.size() + 1 ==
               static_cast<size_t>(Datatype::TripleTermIndex));
-static_assert(Datatype::MaxValue == Datatype::TripleTermIndex);
+static_assert(static_cast<size_t>(Datatype::TripleTermIndex) + 1 ==
+              qlever::enumSize<Datatype>);
 
 // The version of the on-disk format of the materialized views (see
 // `MATERIALIZED_VIEWS_VERSION`) that the views of an index in the source format
