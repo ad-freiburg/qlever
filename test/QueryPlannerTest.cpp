@@ -2125,26 +2125,23 @@ TEST(QueryPlanner, substituteConstantBindExpressions) {
   auto bind = [](std::string_view expression) {
     return h::Bind(h::NeutralElement(), expression, Variable{"?x"});
   };
-  auto p = TripleComponent::Iri::fromIriref("<p>");
-
-  // A number computed from constants is a constant column of the scan.
-  h::expect(query("3 + 5"),
-            h::IndexScan(Id::makeFromInt(8), p, Variable{"?o"}, {},
-                         IndexScan::Graphs::All(), {}, {}, 2));
-
-  // A literal and an IRI computed from constants (which are not in the
-  // vocabulary) are added by a `Bind` on top of the scan.
-  auto expectBindOnTop = [&](std::string_view expression,
-                             TripleComponent value) {
+  auto expectSubstituted = [&](std::string_view expression,
+                               TripleComponent value) {
     h::expect(query(expression),
-              h::Bind(h::IndexScan(std::move(value), p, Variable{"?o"}),
-                      expression, Variable{"?x"}));
+              h::CartesianProductJoin(
+                  bind(expression),
+                  h::IndexScan(std::move(value),
+                               TripleComponent::Iri::fromIriref("<p>"),
+                               Variable{"?o"})));
   };
-  expectBindOnTop(
+
+  // A number, a literal, and an IRI computed from constants.
+  expectSubstituted("3 + 5", Id::makeFromInt(8));
+  expectSubstituted(
       "CONCAT(\"a\", \"b\")",
       TripleComponent::Literal::fromStringRepresentation("\"ab\""));
-  expectBindOnTop("IRI(CONCAT(\"http://x/\", \"a\"))",
-                  TripleComponent::Iri::fromIriref("<http://x/a>"));
+  expectSubstituted("IRI(CONCAT(\"http://x/\", \"a\"))",
+                    TripleComponent::Iri::fromIriref("<http://x/a>"));
 
   // A non-deterministic expression and an expression with value UNDEF are not
   // substituted.
