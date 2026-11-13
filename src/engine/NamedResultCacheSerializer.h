@@ -97,7 +97,8 @@ void readValue(Serializer& serializer, NamedResultCache::Value& arg,
   ExplicitIdTableOperation::IdTableOrView resultTable;
   if constexpr (ZeroCopyReadSerializer<Serializer>) {
     // Zero-copy path: build a non-owning `IdTableView<0>` directly from
-    // spans into the serializer's buffer, without copying the column data.
+    // views of the columns in the serializer's buffer, without copying the
+    // column data.
     // Since the writing side (see above) rejects any entry that contains a
     // `LocalVocabIndex` id, `mapping` can never actually apply to any id in
     // the columns, so skipping `deserializeIds`'s remapping step here is

@@ -324,10 +324,10 @@ TEST(TripleSerializer, rethrowsOnInvalidFileAccess) {
             HasSubstr("(Permission denied)")),
       std::runtime_error);
 }
-// _____________________________________________________________________________
-// An `IdTable` with two columns, one of which contains an `Id` of the
-// `localVocab`. Used by the tests of the serialization of the columns of an
-// `IdTable`.
+
+// Return an `IdTable` with two columns and three rows, one of whose entries is
+// an `Id` of a word that is added to the `localVocab`. This `Id` is also stored
+// in `localVocabId`.
 IdTable tableWithLocalVocabId(LocalVocab& localVocab, Id& localVocabId) {
   auto* qec = ad_utility::testing::getQec();
   localVocabId =
@@ -341,20 +341,23 @@ IdTable tableWithLocalVocabId(LocalVocab& localVocab, Id& localVocabId) {
   return table;
 }
 
-// Test that the columns of an `IdTable` that are written with `serializeIds`
-// are read back by `deserializeIds` into the columns of another `IdTable`, and
-// that the `mapping` is applied to the `Id`s of the local vocab. This is the
-// path with a copy of the named result cache, with and without the split
-// layout.
+// Test that `serializeIds` writes the columns of an `IdTable` in the format of
+// the column itself, which the zero-copy path of the named result cache reads,
+// and that `deserializeIds` reads them back into the columns of another
+// `IdTable` and applies the `mapping` to the `Id`s of the local vocab. The
+// latter is the path with a copy of the named result cache.
 TEST(TripleSerializer, columnsOfAnIdTableRoundTrip) {
   LocalVocab localVocab;
   Id localVocabId;
   const IdTable table = tableWithLocalVocabId(localVocab, localVocabId);
 
   ad_utility::serialization::ByteBufferWriteSerializer writer;
+  ad_utility::serialization::ByteBufferWriteSerializer direct;
   for (const auto& column : table.getColumns()) {
     ad_utility::detail::serializeIds(writer, column);
+    direct << ConstIdColumnRef{column};
   }
+  EXPECT_EQ(writer.data(), direct.data());
 
   ad_utility::serialization::ByteBufferReadSerializer reader{
       std::move(writer).data()};
@@ -372,22 +375,6 @@ TEST(TripleSerializer, columnsOfAnIdTableRoundTrip) {
   EXPECT_THAT(result, matchesIdTable(expected));
 }
 
-// Test that `serializeIds` writes a column of an `IdTable` in the format of
-// the column itself (and not, for example, as single `Id`s), so that
-// `deserializeIds` and the zero-copy path of the named result cache can read
-// it.
-TEST(TripleSerializer, serializeIdsWritesAColumnInTheFormatOfTheColumn) {
-  LocalVocab localVocab;
-  Id localVocabId;
-  const IdTable table = tableWithLocalVocabId(localVocab, localVocabId);
-  for (const auto& column : table.getColumns()) {
-    ad_utility::serialization::ByteBufferWriteSerializer viaSerializeIds;
-    ad_utility::detail::serializeIds(viaSerializeIds, column);
-    ad_utility::serialization::ByteBufferWriteSerializer direct;
-    direct << ConstIdColumnRef{column};
-    EXPECT_EQ(viaSerializeIds.data(), direct.data());
-  }
-}
 // Test that `remapLocalVocab` replaces exactly the `Id`s of the local vocab by
 // the `Id` that the `mapping` gives for their bits, in place, for a
 // `std::vector<Id>` and for a column of an `IdTable`. All other `Id`s stay as

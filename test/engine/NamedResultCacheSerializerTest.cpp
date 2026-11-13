@@ -8,8 +8,6 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include <type_traits>
-
 #include "../QueryPlannerTestHelpers.h"
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
@@ -148,17 +146,6 @@ TEST_F(NamedResultCacheSerializerTest, ValueSerialization) {
   EXPECT_FALSE(deserializedValue.cachedGeoIndex_.has_value());
 }
 
-// The address of the first byte of the data of the `column`: of its `Id`s for a
-// `ql::span`, of its payloads for a column of the split layout.
-template <typename Column>
-const char* firstByteOf(const Column& column) {
-  if constexpr (std::is_same_v<Column, ql::span<const Id>>) {
-    return reinterpret_cast<const char*>(column.data());
-  } else {
-    return reinterpret_cast<const char*>(column.rawPayloads().data());
-  }
-}
-
 // Test that deserializing from an `AlignedByteBufferReadSerializer` (which
 // supports zero-copy deserialization) yields a non-owning `IdTableView<0>`
 // that points directly into the serializer's buffer, instead of an owning
@@ -197,7 +184,7 @@ TEST_F(NamedResultCacheSerializerTest, ValueSerializationZeroCopy) {
   // serializer, so no column was copied.
   const auto& buffer = readSerializer.data();
   for (const auto& column : view.getColumns()) {
-    const char* firstByte = firstByteOf(column);
+    const char* firstByte = memoryOf(column);
     EXPECT_TRUE(firstByte >= buffer.data() &&
                 firstByte < buffer.data() + buffer.size());
   }
