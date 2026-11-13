@@ -121,12 +121,16 @@ TEST(AllocatorMemoryResource, memoryLimitIsRespected) {
                ad_utility::detail::AllocationExceedsLimitException);
 
   // The memory can be used by a monotonic buffer resource, and is returned to
-  // the allocator when the buffer resource is destroyed.
+  // the allocator when the buffer resource is destroyed. NOTE: The
+  // `monotonic_buffer_resource` of `boost::container::pmr` (used in the C++17
+  // mode) throws `std::bad_alloc` for alignments larger than
+  // `alignof(std::max_align_t)`.
   auto memoryLeftBefore = allocator.amountMemoryLeft();
   {
     ql::pmr::monotonic_buffer_resource arena{&resource};
-    void* p = arena.allocate(5'000, 64);
-    EXPECT_TRUE(isAligned(p, 64));
+    constexpr size_t alignment = alignof(std::max_align_t);
+    void* p = arena.allocate(5'000, alignment);
+    EXPECT_TRUE(isAligned(p, alignment));
     EXPECT_LE(allocator.amountMemoryLeft(), memoryLeftBefore - 5_kB);
   }
   EXPECT_EQ(allocator.amountMemoryLeft(), memoryLeftBefore);
