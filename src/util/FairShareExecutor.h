@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "backports/asio.h"
+#include "util/EnumSize.h"
 #include "util/Exception.h"
 #include "util/Executor.h"
 #include "util/Synchronized.h"
@@ -48,6 +49,7 @@ namespace ad_utility {
 // NOTE: The scheduler works for any number of classes, which have to be
 // numbered `0, 1, ...` (see `FairScheduler::State::classes_`).
 enum class FairShareClass { Foreground = 0, Background = 1 };
+QLEVER_ENUM_SIZE(FairShareClass, 2);
 
 // A scheduler that runs the tasks of several clients on the threads of an
 // underlying executor (typically a `boost::asio::thread_pool`).
@@ -154,8 +156,7 @@ class FairScheduler : public std::enable_shared_from_this<FairScheduler> {
     // executor. Each of them occupies one of the `numSlots_` slots.
     size_t numWorkers_ = 0;
     // The state of each `FairShareClass`, indexed by its value.
-    // TODO<#3918> Size it via `qlever::enumSize<FairShareClass>`.
-    std::array<ClassState, 2> classes_;
+    std::array<ClassState, qlever::enumSize<FairShareClass>> classes_;
     // The virtual time of the class whose task was most recently dispatched
     // (see `ClassState::lastDispatchedClientTime_`). Used to place classes that
     // become active (see `submit`).
