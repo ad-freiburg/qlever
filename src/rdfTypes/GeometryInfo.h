@@ -34,6 +34,10 @@
 namespace util::geo {
 enum class CRSType : uint8_t;
 }
+// As `util` is not included in this file, we use this constant instead of
+// `util::geo::CRSType::UNSUPPORTED`. This is used in
+// `SparqlExpressionValueGetter.h`.
+constexpr inline ::util::geo::CRSType crsTypeUnsupported{0};
 
 namespace ad_utility {
 
@@ -128,6 +132,8 @@ struct SourceCrsType {
 
   // Returns the representing IRI.
   std::optional<std::string_view> asIri() const;
+  // Convert a CRS IRI string to CRS type.
+  static ::util::geo::CRSType iriToCrsType(std::string_view uri);
 
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL_CONSTEXPR(SourceCrsType, type_)
 };

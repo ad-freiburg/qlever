@@ -114,7 +114,6 @@ std::optional<double> wktDistLibSpatialJoinImpl(const GeoPointOrWkt& a,
                                                 const GeoPointOrWkt& b) {
   return computeMetricDistance(a, b);
 }
-
 }  // namespace detail
 
 }  // namespace ad_utility

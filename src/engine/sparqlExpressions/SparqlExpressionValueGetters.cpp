@@ -418,39 +418,59 @@ OptIri IriValueGetter::operator()(
 }
 
 // _____________________________________________________________________________
-UnitOfMeasurement UnitOfMeasurementValueGetter::operator()(
-    ValueId id, const EvaluationContext* context) const {
+CPP_template_out_def(auto iriToValue, auto undefined)(
+    requires ad_utility::InvocableWithExactReturnType<
+        decltype(iriToValue), decltype(undefined), std::string_view>)
+decltype(undefined)
+    EnumValueGetter<CPP_sfinae_args(iriToValue, undefined)>::operator()(
+        ValueId id, const EvaluationContext * context) const {
   // Use cache to remember fully parsed units for reoccurring ValueIds
   return cache_.getOrCompute(
-      id, [&context](const ValueId& value) -> UnitOfMeasurement {
+      id, [&context](const ValueId& value) -> decltype(undefined) {
         // Get string content of ValueId
         auto str = idToLiteralOrIri(value, context, true);
         // Use LiteralOrIri overload for actual computation
         if (str.has_value()) {
-          return UnitOfMeasurementValueGetter{}(str.value(), context);
+          return litOrIriToValue(str.value());
         }
-        return UnitOfMeasurement::UNKNOWN;
+        return undefined;
       });
 }
 
 // _____________________________________________________________________________
-UnitOfMeasurement UnitOfMeasurementValueGetter::operator()(
-    const LiteralOrIri& s, const EvaluationContext*) const {
-  return litOrIriToUnit(s);
+CPP_template_out_def(auto iriToValue, auto undefined)(
+    requires ad_utility::InvocableWithExactReturnType<
+        decltype(iriToValue), decltype(undefined), std::string_view>)
+decltype(undefined)
+    EnumValueGetter<CPP_sfinae_args(iriToValue, undefined)>::operator()(
+        const LiteralOrIri & s, const EvaluationContext*) const {
+  return litOrIriToValue(s);
 }
 
 // _____________________________________________________________________________
-UnitOfMeasurement UnitOfMeasurementValueGetter::litOrIriToUnit(
-    const LiteralOrIri& s) {
+CPP_template_out_def(auto iriToValue, auto undefined)(
+    requires ad_utility::InvocableWithExactReturnType<
+        decltype(iriToValue), decltype(undefined), std::string_view>)
+decltype(undefined)
+    EnumValueGetter<CPP_sfinae_args(iriToValue, undefined)>::litOrIriToValue(
+        const LiteralOrIri& s) {
   // The GeoSPARQL standard requires literals of datatype xsd:anyURI for units
-  // of measurement. Because this is a rather obscure requirement, we support
-  // IRIs also.
+  // of measurement and CRS types. Because this is a rather obscure requirement,
+  // we support IRIs also.
   if (s.isIri() || (s.isLiteral() && s.getLiteral().hasDatatype() &&
                     s.getLiteral().getDatatype() == XSD_ANYURI_TYPE)) {
-    return ad_utility::detail::iriToUnitOfMeasurement(s.getContent());
+    return iriToValue(s.getContent());
   }
-  return UnitOfMeasurement::UNKNOWN;
+  return undefined;
 }
+
+// Explicit instantiations
+namespace sparqlExpression::detail {
+template struct EnumValueGetter<&ad_utility::detail::iriToUnitOfMeasurement,
+                                UnitOfMeasurement::UNKNOWN>;
+template struct EnumValueGetter<&ad_utility::SourceCrsType::iriToCrsType,
+                                crsTypeUnsupported>;
+}  // namespace sparqlExpression::detail
 
 //______________________________________________________________________________
 std::optional<ad_utility::GeoPointOrWkt> GeoPointOrWktValueGetter::operator()(
@@ -732,6 +752,7 @@ template struct TypeErasedValueGetter<ToNumericValueGetter>;
 template struct TypeErasedValueGetter<DatatypeValueGetter>;
 template struct TypeErasedValueGetter<IriValueGetter>;
 template struct TypeErasedValueGetter<UnitOfMeasurementValueGetter>;
+template struct TypeErasedValueGetter<CRSTypeValueGetter>;
 template struct TypeErasedValueGetter<GeoPointOrWktValueGetter>;
 template struct TypeErasedValueGetter<LanguageTagValueGetter>;
 template struct TypeErasedValueGetter<IriOrUriValueGetter>;
