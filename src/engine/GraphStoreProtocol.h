@@ -136,7 +136,8 @@ class GraphStoreProtocol {
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
   static ParsedQuery
       transformPost(const RequestT& rawRequest, const GraphOrDefault& graph,
-                    const Index& index) {
+                    const Index& index,
+                    const qlever::Allocator<Id>& allocator) {
     throwIfRequestBodyEmpty(rawRequest);
     auto triples =
         parseTriples(rawRequest.body(), extractMediatype(rawRequest));
@@ -171,7 +172,8 @@ class GraphStoreProtocol {
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
   static ParsedQuery
       transformTsop(const RequestT& rawRequest, const GraphOrDefault& graph,
-                    const Index& index) {
+                    const Index& index,
+                    const qlever::Allocator<Id>& allocator) {
     throwIfRequestBodyEmpty(rawRequest);
     auto triples =
         parseTriples(rawRequest.body(), extractMediatype(rawRequest));
@@ -290,11 +292,11 @@ class GraphStoreProtocol {
     } else if (method == "DELETE") {
       return {transformDelete(operation.graph_, index, std::move(allocator))};
     } else if (method == "POST") {
-      return {transformPost(rawRequest, operation.graph_, index)};
+      return {transformPost(rawRequest, operation.graph_, index, allocator)};
     } else if (method == "TSOP") {
       // TSOP (`POST` backwards) does the inverse of `POST`. It does a `DELETE
       // DATA` of the payload.
-      return {transformTsop(rawRequest, operation.graph_, index)};
+      return {transformTsop(rawRequest, operation.graph_, index, allocator)};
     } else if (method == "HEAD") {
       return {transformHead(operation.graph_, &index.encodedIriManager(),
                             std::move(allocator))};

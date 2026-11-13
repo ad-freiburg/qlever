@@ -18,6 +18,7 @@
 #include "backports/algorithm.h"
 #include "backports/iterator.h"
 #include "backports/shift.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
 #include "util/HashSet.h"
@@ -104,14 +105,17 @@ bool contains_if(const Container& container, const Predicate& predicate) {
 }
 
 /**
- * Appends the second vector to the first one.
+ * Appends the second vector to the first one. The vectors may have different
+ * allocators (for example a `qlm::vector` and a `std::vector`), and `source`
+ * may be any range with the same value type.
  *
  * @param destination Vector& to which to append
  * @param source Vector&& to append
  */
-CPP_template(typename T, typename U)(
-    requires ad_utility::SimilarTo<std::vector<T>, U>)
-void appendVector(std::vector<T>& destination, U&& source) {
+CPP_template(typename T, typename Alloc, typename U)(
+    requires ql::ranges::input_range<U> &&
+    ad_utility::SimilarTo<T, ql::ranges::range_value_t<U>>)
+void appendVector(std::vector<T, Alloc>& destination, U&& source) {
   destination.insert(destination.end(),
                      ad_utility::makeForwardingIterator<U>(source.begin()),
                      ad_utility::makeForwardingIterator<U>(source.end()));
@@ -128,6 +132,20 @@ auto transform(Range&& input, F unaryOp) {
              ad_utility::makeForwardingIterator<Range>(input.end())) |
          ql::views::transform(std::move(unaryOp)) | ::ranges::to_vector;
 }
+
+/**
+ * Like the overload above, but the result is a `qlm::vector` that uses the
+ * given `allocator`.
+ */
+template <typename Range, typename F, typename Alloc>
+auto transform(Range&& input, F unaryOp, const Alloc& allocator) {
+  return ql::ranges::subrange(
+             ad_utility::makeForwardingIterator<Range>(input.begin()),
+             ad_utility::makeForwardingIterator<Range>(input.end())) |
+         ql::views::transform(std::move(unaryOp)) |
+         ::ranges::to<qlm::vector>(allocator);
+}
+
 /*
 @brief Takes two vectors, pairs up their content at the same index positions
 and copies them into `std::pair`s, who are returned inside a vector.
