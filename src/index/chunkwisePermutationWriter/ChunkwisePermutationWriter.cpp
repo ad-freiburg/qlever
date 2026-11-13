@@ -186,6 +186,9 @@ void ChunkwisePermutationWriter::consolidate() {
 // _____________________________________________________________________________
 PermutationPairResult ChunkwisePermutationWriter::finish(
     std::future<void> mergeCompletion) {
+  AD_CONTRACT_CHECK(
+      mergeCompletion.valid(),
+      "`finish` needs the future of the merge, see `mergeToSink`");
   {
     // Whatever happens, wait for the chunks that are still running and for the
     // callbacks before leaving this scope, because they refer to the writers
