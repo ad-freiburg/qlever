@@ -30,23 +30,16 @@ TEST(Views, BufferedAsyncView) {
   };
 
   uint64_t numElements = 1000;
-  const std::vector<uint64_t> ints = [numElements]() {
-    std::vector<uint64_t> ints;
-    ints.reserve(numElements);
-    for (uint64_t i = 0; i < numElements; ++i) {
-      ints.push_back(numElements - i);
-    }
-    return ints;
-  }();
+  const auto ints = ad_utility::integerRange(numElements) |
+                    ql::views::transform(
+                        [numElements](uint64_t i) { return numElements - i; }) |
+                    ::ranges::to_vector;
 
-  const std::vector<std::string> strings = [numElements]() {
-    std::vector<std::string> strings;
-    strings.reserve(numElements);
-    for (uint64_t i = 0; i < numElements; ++i) {
-      strings.push_back(std::to_string(numElements - i));
-    }
-    return strings;
-  }();
+  const auto strings = ad_utility::integerRange(numElements) |
+                       ql::views::transform([numElements](uint64_t i) {
+                         return std::to_string(numElements - i);
+                       }) |
+                       ::ranges::to_vector;
 
   testWithVector(ints);
   testWithVector(strings);

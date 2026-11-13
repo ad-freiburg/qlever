@@ -708,12 +708,8 @@ TEST_F(GroupByOptimizations, existsInGroupByAlias) {
     parsedQuery::Values valuesClause;
     valuesClause._inlineValues._variables = variables;
     for (const auto& row : rows) {
-      std::vector<TripleComponent> valueRow;
-      valueRow.reserve(row.size());
-      for (int64_t value : row) {
-        valueRow.emplace_back(value);
-      }
-      valuesClause._inlineValues._values.push_back(std::move(valueRow));
+      valuesClause._inlineValues._values.push_back(
+          ::ranges::to<std::vector<TripleComponent>>(row));
     }
     pq._rootGraphPattern._graphPatterns.emplace_back(std::move(valuesClause));
     for (const auto& variable : variables) {
