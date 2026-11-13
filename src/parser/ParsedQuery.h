@@ -14,6 +14,7 @@
 #include <variant>
 #include <vector>
 
+#include "backports/span.h"
 #include "backports/three_way_comparison.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/Alias.h"
@@ -160,8 +161,7 @@ class ParsedQuery {
   void registerVariableVisibleInQueryBody(const Variable& variable);
 
   // Add variables, that were found in the query body.
-  void registerVariablesVisibleInQueryBody(
-      const std::vector<Variable>& variables);
+  void registerVariablesVisibleInQueryBody(ql::span<const Variable> variables);
 
   // Return all the warnings that have been added via `addWarning()` or
   // `addUnboundVariableWarningOrThrow`.

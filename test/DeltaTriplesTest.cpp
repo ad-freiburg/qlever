@@ -709,8 +709,9 @@ TEST_F(DeltaTriplesTest, hasWordTriplesForUpdatedLiterals) {
   // Run the `update` via the `DeltaTriplesManager` of the index.
   auto runUpdate = [&](const std::string& update) {
     ad_utility::BlankNodeManager blankNodeManager;
-    auto parsedUpdates = SparqlParser::parseUpdate(&blankNodeManager,
-                                                   encodedIriManager(), update);
+    auto parsedUpdates =
+        SparqlParser::parseUpdate(&blankNodeManager, encodedIriManager(),
+                                  ad_utility::testing::makeAllocator(), update);
     index->deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
       qec.setLocatedTriplesForEvaluation(
           deltaTriples.getLocatedTriplesSharedStateReference());

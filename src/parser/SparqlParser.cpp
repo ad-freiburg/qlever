@@ -17,6 +17,7 @@ namespace {
 template <typename ContextType>
 auto parseOperation(BnodeMgr bnodeMgr,
                     const EncodedIriManager* encodedIriManager,
+                    qlever::Allocator<Id> allocator,
                     ContextType* (SparqlAutomaticParser::*f)(void),
                     std::string operation,
                     const std::vector<DatasetClause>& datasets) {
@@ -27,6 +28,7 @@ auto parseOperation(BnodeMgr bnodeMgr,
   sparqlParserHelpers::ParserAndVisitor p{
       bnodeMgr,
       encodedIriManager,
+      std::move(allocator),
       std::move(operation),
       {{S{QLEVER_INTERNAL_PREFIX_NAME}, S{QLEVER_INTERNAL_PREFIX_IRI}}},
       datasets.empty()
@@ -43,11 +45,11 @@ auto parseOperation(BnodeMgr bnodeMgr,
 
 // _____________________________________________________________________________
 ParsedQuery SparqlParser::parseQuery(
-    const EncodedIriManager* encodedIriManager, std::string query,
-    const std::vector<DatasetClause>& datasets) {
+    const EncodedIriManager* encodedIriManager, qlever::Allocator<Id> allocator,
+    std::string query, const std::vector<DatasetClause>& datasets) {
   ad_utility::BlankNodeManager bnodeMgr;
-  auto res = parseOperation(&bnodeMgr, encodedIriManager, &AntlrParser::query,
-                            std::move(query), datasets);
+  auto res = parseOperation(&bnodeMgr, encodedIriManager, std::move(allocator),
+                            &AntlrParser::query, std::move(query), datasets);
   // Queries never contain blank nodes in the body since they are always turned
   // into internal variables.
   AD_CORRECTNESS_CHECK(bnodeMgr.numBlocksUsed() == 0);
@@ -57,7 +59,8 @@ ParsedQuery SparqlParser::parseQuery(
 // _____________________________________________________________________________
 std::vector<ParsedQuery> SparqlParser::parseUpdate(
     BnodeMgr bnodeMgr, const EncodedIriManager* encodedIriManager,
-    std::string update, const std::vector<DatasetClause>& datasets) {
-  return parseOperation(bnodeMgr, encodedIriManager, &AntlrParser::update,
-                        std::move(update), datasets);
+    qlever::Allocator<Id> allocator, std::string update,
+    const std::vector<DatasetClause>& datasets) {
+  return parseOperation(bnodeMgr, encodedIriManager, std::move(allocator),
+                        &AntlrParser::update, std::move(update), datasets);
 }
