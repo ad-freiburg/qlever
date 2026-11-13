@@ -75,11 +75,12 @@ class LibspatialjoinAlgorithm : public SpatialJoinAlgorithmBase {
                       std::optional<util::geo::I32Box> prefilterBox) const;
 
   // Prepare a libspatialjoin `SpatialJoinCfg`. The result doesn't have any of
-  // its callbacks set yet. Before feeding the configuration to a `Sweeper` you
-  // usually want to set `writeRelCb` and `sweepCancellationCb`. Also
-  // `withinDist` should be set if a proximity search is intended. This
-  // function is only `public` for testing purposes and should otherwise not
-  // be used outside of this class.
+  // its callbacks set yet. Before constructing the `sj::GeometryStore`, the
+  // `sj::SweepEventList`s, the `sj::GeometryCache` and the `sj::Sweeper` (each
+  // of them keeps a copy of the configuration), you usually want to set
+  // `writeRelCb` and `sweepCancellationCb`, and `withinDist` for a proximity
+  // search. This function is only `public` for testing purposes and should
+  // otherwise not be used outside of this class.
   static sj::SpatialJoinCfg sweeperConfig(
       size_t threads, ad_utility::MemorySize totalAllowedMemory = 8_GB);
 
