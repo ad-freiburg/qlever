@@ -74,8 +74,6 @@ jobs:
             additional-cmake-options: "-DUSE_SPLIT_LAYOUT=ON"
             split-layout: true
 
-    continue-on-error: ${{ matrix.split-layout == true }}
-
     runs-on: ${{matrix.runner || 'ubuntu-24.04'}}
 
     steps:
