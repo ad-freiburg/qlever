@@ -123,7 +123,8 @@ class CompressedRelationWriter {
   // them are kept in flight (see `getNumBlocksInFlight`). The number of threads
   // that the writer uses is determined by the `executor` alone; to limit it,
   // pass an executor that limits its concurrency (see
-  // `util/ConcurrencyLimitedExecutor.h`), as the runtime index rebuild does.
+  // `util/ConcurrencyLimitedExecutor.h`) or the executor of a thread pool of
+  // the desired size (as the runtime index rebuild does).
   //
   // The file `f` has to be empty, because this writer writes the blocks at
   // the offsets that `nextOffset_` hands out, starting at `0`. It never
