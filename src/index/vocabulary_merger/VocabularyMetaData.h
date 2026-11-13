@@ -71,7 +71,7 @@ struct SegmentMetaData {
     if (ql::starts_with(word,
                         QLEVER_INTERNAL_PREFIX_IRI_WITHOUT_CLOSING_BRACKET)) {
       internalEntities_.add(id);
-      if (ql::unordered::contains(qlever::specialIds(), word)) {
+      if (qlever::specialIds().contains(word)) {
         specialIds_.emplace_back(std::string{word}, id);
       }
     }
@@ -136,9 +136,8 @@ struct VocabularyMetaData {
       return;
     }
     if (internalEntities_.addIfWordMatches(word, wordIndex)) {
-      if (ql::unordered::contains(*globalSpecialIds_, word)) {
-        ql::unordered::subscript(specialIdMapping_, word) =
-            vocabIdFromIndex(wordIndex);
+      if (globalSpecialIds_->contains(word)) {
+        specialIdMapping_[word] = vocabIdFromIndex(wordIndex);
       }
     }
   }

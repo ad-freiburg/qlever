@@ -138,7 +138,7 @@ TEST(SegmentCommitter, commitSegments) {
   EXPECT_EQ(meta.internalEntities().end(), V(3));
   EXPECT_EQ(meta.langTaggedPredicates().begin(), V(3));
   EXPECT_EQ(meta.langTaggedPredicates().end(), V(4));
-  EXPECT_EQ(ql::unordered::at(meta.specialIdMapping(), special), V(2));
+  EXPECT_EQ(meta.specialIdMapping().at(special), V(2));
 }
 
 // Test that the committer rejects a block writer with a block size of zero and

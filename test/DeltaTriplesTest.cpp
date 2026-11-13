@@ -95,8 +95,7 @@ class DeltaTriplesTest : public ::testing::Test {
       // The RdfStringParser returns temporary internal IDs for the default
       // graph. Detect this and overwrite with the Iri which gets looked up for
       // the correct ID.
-      if (triple.graphIri_ ==
-          ql::unordered::at(qlever::specialIds(), DEFAULT_GRAPH_IRI)) {
+      if (triple.graphIri_ == qlever::specialIds().at(DEFAULT_GRAPH_IRI)) {
         triple.graphIri_ = TripleComponent(
             TripleComponent::Iri::fromIriref(DEFAULT_GRAPH_IRI));
       }

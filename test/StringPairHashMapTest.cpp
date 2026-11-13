@@ -23,12 +23,12 @@ TEST(StringPairHashMapTest, InsertAndLookup) {
   ASSERT_EQ(map.size(), 2u);
 
   // Lookup using `std::string_view` pairs.
-  auto it = ql::unordered::find(map, StringViewPair{"hello", "world"});
+  auto it = map.find(StringViewPair{"hello", "world"});
   ASSERT_NE(it, map.end());
   ASSERT_EQ(it->second, 7);
 
-  EXPECT_EQ(ql::unordered::count(map, StringViewPair{"foo", "bar"}), 1u);
-  EXPECT_EQ(ql::unordered::count(map, StringViewPair{"does not", "exist"}), 0u);
+  EXPECT_EQ(map.count(StringViewPair{"foo", "bar"}), 1u);
+  EXPECT_EQ(map.count(StringViewPair{"does not", "exist"}), 0u);
 }
 
 // _____________________________________________________________________________

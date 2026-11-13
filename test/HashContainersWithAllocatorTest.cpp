@@ -13,12 +13,9 @@
 #include <string>
 #include <string_view>
 #include <type_traits>
-#include <unordered_map>
 #include <utility>
 
-#include "backports/unordered.h"
 #include "util/ContainersWithAllocator.h"
-#include "util/Forward.h"
 #include "util/HashMap.h"
 #include "util/HashSet.h"
 #include "util/MemoryLimitTracker.h"
@@ -122,103 +119,134 @@ TEST(HashContainersWithAllocator, nodeContainersHavePointerStability) {
   EXPECT_EQ(firstElement, &*set.find(0));
 }
 
-// Test that `ql::supportsHeterogeneousLookup` is true exactly for the Boost
-// containers (since Boost 1.82) with transparent hash and equality functions.
-TEST(HashContainersWithAllocator, supportsHeterogeneousLookup) {
-  constexpr bool expected =
-#ifdef QLEVER_HAS_BOOST_UNORDERED_NODE
-      true;
-#else
-      false;
-#endif
-  // The default hash and equality functions from `absl` are transparent for
-  // strings, but not for integers.
-  EXPECT_EQ(
-      (ql::supportsHeterogeneousLookup<ad_utility::HashMap<std::string, int>>),
-      expected);
-  EXPECT_EQ(ql::supportsHeterogeneousLookup<ad_utility::HashSet<std::string>>,
-            expected);
-  EXPECT_EQ(ql::supportsHeterogeneousLookup<qlm::node_hash_set<std::string>>,
-            expected);
-  EXPECT_FALSE(ql::supportsHeterogeneousLookup<ad_utility::HashSet<int>>);
-  EXPECT_FALSE(
-      (ql::supportsHeterogeneousLookup<std::unordered_map<
-           std::string, int, absl::DefaultHashContainerHash<std::string>,
-           absl::DefaultHashContainerEq<std::string>>>));
-}
-
-// Test `ql::heterogeneous`, which converts the key only if needed.
-TEST(HashContainersWithAllocator, heterogeneous) {
-  // Return the type of the key that is passed to the function.
-  auto getKey = [](auto&& key, const auto&) { return key; };
-  std::string_view key = "abc";
-
-  ad_utility::HashMap<std::string, int> map;
-  using KeyType = decltype(ql::heterogeneous(key, map, getKey));
-  EXPECT_EQ((std::is_same_v<KeyType, std::string_view>),
-            ql::supportsHeterogeneousLookup<decltype(map)>);
-  EXPECT_EQ(ql::heterogeneous(key, map, getKey), "abc");
-
-  // For a container without heterogeneous lookups, the key is converted.
-  ad_utility::HashMap<std::string, int, std::hash<std::string>,
-                      std::equal_to<std::string>>
-      nonTransparent;
-  EXPECT_TRUE(
-      (std::is_same_v<decltype(ql::heterogeneous(key, nonTransparent, getKey)),
-                      std::string>));
-  // A key that already has the `key_type` is passed on unchanged.
-  std::string stringKey = "abc";
-  EXPECT_EQ(&ql::heterogeneous(stringKey, nonTransparent,
-                               [](auto&& k, const auto&) -> decltype(auto) {
-                                 return AD_FWD(k);
-                               }),
-            &stringKey);
-}
-
-// Test the functions in the `ql::unordered` namespace with keys of a different
-// type than the `key_type`, for a hash map with and without transparent hash
-// and equality functions.
-TEST(HashContainersWithAllocator, unorderedFunctions) {
+// Test the heterogeneous lookups and insertions with keys of a different type
+// than the `key_type`, which all the hash containers support if their hash and
+// equality functions are transparent (as the defaults from `absl` are for
+// strings).
+TEST(HashContainersWithAllocator, heterogeneousMemberFunctions) {
   auto testMap = [](auto map) {
     std::string_view hello = "hello";
-    auto [it, isNew] = ql::unordered::try_emplace(map, hello, 42);
+    auto [it, isNew] = map.try_emplace(hello, 42);
     EXPECT_TRUE(isNew);
     EXPECT_EQ(it->first, "hello");
-    EXPECT_FALSE(ql::unordered::try_emplace(map, hello, 43).second);
-    EXPECT_EQ(ql::unordered::at(map, hello), 42);
-    EXPECT_FALSE(ql::unordered::insert_or_assign(map, hello, 44).second);
-    EXPECT_EQ(ql::unordered::subscript(map, hello), 44);
-    ql::unordered::subscript(map, std::string_view{"new"}) = 3;
+    EXPECT_FALSE(map.try_emplace(hello, 43).second);
+    EXPECT_EQ(map.at(hello), 42);
+    EXPECT_EQ(std::as_const(map).at(hello), 42);
+    EXPECT_FALSE(map.insert_or_assign(hello, 44).second);
+    EXPECT_EQ(map[hello], 44);
+    map[std::string_view{"new"}] = 3;
     EXPECT_EQ(map.size(), 2u);
-    EXPECT_TRUE(ql::unordered::contains(map, hello));
-    EXPECT_FALSE(ql::unordered::contains(map, std::string_view{"world"}));
-    EXPECT_EQ(ql::unordered::count(map, hello), 1u);
-    EXPECT_EQ(ql::unordered::find(map, hello)->second, 44);
-    EXPECT_EQ(ql::unordered::find(std::as_const(map), hello)->second, 44);
-    EXPECT_TRUE(ql::unordered::find(map, std::string_view{"world"}) ==
-                map.end());
-    EXPECT_EQ(ql::unordered::erase(map, hello), 1u);
-    EXPECT_EQ(ql::unordered::erase(map, hello), 0u);
+    EXPECT_TRUE(map.contains(hello));
+    EXPECT_FALSE(map.contains(std::string_view{"world"}));
+    EXPECT_EQ(map.count(hello), 1u);
+    EXPECT_EQ(map.find(hello)->second, 44);
+    EXPECT_EQ(std::as_const(map).find(hello)->second, 44);
+    EXPECT_TRUE(map.find(std::string_view{"world"}) == map.end());
+    EXPECT_EQ(map.erase(hello), 1u);
+    EXPECT_EQ(map.erase(hello), 0u);
     EXPECT_EQ(map.size(), 1u);
+
+    // The member functions that don't take a key still work.
+    map.insert({"a", 1});
+    map.insert(std::pair<const std::string, int>{"b", 2});
+    map.erase(map.find("a"));
+    EXPECT_EQ(map.size(), 2u);
+    map.erase(map.begin(), map.end());
+    EXPECT_TRUE(map.empty());
   };
   testMap(ad_utility::HashMap<std::string, int>{});
-  testMap(ad_utility::HashMap<std::string, int, std::hash<std::string>,
-                              std::equal_to<std::string>>{});
+  testMap(ad_utility::HashMapWithMemoryLimit<std::string, int>{
+      makeAllocator<std::pair<const std::string, int>>(1_MB)});
   testMap(qlm::node_hash_map<std::string, int>{
       makeAllocator<std::pair<const std::string, int>>(1_MB)});
 
   auto testSet = [](auto set) {
     std::string_view hello = "hello";
-    EXPECT_TRUE(ql::unordered::insert(set, hello).second);
-    EXPECT_FALSE(ql::unordered::insert(set, hello).second);
-    EXPECT_TRUE(ql::unordered::contains(set, hello));
-    EXPECT_EQ(ql::unordered::erase(set, hello), 1u);
+    EXPECT_TRUE(set.insert(hello).second);
+    EXPECT_FALSE(set.insert(hello).second);
+    EXPECT_TRUE(set.contains(hello));
+    EXPECT_EQ(set.count(hello), 1u);
+    EXPECT_EQ(*set.find(hello), "hello");
+    EXPECT_EQ(set.erase(hello), 1u);
     EXPECT_TRUE(set.empty());
+
+    // The member functions that don't take a key still work.
+    set.insert({std::string{"a"}, std::string{"b"}});
+    set.insert(set.begin(), std::string{"c"});
+    EXPECT_EQ(set.size(), 3u);
+    set.erase(set.find("c"));
+    EXPECT_EQ(set.size(), 2u);
   };
   testSet(ad_utility::HashSet<std::string>{});
-  testSet(ad_utility::HashSet<std::string, std::hash<std::string>,
-                              std::equal_to<std::string>>{});
+  testSet(ad_utility::HashSetWithMemoryLimit<std::string>{
+      makeAllocator<std::string>(1_MB)});
   testSet(qlm::flat_hash_set<std::string>{makeAllocator<std::string>(1_MB)});
+  testSet(qlm::node_hash_set<std::string>{makeAllocator<std::string>(1_MB)});
+
+  // Keys can also be passed as braced initializer lists.
+  ad_utility::HashMap<std::pair<int, int>, int> pairMap;
+  pairMap[{1, 2}] = 3;
+  EXPECT_TRUE(pairMap.contains({1, 2}));
+  EXPECT_EQ(pairMap.at({1, 2}), 3);
+  EXPECT_TRUE(pairMap.find({2, 1}) == pairMap.end());
+  EXPECT_TRUE(pairMap.try_emplace({2, 1}, 4).second);
+  EXPECT_EQ(pairMap.erase({1, 2}), 1u);
+}
+
+namespace {
+// True iff `map.find(key)`, `map.try_emplace(key, 0)`, or `map[key]` compile.
+template <typename Map, typename Key, typename = void>
+constexpr bool canFind = false;
+template <typename Map, typename Key>
+constexpr bool canFind<
+    Map, Key,
+    std::void_t<decltype(std::declval<Map&>().find(std::declval<Key>()))>> =
+    true;
+
+template <typename Map, typename Key, typename = void>
+constexpr bool canTryEmplace = false;
+template <typename Map, typename Key>
+constexpr bool
+    canTryEmplace<Map, Key,
+                  std::void_t<decltype(std::declval<Map&>().try_emplace(
+                      std::declval<Key>(), 0))>> = true;
+
+template <typename Map, typename Key, typename = void>
+constexpr bool canSubscript = false;
+template <typename Map, typename Key>
+constexpr bool canSubscript<
+    Map, Key,
+    std::void_t<decltype(std::declval<Map&>()[std::declval<Key>()])>> = true;
+}  // namespace
+
+// Test the hash maps with non-transparent hash and equality functions. They
+// can only be used with keys that are implicitly convertible to the
+// `key_type`.
+TEST(HashContainersWithAllocator, nonTransparentHashes) {
+  using NonTransparent =
+      ad_utility::HashMap<std::string, int, std::hash<std::string>,
+                          std::equal_to<std::string>>;
+  NonTransparent map;
+  map["abc"] = 1;
+  EXPECT_EQ(map.at(std::string{"abc"}), 1);
+  EXPECT_TRUE(map.contains("abc"));
+  EXPECT_TRUE(map.try_emplace("def", 2).second);
+  EXPECT_EQ(map.erase("abc"), 1u);
+
+  // With the Boost containers, heterogeneous lookups and insertions with a
+  // non-transparent hash function don't compile, so that a missing
+  // transparent hash function is detected. (With the `HeterogeneousContainer`
+  // wrapper, they also don't compile, but the errors happen when instantiating
+  // the function body, which we can't detect here.)
+  using Transparent = ad_utility::HashMap<std::string, int>;
+  static_assert(canFind<Transparent, std::string_view>);
+  static_assert(canTryEmplace<Transparent, std::string_view>);
+  static_assert(canSubscript<Transparent, std::string_view>);
+#ifdef QLEVER_HAS_BOOST_UNORDERED_NODE
+  static_assert(!canFind<NonTransparent, std::string_view>);
+  static_assert(!canTryEmplace<NonTransparent, std::string_view>);
+  static_assert(!canSubscript<NonTransparent, std::string_view>);
+#endif
 }
 
 // Test that `ql::erase_if` works for all the hash containers.

@@ -72,7 +72,7 @@ void collectNewWords(ConstIdColumnRef column,
     }
     const auto& word = entry->toStringRepresentation();
     if (!secondaryVocab.getId(word).has_value()) {
-      ql::unordered::insert(newWords, word);
+      newWords.insert(word);
     }
   }
 }

@@ -133,8 +133,7 @@ class RdfAsyncParallelParser : public AsyncRdfParserBase {
                          ad_utility::MemorySize blocksize,
                          const EncodedIriManager* encodedIriManager,
                          const TripleComponent& defaultGraphIri =
-                             ql::unordered::at(qlever::specialIds(),
-                                               DEFAULT_GRAPH_IRI),
+                             qlever::specialIds().at(DEFAULT_GRAPH_IRI),
                          RdfParserSettings settings = {});
 
  protected:

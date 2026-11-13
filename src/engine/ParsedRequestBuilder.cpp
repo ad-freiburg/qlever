@@ -102,7 +102,7 @@ void ParsedRequestBuilder::extractGraphStoreOperationDirect() {
 
 // ____________________________________________________________________________
 bool ParsedRequestBuilder::parametersContain(std::string_view param) const {
-  return ql::unordered::contains(parsedRequest_.parameters_, param);
+  return parsedRequest_.parameters_.contains(param);
 }
 
 // ____________________________________________________________________________
@@ -141,7 +141,7 @@ void ParsedRequestBuilder::extractOperationIfSpecified(
     AD_CORRECTNESS_CHECK(
         std::holds_alternative<None>(parsedRequest_.operation_));
     parsedRequest_.operation_ = Operation{operation.value(), {}};
-    ql::unordered::erase(parsedRequest_.parameters_, paramName);
+    parsedRequest_.parameters_.erase(paramName);
   }
 }
 

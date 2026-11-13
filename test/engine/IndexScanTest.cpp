@@ -656,7 +656,7 @@ TEST(IndexScan, getResultSizeOfScanFromRelationMetadata) {
   // unchanged, but makes it inexact.
   auto cancellationHandle =
       std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
-  auto g = ql::unordered::at(qlever::specialIds(), QLEVER_INTERNAL_GRAPH_IRI);
+  auto g = qlever::specialIds().at(QLEVER_INTERNAL_GRAPH_IRI);
   auto p = getId("<p>");
   auto r = getId("<r>");
   auto x0 = getId("<x0>");
@@ -683,7 +683,7 @@ TEST(IndexScan, getResultSizeOfScanWithDeltaTriples) {
       makeTestIndex("getResultSizeOfScanWithDeltaTriples",
                     "<a> <a> <a> . <b> <b> <b> . <c> <c> <c> ."));
   auto getId = makeGetId(*index);
-  auto g = ql::unordered::at(qlever::specialIds(), QLEVER_INTERNAL_GRAPH_IRI);
+  auto g = qlever::specialIds().at(QLEVER_INTERNAL_GRAPH_IRI);
   auto a = getId("<a>");
   auto b = getId("<b>");
   using V = Variable;

@@ -324,8 +324,7 @@ bool QueryPatternCache::analyzeView(ViewPtr view,
       // triple here, or `patternFound` would be `false`.
       auto predicate = triple.getSimplePredicate();
       AD_CORRECTNESS_CHECK(predicate.has_value());
-      ql::unordered::subscript(predicateInView_, predicate.value())
-          .push_back(view);
+      predicateInView_[predicate.value()].push_back(view);
     }
   }
 
