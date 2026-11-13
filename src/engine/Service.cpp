@@ -145,8 +145,7 @@ Result Service::computeResult(bool requestLaziness) {
   } catch (const ad_utility::detail::AllocationExceedsLimitException&) {
     throw;
   } catch (const std::exception&) {
-    // if the `SILENT` keyword is set in the service clause, catch the error and
-    // return a neutral Element.
+    // With `SILENT`, return the neutral element instead of throwing.
     if (parsedServiceClause_.silent_) {
       return makeNeutralElementResultForSilentFail();
     }
