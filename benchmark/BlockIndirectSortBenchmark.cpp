@@ -81,7 +81,7 @@ IdTable randomIdTable(size_t numRows, size_t numColumns) {
   IdTable table{numColumns, ad_utility::makeUnlimitedAllocator<Id>()};
   table.resize(numRows);
   for (auto column : table.getColumns()) {
-    for (auto& id : column) {
+    for (IdRef id : column) {
       id = Id::makeFromVocabIndex(VocabIndex::make(generator() >> 20));
     }
   }
