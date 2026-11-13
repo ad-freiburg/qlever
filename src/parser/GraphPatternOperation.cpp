@@ -74,9 +74,7 @@ const ParsedQuery& Subquery::get() const { return *_subquery; }
 
 // _____________________________________________________________________________
 void BasicGraphPattern::appendTriples(BasicGraphPattern other) {
-  _triples.insert(_triples.end(),
-                  std::make_move_iterator(other._triples.begin()),
-                  std::make_move_iterator(other._triples.end()));
+  ad_utility::appendVector(_triples, std::move(other._triples));
 }
 
 // ____________________________________________________________________________

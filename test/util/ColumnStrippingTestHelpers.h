@@ -85,12 +85,12 @@ makeExistsExpression(const std::string& predicate) {
   auto allocator = ad_utility::testing::makeAllocator();
   ParsedQuery query{allocator};
   query._rootGraphPattern._graphPatterns.push_back(
-      parsedQuery::BasicGraphPattern{qlm::vector<SparqlTriple>{
-          {SparqlTriple{
-              TripleComponent{Variable{"?a"}},
-              ad_utility::triple_component::Iri::fromIriref(predicate),
-              TripleComponent{Variable{"?x"}}}},
-          allocator}});
+      parsedQuery::BasicGraphPattern{
+          {{SparqlTriple{
+               TripleComponent{Variable{"?a"}},
+               ad_utility::triple_component::Iri::fromIriref(predicate),
+               TripleComponent{Variable{"?x"}}}},
+           allocator}});
   // Select the visible variables via `*`, exactly as the parser does.
   query.selectClause().setAsterisk();
   query.selectClause().addVisibleVariable(Variable{"?a"});

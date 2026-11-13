@@ -889,14 +889,15 @@ TripleComponent::Iri transformGraph(const GraphOrDefault& graph) {
           }},
       graph);
 }
+}  // namespace
 
 // _____________________________________________________________________________
 // Make a `GraphPatternOperation` that matches all triples in the given graph.
-GraphPatternOperation makeAllTripleGraphPattern(
-    const qlever::Allocator<Id>& allocator, TripleComponent::Iri graphIri) {
-  GraphPattern inner{allocator};
-  inner._graphPatterns.emplace_back(BasicGraphPattern{qlm::vector<SparqlTriple>{
-      {{{Variable("?s")}, Variable("?p"), {Variable("?o")}}}, allocator}});
+GraphPatternOperation Visitor::makeAllTripleGraphPattern(
+    TripleComponent::Iri graphIri) const {
+  GraphPattern inner{allocator()};
+  inner._graphPatterns.emplace_back(BasicGraphPattern{
+      {{{{Variable("?s")}, Variable("?p"), {Variable("?o")}}}, allocator()}});
   return {
       parsedQuery::GroupGraphPattern{std::move(inner), std::move(graphIri)}};
 }
@@ -904,16 +905,17 @@ GraphPatternOperation makeAllTripleGraphPattern(
 // _____________________________________________________________________________
 // Make a `GraphPatternOperation` that matches all triples in either all graphs,
 // or just named graphs, depending on the value of `behaviour`.
-GraphPatternOperation makeAllTripleGraphPattern(
-    const qlever::Allocator<Id>& allocator, Variable graphVariable,
-    parsedQuery::GroupGraphPattern::GraphVariableBehaviour behaviour) {
-  GraphPattern inner{allocator};
-  inner._graphPatterns.emplace_back(BasicGraphPattern{qlm::vector<SparqlTriple>{
-      {{{Variable("?s")}, Variable("?p"), {Variable("?o")}}}, allocator}});
+GraphPatternOperation Visitor::makeAllTripleGraphPattern(
+    Variable graphVariable,
+    parsedQuery::GroupGraphPattern::GraphVariableBehaviour behaviour) const {
+  GraphPattern inner{allocator()};
+  inner._graphPatterns.emplace_back(BasicGraphPattern{
+      {{{{Variable("?s")}, Variable("?p"), {Variable("?o")}}}, allocator()}});
   return {parsedQuery::GroupGraphPattern{std::move(inner),
                                          std::move(graphVariable), behaviour}};
 }
 
+namespace {
 // ____________________________________________________________________________________
 // Make a `SparqlTripleSimpleWithGraph` that templates all triples in the graph.
 SparqlTripleSimpleWithGraph makeAllTripleTemplate(
@@ -936,24 +938,21 @@ ParsedQuery Visitor::makeClear(const GraphRefAll& graph) {
   auto [graphPattern, updatePattern] = std::visit(
       ad_utility::OverloadCallOperator{
           [this](const GraphRef& graph) -> P {
-            return {makeAllTripleGraphPattern(allocator(), graph), graph};
+            return {makeAllTripleGraphPattern(graph), graph};
           },
           [this](const DEFAULT&) -> P {
             auto defaultGraph = ad_utility::triple_component::Iri::fromIriref(
                 DEFAULT_GRAPH_IRI);
             auto copy = defaultGraph;
-            return {
-                makeAllTripleGraphPattern(allocator(), std::move(defaultGraph)),
-                std::move(copy)};
+            return {makeAllTripleGraphPattern(std::move(defaultGraph)),
+                    std::move(copy)};
           },
           [this](const NAMED&) -> P {
-            return {makeAllTripleGraphPattern(allocator(), Variable{"?g"},
-                                              GVB::NAMED),
+            return {makeAllTripleGraphPattern(Variable{"?g"}, GVB::NAMED),
                     Variable{"?g"}};
           },
           [this](const ALL&) -> P {
-            return {makeAllTripleGraphPattern(allocator(), Variable{"?g"},
-                                              GVB::ALL),
+            return {makeAllTripleGraphPattern(Variable{"?g"}, GVB::ALL),
                     Variable{"?g"}};
           }},
       graph);
@@ -969,7 +968,7 @@ ParsedQuery Visitor::makeClear(const GraphRefAll& graph) {
 ParsedQuery Visitor::makeAdd(const GraphOrDefault& source,
                              const GraphOrDefault& target) {
   parsedQuery_._rootGraphPattern._graphPatterns.push_back(
-      makeAllTripleGraphPattern(allocator(), transformGraph(source)));
+      makeAllTripleGraphPattern(transformGraph(source)));
   parsedQuery_._clause = parsedQuery::UpdateClause{GraphUpdate{
       {{makeAllTripleTemplate(transformGraph(target))}, LocalVocab{}}, {}}};
   parsedQuery_.datasetClauses_ = activeDatasetClauses_;
@@ -1359,13 +1358,9 @@ BasicGraphPattern Visitor::visit(Parser::TriplesBlockContext* ctx) {
             graphTermToTripleComponentWithEncoding(triple.object_)};
   };
 
-  qlm::vector<SparqlTriple> sparqlTriples{allocator()};
-  auto sparqlTripleContexts = visit(ctx->triplesSameSubjectPath());
-  sparqlTriples.reserve(sparqlTripleContexts.size());
-  for (const auto& triple : sparqlTripleContexts) {
-    sparqlTriples.push_back(convertAndRegisterTriple(triple));
-  }
-  BasicGraphPattern triples{std::move(sparqlTriples)};
+  BasicGraphPattern triples = {
+      ad_utility::transform(visit(ctx->triplesSameSubjectPath()),
+                            convertAndRegisterTriple, allocator())};
   if (ctx->triplesBlock()) {
     triples.appendTriples(visit(ctx->triplesBlock()));
   }

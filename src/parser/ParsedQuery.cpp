@@ -433,7 +433,7 @@ bool ParsedQuery::GraphPattern::addLanguageFilter(
     const auto allocator = _graphPatterns.get_allocator();
     std::vector<BasicGraphPattern> operations;
     for (const auto& langTag : langTags) {
-      operations.push_back(BasicGraphPattern{qlm::vector<SparqlTriple>{
+      operations.push_back({qlm::vector<SparqlTriple>{
           {SparqlTriple{
               variable,
               PropertyPath::fromIri(

@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "util/Algorithm.h"
+#include "util/AllocatorTestHelpers.h"
 #include "util/GTestHelpers.h"
 #include "util/HashMap.h"
 #include "util/Random.h"
@@ -152,6 +153,35 @@ TEST(Algorithm, AppendVector) {
 }
 
 // _____________________________________________________________________________
+// Test that `appendVector` works for vectors with an allocator, for different
+// allocators of the destination and the source, and for moving from the source.
+TEST(Algorithm, AppendVectorWithAllocator) {
+  auto allocator = ad_utility::testing::makeAllocator();
+  using V = qlm::vector<std::string>;
+  V v{{"1", "2"}, allocator};
+
+  // Copy from a `std::vector` to a `qlm::vector`.
+  std::vector<std::string> plain{"3", "9"};
+  appendVector(v, plain);
+  ASSERT_EQ(v, (V{{"1", "2", "3", "9"}, allocator}));
+  ASSERT_EQ(plain, (std::vector<std::string>{"3", "9"}));
+
+  // Move from a `qlm::vector` to a `qlm::vector`.
+  V other{{"-18", "0"}, allocator};
+  appendVector(v, std::move(other));
+  ASSERT_EQ(v, (V{{"1", "2", "3", "9", "-18", "0"}, allocator}));
+  ASSERT_EQ(other.size(), 2u);
+  ASSERT_TRUE(other[0].empty());
+  ASSERT_TRUE(other[1].empty());
+
+  // Copy from a `qlm::vector` to a `std::vector`.
+  std::vector<std::string> target{"a"};
+  appendVector(target, v);
+  ASSERT_EQ(target,
+            (std::vector<std::string>{"a", "1", "2", "3", "9", "-18", "0"}));
+}
+
+// _____________________________________________________________________________
 TEST(Algorithm, Transform) {
   std::vector<std::string> v{"hi", "bye", "why"};
   auto vCopy = v;
@@ -166,6 +196,35 @@ TEST(Algorithm, Transform) {
   ASSERT_EQ((std::vector<std::string>{"hix", "byex", "whyx"}), v3);
   ASSERT_EQ(3u, v.size());
   // The individual elements of `v` were moved from.
+  ASSERT_TRUE(ql::ranges::all_of(v, &std::string::empty));
+}
+
+// _____________________________________________________________________________
+// Test that `transform` with an allocator returns a `qlm::vector` that
+// allocates its memory via this allocator.
+TEST(Algorithm, TransformWithAllocator) {
+  auto allocator =
+      ad_utility::testing::makeAllocator(ad_utility::MemorySize::megabytes(1));
+  const auto memoryLeftBefore = allocator.amountMemoryLeft();
+  std::vector<std::string> v{"hi", "bye", "why"};
+  auto v2 =
+      transform(v, [](const std::string& s) { return s.substr(1); }, allocator);
+  static_assert(std::is_same_v<decltype(v2), qlm::vector<std::string>>);
+  ASSERT_EQ((qlm::vector<std::string>{{"i", "ye", "hy"}, allocator}), v2);
+  EXPECT_LT(allocator.amountMemoryLeft(), memoryLeftBefore);
+  // `v` was copied from.
+  ASSERT_EQ((std::vector<std::string>{"hi", "bye", "why"}), v);
+
+  // Transform using the moved values from `v`.
+  auto v3 = transform(
+      std::move(v),
+      [](std::string s) {
+        s.push_back('x');
+        return s;
+      },
+      allocator);
+  ASSERT_EQ((qlm::vector<std::string>{{"hix", "byex", "whyx"}, allocator}), v3);
+  ASSERT_EQ(3u, v.size());
   ASSERT_TRUE(ql::ranges::all_of(v, &std::string::empty));
 }
 
