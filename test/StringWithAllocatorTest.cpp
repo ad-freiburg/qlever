@@ -153,12 +153,12 @@ TEST(StringWithAllocator, ostringstreamSeek) {
     os << "ab";
     os.seekp(1, std::ios_base::end);
   });
-  // Seeking the input position fails, as the buffer is output-only.
-  check([](std::ostream& os) {
-    os << "ab";
-    EXPECT_EQ(os.rdbuf()->pubseekoff(0, std::ios_base::cur, std::ios_base::in),
-              std::streampos(std::streamoff(-1)));
-  });
+  // Seeking the input position fails, as the buffer is output-only. Not
+  // compared to `std::ostringstream`, for which libc++ succeeds here.
+  qlm::ostringstream os{unlimited()};
+  os << "ab";
+  EXPECT_EQ(os.rdbuf()->pubseekoff(0, std::ios_base::cur, std::ios_base::in),
+            std::streampos(std::streamoff(-1)));
 }
 
 // `overflow(eof)` succeeds without writing anything.
