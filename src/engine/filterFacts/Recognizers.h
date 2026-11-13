@@ -29,9 +29,9 @@ struct DistanceBound {
 };
 
 // Recognize `distance(a, b) <= c` and `distance(a, b) < c` for a finite number
-// `c >= 0`. For `<`, the maximum distance is the largest `double` below `c`
-// (because a `SpatialJoin` includes the pairs at exactly its maximum
-// distance).
+// `c` and a maximum distance that is not negative. For `<`, the maximum
+// distance is the largest `double` below `c` (because a `SpatialJoin` includes
+// the pairs at exactly its maximum distance).
 std::optional<DistanceBound> recognizeDistanceBound(const Conjunct& conjunct);
 
 }  // namespace filterFacts
