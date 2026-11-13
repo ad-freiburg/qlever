@@ -276,7 +276,8 @@ TEST(LocalVocab, merge) {
   EXPECT_TRUE(vocE.isBlankNodeIndexContained(id2));
 }
 
-// _____________________________________________________________________________
+// Test `numSets` and `isLocalVocabIndexContained` for indices in the primary
+// set, in another set, and in neither.
 TEST(LocalVocab, numSetsAndIsLocalVocabIndexContained) {
   const auto& context = ad_utility::testing::getQec()->getLocalVocabContext();
   LocalVocab vocA = makeLocalVocab();

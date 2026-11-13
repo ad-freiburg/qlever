@@ -742,7 +742,7 @@ TEST(Result, assertionOnNullptrConstruction) {
       Result(Result::IdTablePtr(nullptr), sortOrder(), makeLocalVocab()));
 }
 
-// _____________________________________________________________________________
+// Test that merging the local vocabs of zero results throws.
 TEST(Result, getMergedLocalVocabThrowsWithoutResults) {
   EXPECT_ANY_THROW(Result::getMergedLocalVocab(std::vector<Result>{}));
 }

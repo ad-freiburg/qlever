@@ -65,7 +65,8 @@ bool isAligned(const void* p, size_t alignment) {
 }
 }  // namespace
 
-// _____________________________________________________________________________
+// Test that every supported alignment is passed on to the allocator, with the
+// size rounded up to a multiple of the alignment.
 TEST(AllocatorMemoryResource, everyAlignmentIsPassedToTheAllocator) {
   RecordingAllocator<std::byte> allocator;
   ad_utility::AllocatorMemoryResource<RecordingAllocator<std::byte>> resource{
@@ -85,7 +86,8 @@ TEST(AllocatorMemoryResource, everyAlignmentIsPassedToTheAllocator) {
   }
 }
 
-// _____________________________________________________________________________
+// Test that allocating and deallocating with an alignment larger than
+// `maxAlignment` throws.
 TEST(AllocatorMemoryResource, tooLargeAlignmentThrows) {
   ad_utility::AllocatorMemoryResource<RecordingAllocator<std::byte>> resource{
       RecordingAllocator<std::byte>{}};
@@ -99,7 +101,8 @@ TEST(AllocatorMemoryResource, tooLargeAlignmentThrows) {
       resource.deallocate(memory, 8, 2 * decltype(resource)::maxAlignment));
 }
 
-// _____________________________________________________________________________
+// Test that a resource only compares equal to itself, even if another resource
+// has the same allocator.
 TEST(AllocatorMemoryResource, isEqualOnlyToItself) {
   using Resource =
       ad_utility::AllocatorMemoryResource<RecordingAllocator<std::byte>>;
@@ -111,7 +114,9 @@ TEST(AllocatorMemoryResource, isEqualOnlyToItself) {
   EXPECT_FALSE(other.is_equal(resource));
 }
 
-// _____________________________________________________________________________
+// Test that the memory limit of an `AllocatorWithLimit` applies to the
+// resource, also when it is used as the upstream of a
+// `monotonic_buffer_resource`.
 TEST(AllocatorMemoryResource, memoryLimitIsRespected) {
   auto allocator = ad_utility::makeAllocatorWithLimit<std::byte>(10_kB);
   ad_utility::AllocatorMemoryResource<ad_utility::AllocatorWithLimit<std::byte>>
