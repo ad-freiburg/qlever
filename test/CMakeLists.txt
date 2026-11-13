@@ -685,6 +685,8 @@ addLinkAndDiscoverTest(ExportIdsTest engine sparqlParser)
 
 addLinkAndDiscoverTestNoLibs(EnumWithStringsTest Boost::program_options)
 
+addLinkAndDiscoverTestNoLibs(EnumSizeTest)
+
 addLinkAndDiscoverTest(ConstructTripleGeneratorTest engine)
 
 addLinkAndDiscoverTest(ConstructDeduplicatorTest engine)
