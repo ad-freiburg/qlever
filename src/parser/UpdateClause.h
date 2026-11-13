@@ -34,11 +34,7 @@ namespace parsedQuery {
 struct UpdateClause : ClauseBase {
   updateClause::GraphUpdate op_;
 
-  explicit UpdateClause(const qlever::Allocator<Id>& allocator)
-      : ClauseBase{allocator}, op_{allocator} {}
-  UpdateClause(const qlever::Allocator<Id>& allocator,
-               updateClause::GraphUpdate op)
-      : ClauseBase{allocator}, op_{std::move(op)} {}
+  explicit UpdateClause(updateClause::GraphUpdate op) : op_{std::move(op)} {}
 };
 }  // namespace parsedQuery
 
