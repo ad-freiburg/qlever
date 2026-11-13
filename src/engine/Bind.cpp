@@ -81,10 +81,11 @@ std::string Bind::getDescriptor() const { return _bind.getDescriptor(); }
 bool Bind::knownEmptyResult() { return _subtree->knownEmptyResult(); }
 
 // _____________________________________________________________________________
-std::string Bind::getCacheKeyImpl() const {
-  return absl::StrCat(
-      "BIND ", _bind._expression.getCacheKey(_subtree->getVariableColumns()),
-      "\n", _subtree->getCacheKey());
+qlm::string Bind::getCacheKeyImpl() const {
+  return qlm::StrCat(
+      allocator(), "BIND ",
+      _bind._expression.getCacheKey(_subtree->getVariableColumns()), "\n",
+      _subtree->getCacheKey());
 }
 
 // _____________________________________________________________________________

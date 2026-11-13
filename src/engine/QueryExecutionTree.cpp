@@ -42,7 +42,7 @@ QueryExecutionTree::QueryExecutionTree(QueryExecutionContext* const qec,
 }
 
 // _____________________________________________________________________________
-std::string QueryExecutionTree::getCacheKey() const {
+const qlm::string& QueryExecutionTree::getCacheKey() const {
   return cacheKey_.value();
 }
 
@@ -229,8 +229,8 @@ bool QueryExecutionTree::readFromCache() {
     return false;
   }
   auto& cache = qec_->getQueryTreeCache();
-  auto res =
-      cache.getIfContained({getCacheKey(), qec_->locatedTriplesState().index_});
+  auto res = cache.getIfContained(
+      {std::string{getCacheKey()}, qec_->locatedTriplesState().index_});
   if (res.has_value()) {
     cachedResult_ = res->_resultPointer->resultTablePtr();
     return true;

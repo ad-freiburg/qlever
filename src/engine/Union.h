@@ -42,7 +42,7 @@ class Union : public Operation {
         const std::shared_ptr<QueryExecutionTree>& t2);
 
  protected:
-  virtual std::string getCacheKeyImpl() const override;
+  virtual qlm::string getCacheKeyImpl() const override;
 
  public:
   virtual std::string getDescriptor() const override;

@@ -113,8 +113,8 @@ std::string TextIndexScanForWord::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-std::string TextIndexScanForWord::getCacheKeyImpl() const {
-  std::ostringstream os;
+qlm::string TextIndexScanForWord::getCacheKeyImpl() const {
+  qlm::ostringstream os{allocator()};
   os << "WORD INDEX SCAN: " << " with word: \"" << config_.word_
      << "\", has variable: " << config_.scoreVar_.has_value();
   return std::move(os).str();

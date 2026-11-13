@@ -55,8 +55,8 @@ VariableToColumnMap Filter::computeVariableToColumnMap() const {
 }
 
 // _____________________________________________________________________________
-std::string Filter::getCacheKeyImpl() const {
-  std::ostringstream os;
+qlm::string Filter::getCacheKeyImpl() const {
+  qlm::ostringstream os{allocator()};
   os << "FILTER " << _subtree->getCacheKey();
   os << " with " << _expression.getCacheKey(_subtree->getVariableColumns());
   return std::move(os).str();

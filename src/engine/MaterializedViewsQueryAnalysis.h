@@ -111,7 +111,7 @@ class QueryPatternCache {
       QueryExecutionContext* qec,
       const parsedQuery::BasicGraphPattern& triples) const;
 
-  ByCacheKeyInfoPtr lookupByCacheKey(const std::string& cacheKey) const;
+  ByCacheKeyInfoPtr lookupByCacheKey(std::string_view cacheKey) const;
 
  private:
   // Helper for `analyzeView`: build the view as a graph for pattern-based

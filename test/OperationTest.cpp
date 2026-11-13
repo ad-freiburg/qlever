@@ -1134,7 +1134,7 @@ TEST(OperationTest, disableCachingForOperation) {
   ValuesForTesting valuesForTesting{
       qec, std::move(idTablesVector), {Variable{"?x"}, Variable{"?y"}}, true};
 
-  QueryCacheKey cacheKey{valuesForTesting.getCacheKey(),
+  QueryCacheKey cacheKey{std::string{valuesForTesting.getCacheKey()},
                          qec->locatedTriplesState().index_};
 
   // By default, the result of `valuesForTesting` is cached because it is
@@ -1177,7 +1177,7 @@ TEST(OperationTest, disableCachingGlobally) {
 
   EXPECT_THAT(valuesForTesting.getCacheKey(), ::testing::IsEmpty());
 
-  QueryCacheKey cacheKey{valuesForTesting.getCacheKey(),
+  QueryCacheKey cacheKey{std::string{valuesForTesting.getCacheKey()},
                          qec->locatedTriplesState().index_};
 
   // Initially not contained in the cache (because we cleared the cache).
@@ -1316,4 +1316,27 @@ TEST(Operation, makeDistinctTreeDefaultRequiresNotAlreadyDistinct) {
 
   ASSERT_FALSE(scanOp.isDistinctBy(SC{0}));
   EXPECT_EQ(scanOp.makeDistinctTree(SC{0}), std::nullopt);
+}
+
+// The cache keys of operations and the cache key that is stored in a
+// `QueryExecutionTree` are allocated with the allocator of the query, so they
+// count toward its memory limit.
+TEST(Operation, cacheKeysRespectMemoryLimit) {
+  auto qec = getQec();
+  auto op = std::make_shared<ValuesForTesting>(
+      qec, makeIdTableFromVector({{1}}),
+      std::vector<std::optional<Variable>>{Variable{"?x"}});
+
+  QueryExecutionTree tree{qec, op};
+  const auto& allocator = qec->getAllocator();
+  EXPECT_EQ(tree.getCacheKey().get_allocator(), allocator);
+  EXPECT_EQ(op->getCacheKey().get_allocator(), allocator);
+
+  // Use up all the memory that is left.
+  std::vector<Id, ad_utility::AllocatorWithLimit<Id>> blocker(
+      allocator.amountMemoryLeft().getBytes() / sizeof(Id), allocator);
+  EXPECT_THROW(op->getCacheKey(),
+               ad_utility::detail::AllocationExceedsLimitException);
+  EXPECT_THROW((QueryExecutionTree{qec, op}),
+               ad_utility::detail::AllocationExceedsLimitException);
 }

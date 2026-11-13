@@ -138,7 +138,7 @@ class Sort : public Operation {
     return subtree_->getVariableColumns();
   }
 
-  std::string getCacheKeyImpl() const override;
+  qlm::string getCacheKeyImpl() const override;
 };
 
 #endif  // QLEVER_SRC_ENGINE_SORT_H

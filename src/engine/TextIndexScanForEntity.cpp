@@ -134,8 +134,8 @@ std::string TextIndexScanForEntity::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-std::string TextIndexScanForEntity::getCacheKeyImpl() const {
-  std::ostringstream os;
+qlm::string TextIndexScanForEntity::getCacheKeyImpl() const {
+  qlm::ostringstream os{allocator()};
   os << "ENTITY INDEX SCAN FOR WORD: " << " with word: \"" << config_.word_
      << "\" and fixed-entity: \""
      << (hasFixedEntity() ? fixedEntity() : "no fixed-entity")

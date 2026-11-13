@@ -101,7 +101,7 @@ class DistinctGraphs : public Operation {
   // for every variable. Whether the default graph is included has to be part
   // of it, because the runtime parameter that decides this can change
   // between two queries.
-  [[nodiscard]] std::string getCacheKeyImpl() const override;
+  [[nodiscard]] qlm::string getCacheKeyImpl() const override;
 
   // Return the last saved number of distinct graphs.
   uint64_t getSizeEstimateBeforeLimit() override {

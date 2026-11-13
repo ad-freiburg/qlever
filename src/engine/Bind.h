@@ -24,7 +24,7 @@ class Bind : public Operation {
   parsedQuery::Bind _bind;
   // For the documentation of the overridden members, see Operation.h
  protected:
-  [[nodiscard]] std::string getCacheKeyImpl() const override;
+  [[nodiscard]] qlm::string getCacheKeyImpl() const override;
 
  public:
   const parsedQuery::Bind& bind() const { return _bind; }

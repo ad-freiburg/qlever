@@ -36,8 +36,8 @@ struct TransitivePathSide {
 
   bool isUnboundVariable() const { return isVariable() && !isBoundVariable(); }
 
-  std::string getCacheKey() const {
-    std::ostringstream os;
+  qlm::string getCacheKey(const qlm::Allocator<char>& allocator) const {
+    qlm::ostringstream os{allocator};
     if (!isVariable()) {
       os << "Value " << value_;
     }
@@ -194,7 +194,7 @@ class TransitivePathBase : public Operation {
   const TransitivePathSide& getRight() const { return rhs_; }
 
  protected:
-  std::string getCacheKeyImpl() const override;
+  qlm::string getCacheKeyImpl() const override;
 
   /**
    * @brief Decide on which transitive path side the hull computation should

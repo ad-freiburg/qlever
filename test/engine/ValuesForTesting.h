@@ -183,8 +183,8 @@ class ValuesForTesting : public Operation {
 
  private:
   // ___________________________________________________________________________
-  std::string getCacheKeyImpl() const override {
-    std::stringstream str;
+  qlm::string getCacheKeyImpl() const override {
+    qlm::ostringstream str{allocator()};
     auto numRowsView = tables() | ql::views::transform(&IdTable::numRows);
     auto totalNumRows = ::ranges::accumulate(numRowsView, 0ULL);
     auto numCols = tables_.empty() ? 0 : tables()[0].numColumns();

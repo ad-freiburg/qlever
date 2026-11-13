@@ -32,7 +32,7 @@ class MultiColumnJoin : public Operation {
                   bool allowSwappingChildrenOnlyForTesting = true);
 
  protected:
-  std::string getCacheKeyImpl() const override;
+  qlm::string getCacheKeyImpl() const override;
 
  public:
   std::string getDescriptor() const override;

@@ -48,7 +48,7 @@ class Load final : public Operation {
   }
 
  public:
-  std::string getCacheKeyImpl() const override;
+  qlm::string getCacheKeyImpl() const override;
 
   std::string getDescriptor() const override;
 

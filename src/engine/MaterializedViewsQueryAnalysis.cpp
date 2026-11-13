@@ -463,7 +463,7 @@ BindExpressionAndTargetCol extractBindExpressions(
 
 // _____________________________________________________________________________
 ByCacheKeyInfoPtr QueryPatternCache::lookupByCacheKey(
-    const std::string& cacheKey) const {
+    std::string_view cacheKey) const {
   if (auto info = ad_utility::findOptional(byCacheKey_, cacheKey)) {
     return info.value();
   }
