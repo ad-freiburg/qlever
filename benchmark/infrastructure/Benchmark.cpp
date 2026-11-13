@@ -16,10 +16,10 @@
 #include "../benchmark/infrastructure/BenchmarkMetadata.h"
 #include "backports/functional.h"
 #include "util/Algorithm.h"
-#include "util/ConfigManager/ConfigManager.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
 #include "util/Timer.h"
+#include "util/configManager/ConfigManager.h"
 
 namespace ad_benchmark {
 // ____________________________________________________________________________

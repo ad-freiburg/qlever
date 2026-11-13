@@ -624,7 +624,7 @@ class Operation : public std::enable_shared_from_this<Operation> {
   // `pushDownBindToAnyChild` or `pushDownBindToChild` have to override this.
   // The default implementation throws.
   virtual std::unique_ptr<Operation> cloneWithNewChildren(
-      std::vector<std::shared_ptr<QueryExecutionTree>> children) const;
+      qlm::vector<std::shared_ptr<QueryExecutionTree>> children) const;
 
  protected:
   /**
@@ -678,7 +678,7 @@ class Operation : public std::enable_shared_from_this<Operation> {
   // the push down, the target would then wrongly become a join column.
   std::optional<std::shared_ptr<QueryExecutionTree>> pushDownBindToChild(
       const parsedQuery::Bind& bind,
-      std::vector<std::shared_ptr<QueryExecutionTree>> children,
+      qlm::vector<std::shared_ptr<QueryExecutionTree>> children,
       size_t childIndex) const;
 
   // Opt-in helper for implementing `makeTreeWithBindColumn`: Push the `bind`
@@ -688,7 +688,7 @@ class Operation : public std::enable_shared_from_this<Operation> {
   // `makeTreeWithBindColumn` override.
   std::optional<std::shared_ptr<QueryExecutionTree>> pushDownBindToAnyChild(
       const parsedQuery::Bind& bind,
-      std::vector<std::shared_ptr<QueryExecutionTree>> children) const;
+      qlm::vector<std::shared_ptr<QueryExecutionTree>> children) const;
 
  private:
   //! Compute the result of the query-subtree rooted at this element..

@@ -19,10 +19,8 @@
 // supports reflection, which CMake passes automatically for that compiler (see
 // the `QLEVER_USE_REFLECTION` option).
 
-// Include `<version>` (which defines the library feature test macros) only if
-// it exists. It is a C++20 header that the standard library of GCC 8 doesn't
-// have, and without it `__cpp_lib_reflection` stays undefined, so the check
-// below correctly finds no reflection.
+// NOTE: The `<version>` header only exists since C++20 (e.g. it is missing in
+// the standard library of GCC 8). Without it, there is no reflection either.
 #if __has_include(<version>)
 #include <version>
 #endif

@@ -26,12 +26,12 @@
 // and `writeToSerializer`, which have to be defined in this header because
 // they are generic in the serializer.
 #include "util/HashMap.h"
-#include "util/Serializer/SerializeHashMap.h"
-#include "util/Serializer/SerializeOptional.h"
-#include "util/Serializer/SerializePair.h"
-#include "util/Serializer/SerializeString.h"
-#include "util/Serializer/SerializeVector.h"
-#include "util/Serializer/Serializer.h"
+#include "util/serializer/SerializeHashMap.h"
+#include "util/serializer/SerializeOptional.h"
+#include "util/serializer/SerializePair.h"
+#include "util/serializer/SerializeString.h"
+#include "util/serializer/SerializeVector.h"
+#include "util/serializer/Serializer.h"
 
 // Forward declarations
 class MutableS2ShapeIndex;
