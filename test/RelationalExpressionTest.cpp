@@ -112,11 +112,8 @@ auto liftToValueId = [](const auto& t) {
 template <typename T>
 VectorWithMemoryLimit<ValueId> makeValueIdVector(
     const VectorWithMemoryLimit<T>& vec) {
-  VectorWithMemoryLimit<ValueId> result{makeAllocator()};
-  for (const auto& d : vec) {
-    result.push_back(liftToValueId(d));
-  }
-  return result;
+  return vec | ql::views::transform(liftToValueId) |
+         ::ranges::to<VectorWithMemoryLimit>(makeAllocator());
 }
 
 auto expectTrue = [](const ExpressionResult& result,
