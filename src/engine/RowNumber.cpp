@@ -22,8 +22,15 @@
 // _____________________________________________________________________________
 RowNumber::RowNumber(QueryExecutionContext* qec,
                      std::shared_ptr<QueryExecutionTree> child,
+                     Variable rowNumberVariable, int64_t offset)
+    : RowNumber{qec, std::move(child), std::move(rowNumberVariable), offset,
+                qlm::vector<ColumnIndex>{qec->getAllocator()}} {}
+
+// _____________________________________________________________________________
+RowNumber::RowNumber(QueryExecutionContext* qec,
+                     std::shared_ptr<QueryExecutionTree> child,
                      Variable rowNumberVariable, int64_t offset,
-                     std::vector<ColumnIndex> sortedOn)
+                     qlm::vector<ColumnIndex> sortedOn)
     : Operation{qec},
       child_{std::move(child)},
       rowNumberVariable_{std::move(rowNumberVariable)},
@@ -113,13 +120,12 @@ std::optional<std::shared_ptr<QueryExecutionTree>> RowNumber::makeSortedTree(
   }
   return ad_utility::makeExecutionTree<RowNumber>(
       getExecutionContext(), child_, rowNumberVariable_, offset_,
-      std::vector<ColumnIndex>(sortColumns.begin(), sortColumns.end()));
+      qlm::vector<ColumnIndex>{sortColumns.begin(), sortColumns.end(),
+                               allocator()});
 }
 
 // _____________________________________________________________________________
-qlm::vector<ColumnIndex> RowNumber::resultSortedOn() const {
-  return {sortedOn_.begin(), sortedOn_.end(), allocator()};
-}
+qlm::vector<ColumnIndex> RowNumber::resultSortedOn() const { return sortedOn_; }
 
 // _____________________________________________________________________________
 VariableToColumnMap RowNumber::computeVariableToColumnMap() const {

@@ -13,8 +13,8 @@
 #include <tuple>
 
 #include "backports/type_traits.h"
-#include "util/ConfigManager/ConfigOption.h"
 #include "util/TypeTraits.h"
+#include "util/configManager/ConfigOption.h"
 
 /*
 @brief Generate a value of the given type. Used for generating test values in

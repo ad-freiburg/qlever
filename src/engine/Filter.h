@@ -47,6 +47,10 @@ class Filter : public Operation {
 
   std::shared_ptr<QueryExecutionTree> getSubtree() const { return _subtree; }
 
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithStrippedColumns(
+      const std::set<Variable>& requestedVariables) const override;
+
  private:
   qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
     return {{_subtree.get()}, allocator()};
@@ -62,7 +66,7 @@ class Filter : public Operation {
   std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
       const parsedQuery::Bind& bind) const override;
   std::unique_ptr<Operation> cloneWithNewChildren(
-      std::vector<std::shared_ptr<QueryExecutionTree>> children) const override;
+      qlm::vector<std::shared_ptr<QueryExecutionTree>> children) const override;
 
  private:
   [[nodiscard]] bool isDeterministicImpl() const override;

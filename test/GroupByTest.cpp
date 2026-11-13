@@ -11,6 +11,7 @@
 #include "./util/IdTableHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
+#include "engine/ExistsJoin.h"
 #include "engine/GroupBy.h"
 #include "engine/GroupByImpl.h"
 #include "engine/IndexScan.h"
@@ -532,9 +533,9 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
 
   std::vector<Variable> variablesXAndY{varX, varY};
 
-  std::vector<ColumnIndex> sortedColumns = {0};
+  auto sortedColumns = colIndices({0});
   Tree subtreeWithSort =
-      makeExecutionTree<Sort>(qec, validJoinWhenGroupingByX, sortedColumns);
+      ::makeExecutionTree<Sort>(qec, validJoinWhenGroupingByX, sortedColumns);
 
   SparqlExpressionPimpl avgXPimpl = makeAvgPimpl(varX);
   SparqlExpressionPimpl avgDistinctXPimpl = makeAvgPimpl(varX, true);
@@ -704,12 +705,8 @@ TEST_F(GroupByOptimizations, existsInGroupByAlias) {
     parsedQuery::Values valuesClause;
     valuesClause._inlineValues._variables = variables;
     for (const auto& row : rows) {
-      std::vector<TripleComponent> valueRow;
-      valueRow.reserve(row.size());
-      for (int64_t value : row) {
-        valueRow.emplace_back(value);
-      }
-      valuesClause._inlineValues._values.push_back(std::move(valueRow));
+      valuesClause._inlineValues._values.push_back(
+          ::ranges::to<std::vector<TripleComponent>>(row));
     }
     pq._rootGraphPattern._graphPatterns.emplace_back(std::move(valuesClause));
     for (const auto& variable : variables) {
@@ -1364,8 +1361,8 @@ TEST_F(GroupByOptimizations, hashMapOptimizationGroupConcatIndex) {
       SparqlTripleSimple{varX, iri("<label>"), varY});
 
   // Optimization will not be used if subtree is not sort
-  std::vector<ColumnIndex> sortedColumns = {0};
-  Tree subtreeWithSort = makeExecutionTree<Sort>(qec, xyScan, sortedColumns);
+  auto sortedColumns = colIndices({0});
+  Tree subtreeWithSort = ::makeExecutionTree<Sort>(qec, xyScan, sortedColumns);
 
   auto groupConcatExpression1 = makeGroupConcatPimpl(varY);
   auto aliasGC1 = Alias{groupConcatExpression1, varZ};
@@ -1455,8 +1452,8 @@ TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxIndex) {
       SparqlTripleSimple{varX, iri("<label>"), varY});
 
   // Optimization will not be used if subtree is not sort
-  std::vector<ColumnIndex> sortedColumns = {0};
-  Tree subtreeWithSort = makeExecutionTree<Sort>(qec, xyScan, sortedColumns);
+  auto sortedColumns = colIndices({0});
+  Tree subtreeWithSort = ::makeExecutionTree<Sort>(qec, xyScan, sortedColumns);
 
   auto minExpression = makeMinPimpl(varY);
   auto aliasMin = Alias{minExpression, varZ};
@@ -1499,8 +1496,8 @@ TEST_F(GroupByOptimizations, hashMapOptimizationNonTrivial) {
       qec, Permutation::Enum::PSO,
       SparqlTripleSimple{Variable{"?z"}, iri("<is>"), Variable{"?y"}});
   Tree join = makeExecutionTree<Join>(qec, zxScan, zyScan, 0, 0);
-  std::vector<ColumnIndex> sortedColumns = {1};
-  Tree sortedJoin = makeExecutionTree<Sort>(qec, join, sortedColumns);
+  auto sortedColumns = colIndices({1});
+  Tree sortedJoin = ::makeExecutionTree<Sort>(qec, join, sortedColumns);
 
   // (AVG(?y) as ?avg)
   Variable varAvg{"?avg"};
@@ -3357,8 +3354,8 @@ TEST(GroupBy, RegexOnGroupedVariableHashMapOptimization) {
   auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{abc, I(1)}, {abc, I(2)}, {xyz, I(3)}}),
       std::vector<std::optional<Variable>>{o, y});
-  auto sorted = ad_utility::makeExecutionTree<Sort>(
-      qec, values, std::vector<ColumnIndex>{0});
+  auto sorted =
+      ad_utility::makeExecutionTree<Sort>(qec, values, colIndices({0}));
 
   auto count = std::make_unique<CountExpression>(
       false, std::make_unique<VariableExpression>(y));
@@ -3770,6 +3767,48 @@ TEST(GroupBy, makeTreeWithStrippedColumns) {
               "GroupBy on unbound variables");
     EXPECT_EQ(tree->getResult(false)->idTableView().numRows(), 0u);
   }
+
+  // An alias with an `EXISTS`: the constructor of `GroupBy` adds an
+  // `ExistsJoin` for it. When the constructor is called with a subtree that
+  // already contains this `ExistsJoin` (in `clone` and in
+  // `makeTreeWithStrippedColumns`), the column of the `EXISTS` must survive the
+  // stripping in the constructor, otherwise a second `ExistsJoin` is added.
+  {
+    // The constructor of `GroupBy` only strips columns if this is enabled (the
+    // default is `false`).
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::stripColumns_>(true);
+
+    // `EXISTS { ?a <predicate> ?x }`, correlated only with the grouped `?a`.
+    using ::column_stripping_test_helpers::countOperations;
+    using ::column_stripping_test_helpers::makeExistsExpression;
+    auto [existsPimpl, existsVar] = makeExistsExpression("<predicate>");
+    Alias existsAlias(std::move(existsPimpl), Variable{"?target"});
+
+    // `GroupBy` `?a` with an `EXISTS` expression should result in one added
+    // `ExistsJoin` operation as a child of `GroupBy`. The columns delivered by
+    // `ExistsJoin` are `?a` and `existsVar`, `?b`, `?c` and `?d` are stripped.
+    GroupBy groupBy(qec, {V{"?a"}}, {existsAlias}, values);
+    ASSERT_EQ(groupBy.computeVariableToColumnMap().size(), 2u);
+    ASSERT_EQ(groupBy.getChildren().size(), 1u);
+    ASSERT_FALSE(groupBy.getChildren().at(0)->containsVariable(V{"?b"}));
+    ASSERT_TRUE(groupBy.getChildren().at(0)->containsVariable(existsVar));
+    ASSERT_TRUE(groupBy.getChildren().at(0)->containsVariable(V{"?a"}));
+    ASSERT_EQ(countOperations<ExistsJoin>(groupBy), 1u);
+
+    // There should only be one `ExistsJoin` in the tree after cloning.
+    auto clone = groupBy.clone();
+    EXPECT_EQ(countOperations<ExistsJoin>(*clone), 1u);
+
+    // There should only be one `ExistsJoin` in the tree after stripping (with
+    // and without the `StripColumns` on top).
+    for (const auto& requested :
+         {std::set<V>{V{"?a"}, V{"?target"}}, std::set<V>{V{"?target"}}}) {
+      auto tree = groupBy.makeTreeWithStrippedColumns(requested);
+      ASSERT_TRUE(tree.has_value() && tree.value() != nullptr);
+      EXPECT_EQ(countOperations<ExistsJoin>(*tree.value()), 1u);
+    }
+  }
 }
 
 // Test that a `GROUP BY` on unbound variables has one group for a non-empty
@@ -3891,8 +3930,8 @@ TEST(GroupBy, HashMapOptimizationWithoutGroupByColumns) {
     qec->getQueryTreeCache().clearAll();
     auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, std::move(input), std::vector<std::optional<Variable>>{x});
-    auto sorted = ad_utility::makeExecutionTree<Sort>(
-        qec, std::move(values), std::vector<ColumnIndex>{0});
+    auto sorted = ad_utility::makeExecutionTree<Sort>(qec, std::move(values),
+                                                      colIndices({0}));
     GroupByImpl groupBy{
         qec,
         std::move(groupByVariables),
