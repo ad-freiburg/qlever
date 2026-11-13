@@ -403,6 +403,8 @@ TEST(GeometryInfoValueGetterTest, OperatorWithIdGeoPoint) {
 TEST(GeometryInfoValueGetterTest, OperatorWithUnrelatedId) {
   GeoInfoTester t;
   auto noGeoInfo = geoInfoMatcher(std::nullopt);
+  t.checkFromValueId(
+      ValueId::makeFromTripleTermIndex(TripleTermIndex::make(17)), noGeoInfo);
   t.checkFromValueId(ValueId::makeUndefined(), noGeoInfo);
   t.checkFromValueId(ValueId::makeFromBool(true), noGeoInfo);
   t.checkFromValueId(ValueId::makeFromInt(42), noGeoInfo);
@@ -422,6 +424,9 @@ TEST(GeoPointOrWktValueGetterTest, OperatorWithIdGeoPoint) {
   t.checkFromValueId(p2id, geoPointOrWktMatcher(p2));
 
   auto noGeoInfoOrWkt = geoPointOrWktMatcher(std::nullopt);
+  t.checkFromValueId(
+      ValueId::makeFromTripleTermIndex(TripleTermIndex::make(17)),
+      noGeoInfoOrWkt);
   t.checkFromValueId(ValueId::makeUndefined(), noGeoInfoOrWkt);
   t.checkFromValueId(ValueId::makeFromBool(true), noGeoInfoOrWkt);
   t.checkFromValueId(ValueId::makeFromInt(42), noGeoInfoOrWkt);
@@ -505,6 +510,9 @@ TEST(NumericOrDateValueGetterTest, OperatorWithId) {
           DayTimeDuration(DayTimeDuration::Type::Positive, 102))));
   auto isNotNumeric =
       Optional(VariantWith<sparqlExpression::detail::NotNumeric>(_));
+  t.checkFromValueId(
+      ValueId::makeFromTripleTermIndex(TripleTermIndex::make(17)),
+      isNotNumeric);
   t.checkFromValueId(ValueId::makeUndefined(), isNotNumeric);
   t.checkFromValueId(ValueId::makeFromGeoPoint({3, 4}), isNotNumeric);
 
@@ -552,6 +560,7 @@ class ValueGetterFixture : public ::testing::Test {
   Id blankNode_ = Id::makeFromBlankNodeIndex(BlankNodeIndex::make(0));
   Id textRecord_ = Id::makeFromTextRecordIndex(TextRecordIndex::make(0));
   Id wordVocab_ = Id::makeFromWordVocabIndex(WordVocabIndex::make(0));
+  Id tripleTerm_ = Id::makeFromTripleTermIndex(TripleTermIndex::make(17));
 
   // An IRI that is encoded directly in the `Id`.
   Id encodedIri_ = context_.encodedIriId();
@@ -653,11 +662,11 @@ TEST_F(NumericValueGetterTest, OperatorWithId) {
   EXPECT_THAT(get<Getter>(boolFalse_), VariantWith<int64_t>(0));
   // Nothing else is numeric, in particular no word of one of the three
   // vocabularies that store strings, and no encoded IRI.
-  expectAll<Getter>(
-      {undefined_, date_, geoPoint_, blankNode_, textRecord_, wordVocab_,
-       encodedIri_, plainLiteral_, localPlainLiteral_, secondaryPlainLiteral_,
-       wktLiteral_, secondaryWktLiteral_, iri_, localIri_, secondaryIri_},
-      VariantWith<NotNumeric>(_));
+  expectAll<Getter>({undefined_, date_, geoPoint_, blankNode_, textRecord_,
+                     wordVocab_, encodedIri_, plainLiteral_, localPlainLiteral_,
+                     secondaryPlainLiteral_, wktLiteral_, secondaryWktLiteral_,
+                     iri_, localIri_, secondaryIri_, tripleTerm_},
+                    VariantWith<NotNumeric>(_));
 }
 
 // _____________________________________________________________________________
@@ -734,9 +743,9 @@ TEST_F(DatatypeValueGetterTest, OperatorWithId) {
 
   // An IRI has no datatype, and neither have the remaining datatypes.
   expectAllWords<Getter>(iris_, ignoreContent(Eq(std::nullopt)));
-  expectAll<Getter>(
-      {encodedIri_, undefined_, blankNode_, textRecord_, wordVocab_},
-      Eq(std::nullopt));
+  expectAll<Getter>({encodedIri_, undefined_, blankNode_, textRecord_,
+                     wordVocab_, tripleTerm_},
+                    Eq(std::nullopt));
 }
 
 // _____________________________________________________________________________
@@ -761,7 +770,7 @@ TEST_F(LanguageTagValueGetterTest, OperatorWithId) {
   // An IRI is not a literal, so it has no language tag at all, and neither have
   // the remaining datatypes.
   expectAll<Getter>({iri_, localIri_, secondaryIri_, encodedIri_, undefined_,
-                     blankNode_, textRecord_, wordVocab_},
+                     blankNode_, textRecord_, wordVocab_, tripleTerm_},
                     Eq(std::nullopt));
 }
 
@@ -854,7 +863,7 @@ TEST_F(IriOrUriValueGetterTest, OperatorWithId) {
   // For all the other datatypes there is no IRI, which the getter signals with
   // an undefined `Id`.
   expectAll<Getter>({undefined_, boolTrue_, int_, double_, date_, geoPoint_,
-                     blankNode_, textRecord_, wordVocab_},
+                     blankNode_, textRecord_, wordVocab_, tripleTerm_},
                     VariantWith<Id>(Eq(Id::makeUndefined())));
 }
 };  // namespace
