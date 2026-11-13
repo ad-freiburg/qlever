@@ -17,7 +17,7 @@
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/Exception.h"
 #include "util/ExceptionHandling.h"
-#include "util/Serializer/Serializer.h"
+#include "util/serializer/Serializer.h"
 
 // A vocabulary that stores all the words on disk. Additionally, some of the
 // words can be stored in RAM. The words that are stored in RAM can be accessed

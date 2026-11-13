@@ -25,14 +25,15 @@
 using namespace geometryConverters;
 
 namespace {
-using S2Queries = std::vector<std::unique_ptr<S2ClosestEdgeQuery>>;
+using S2Queries = qlm::vector<std::unique_ptr<S2ClosestEdgeQuery>>;
 
 // Return one query object for each segment of the `geoIndex` (in the same
 // order), which finds all edges within `maxDistInMeters`. The query objects can
 // be reused for many targets.
 S2Queries makeQueriesForAllSegments(const SpatialJoinCachedIndex& geoIndex,
-                                    double maxDistInMeters) {
-  S2Queries queries;
+                                    double maxDistInMeters,
+                                    S2Queries::allocator_type allocator) {
+  S2Queries queries{allocator};
   queries.reserve(geoIndex.numSegments());
   for (const auto& segment : geoIndex.segments()) {
     auto& query = *queries.emplace_back(
@@ -96,7 +97,8 @@ Result S2PointPolylineAlgorithm::run() {
   // Construct one query object per segment of the index with the given
   // constraints. The query objects are reused for all points.
   const auto& geoIndex = s2index.value();
-  auto s2queries = makeQueriesForAllSegments(geoIndex, maxDist_.value());
+  auto s2queries = makeQueriesForAllSegments(geoIndex, maxDist_.value(),
+                                             qec_->getAllocator());
 
   ad_utility::Timer timerAll{ad_utility::Timer::Started};
   ad_utility::Timer timerS2{ad_utility::Timer::Stopped};
