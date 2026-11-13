@@ -258,11 +258,7 @@ std::vector<std::vector<Id>> columnsOfPinnedResult(const Qlever& qlever,
                                                    const std::string& name) {
   auto view = ExplicitIdTableOperation::viewOf(
       qlever.namedResultCache().get(name)->result_);
-  std::vector<std::vector<Id>> columns;
-  for (const auto& column : view.getColumns()) {
-    columns.emplace_back(column.begin(), column.end());
-  }
-  return columns;
+  return ::ranges::to<std::vector<std::vector<Id>>>(view.getColumns());
 }
 
 // Return the result (as TSV) of the query that selects the `variables` (for

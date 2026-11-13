@@ -78,13 +78,9 @@ void SelectClause::setSelected(qlm::vector<Variable> variables) {
 // ____________________________________________________________________________
 [[nodiscard]] std::vector<std::string>
 SelectClause::getSelectedVariablesAsStrings() const {
-  std::vector<std::string> result;
-  const auto& vars = getSelectedVariables();
-  result.reserve(vars.size());
-  for (const auto& var : vars) {
-    result.push_back(var.name());
-  }
-  return result;
+  return getSelectedVariables() |
+         ql::views::transform([](const Variable& var) { return var.name(); }) |
+         ::ranges::to_vector;
 }
 
 // ____________________________________________________________________
