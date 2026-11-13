@@ -5,9 +5,9 @@
 #include <gmock/gmock.h>
 
 #include "../util/IdTableHelpers.h"
-#include "engine/GroupBy.h"
-#include "engine/GroupByImpl.h"
 #include "engine/LazyGroupBy.h"
+#include "engine/operation/GroupBy.h"
+#include "engine/operation/GroupByImpl.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"

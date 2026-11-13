@@ -19,13 +19,13 @@
 #include <stdexcept>
 
 #include "backports/filesystem.h"
-#include "engine/IndexScan.h"
-#include "engine/Join.h"
 #include "engine/MaterializedViewsQueryAnalysis.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/VariableToColumnMap.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
+#include "engine/operation/IndexScan.h"
+#include "engine/operation/Join.h"
 #include "global/Constants.h"
 #include "global/FileSuffixConstants.h"
 #include "global/RuntimeParameters.h"

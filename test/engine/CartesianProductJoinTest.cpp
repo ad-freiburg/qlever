@@ -15,10 +15,10 @@
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
-#include "engine/CartesianProductJoin.h"
-#include "engine/Distinct.h"
-#include "engine/IndexScan.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/operation/CartesianProductJoin.h"
+#include "engine/operation/Distinct.h"
+#include "engine/operation/IndexScan.h"
 
 using namespace ad_utility::testing;
 using ad_utility::source_location;

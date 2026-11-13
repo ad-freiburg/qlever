@@ -10,10 +10,10 @@
 #include "../util/LocalVocabEntryTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
-#include "engine/ExistsJoin.h"
-#include "engine/IndexScan.h"
 #include "engine/JoinHelpers.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/operation/ExistsJoin.h"
+#include "engine/operation/IndexScan.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
 
 using namespace ad_utility::testing;

@@ -6,9 +6,9 @@
 #ifndef QLEVER_TEST_ENGINE_VALUESFORTESTING_H
 #define QLEVER_TEST_ENGINE_VALUESFORTESTING_H
 
-#include "engine/Operation.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/Result.h"
+#include "engine/operation/Operation.h"
 #include "util/Algorithm.h"
 #include "util/ContainersWithAllocator.h"
 #include "util/Random.h"

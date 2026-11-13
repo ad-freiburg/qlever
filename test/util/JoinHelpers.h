@@ -12,8 +12,8 @@
 #include "AllocatorTestHelpers.h"
 #include "IndexTestHelpers.h"
 #include "engine/CallFixedSize.h"
-#include "engine/JoinImpl.h"
 #include "engine/idTable/IdTable.h"
+#include "engine/operation/JoinImpl.h"
 #include "index/IdTableUtils.h"
 #include "util/Forward.h"
 #include "util/Random.h"
@@ -28,7 +28,7 @@
  *
  * @param tableA, tableB the tables with their join columns.
  * @param func the function, that will be used for joining the two tables
- *  together. Look into src/engine/Join.h for how it should look like.
+ *  together. Look into src/engine/operation/Join.h for how it should look like.
  *
  * @returns tableA and tableB joined together in a IdTable.
  */

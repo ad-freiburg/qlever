@@ -13,8 +13,8 @@
 
 #include "../util/IndexTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
-#include "engine/DistinctGraphs.h"
 #include "engine/VariableToColumnMap.h"
+#include "engine/operation/DistinctGraphs.h"
 #include "global/Constants.h"
 #include "index/TripleComponentConversions.h"
 #include "rdfTypes/Variable.h"

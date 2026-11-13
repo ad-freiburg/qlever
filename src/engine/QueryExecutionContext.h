@@ -15,7 +15,7 @@
 #include "backports/asio.h"
 #include "backports/three_way_comparison.h"
 #include "engine/Result.h"
-#include "engine/RuntimeInformation.h"
+#include "engine/operation/RuntimeInformation.h"
 #include "global/Id.h"
 #include "index/DeltaTriples.h"
 #include "index/Index.h"

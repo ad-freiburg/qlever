@@ -1,0 +1,316 @@
+// Copyright 2015, University of Freiburg,
+// Chair of Algorithms and Data Structures.
+// Author:
+//   2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+//   2020-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
+
+#include "engine/operation/Filter.h"
+
+#include <sstream>
+
+#include "backports/algorithm.h"
+#include "engine/CallFixedSize.h"
+#include "engine/QueryExecutionTree.h"
+#include "engine/operation/ColumnStrippingHelpers.h"
+#include "engine/operation/ExistsJoin.h"
+#include "engine/sparqlExpressions/ExistsExpression.h"
+#include "engine/sparqlExpressions/SparqlExpression.h"
+#include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
+#include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
+#include "global/RuntimeParameters.h"
+
+using std::endl;
+
+// _____________________________________________________________________________
+size_t Filter::getResultWidth() const { return _subtree->getResultWidth(); }
+
+// _____________________________________________________________________________
+Filter::Filter(QueryExecutionContext* qec,
+               std::shared_ptr<QueryExecutionTree> subtree,
+               sparqlExpression::SparqlExpressionPimpl expression)
+    : Operation(qec),
+      _subtree(std::move(subtree)),
+      _expression{std::move(expression)} {
+  _subtree = ExistsJoin::addExistsJoinsToSubtree(
+      _expression, std::move(_subtree), getExecutionContext(),
+      cancellationHandle());
+  if (getRuntimeParameter<&RuntimeParameters::enablePrefilterOnIndexScans_>()) {
+    setPrefilterExpressionForChildren();
+  }
+}
+
+// _____________________________________________________________________________
+VariableToColumnMap Filter::computeVariableToColumnMap() const {
+  // The columns of the `ExistsJoin`s are only needed to evaluate this filter.
+  // Hide them, so that parents neither join on them nor see them twice.
+  // TODO<StripColumns> Don't write these columns once `Filter` can strip
+  // columns.
+  auto variableColumns = _subtree->getVariableColumns();
+  for (const auto* expression : _expression.getExistsExpressions()) {
+    variableColumns.erase(
+        dynamic_cast<const sparqlExpression::ExistsExpression&>(*expression)
+            .variable());
+  }
+  return variableColumns;
+}
+
+// _____________________________________________________________________________
+std::string Filter::getCacheKeyImpl() const {
+  std::ostringstream os;
+  os << "FILTER " << _subtree->getCacheKey();
+  os << " with " << _expression.getCacheKey(_subtree->getVariableColumns());
+  return std::move(os).str();
+}
+
+//______________________________________________________________________________
+std::string Filter::getDescriptor() const {
+  return absl::StrCat("Filter ", _expression.getDescriptor());
+}
+
+//______________________________________________________________________________
+void Filter::setPrefilterExpressionForChildren() {
+  std::vector<PrefilterVariablePair> prefilterPairs =
+      _expression.getPrefilterExpressionForMetadata(getLocalVocabContext());
+  auto optNewSubTree =
+      _subtree->getUpdatedQueryExecutionTreeWithPrefilterApplied(
+          std::move(prefilterPairs));
+  if (optNewSubTree.has_value()) {
+    _subtree = std::move(optNewSubTree.value());
+  }
+}
+
+// _____________________________________________________________________________
+Result Filter::computeResult(bool requestLaziness) {
+  AD_LOG_DEBUG << "Getting sub-result for Filter result computation..." << endl;
+  std::shared_ptr<const Result> subRes = _subtree->getResult(true);
+  AD_LOG_DEBUG << "Filter result computation..." << endl;
+  checkCancellation();
+
+  if (subRes->isFullyMaterialized()) {
+    IdTable result = filterIdTable(subRes->sortedBy(), subRes->idTableView());
+    AD_LOG_DEBUG << "Filter result computation done." << endl;
+
+    return {std::move(result), resultSortedOn(), subRes->getSharedLocalVocab()};
+  }
+
+  if (requestLaziness) {
+    return {Result::LazyResult{
+                ad_utility::CachingTransformInputRange{
+                    subRes->idTables(),
+                    [this, subRes](auto& idTableVocabPair) {
+                      IdTable filteredTable = this->filterIdTable(
+                          subRes->sortedBy(), idTableVocabPair.idTable_);
+                      return Result::IdTableVocabPair{
+                          std::move(filteredTable),
+                          std::move(idTableVocabPair.localVocab_)};
+                    }} |
+
+                ql::views::filter(
+                    [](const auto& pair) { return !pair.idTable_.empty(); })},
+            subRes->sortedBy()};
+  }
+
+  // If we receive a generator of IdTables, we need to materialize it into a
+  // single IdTable.
+  size_t width = getSubtree().get()->getResultWidth();
+  IdTable result{width, getExecutionContext()->getAllocator()};
+
+  LocalVocab resultLocalVocab{};
+  ad_utility::callFixedSizeVi(
+      width, [this, &subRes, &result, &resultLocalVocab](auto WIDTH) {
+        for (Result::IdTableVocabPair& pair : subRes->idTables()) {
+          computeFilterImpl<WIDTH>(result, std::move(pair.idTable_),
+                                   subRes->sortedBy());
+          resultLocalVocab.mergeWith(pair.localVocab_);
+        }
+      });
+
+  AD_LOG_DEBUG << "Filter result computation done." << endl;
+
+  return {std::move(result), resultSortedOn(), std::move(resultLocalVocab)};
+}
+
+// _____________________________________________________________________________
+CPP_template_def(typename Table)(requires IdTableLike<Table>)
+IdTable Filter::filterIdTable(qlm::vector<ColumnIndex> sortedBy,
+                              Table&& idTable) const {
+  size_t width = idTable.numColumns();
+  IdTable result{width, getExecutionContext()->getAllocator()};
+
+  auto impl = [this, &result, &idTable, &sortedBy](auto WIDTH) {
+    return this->computeFilterImpl<WIDTH>(result, AD_FWD(idTable),
+                                          std::move(sortedBy));
+  };
+  ad_utility::callFixedSizeVi(width, impl);
+  return result;
+}
+
+// _____________________________________________________________________________
+CPP_template_def(int WIDTH, typename Table)(requires IdTableLike<Table>)
+void Filter::computeFilterImpl(IdTable& dynamicResultTable, Table&& inputTable,
+                               qlm::vector<ColumnIndex> sortedBy) const {
+  LocalVocab dummyLocalVocab{};
+  AD_CONTRACT_CHECK(inputTable.numColumns() == WIDTH || WIDTH == 0);
+  IdTableStatic<WIDTH> resultTable =
+      std::move(dynamicResultTable).toStatic<static_cast<size_t>(WIDTH)>();
+  sparqlExpression::EvaluationContext evaluationContext(
+      *getExecutionContext(), _subtree->getVariableColumns(),
+      inputTable.template asStaticView<0>(),
+      getExecutionContext()->getAllocator(), dummyLocalVocab,
+      cancellationHandle());
+
+  // TODO<joka921> This should be a mandatory argument to the
+  // EvaluationContext constructor.
+  evaluationContext._columnsByWhichResultIsSorted = std::move(sortedBy);
+  const auto input =
+      evaluationContext._inputTable.asStaticView<static_cast<size_t>(WIDTH)>();
+  sparqlExpression::ExpressionResult expressionResult =
+      _expression.getPimpl()->evaluate(&evaluationContext);
+
+  // Filter `input` by `expressionResult` and store the result in `resultTable`.
+  // This is a lambda because `expressionResult` is a `std::variant`.
+  //
+  // NOTE: the explicit (seemingly redundant) capture of `resultTable` is
+  // required to work around a bug in Clang 17, see
+  // https://github.com/llvm/llvm-project/issues/61267
+  auto computeResult = CPP_template_lambda(
+      this, &resultTable = resultTable, &input, &inputTable,
+      &dynamicResultTable, &evaluationContext)(typename T)(T && singleResult)(
+      requires sparqlExpression::SingleExpressionResult<T>) {
+    if constexpr (std::is_same_v<T, ad_utility::SetOfIntervals>) {
+      AD_CONTRACT_CHECK(input.size() == evaluationContext.size());
+      AD_CONTRACT_CHECK(singleResult.size() == input.size(),
+                        "The size of a `SetOfIntervals` does not match the "
+                        "size of the evaluation context.");
+      // If the expression result is given as a set of intervals, we copy
+      // the corresponding parts of `input` to `resultTable`.
+      auto totalSize = std::accumulate(
+          singleResult._intervals.begin(), singleResult._intervals.end(),
+          resultTable.size(), [](const auto& sum, const auto& interval) {
+            return sum + (interval.second - interval.first);
+          });
+      if (resultTable.empty() && totalSize == inputTable.size()) {
+        // The binary filter contains all elements of the input, and we have
+        // no previous results, so we can simply copy or move the complete
+        // table.
+        dynamicResultTable =
+            AD_FWD(inputTable).moveOrClone(cancellationChecker());
+        return;
+      }
+      checkCancellation();
+      for (auto [intervalBegin, intervalEnd] : singleResult._intervals) {
+        resultTable.insertAtEnd(inputTable, intervalBegin, intervalEnd);
+        checkCancellation();
+      }
+      AD_CORRECTNESS_CHECK(resultTable.size() == totalSize);
+    } else {
+      // In the general case, we generate all expression results and apply
+      // the `EffectiveBooleanValueGetter` to each.
+      //
+      // NOTE: According to the standard, this means that values like zero,
+      // UNDEF, and empty strings are converted to `false` and hence the
+      // corresponding rows from `input` are filtered out.
+      //
+      // TODO<joka921> Check whether it is feasible to precompute the
+      // number of `true` values and use that to reserve the right
+      // amount of space for `resultTable`, like we do it for the set of
+      // intervals above. This depends on how expensive the evaluation with
+      // the `EffectiveBooleanValueGetter` is.
+      auto resultGenerator = sparqlExpression::detail::makeGenerator(
+          AD_FWD(singleResult), input.size(), &evaluationContext);
+      size_t i = 0;
+
+      using ValueGetter = sparqlExpression::detail::EffectiveBooleanValueGetter;
+      ValueGetter valueGetter{};
+      for (auto&& resultValue : resultGenerator) {
+        if (valueGetter(resultValue, &evaluationContext) ==
+            ValueGetter::Result::True) {
+          resultTable.push_back(input[i]);
+        }
+        checkCancellation();
+        ++i;
+      }
+    }
+  };
+  std::visit(computeResult, std::move(expressionResult));
+
+  // Detect the case that we have directly written the `dynamicResultTable`
+  // in the binary search filter case.
+  if (dynamicResultTable.empty()) {
+    dynamicResultTable = std::move(resultTable).toDynamic();
+  }
+  checkCancellation();
+}
+
+// _____________________________________________________________________________
+uint64_t Filter::getSizeEstimateBeforeLimit() {
+  return _expression
+      .getEstimatesForFilterExpression(
+          _subtree->getSizeEstimate(),
+          _subtree->getRootOperation()->getPrimarySortKeyVariable())
+      .sizeEstimate;
+}
+
+// _____________________________________________________________________________
+size_t Filter::getCostEstimate() {
+  return _subtree->getCostEstimate() +
+         _expression
+             .getEstimatesForFilterExpression(
+                 _subtree->getSizeEstimate(),
+                 _subtree->getRootOperation()->getPrimarySortKeyVariable())
+             .costEstimate;
+}
+
+// _____________________________________________________________________________
+bool Filter::isDeterministicImpl() const {
+  return _expression.isDeterministic();
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> Filter::cloneImpl() const {
+  return cloneWithNewChildren({{_subtree->clone()}, allocator()});
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> Filter::cloneWithNewChildren(
+    qlm::vector<std::shared_ptr<QueryExecutionTree>> children) const {
+  return std::make_unique<Filter>(_executionContext, std::move(children.at(0)),
+                                  _expression);
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+Filter::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
+  // The filter expression sees the target as unbound, but after the push down
+  // it wouldn't.
+  if (_expression.isVariableContained(bind._target)) {
+    return std::nullopt;
+  }
+  return pushDownBindToAnyChild(bind, {{_subtree}, allocator()});
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+Filter::makeTreeWithStrippedColumns(
+    const std::set<Variable>& requestedVariables) const {
+  using AddVarsResult =
+      columnStrippingHelpers::VarsRequiredFromSubtree::AddVarsResult;
+  // The subtree has to provide the requested variables and all variables that
+  // the `Filter` operation filters on.
+  columnStrippingHelpers::VarsRequiredFromSubtree varsRequiredFromSubtree(
+      &requestedVariables);
+  auto addVarsResult =
+      varsRequiredFromSubtree.addVarsFromExpression(_expression);
+  AD_CORRECTNESS_CHECK(
+      addVarsResult == AddVarsResult::Success,
+      "Aggregate functions are not allowed in a `Filter` clause");
+
+  // Strip the subtree.
+  auto subtree = varsRequiredFromSubtree.stripSubtree(_subtree);
+
+  // The new `Filter` also exports the filtered variables that the parent did
+  // not request, the helper adds a `StripColumns` operation for them.
+  return columnStrippingHelpers::makeTreeWithOptionalStripOperation<Filter>(
+      getExecutionContext(), requestedVariables, std::move(subtree),
+      _expression);
+}

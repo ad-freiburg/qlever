@@ -17,14 +17,14 @@
 #include "./util/IdTableHelpers.h"
 #include "./util/JoinHelpers.h"
 #include "engine/CallFixedSize.h"
-#include "engine/IndexScan.h"
-#include "engine/Join.h"
 #include "engine/JoinHelpers.h"
-#include "engine/NeutralOptional.h"
 #include "engine/QueryExecutionTree.h"
-#include "engine/Values.h"
 #include "engine/ValuesForTesting.h"
 #include "engine/idTable/IdTable.h"
+#include "engine/operation/IndexScan.h"
+#include "engine/operation/Join.h"
+#include "engine/operation/NeutralOptional.h"
+#include "engine/operation/Values.h"
 #include "index/IdTableUtils.h"
 #include "util/Forward.h"
 #include "util/IndexTestHelpers.h"
@@ -79,8 +79,8 @@ void removeJoinColFromVarColMap(const Variable& var, VariableToColumnMap& map) {
  * @param testSet is an array of JoinTestCases, that describe what tests to
  *  do. For an explanation, how to read JoinTestCase, see the definition.
  * @param func the function, that will be used for joining the two tables
- *  together. Look into src/engine/Join.h, or this file, for how it should look
- * like.
+ *  together. Look into src/engine/operation/Join.h, or this file, for how it
+ * should look like.
  */
 template <typename JOIN_FUNCTION>
 void goThroughSetOfTestsWithJoinFunction(

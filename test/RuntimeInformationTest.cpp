@@ -5,7 +5,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include "engine/RuntimeInformation.h"
+#include "engine/operation/RuntimeInformation.h"
 
 using namespace std::chrono_literals;
 

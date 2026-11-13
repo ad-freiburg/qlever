@@ -10,10 +10,10 @@
 #include "../util/IndexTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
 #include "./ValuesForTesting.h"
-#include "engine/Describe.h"
-#include "engine/IndexScan.h"
-#include "engine/NeutralElementOperation.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/operation/Describe.h"
+#include "engine/operation/IndexScan.h"
+#include "engine/operation/NeutralElementOperation.h"
 
 using namespace ad_utility::testing;
 

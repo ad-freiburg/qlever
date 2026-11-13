@@ -14,9 +14,9 @@
 #include <memory>
 #include <utility>
 
-#include "engine/TransitivePathBinSearch.h"
 #include "engine/TransitivePathGraphSearch.h"
-#include "engine/TransitivePathHashMap.h"
+#include "engine/operation/TransitivePathBinSearch.h"
+#include "engine/operation/TransitivePathHashMap.h"
 #include "global/Constants.h"
 #include "util/AllocatorTestHelpers.h"
 #include "util/AllocatorWithLimit.h"

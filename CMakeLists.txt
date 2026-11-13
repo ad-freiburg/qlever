@@ -996,7 +996,7 @@ set(PRECOMPILED_HEADER_FILES_WITH_BEAST
 
 set(PRECOMPILED_HEADER_FILES_ENGINE
     src/util/HashMap.h
-    src/engine/Operation.h
+    src/engine/operation/Operation.h
     src/engine/QueryExecutionTree.h
     ${PRECOMPILED_HEADER_FILES_WITH_BEAST})
 
