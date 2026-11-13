@@ -449,6 +449,12 @@ TEST(GeometryInfoTest, IsValidWktStrict) {
     EXPECT_FALSE(GeometryInfo::isValidWktStrict(wkt(s))) << s;
   }
 
+  // `getWktParseError` reports the reason.
+  EXPECT_EQ(GeometryInfo::getWktParseError(litPoint), std::nullopt);
+  EXPECT_THAT(GeometryInfo::getWktParseError(litInvalidCoord),
+              ::testing::Optional(::testing::HasSubstr(
+                  "Could not parse WKT: coordinate is not a number")));
+
   // All geometry computations use the strict mode, so they don't skip the
   // invalid coordinate (as the lenient mode would), but yield no result.
   EXPECT_EQ(GeometryInfo::getNumGeometries(litInvalidCoord), std::nullopt);
