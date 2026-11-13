@@ -1758,17 +1758,15 @@ auto Visitor::visitInFreshQueryContext(Ctx* ctx)
   auto blankNodeLabelsBackup =
       std::exchange(blankNodeLabelsInCurrentBasicGraphPattern_, {});
   // The restoring assignments are moves and cannot throw, so the cleanup
-  // is safe also during stack unwinding. The exception is `visibleVariables_`:
-  // moving a `qlm::vector` is only `noexcept` for some allocators, so it is
-  // restored via `swap` (`variablesBackup` has the same allocator).
+  // is safe also during stack unwinding.
   static_assert(std::is_nothrow_move_assignable_v<ParsedQuery>);
-  static_assert(std::is_nothrow_swappable_v<qlm::vector<Variable>>);
+  static_assert(std::is_nothrow_move_assignable_v<qlm::vector<Variable>>);
   static_assert(std::is_nothrow_move_assignable_v<
                 decltype(blankNodeLabelsInCurrentBasicGraphPattern_)>);
   absl::Cleanup restoreBackups{
       [this, &queryBackup, &variablesBackup, &blankNodeLabelsBackup]() {
         parsedQuery_ = std::move(queryBackup);
-        visibleVariables_.swap(variablesBackup);
+        visibleVariables_ = std::move(variablesBackup);
         blankNodeLabelsInCurrentBasicGraphPattern_ =
             std::move(blankNodeLabelsBackup);
       }};
