@@ -27,10 +27,15 @@
 #include "index/chunkwisePermutationWriter/Options.h"
 #include "index/chunkwisePermutationWriter/Statistics.h"
 #include "index/compressedRelationWriter/CompressedRelationWriter.h"
-#include "util/AsioHelpers.h"
 #include "util/GlobalExecutor.h"
 #include "util/NoCopyNoMove.h"
 #include "util/ThreadSafeReorderBuffer.h"
+
+// NOTE: `AsioHelpers.h` needs a newer Boost than the C++17 build of `libqlever`
+// has, and the writer only exists in the C++20 mode anyway.
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+#include "util/AsioHelpers.h"
+#endif
 
 // Write a pair of twin permutations (e.g. PSO and POS) directly from the
 // chunks of the parallel merge of an external sorter, see

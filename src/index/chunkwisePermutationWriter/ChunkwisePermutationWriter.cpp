@@ -17,6 +17,18 @@
 
 namespace chunkwisePermutationWriter {
 
+namespace {
+// Check that the `executor` is not empty and return it. This is called in the
+// member initializer list of the writer, so that the check happens before the
+// members that use the executor are constructed.
+net::any_io_executor checkNotEmpty(net::any_io_executor executor) {
+  AD_CONTRACT_CHECK(static_cast<bool>(executor),
+                    "The executor of a chunkwise permutation writer must not "
+                    "be empty");
+  return executor;
+}
+}  // namespace
+
 // _____________________________________________________________________________
 ChunkwisePermutationWriter::ChunkwisePermutationWriter(
     PrivateTag, size_t numChunks, const std::string& basename,
@@ -26,7 +38,7 @@ ChunkwisePermutationWriter::ChunkwisePermutationWriter(
     net::any_io_executor executor)
     : writer1_{std::move(writerAndCallback1.writer_)},
       writer2_{std::move(writerAndCallback2.writer_)},
-      executor_{std::move(executor)},
+      executor_{checkNotEmpty(std::move(executor))},
       context_{*writer1_,
                *writer2_,
                permutation.keys().at(0),
@@ -48,9 +60,6 @@ ChunkwisePermutationWriter::ChunkwisePermutationWriter(
       chunkWriters_(numChunks) {
   AD_CONTRACT_CHECK(numChunks > 0,
                     "A chunkwise permutation writer needs at least one chunk");
-  AD_CONTRACT_CHECK(static_cast<bool>(executor_),
-                    "The executor of a chunkwise permutation writer must not "
-                    "be empty");
   chunkResults_.setNumSlots(numChunks);
   // This logic only works for permutations that have the graph as the fourth
   // column.
