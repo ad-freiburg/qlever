@@ -545,6 +545,21 @@ class SparqlAutomaticListener : public antlr4::tree::ParseTreeListener {
   virtual void enterVarOrTerm(SparqlAutomaticParser::VarOrTermContext* ctx) = 0;
   virtual void exitVarOrTerm(SparqlAutomaticParser::VarOrTermContext* ctx) = 0;
 
+  virtual void enterTripleTerm(
+      SparqlAutomaticParser::TripleTermContext* ctx) = 0;
+  virtual void exitTripleTerm(
+      SparqlAutomaticParser::TripleTermContext* ctx) = 0;
+
+  virtual void enterTripleTermSubject(
+      SparqlAutomaticParser::TripleTermSubjectContext* ctx) = 0;
+  virtual void exitTripleTermSubject(
+      SparqlAutomaticParser::TripleTermSubjectContext* ctx) = 0;
+
+  virtual void enterTripleTermObject(
+      SparqlAutomaticParser::TripleTermObjectContext* ctx) = 0;
+  virtual void exitTripleTermObject(
+      SparqlAutomaticParser::TripleTermObjectContext* ctx) = 0;
+
   virtual void enterVarOrIri(SparqlAutomaticParser::VarOrIriContext* ctx) = 0;
   virtual void exitVarOrIri(SparqlAutomaticParser::VarOrIriContext* ctx) = 0;
 

@@ -615,6 +615,21 @@ class SparqlAutomaticBaseListener : public SparqlAutomaticListener {
   virtual void exitVarOrTerm(
       SparqlAutomaticParser::VarOrTermContext* /*ctx*/) override {}
 
+  virtual void enterTripleTerm(
+      SparqlAutomaticParser::TripleTermContext* /*ctx*/) override {}
+  virtual void exitTripleTerm(
+      SparqlAutomaticParser::TripleTermContext* /*ctx*/) override {}
+
+  virtual void enterTripleTermSubject(
+      SparqlAutomaticParser::TripleTermSubjectContext* /*ctx*/) override {}
+  virtual void exitTripleTermSubject(
+      SparqlAutomaticParser::TripleTermSubjectContext* /*ctx*/) override {}
+
+  virtual void enterTripleTermObject(
+      SparqlAutomaticParser::TripleTermObjectContext* /*ctx*/) override {}
+  virtual void exitTripleTermObject(
+      SparqlAutomaticParser::TripleTermObjectContext* /*ctx*/) override {}
+
   virtual void enterVarOrIri(
       SparqlAutomaticParser::VarOrIriContext* /*ctx*/) override {}
   virtual void exitVarOrIri(

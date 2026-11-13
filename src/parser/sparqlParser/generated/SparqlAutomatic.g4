@@ -464,6 +464,23 @@ graphNodePath
 varOrTerm
     : var
     | graphTerm
+    | tripleTerm
+    ;
+
+// SPARQL 1.2 triple patterns permit recursive `tripleTerm` components in
+// both positions, including literal subjects (which cannot match RDF triples).
+// Keep these separate from `graphTerm`, which is also used for data values.
+// TODO<Prashanth0703> Add triple-term data and expression productions separately.
+tripleTerm
+    : '<<(' tripleTermSubject verb tripleTermObject ')>>'
+    ;
+
+tripleTermSubject
+    : var | iri | rdfLiteral | numericLiteral | booleanLiteral | blankNode | tripleTerm
+    ;
+
+tripleTermObject
+    : var | iri | rdfLiteral | numericLiteral | booleanLiteral | blankNode | tripleTerm
     ;
 
 varOrIri

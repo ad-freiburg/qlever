@@ -2680,7 +2680,15 @@ SubjectOrObjectAndPathTriples Visitor::visit(
 
 // ____________________________________________________________________________________
 GraphTerm Visitor::visit(Parser::VarOrTermContext* ctx) {
-  return visitAlternative<GraphTerm>(ctx->var(), ctx->graphTerm());
+  return visitAlternative<GraphTerm>(ctx->var(), ctx->graphTerm(),
+                                     ctx->tripleTerm());
+}
+
+// ____________________________________________________________________________________
+GraphTerm Visitor::visit(Parser::TripleTermContext* ctx) {
+  // TODO<Prashanth0703> Translate `tripleTerm` once a recursive representation
+  // and evaluation are available. Mentioning a triple term must not assert it.
+  reportNotSupported(ctx, "Triple terms in SPARQL patterns are");
 }
 
 // ____________________________________________________________________________________
