@@ -43,7 +43,8 @@ enum class Negative : int8_t { A = -1, B, C };
 
 using namespace enumSizeTest;
 
-// _____________________________________________________________________________
+// Test `qlever::enumSize` for an enum at namespace scope, a plain enum, a
+// nested enum, and a nested enum of a class template.
 TEST(EnumSize, enumSize) {
   static_assert(qlever::enumSize<Color> == 3);
   static_assert(qlever::enumSize<Plain> == 1);
@@ -52,7 +53,19 @@ TEST(EnumSize, enumSize) {
   EXPECT_EQ(qlever::enumSize<Color>, 3u);
 }
 
-// _____________________________________________________________________________
+// Test that the function `qleverEnumSize` defined by the two macros also
+// returns the size when it is called at runtime.
+TEST(EnumSize, qleverEnumSizeAtRuntime) {
+  qlever::enumSizeDetail::EnumSizeTag tag;
+  Color color = Color::Green;
+  WithNestedEnum::Kind kind = WithNestedEnum::Kind::First;
+  std::size_t colorSize = qleverEnumSize(tag, color);
+  std::size_t kindSize = qleverEnumSize(tag, kind);
+  EXPECT_EQ(colorSize, 3u);
+  EXPECT_EQ(kindSize, 2u);
+}
+
+// Test that `qlever::allEnumValues` lists all the values in increasing order.
 TEST(EnumSize, allEnumValues) {
   using C = Color;
   EXPECT_EQ(qlever::allEnumValues<C>, (std::array{C::Red, C::Green, C::Blue}));
