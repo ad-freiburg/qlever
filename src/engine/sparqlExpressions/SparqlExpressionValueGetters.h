@@ -329,10 +329,12 @@ struct LiteralFromIdGetter : Mixin<LiteralFromIdGetter> {
   }
 };
 
-// Similar to `LiteralFromIdGetter`, but correctly preprocesses strings so that
-// they can be used by re2 as replacement strings. So '$1 \abc \$' becomes
-// '\1 \\abc $', where the former variant is valid in the SPARQL standard and
-// the latter represents the format that re2 expects.
+// Similar to `LiteralFromIdGetter`, but converts the replacement string of
+// `fn:replace` into the rewrite string that re2 expects. So '$1 \\ \$' becomes
+// '\1 \\ $'. Return `std::nullopt` if the replacement string is invalid,
+// that is if it contains a `$` that is neither escaped nor followed by a digit,
+// or a `\` that is not part of `\\` or `\$` (error `FORX0004` in the XPath
+// standard).
 struct ReplacementStringGetter : Mixin<ReplacementStringGetter> {
   using Value = std::optional<std::string>;
   using Mixin<ReplacementStringGetter>::operator();
@@ -343,7 +345,8 @@ struct ReplacementStringGetter : Mixin<ReplacementStringGetter> {
                                         const EvaluationContext*) const;
 
  private:
-  static std::string convertToReplacementString(std::string_view view);
+  static std::optional<std::string> convertToReplacementString(
+      std::string_view view);
 };
 
 // Convert the input into a `shared_ptr<RE2>`. Return nullptr if the input is
