@@ -943,12 +943,10 @@ class IdTable {
     if constexpr (isDynamic) {
       // TODO<joka921, for the dynamic case we could maybe use a vector with
       // a small buffer optimization or a fixed maximal size from folly etc.
-      std::vector<Column> columns;
-      columns.reserve(self.numColumns());
-      for (size_t i = 0; i < self.numColumns(); ++i) {
-        columns.push_back(self.getColumn(i));
-      }
-      return columns;
+      return ad_utility::integerRange(self.numColumns()) |
+             ql::views::transform(
+                 [&self](size_t i) { return self.getColumn(i); }) |
+             ::ranges::to_vector;
     } else {
       std::array<Column, NumColumns> columns;
       for (size_t i = 0; i < self.numColumns(); ++i) {
