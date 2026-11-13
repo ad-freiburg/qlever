@@ -81,6 +81,7 @@ NumericValue NumericValueGetter::operator()(
     case Datatype::WordVocabIndex:
     case Datatype::Date:
     case Datatype::GeoPoint:
+    case Datatype::TripleTermIndex:
     case Datatype::BlankNodeIndex:
     case Datatype::SecondaryVocabIndex:
       return NotNumeric{};
@@ -108,6 +109,7 @@ NumericOrDateValue NumericOrDateValueGetter::operator()(
     case Datatype::Date:
       return id.getDate();
     case Datatype::GeoPoint:
+    case Datatype::TripleTermIndex:
     case Datatype::BlankNodeIndex:
     case Datatype::SecondaryVocabIndex:
       return NotNumeric{};
@@ -128,6 +130,10 @@ auto EffectiveBooleanValueGetter::operator()(
       return (id.getInt() != 0) ? True : False;
     case Datatype::Bool:
       return id.getBool() ? True : False;
+    case Datatype::TripleTermIndex:
+      // SPARQL 1.2 section 17.2.3: EBV of a non-literal is an error.
+      // `Undef` represents that error, not an unbound triple term.
+      return Undef;
     case Datatype::Undefined:
     case Datatype::BlankNodeIndex:
       return Undef;
@@ -283,6 +289,10 @@ Id IsSomethingValueGetter<isSomethingFunction, prefix>::operator()(
     case Datatype::Date:
     case Datatype::GeoPoint:
       return Id::makeFromBool(prefix == isLiteralPrefix);
+    case Datatype::TripleTermIndex:
+      // A triple term is neither an IRI nor a literal (SPARQL 1.2 sections
+      // 17.4.2.3 and 17.4.2.5).
+      return Id::makeFromBool(false);
     case Datatype::TextRecordIndex:
     case Datatype::WordVocabIndex:
     case Datatype::BlankNodeIndex:
@@ -319,6 +329,10 @@ bool IsValidValueGetter::operator()(
 IntDoubleStr ToNumericValueGetter::operator()(
     ValueId id, [[maybe_unused]] const EvaluationContext* context) const {
   switch (id.getDatatype()) {
+    case Datatype::TripleTermIndex:
+      // Triple terms cannot be cast to numeric or boolean literals. The
+      // constructor maps `monostate` to an undefined expression result.
+      return std::monostate{};
     case Datatype::Undefined:
       return std::monostate{};
     case Datatype::Int:
@@ -380,6 +394,7 @@ OptIri DatatypeValueGetter::operator()(ValueId id,
     case SecondaryVocabIndex:
       return (*this)(getLiteralOrIri(id, context), context);
     case Undefined:
+    case TripleTermIndex:
     case BlankNodeIndex:
     case TextRecordIndex:
     case WordVocabIndex:
@@ -472,6 +487,7 @@ std::optional<ad_utility::GeoPointOrWkt> GeoPointOrWktValueGetter::operator()(
     case Undefined:
     case TextRecordIndex:
     case WordVocabIndex:
+    case TripleTermIndex:
     case BlankNodeIndex:
     case EncodedVal:
       return std::nullopt;
@@ -505,6 +521,7 @@ T getValue(ValueId id, const sparqlExpression::EvaluationContext* context,
       return valueGetter(getLiteralOrIri(id, context), context);
     case TextRecordIndex:
     case WordVocabIndex:
+    case TripleTermIndex:
     case BlankNodeIndex:
     case Bool:
     case Int:
@@ -546,6 +563,7 @@ std::optional<std::string> LanguageTagValueGetter::operator()(
     case LocalVocabIndex:
     case TextRecordIndex:
     case WordVocabIndex:
+    case TripleTermIndex:
     case BlankNodeIndex:
     case SecondaryVocabIndex:
       return getValue<std::optional<std::string>>(id, context, *this);
@@ -629,6 +647,7 @@ std::optional<RequestedInfo> GeometryInfoValueGetter<CPP_sfinae_args(
           .getRequestedInfo<RequestedInfo>();
     case TextRecordIndex:
     case WordVocabIndex:
+    case TripleTermIndex:
     case BlankNodeIndex:
     case Bool:
     case Int:

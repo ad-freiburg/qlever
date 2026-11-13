@@ -73,8 +73,8 @@ std::string versionAsString(const IndexFormatVersion& version) {
 // whose datatype bits are `i` in the source format is an `Id` of datatype
 // `datatypesOfSourceFormat[i]` in the target format. The only difference
 // between the two formats is that `Datatype::SecondaryVocabIndex` was inserted
-// (see the note there), which is why this array is exactly the current enum
-// without that datatype.
+// (see the note there). This array excludes `SecondaryVocabIndex` and the later
+// `TripleTermIndex`, which cannot occur in the historical source format.
 constexpr std::array<Datatype, 12> datatypesOfSourceFormat{
     Datatype::Undefined,
     Datatype::Bool,
@@ -108,9 +108,16 @@ QL_CONSTEVAL bool isStrictlyAscending(
 // converter is not applicable to it.
 static_assert(isStrictlyAscending(datatypesOfSourceFormat));
 
-// Exactly one datatype was added, so no datatype of the source format was
-// removed or duplicated above.
-static_assert(datatypesOfSourceFormat.size() + 1 == qlever::enumSize<Datatype>);
+// The historical conversion adds `SecondaryVocabIndex`. `TripleTermIndex` is
+// appended without changing existing tags and cannot occur in the source
+// format.
+// TODO<Prashanth0703> Before persisting triple-term references, define index
+// metadata and version handling that preserve compatibility for indexes without
+// them.
+static_assert(datatypesOfSourceFormat.size() + 1 ==
+              static_cast<size_t>(Datatype::TripleTermIndex));
+static_assert(static_cast<size_t>(Datatype::TripleTermIndex) + 1 ==
+              qlever::enumSize<Datatype>);
 
 // The version of the on-disk format of the materialized views (see
 // `MATERIALIZED_VIEWS_VERSION`) that the views of an index in the source format

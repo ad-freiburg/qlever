@@ -17,6 +17,7 @@
 #include "index/LocalVocabEntry.h"
 #include "parser/LiteralOrIri.h"
 #include "rdfTypes/Literal.h"
+#include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IdTestHelpers.h"
 #include "util/IndexTestHelpers.h"
@@ -632,3 +633,17 @@ TEST(ExportIds, resolveNonVocabIndexIds) {
 }
 
 }  // namespace
+
+// _____________________________________________________________________________
+// Test that triple-term references have no literal representation and that
+// string export rejects them until structural serialization is implemented.
+TEST(ExportIds, tripleTermReferencesHaveNoLiteralOrStringRepresentationYet) {
+  const auto& index = ad_utility::testing::getQec()->getIndex();
+  auto term = Id::makeFromTripleTermIndex(TripleTermIndex::make(17));
+  EXPECT_FALSE(ql::exportIds::idToLiteral(index, term, LocalVocab{}));
+  EXPECT_FALSE(ql::exportIds::idToLiteralOrIri(index, term, LocalVocab{}));
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      ql::exportIds::idToStringAndTypeForEncodedValue(term),
+      ::testing::StrEq("Export of triple-term references is not supported yet"),
+      std::runtime_error);
+}

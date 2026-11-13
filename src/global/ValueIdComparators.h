@@ -391,6 +391,12 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForId(
     case Datatype::Date:
     case Datatype::GeoPoint:
     case Datatype::BlankNodeIndex:
+    // As long as we don't have local vocab triple term indices, the equality on
+    // `TripleTermIndex` works on bits. For `<>`  we currently also use the bit
+    // order.
+    // TODO<Prashanth0703> Determine the correct semantic ordering of triple
+    // terms.
+    case Datatype::TripleTermIndex:
       // TODO<joka921> The same caveat as for `EncodedVal` above applies to the
       // `SecondaryVocabIndex` type: the comparison via bits is only correct for
       // equality, because the words of a secondary vocabulary are all sorted

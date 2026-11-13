@@ -43,9 +43,11 @@ enum struct Datatype {
   GeoPoint,
   WordVocabIndex,
   BlankNodeIndex,
-  EncodedVal
+  EncodedVal,
+  // The Index of an RDF 1.2 triple term.
+  TripleTermIndex
 };
-QLEVER_ENUM_SIZE(Datatype, 13);
+QLEVER_ENUM_SIZE(Datatype, 14);
 
 // Return true iff `datatype` is trivial, that is, IDs with this datatype
 // directly encode the value they represent and do not point to an external
@@ -109,6 +111,8 @@ inline QL_CONSTEXPR std::string_view toString(Datatype type) {
       return "BlankNodeIndex";
     case Datatype::SecondaryVocabIndex:
       return "SecondaryVocabIndex";
+    case Datatype::TripleTermIndex:
+      return "TripleTermIndex";
   }
   // This line is reachable if we cast an arbitrary invalid int to this enum
   AD_FAIL();
