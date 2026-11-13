@@ -301,10 +301,7 @@ inline void runParsingAndSweeper(
   // Run second parsing step (right side)
   std::optional<util::geo::I32Box> prefilterBox = std::nullopt;
   if (usePrefilter) {
-    // See `LibspatialjoinAlgorithm::run`.
-    auto paddedBoxLeft =
-        sj::padBox(aggBoundingBoxLeft, aggBoundingBoxLeft, sweeperCfg);
-    prefilterBox = sj::padBox(paddedBoxLeft, paddedBoxLeft, sweeperCfg);
+    prefilterBox = storeRight.getPaddedBoundingBox(aggBoundingBoxLeft);
   }
   auto [aggBoundingBoxRight, numGeomAddedRight, numGeomDroppedRight,
         numGeomInvalidRight, numThreadsRight] =

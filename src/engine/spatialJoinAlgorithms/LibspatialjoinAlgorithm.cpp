@@ -346,25 +346,18 @@ Result LibspatialjoinAlgorithm::run() {
         "num-parser-threads-smaller-side", threadsSmall);
     auto numValidGeomsSmall = eventsSmall.numObjects();
 
-    // Pad the bounding box of the smaller side for `WITHIN_DIST` joins: once
-    // for comparing it against the padded boxes of the larger side, and twice
-    // for comparing it against their unpadded boxes.
-    auto paddedBoxSmall = sj::padBox(boxSmall, boxSmall, sweeperCfg);
-    auto prefilterBoxLarge =
-        sj::padBox(paddedBoxSmall, paddedBoxSmall, sweeperCfg);
-
     // Filtering by bounding box *after* parsing is only necessary if
     // precomputed bounding boxes for filtering *before* parsing are not
     // available.
     if (!qec_->getIndex().getVocab().isGeoInfoAvailable()) {
-      storeLarge.setFilterBox(paddedBoxSmall);
+      storeLarge.setFilterBox(boxSmall);
     }
 
     // Parse and add the relevant (intersection with the bounding box)
     // geometries from the larger side
     auto [boxLarge, countLarge, droppedLarge, invalidLarge, threadsLarge] =
         parse(larger, storeLarge, eventsLarge.addCb(storeIds[!smallerIsRight]),
-              NUM_THREADS, prefilterBoxLarge);
+              NUM_THREADS, storeLarge.getPaddedBoundingBox(boxSmall));
     auto numValidGeomsLarge = eventsLarge.numObjects();
     auto numValidGeomsTotal = numValidGeomsSmall + numValidGeomsLarge;
 

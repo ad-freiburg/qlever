@@ -60,10 +60,6 @@ class WKTParser : public sj::WKTParserBase<SpatialJoinParseJob> {
   void addValueIdToQueue(ValueId valueId, size_t rowIndex,
                          std::optional<BoundingBox> boundingBox);
 
-  // The bounding box of all geometries added to the store (not padded for
-  // `withinDist`). Only valid after `done()`.
-  ::util::geo::I32Box getBoundingBox() const;
-
   // Accumulate the counters across all threads. They count the number of
   // geometries skipped by bounding box prefilter and the number of parsed (that
   // is, not skipped) geometries respectively.
@@ -83,10 +79,6 @@ class WKTParser : public sj::WKTParserBase<SpatialJoinParseJob> {
   // that were skipped by prefilter or actually parsed for each of the threads.
   std::vector<size_t> _numSkipped;
   std::vector<size_t> _numParsed;
-
-  // The bounding box of the geometries added by each of the threads, see
-  // `getBoundingBox`.
-  std::vector<::util::geo::I32Box> _bboxes;
 
   // Configure prefiltering geometries by bounding box.
   bool _usePrefiltering;
