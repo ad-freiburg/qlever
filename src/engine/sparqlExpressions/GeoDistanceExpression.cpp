@@ -82,14 +82,14 @@ std::optional<GeoDistanceCall> getGeoDistanceExpressionParameters(
     // Unit given as IRI
     auto unitExpr = dynamic_cast<const IriExpression*>(ptr);
     if (unitExpr != nullptr) {
-      return UnitOfMeasurementValueGetter::litOrIriToUnit(
+      return UnitOfMeasurementValueGetter::litOrIriToValue(
           LiteralOrIri{unitExpr->value()});
     }
 
     // Unit given as literal expression
     auto unitExpr2 = dynamic_cast<const StringLiteralExpression*>(ptr);
     if (unitExpr2 != nullptr) {
-      return UnitOfMeasurementValueGetter::litOrIriToUnit(
+      return UnitOfMeasurementValueGetter::litOrIriToValue(
           LiteralOrIri{unitExpr2->value()});
     }
 

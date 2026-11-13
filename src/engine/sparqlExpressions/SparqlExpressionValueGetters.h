@@ -427,7 +427,7 @@ using UnitOfMeasurementValueGetter =
 
 using CRSTypeValueGetter =
     EnumValueGetter<&ad_utility::SourceCrsType::iriToCrsType,
-                    crsTypeUnsupported>;
+                    ad_utility::crsTypeUnsupported>;
 
 // This value getter retrieves geometries: `GeoPoints` or literals with
 // `geo:wktLiteral` datatype.

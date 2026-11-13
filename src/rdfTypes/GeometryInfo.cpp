@@ -228,12 +228,10 @@ std::optional<std::string_view> SourceCrsType::asIri() const {
   // (CRS84) if the opening bracket is missing. We wrap the content here
   // to ensure that `::util::geo::getCRSType` handles the IRIs correctly.
   std::string content{uri};
-  if (content.empty()) {
-    content = "<>";
-  } else if (content.front() != '<') {
+  if (content.empty() || content.front() != '<') {
     content = "<" + content + ">";
   }
-  return ::util::geo::getCRSType(std::string{content});
+  return ::util::geo::getCRSType(content);
 }
 
 // ____________________________________________________________________________

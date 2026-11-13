@@ -469,7 +469,7 @@ namespace sparqlExpression::detail {
 template struct EnumValueGetter<&ad_utility::detail::iriToUnitOfMeasurement,
                                 UnitOfMeasurement::UNKNOWN>;
 template struct EnumValueGetter<&ad_utility::SourceCrsType::iriToCrsType,
-                                crsTypeUnsupported>;
+                                ad_utility::crsTypeUnsupported>;
 }  // namespace sparqlExpression::detail
 
 //______________________________________________________________________________

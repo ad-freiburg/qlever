@@ -34,12 +34,13 @@
 namespace util::geo {
 enum class CRSType : uint8_t;
 }
+
+namespace ad_utility {
+
 // As `util` is not included in this file, we use this constant instead of
 // `util::geo::CRSType::UNSUPPORTED`. This is used in
 // `SparqlExpressionValueGetter.h`.
 constexpr inline ::util::geo::CRSType crsTypeUnsupported{0};
-
-namespace ad_utility {
 
 // These encapsulating structs are required for the `RequestedInfo` templates
 // used in the `GeometryInfo` class and the `GeometryInfoValueGetter`.
