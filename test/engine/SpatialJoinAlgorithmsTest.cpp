@@ -2152,4 +2152,67 @@ TEST(SpatialJoin, LibspatialJoinWithAbsoluteOnDiskBase) {
 
 }  // namespace runtimeParameters
 
+// Test that a `libspatialjoin` spatial join on an index with a geometry store
+// (see `GeoVocabulary::setBuildGeometryStore`) takes the geometries of the
+// geo vocabulary from the store, and has the same result as without the store
+// for each join type.
+TEST(SpatialJoin, LibspatialJoinWithGeometryStore) {
+  // Areas, of which one is the object of two subjects, a line, an invalid
+  // literal and points, which are `GeoPoint`s and thus not in the store.
+  std::string kg = createTrueDistanceDataset();
+  addArea(kg, "7", "\"Minster Freiburg Area again\"", areaMuenster);
+  addArea(kg, "8", "\"Georges-Koehler-Allee\"", lineSegmentGeorgesKoehlerAllee);
+  addArea(kg, "9", "\"Invalid\"", invalidWkt);
+  auto makeQec = [&kg](bool buildGeometryStore) {
+    ad_utility::testing::TestIndexConfig config{kg};
+    config.vocabularyType = ad_utility::VocabularyType{
+        ad_utility::VocabularyType::Enum::OnDiskCompressedGeoSplit};
+    config.buildGeometryStore = buildGeometryStore;
+    config.parserBufferSize = 10_kB;
+    return ad_utility::testing::getQec(std::move(config));
+  };
+  auto qecWithoutStore = makeQec(false);
+  auto qecWithStore = makeQec(true);
+
+  // Join all geometries with all geometries using the given `task` and return
+  // the sorted result rows and the number of rows from the geometry store.
+  auto run = [](QueryExecutionContext* qec, LibSpatialJoinConfig task) {
+    SpatialJoinConfiguration config{task,
+                                    Variable{"?geo1"},
+                                    Variable{"?geo2"},
+                                    Variable{"?dist"},
+                                    PayloadVariables::all(),
+                                    SpatialJoinAlgorithm::LIBSPATIALJOIN};
+    config.distanceUnit_ = UnitOfMeasurement::METERS;
+    auto tree = ad_utility::makeExecutionTree<SpatialJoin>(
+        qec, std::move(config),
+        buildIndexScan(qec, {"?obj1", std::string{"<asWKT>"}, "?geo1"}),
+        buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?geo2"}));
+    auto spatialJoin =
+        std::dynamic_pointer_cast<SpatialJoin>(tree->getRootOperation());
+    auto result = spatialJoin->computeResult(false);
+    auto rows = printTable(qec, &result);
+    ql::ranges::sort(rows);
+    auto details = spatialJoin->runtimeInfo().details_;
+    return std::pair{
+        rows, static_cast<size_t>(details["num-rows-from-geometry-store"])};
+  };
+
+  // The four valid literals of the geo vocabulary (five rows) are taken from
+  // the store on each side, and the results are the same as without the store
+  // (including the pairs of a stored geometry with itself, see `EQUALS`).
+  using enum SpatialJoinType::Enum;
+  for (auto task :
+       {LibSpatialJoinConfig{INTERSECTS}, LibSpatialJoinConfig{CONTAINS},
+        LibSpatialJoinConfig{WITHIN}, LibSpatialJoinConfig{EQUALS},
+        LibSpatialJoinConfig{WITHIN_DIST, 100'000, std::nullopt}}) {
+    auto [rowsWithoutStore, storedWithoutStore] = run(qecWithoutStore, task);
+    auto [rowsWithStore, storedWithStore] = run(qecWithStore, task);
+    EXPECT_EQ(storedWithoutStore, 0);
+    EXPECT_EQ(storedWithStore, 2 * 5);
+    EXPECT_FALSE(rowsWithStore.empty());
+    EXPECT_EQ(rowsWithStore, rowsWithoutStore);
+  }
+}
+
 }  // namespace

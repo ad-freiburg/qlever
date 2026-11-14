@@ -216,6 +216,11 @@ class IndexImpl {
   ad_utility::GeoPointEncoding geoPointEncodingForIndexBuilding_{
       ad_utility::GeoPointEncoding::ZOrder};
 
+  // Whether the index build parses the WKT literals into the persistent
+  // geometry store of the geo vocabulary (see
+  // `GeoVocabulary::setBuildGeometryStore`).
+  bool buildGeometryStoreForIndexBuilding_ = false;
+
   // The encoding of the geo points of the loaded index (see
   // `applyGeoPointEncoding`).
   ad_utility::GeoPointEncoding geoPointEncodingOfLoadedIndex_{
@@ -450,6 +455,12 @@ class IndexImpl {
   void setGeoPointEncodingForIndexBuilding(
       ad_utility::GeoPointEncoding encoding) {
     geoPointEncodingForIndexBuilding_ = encoding;
+  }
+
+  // Set whether the index build parses the WKT literals into the geometry
+  // store of the geo vocabulary (see `GeoVocabulary::setBuildGeometryStore`).
+  void setBuildGeometryStoreForIndexBuilding(bool buildGeometryStore) {
+    buildGeometryStoreForIndexBuilding_ = buildGeometryStore;
   }
 
   // Set the normalization of the words of the `ql:has-word` triples; see

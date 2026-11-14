@@ -1423,7 +1423,7 @@ TEST(SpatialJoin, InvalidGeometriesAreExcludedFromNonEmptyCheck) {
   EXPECT_EQ(result.idTableView().numRows(), 0);
 
   // Only `POINT(0 0)` from `?a` is a valid geometry that was added to the
-  // sweeper; none of the values of `?b` (two invalid literals and one point
+  // event lists; none of the values of `?b` (two invalid literals and one point
   // that is not contained in `?a`) contribute a valid geometry.
   auto details = spatialJoin->runtimeInfo().details_;
   EXPECT_THAT(details, AllOf(HasKeyMatching("num-valid-geoms-parsed", Eq(1)),

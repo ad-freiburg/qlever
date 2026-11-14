@@ -254,6 +254,8 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
       config.hasWordRestrictPredicates_);
   index.getImpl().setVocabularyTypeForIndexBuilding(config.vocabType_);
   index.getImpl().setGeoPointEncodingForIndexBuilding(config.geoPointEncoding_);
+  index.getImpl().setBuildGeometryStoreForIndexBuilding(
+      config.buildGeometryStore_);
   index.getImpl().setPrefixesForEncodedValues(config.prefixesForIdEncodedIris_,
                                               config.patternsForIdEncodedIris_);
   index.getImpl().setBlankNodeIriRegexes(

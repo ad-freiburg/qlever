@@ -387,6 +387,17 @@ inline DBox projectInt32WebMercToDoubleLatLng(const I32Box& box) {
           projectInt32WebMercToDoubleLatLng(box.getUpperRight())};
 }
 
+// The projection applied by `sj::WKTParser` for a bounding box: convert it
+// from lat-long double to web mercator int32 coordinates, rounding outwards.
+inline I32Box projectDoubleLatLngToInt32WebMerc(const DBox& box) {
+  auto lowerLeft = latLngToWebMerc(box.getLowerLeft());
+  auto upperRight = latLngToWebMerc(box.getUpperRight());
+  return {{static_cast<int32_t>(std::floor(lowerLeft.getX() * PREC)),
+           static_cast<int32_t>(std::floor(lowerLeft.getY() * PREC))},
+          {static_cast<int32_t>(std::ceil(upperRight.getX() * PREC)),
+           static_cast<int32_t>(std::ceil(upperRight.getY() * PREC))}};
+}
+
 // Counts the number of geometries in a geometry collection.
 inline uint32_t countChildGeometries(const ParsedWkt& geom) {
   return std::visit(

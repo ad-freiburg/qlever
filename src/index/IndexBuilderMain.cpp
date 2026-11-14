@@ -310,6 +310,12 @@ int main(int argc, char** argv) {
       "index. With it, a spatial prefilter on points can only restrict the "
       "latitude.");
 
+  add("build-geometry-store", po::bool_switch(&config.buildGeometryStore_),
+      "Parse the WKT literals into a persistent geometry store during the "
+      "index build, such that spatial joins with `libspatialjoin` do not have "
+      "to parse them again. Only has an effect with a vocabulary type that "
+      "splits off the geometries (`on-disk-compressed-geo-split`).");
+
   add("encode-as-id",
       po::value(&config.prefixesForIdEncodedIris_)->composing()->multitoken(),
       "Space-separated list of IRI prefixes (without angle brackets). "
