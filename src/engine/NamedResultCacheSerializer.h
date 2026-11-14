@@ -97,7 +97,8 @@ void readValue(Serializer& serializer, NamedResultCache::Value& arg,
   ExplicitIdTableOperation::IdTableOrView resultTable;
   if constexpr (ZeroCopyReadSerializer<Serializer>) {
     // Zero-copy path: build a non-owning `IdTableView<0>` directly from
-    // spans into the serializer's buffer, without copying the column data.
+    // views of the columns in the serializer's buffer, without copying the
+    // column data.
     // Since the writing side (see above) rejects any entry that contains a
     // `LocalVocabIndex` id, `mapping` can never actually apply to any id in
     // the columns, so skipping `deserializeIds`'s remapping step here is
@@ -105,7 +106,14 @@ void readValue(Serializer& serializer, NamedResultCache::Value& arg,
     IdTableView<0>::ViewSpans columns;
     columns.reserve(numColumns);
     for (size_t i = 0; i < numColumns; ++i) {
-      auto column = zeroCopyDeserializeToSpan<Id>(serializer);
+      ConstIdColumnRef column = [&serializer] {
+        if constexpr (std::is_same_v<ConstIdColumnRef, ql::span<const Id>>) {
+          return zeroCopyDeserializeToSpan<Id>(serializer);
+        } else {
+          return columnBasedIdTable::splitLayout::zeroCopyDeserializeIdColumn(
+              serializer);
+        }
+      }();
       AD_CORRECTNESS_CHECK(column.size() == numRows);
       AD_CORRECTNESS_CHECK(
           ql::ranges::find(column, Datatype::LocalVocabIndex,
