@@ -1736,22 +1736,19 @@ struct BlockZipperJoinImplForSpecialOptionalJoin
       return;
     }
 
-    // Get allocator and number of columns from the first block.
-    // TODO<joka921> pass in a proper allocator here.
-    auto allocator = makeUnlimitedAllocator<Id>();
     AD_CORRECTNESS_CHECK(!blocksLeft.empty() && !blocksRight.empty());
 
     // TODO<joka921> This can be much more efficient, in particular it could use
     // zero copying.
     // Concatenate all rows from blocksLeft into a single IdTable.
 
-    auto materializeBlocksAsTable = [&allocator](const auto& blocks) {
+    auto materializeBlocksAsTable = [](const auto& blocks) {
       // Note: It is crucial that we go through the `asStaticView` interface of
       // the `IdTableAndFirstCols` interface, because we need to copy ALL the
       // columns, not only the join columns, because the resultAdder needs them.
-      size_t numCols =
-          blocks.front().fullBlock().template asStaticView<0>().numColumns();
-      IdTable table(numCols, allocator);
+      auto firstView = blocks.front().fullBlock().template asStaticView<0>();
+      // Get allocator and number of columns from the first block.
+      IdTable table(firstView.numColumns(), firstView.getAllocator());
       LocalVocab vocab;
       // TODO<joka921> preallocate the sum of the index-range sizes.
       for (const auto& block : blocks) {

@@ -990,3 +990,35 @@ TEST(JoinAlgorithms, SpecialOptionalJoinComplexCombination) {
   };
   testSpecialOptionalJoinWithSplits(leftTable, rightTable, expectedResult);
 }
+
+// _____________________________________________________________________________
+// Test that the special optional join respects the memory limit of the
+// allocator of its inputs when it materializes the blocks.
+TEST(JoinAlgorithms, SpecialOptionalJoinRespectsTheMemoryLimitOfTheInputs) {
+  // Both inputs are a single block of rows that all match each other. The
+  // inputs need 48 kB, copying them for the join needs more.
+  constexpr size_t numRows = 1000;
+  auto join = [](ad_utility::MemorySize limit) {
+    auto allocator = ad_utility::testing::makeAllocator(limit);
+    auto makeInput = [&allocator]() {
+      IdTable table{3, allocator};
+      table.resize(numRows);
+      for (size_t i = 0; i < numRows; ++i) {
+        table(i, 0) = I(1);
+        table(i, 1) = I(1);
+        table(i, 2) = I(i);
+      }
+      std::vector<ad_utility::IdTableAndFirstCols<2, IdTable>> blocks;
+      blocks.emplace_back(std::move(table), LocalVocab{});
+      return blocks;
+    };
+    IdJoinResult result;
+    auto adder = makeIdRowAdder(result);
+    ad_utility::specialOptionalJoinForBlocks(makeInput(), makeInput(),
+                                             size_t{2}, adder);
+    return result.size();
+  };
+  EXPECT_EQ(join(ad_utility::MemorySize::megabytes(10)), numRows * numRows);
+  EXPECT_THROW(join(ad_utility::MemorySize::kilobytes(60)),
+               ad_utility::detail::AllocationExceedsLimitException);
+}
