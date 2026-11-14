@@ -61,16 +61,12 @@ class BasicIdColumnIterator {
   template <bool>
   friend class BasicIdColumnIterator;
 
-  // `shift_left` for a split column (found via ADL, so call it unqualified
-  // after `using ql::shift_left;`): its payloads and its datatypes are shifted
-  // on their own, each with one `memmove`. The generic `ql::shift_left` rejects
-  // this iterator, because its classic `std::move` requires that `*it` is the
-  // `iterator_traits::reference`, which it is not on purpose.
-  friend BasicIdColumnIterator shift_left(BasicIdColumnIterator first,
-                                          BasicIdColumnIterator last,
-                                          difference_type n) {
-    return {ql::shift_left(first.payload_, last.payload_, n),
-            ql::shift_left(first.datatype_, last.datatype_, n)};
+  // `ql::shift_left` for a split column: its payloads and its datatypes are
+  // shifted on their own, each with one `memmove`.
+  BasicIdColumnIterator shiftLeft(BasicIdColumnIterator last,
+                                  difference_type n) const {
+    return {ql::shift_left(payload_, last.payload_, n),
+            ql::shift_left(datatype_, last.datatype_, n)};
   }
 
   // Implicit conversion from the mutable to the const iterator, like

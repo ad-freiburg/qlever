@@ -151,8 +151,7 @@ void resizeIdTable(IdTable& idTable, const LimitOffsetClause& limitOffset) {
       [offset = limitOffset.actualOffset(idTable.numRows()),
        upperBound =
            limitOffset.upperBound(idTable.numRows())](IdColumnRef column) {
-        using ql::shift_left;
-        shift_left(column.begin(), column.begin() + upperBound, offset);
+        ql::shift_left(column.begin(), column.begin() + upperBound, offset);
       });
   // Resize the `IdTable` if necessary.
   size_t targetSize = limitOffset.actualSize(idTable.numRows());

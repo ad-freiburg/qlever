@@ -178,8 +178,9 @@ TEST(IdColumnIteratorTest, rangeBasedForAndSort) {
   EXPECT_THAT(afterSort, ::testing::ElementsAreArray(sortedIds));
 }
 
-// Test that `shift_left` on a split column shifts it like `ql::shift_left`
-// shifts the ids themselves, for all shifts from none to beyond the end.
+// Test that `ql::shift_left` on a split column (which uses its member
+// `shiftLeft`) shifts it like the ids themselves, for all shifts from none to
+// beyond the end.
 TEST(IdColumnIteratorTest, shiftLeft) {
   const auto ids = sampleIds();
   const auto size = static_cast<int64_t>(ids.size());
@@ -188,9 +189,8 @@ TEST(IdColumnIteratorTest, shiftLeft) {
     const auto view = vec.asView();
     std::vector<Id> expected = ids;
 
-    using ql::shift_left;
-    auto end = shift_left(view.begin(), view.end() - 1, n);
-    auto expectedEnd = shift_left(expected.begin(), expected.end() - 1, n);
+    auto end = ql::shift_left(view.begin(), view.end() - 1, n);
+    auto expectedEnd = ql::shift_left(expected.begin(), expected.end() - 1, n);
 
     EXPECT_EQ(end - view.begin(), expectedEnd - expected.begin());
     std::vector afterShift(view.begin(), view.end());
