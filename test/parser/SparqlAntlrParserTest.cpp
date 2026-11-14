@@ -1467,6 +1467,45 @@ TEST(SparqlParser, ensureExceptionOnInvalidGraphTerm) {
       ad_utility::Exception);
 }
 
+// Test that the triples, the filters, and the nested graph patterns of a
+// `WHERE` clause count towards the memory limit of the allocator that is
+// passed to the parser. The memory of the `ParsedQuery` has to grow with the
+// number of these elements by at least the size of the elements.
+TEST(SparqlParser, graphPatternAllocationsCountTowardsMemoryLimit) {
+  // Parse a query that consists of `n` patterns, where the `i`-th pattern is
+  // created by `makePattern(i)`, and return the memory (in bytes) that the
+  // resulting `ParsedQuery` has allocated from the allocator.
+  auto memoryUsedByParsedQuery = [](size_t n, const auto& makePattern) {
+    std::string query = "SELECT ?s { ?s <p> ?o ";
+    for (size_t i = 0; i < n; ++i) {
+      query += makePattern(i);
+    }
+    query += "}";
+    auto allocator = ad_utility::testing::makeAllocator(
+        ad_utility::MemorySize::megabytes(100));
+    const size_t memoryLeftBefore = allocator.amountMemoryLeft().getBytes();
+    auto pq = SparqlParser::parseQuery(encodedIriManager(), allocator, query);
+    return memoryLeftBefore - allocator.amountMemoryLeft().getBytes();
+  };
+  auto expectGrowth = [&memoryUsedByParsedQuery](const auto& makePattern,
+                                                 size_t sizeOfElement) {
+    constexpr size_t numSmall = 10;
+    constexpr size_t numLarge = 1000;
+    EXPECT_GE(memoryUsedByParsedQuery(numLarge, makePattern),
+              memoryUsedByParsedQuery(numSmall, makePattern) +
+                  (numLarge - numSmall) * sizeOfElement);
+  };
+  expectGrowth(
+      [](size_t i) { return absl::StrCat(". ?s <p", i, "> ?o", i, " "); },
+      sizeof(SparqlTriple));
+  expectGrowth(
+      [](size_t i) { return absl::StrCat("FILTER(?s != <x", i, ">) "); },
+      sizeof(SparqlFilter));
+  expectGrowth(
+      [](size_t i) { return absl::StrCat("OPTIONAL { ?s <q", i, "> ?x } "); },
+      sizeof(parsedQuery::GraphPatternOperation));
+}
+
 // Test that ASK queries are parsed as they should.
 TEST(SparqlParser, AskQuery) {
   // Some helper functions and abbreviations.

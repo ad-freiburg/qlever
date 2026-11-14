@@ -82,12 +82,15 @@ size_t countOperations(const QueryExecutionTree& tree) {
 // `ExistsJoin` writes the result of the `EXISTS` to.
 inline std::pair<sparqlExpression::SparqlExpressionPimpl, Variable>
 makeExistsExpression(const std::string& predicate) {
-  ParsedQuery query;
+  auto allocator = ad_utility::testing::makeAllocator();
+  ParsedQuery query{allocator};
   query._rootGraphPattern._graphPatterns.push_back(
-      parsedQuery::BasicGraphPattern{{SparqlTriple{
-          TripleComponent{Variable{"?a"}},
-          ad_utility::triple_component::Iri::fromIriref(predicate),
-          TripleComponent{Variable{"?x"}}}}});
+      parsedQuery::BasicGraphPattern{
+          {{SparqlTriple{
+               TripleComponent{Variable{"?a"}},
+               ad_utility::triple_component::Iri::fromIriref(predicate),
+               TripleComponent{Variable{"?x"}}}},
+           allocator}});
   // Select the visible variables via `*`, exactly as the parser does.
   query.selectClause().setAsterisk();
   query.selectClause().addVisibleVariable(Variable{"?a"});

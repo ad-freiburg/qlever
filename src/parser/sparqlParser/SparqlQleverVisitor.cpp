@@ -224,7 +224,7 @@ void Visitor::checkGeoFunctionArgs(const std::vector<ExpressionPtr>& args,
 }
 
 // ___________________________________________________________________________
-void Visitor::checkWktInValues(const std::vector<GraphPatternOperation>& ops,
+void Visitor::checkWktInValues(ql::span<const GraphPatternOperation> ops,
                                const antlr4::ParserRuleContext* ctx) const {
   // Always empty if the runtime parameter `throw-on-invalid-wkt` is not set.
   if (geoFunctionArgVariables_.empty()) {
@@ -546,7 +546,8 @@ Alias Visitor::visit(Parser::AliasWithoutBracketsContext* ctx) {
 // ____________________________________________________________________________________
 parsedQuery::BasicGraphPattern Visitor::toGraphPattern(
     const ad_utility::sparql_types::Triples& triples) const {
-  parsedQuery::BasicGraphPattern pattern{};
+  parsedQuery::BasicGraphPattern pattern{
+      qlm::vector<SparqlTriple>{allocator()}};
   pattern._triples.reserve(triples.size());
   auto toTripleComponent = [this](const auto& item) {
     using T = std::decay_t<decltype(item)>;
@@ -851,7 +852,7 @@ std::vector<ParsedQuery> Visitor::visit(Parser::Update1Context* ctx) {
 // ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::LoadContext* ctx) {
   AD_CORRECTNESS_CHECK(visibleVariables_.empty());
-  GraphPattern pattern;
+  GraphPattern pattern{allocator()};
   auto iri = visit(ctx->iri());
   // The `LOAD` Update operation is translated into something like
   // `INSERT { ?s ?p ?o } WHERE { LOAD_OP <iri> [SILENT] }`. Where `LOAD_OP` is
@@ -888,13 +889,15 @@ TripleComponent::Iri transformGraph(const GraphOrDefault& graph) {
           }},
       graph);
 }
+}  // namespace
 
 // _____________________________________________________________________________
 // Make a `GraphPatternOperation` that matches all triples in the given graph.
-GraphPatternOperation makeAllTripleGraphPattern(TripleComponent::Iri graphIri) {
-  GraphPattern inner;
+GraphPatternOperation Visitor::makeAllTripleGraphPattern(
+    TripleComponent::Iri graphIri) const {
+  GraphPattern inner{allocator()};
   inner._graphPatterns.emplace_back(BasicGraphPattern{
-      {{{Variable("?s")}, Variable("?p"), {Variable("?o")}}}});
+      {{{{Variable("?s")}, Variable("?p"), {Variable("?o")}}}, allocator()}});
   return {
       parsedQuery::GroupGraphPattern{std::move(inner), std::move(graphIri)}};
 }
@@ -902,16 +905,17 @@ GraphPatternOperation makeAllTripleGraphPattern(TripleComponent::Iri graphIri) {
 // _____________________________________________________________________________
 // Make a `GraphPatternOperation` that matches all triples in either all graphs,
 // or just named graphs, depending on the value of `behaviour`.
-GraphPatternOperation makeAllTripleGraphPattern(
+GraphPatternOperation Visitor::makeAllTripleGraphPattern(
     Variable graphVariable,
-    parsedQuery::GroupGraphPattern::GraphVariableBehaviour behaviour) {
-  GraphPattern inner;
+    parsedQuery::GroupGraphPattern::GraphVariableBehaviour behaviour) const {
+  GraphPattern inner{allocator()};
   inner._graphPatterns.emplace_back(BasicGraphPattern{
-      {{{Variable("?s")}, Variable("?p"), {Variable("?o")}}}});
+      {{{{Variable("?s")}, Variable("?p"), {Variable("?o")}}}, allocator()}});
   return {parsedQuery::GroupGraphPattern{std::move(inner),
                                          std::move(graphVariable), behaviour}};
 }
 
+namespace {
 // ____________________________________________________________________________________
 // Make a `SparqlTripleSimpleWithGraph` that templates all triples in the graph.
 SparqlTripleSimpleWithGraph makeAllTripleTemplate(
@@ -933,21 +937,21 @@ ParsedQuery Visitor::makeClear(const GraphRefAll& graph) {
       std::pair<GraphPatternOperation, SparqlTripleSimpleWithGraph::Graph>;
   auto [graphPattern, updatePattern] = std::visit(
       ad_utility::OverloadCallOperator{
-          [](const GraphRef& graph) -> P {
+          [this](const GraphRef& graph) -> P {
             return {makeAllTripleGraphPattern(graph), graph};
           },
-          [](const DEFAULT&) -> P {
+          [this](const DEFAULT&) -> P {
             auto defaultGraph = ad_utility::triple_component::Iri::fromIriref(
                 DEFAULT_GRAPH_IRI);
             auto copy = defaultGraph;
             return {makeAllTripleGraphPattern(std::move(defaultGraph)),
                     std::move(copy)};
           },
-          [](const NAMED&) -> P {
+          [this](const NAMED&) -> P {
             return {makeAllTripleGraphPattern(Variable{"?g"}, GVB::NAMED),
                     Variable{"?g"}};
           },
-          [](const ALL&) -> P {
+          [this](const ALL&) -> P {
             return {makeAllTripleGraphPattern(Variable{"?g"}, GVB::ALL),
                     Variable{"?g"}};
           }},
@@ -1057,10 +1061,10 @@ GraphUpdate Visitor::visit(Parser::DeleteDataContext* ctx) {
 ParsedQuery Visitor::visit(Parser::DeleteWhereContext* ctx) {
   AD_CORRECTNESS_CHECK(visibleVariables_.empty());
   parsedQuery_.datasetClauses_ = activeDatasetClauses_;
-  GraphPattern pattern;
+  GraphPattern pattern{allocator()};
   auto cleanup = setBlankNodeTreatmentForScope(TreatBlankNodesAs::Illegal);
   auto triples = visit(ctx->quadPattern());
-  pattern._graphPatterns = triples.toGraphPatternOperations();
+  pattern._graphPatterns = triples.toGraphPatternOperations(allocator());
   parsedQuery_._rootGraphPattern = std::move(pattern);
   // The query body and template are identical. No need to check that variables
   // are visible. But they need to be registered.
@@ -1238,7 +1242,7 @@ void Visitor::selectExistsVariables(SparqlFilter& filter) const {
 
 // _____________________________________________________________________________
 GraphPattern Visitor::visit(Parser::GroupGraphPatternContext* ctx) {
-  GraphPattern pattern;
+  GraphPattern pattern{allocator()};
 
   // The triples inside a group belong to a basic graph pattern of their own,
   // no matter which basic graph pattern was active in the enclosing scope.
@@ -1287,8 +1291,8 @@ GraphPattern Visitor::visit(Parser::GroupGraphPatternContext* ctx) {
 
 Visitor::OperationsAndFilters Visitor::visit(
     Parser::GroupGraphPatternSubContext* ctx) {
-  std::vector<GraphPatternOperation> ops;
-  std::vector<SparqlFilter> filters;
+  qlm::vector<GraphPatternOperation> ops{allocator()};
+  qlm::vector<SparqlFilter> filters{allocator()};
   auto outerGeoFunctionArgVariables =
       std::exchange(geoFunctionArgVariables_, {});
 
@@ -1312,7 +1316,8 @@ Visitor::OperationsAndFilters Visitor::visit(
       continue;
     }
     if (ops.empty() || !std::holds_alternative<BasicGraphPattern>(ops.back())) {
-      ops.emplace_back(BasicGraphPattern{});
+      ops.emplace_back(
+          BasicGraphPattern{qlm::vector<SparqlTriple>{allocator()}});
     }
     std::get<BasicGraphPattern>(ops.back())
         .appendTriples(std::move(triples.value()));
@@ -1353,8 +1358,9 @@ BasicGraphPattern Visitor::visit(Parser::TriplesBlockContext* ctx) {
             graphTermToTripleComponentWithEncoding(triple.object_)};
   };
 
-  BasicGraphPattern triples = {ad_utility::transform(
-      visit(ctx->triplesSameSubjectPath()), convertAndRegisterTriple)};
+  BasicGraphPattern triples = {
+      ad_utility::transform(visit(ctx->triplesSameSubjectPath()),
+                            convertAndRegisterTriple, allocator())};
   if (ctx->triplesBlock()) {
     triples.appendTriples(visit(ctx->triplesBlock()));
   }
@@ -2017,8 +2023,9 @@ GraphPatternOperation Visitor::visit(Parser::MinusGraphPatternContext* ctx) {
 
 // ____________________________________________________________________________________
 namespace {
-GraphPattern wrap(GraphPatternOperation op) {
-  auto pattern = GraphPattern();
+GraphPattern wrap(GraphPatternOperation op,
+                  const qlever::Allocator<Id>& allocator) {
+  auto pattern = GraphPattern{allocator};
   pattern._graphPatterns.emplace_back(std::move(op));
   return pattern;
 }
@@ -2031,9 +2038,9 @@ GraphPatternOperation Visitor::visit(
   if (children.size() > 1) {
     // https://en.cppreference.com/w/cpp/algorithm/accumulate
     // a similar thing is done in QueryPlaner::uniteGraphPatterns
-    auto foldOp = [](GraphPatternOperation op1, GraphPattern op2) {
-      return GraphPatternOperation{
-          parsedQuery::Union{wrap(std::move(op1)), std::move(op2)}};
+    auto foldOp = [this](GraphPatternOperation op1, GraphPattern op2) {
+      return GraphPatternOperation{parsedQuery::Union{
+          wrap(std::move(op1), allocator()), std::move(op2)}};
     };
     // TODO<joka921> QLever should support Nary UNIONs directly.
     return std::accumulate(std::next(children.begin(), 2), children.end(),
