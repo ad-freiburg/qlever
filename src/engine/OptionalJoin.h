@@ -9,6 +9,7 @@
 #include "backports/span.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "util/ContainersWithAllocator.h"
 
 // Forward declaration
@@ -39,12 +40,26 @@ class OptionalJoin : public Operation {
   bool keepJoinColumns_ = true;
 
  public:
+  // The outermost FILTERs of an OPTIONAL group that use variables from the
+  // left side. By the SPARQL standard (section 18.2.2.6 and the definition of
+  // `LeftJoin` in section 18.5) they are not a filter on the right side, but
+  // the condition of the left join: a pair of a left and a right row is only
+  // part of the result if all expressions are true for the merged row. A left
+  // row for which no such pair exists is kept once, with UNDEF on the right.
+  using JoinCondition = std::vector<sparqlExpression::SparqlExpressionPimpl>;
+
   OptionalJoin(QueryExecutionContext* qec,
                std::shared_ptr<QueryExecutionTree> t1,
                std::shared_ptr<QueryExecutionTree> t2,
-               bool keepJoinColumns = true);
+               bool keepJoinColumns = true, JoinCondition condition = {});
 
  private:
+  JoinCondition condition_;
+  // The `ConditionFilter` only evaluates the condition when at least this
+  // many new rows have been written. This is also the buffer size of the row
+  // adder in the materialized case.
+  size_t conditionChunkSize_ = 100'000;
+
   std::string getCacheKeyImpl() const override;
 
   void onLimitOffsetChanged(const LimitOffsetClause&,
@@ -92,6 +107,12 @@ class OptionalJoin : public Operation {
       IdTable* dynResult,
       Implementation implementation = Implementation::GeneralCase);
 
+  // Set `conditionChunkSize_`.
+  void setConditionChunkSizeForTesting(size_t chunkSize) {
+    AD_CONTRACT_CHECK(chunkSize > 0);
+    conditionChunkSize_ = chunkSize;
+  }
+
   // Joins two results on a single join column lazily, inserting the special
   // value `Id::makeUndefined()` for any entries marked as optional.
   Result lazyOptionalJoin(std::shared_ptr<const Result> left,
@@ -111,9 +132,33 @@ class OptionalJoin : public Operation {
                                    bool requestLaziness);
 
  private:
-  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
+  [[nodiscard]] bool isDeterministicImpl() const override {
+    return ql::ranges::all_of(condition_, [](const auto& expression) {
+      return expression.isDeterministic();
+    });
+  }
 
   std::unique_ptr<Operation> cloneImpl() const override;
+
+  // Applies the `condition_` while the join result is being written, see
+  // `OptionalJoinConditionFilter.h`.
+  class ConditionFilter;
+
+  // Compute the result without join columns: every left row is compatible
+  // with every right row (Cartesian product), and the `condition_` decides
+  // which of these pairs are kept. A left row without a kept pair is kept
+  // once with UNDEF on the right. Works block by block, so the Cartesian
+  // product is never materialized.
+  Result optionalJoinWithoutJoinColumns(bool requestLaziness);
+
+  // The part of the result of `optionalJoinWithoutJoinColumns` for the rows
+  // `[beginLeft, endLeft)` of the `left` input.
+  IdTable joinBlockWithoutJoinColumns(IdTableView<0> left, IdTableView<0> right,
+                                      size_t beginLeft, size_t endLeft) const;
+
+  // The variable to column map for the internal column order of the result
+  // during the join, which is used to evaluate the condition.
+  VariableToColumnMap getInternalVariableColumns() const;
 
   // Helper function for `tryIndexNestedLoopJoinIfSuitable` which makes the
   // logic reusable. Note that this depends on the size estimates and hence may

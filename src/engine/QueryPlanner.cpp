@@ -2341,7 +2341,12 @@ SubtreePlanVec QueryPlanner::createJoinCandidates(
   SubtreePlanVec candidates{allocator()};
 
   if (jcs.empty()) {
-    // The candidates are not connected
+    // The candidates are not connected. Only an OPTIONAL with a condition is
+    // still joined, as an `OptionalJoin` without join columns.
+    if (b.type == SubtreePlan::OPTIONAL && !b.optionalJoinCondition_.empty()) {
+      return singlePlanVec(makeSubtreePlan<OptionalJoin>(
+          _qec, a._qet, b._qet, true, b.optionalJoinCondition_));
+    }
     return candidates;
   }
 
@@ -2380,7 +2385,9 @@ SubtreePlanVec QueryPlanner::createJoinCandidates(
   // OPTIONAL JOINS are not symmetric!
   if (b.type == SubtreePlan::OPTIONAL) {
     // Join the two optional columns using an optional join
-    return singlePlanVec(makeSubtreePlan<OptionalJoin>(_qec, a._qet, b._qet));
+    // with the condition from `extractOptionalJoinCondition`.
+    return singlePlanVec(makeSubtreePlan<OptionalJoin>(
+        _qec, a._qet, b._qet, true, b.optionalJoinCondition_));
   }
 
   if (auto opt = createJoinWithPathSearch(a, b, jcs)) {
@@ -3091,6 +3098,111 @@ QueryPlanner::GraphPatternPlanner::getVariablesOfPreviousPatterns() const {
   return variables;
 }
 
+namespace {
+// Return true iff the conjunct `expression` of a FILTER in an OPTIONAL group
+// is part of the condition of the left join, see
+// `extractOptionalJoinCondition` for the arguments.
+bool isPartOfOptionalJoinCondition(
+    const sparqlExpression::SparqlExpressionPimpl& expression,
+    const ad_utility::HashSet<Variable>& previousVariables,
+    const ad_utility::HashSet<Variable>& alwaysBoundInGroup) {
+  // TODO<ninofrey> An `EXISTS` is computed by an `ExistsJoin` below the FILTER
+  // and can't be evaluated for each joined row yet. It stays in the group,
+  // which is wrong if it uses a variable only bound on the left.
+  if (!expression.getExistsExpressions().empty()) {
+    return false;
+  }
+  // A non-deterministic expression (e.g. `RAND()`) has to be evaluated for
+  // each joined row, so for it every variable from the left counts.
+  bool isDeterministic = expression.isDeterministic();
+  return ql::ranges::any_of(
+      expression.containedVariables(), [&](const Variable* var) {
+        return previousVariables.contains(*var) &&
+               !(isDeterministic && alwaysBoundInGroup.contains(*var));
+      });
+}
+}  // namespace
+
+// _____________________________________________________________________________
+std::vector<sparqlExpression::SparqlExpressionPimpl>
+QueryPlanner::GraphPatternPlanner::extractOptionalJoinCondition(
+    ParsedQuery::GraphPattern& group) const {
+  std::vector<sparqlExpression::SparqlExpressionPimpl> condition;
+  // Without variables on the left side (e.g. the OPTIONAL is the first pattern
+  // of its group), every FILTER only depends on the group itself.
+  auto previousVariables = getVariablesOfPreviousPatterns();
+  if (previousVariables.empty()) {
+    return condition;
+  }
+  ad_utility::HashSet<Variable> alwaysBoundInGroup;
+  for (const auto& operation : group._graphPatterns) {
+    if (const auto* triples =
+            std::get_if<parsedQuery::BasicGraphPattern>(&operation)) {
+      triples->collectAllContainedVariables(alwaysBoundInGroup);
+    }
+  }
+  auto isPartOfCondition = [&](const auto& conjunct) {
+    return isPartOfOptionalJoinCondition(conjunct, previousVariables,
+                                         alwaysBoundInGroup);
+  };
+  std::vector<SparqlFilter> remainingFilters;
+  for (auto& filter : group._filters) {
+    decltype(condition) conditionConjuncts;
+    decltype(condition) remainingConjuncts;
+    for (auto& conjunct : filter.expression_.splitConjunction()) {
+      if (isPartOfCondition(conjunct)) {
+        conditionConjuncts.push_back(std::move(conjunct));
+      } else {
+        remainingConjuncts.push_back(std::move(conjunct));
+      }
+    }
+    // If no conjunct is part of the condition, keep the FILTER unchanged.
+    if (conditionConjuncts.empty()) {
+      remainingFilters.push_back(std::move(filter));
+      continue;
+    }
+    ad_utility::appendVector(condition, std::move(conditionConjuncts));
+    for (auto& conjunct : remainingConjuncts) {
+      remainingFilters.push_back(SparqlFilter{std::move(conjunct)});
+    }
+  }
+  group._filters = std::move(remainingFilters);
+  return condition;
+}
+
+// _____________________________________________________________________________
+void QueryPlanner::GraphPatternPlanner::applyConditionToOptionalGroup(
+    std::vector<sparqlExpression::SparqlExpressionPimpl>& condition,
+    SubtreePlanVec& candidates) const {
+  if (condition.empty()) {
+    return;
+  }
+  auto previousVariables = getVariablesOfPreviousPatterns();
+  // A variable has the same value in the group and in the joined row if the
+  // previous patterns don't bind it or if the group always binds it. All
+  // candidates get the same condition, so this has to hold for each of them.
+  auto hasSameValueAfterJoin = [&](const Variable* var) {
+    return !previousVariables.contains(*var) ||
+           ql::ranges::all_of(candidates, [var](const SubtreePlan& plan) {
+             return plan._qet->getRootOperation()->isVariableAlwaysDefined(
+                 *var);
+           });
+  };
+  std::vector<sparqlExpression::SparqlExpressionPimpl> remainingCondition;
+  for (auto& expression : condition) {
+    if (!expression.isDeterministic() ||
+        !ql::ranges::all_of(expression.containedVariables(),
+                            hasSameValueAfterJoin)) {
+      remainingCondition.push_back(std::move(expression));
+      continue;
+    }
+    for (auto& plan : candidates) {
+      plan._qet = makeExecutionTree<Filter>(qec_, plan._qet, expression);
+    }
+  }
+  condition = std::move(remainingCondition);
+}
+
 // _____________________________________________________________________________
 template <typename Variables>
 bool QueryPlanner::GraphPatternPlanner::handleUnconnectedMinusOrOptional(
@@ -3137,8 +3249,14 @@ bool QueryPlanner::GraphPatternPlanner::handleUnconnectedMinusOrOptional(
     return true;
   }
   // An OPTIONAL clause that doesn't share any variable with the preceding
-  // patterns behaves as if it is joined with the neutral element.
-  //
+  // patterns behaves as if it is joined with the neutral element. This does
+  // not hold if it has a condition (which uses variables of the previous
+  // patterns). Then it becomes an `OptionalJoin` without join columns, see
+  // `createJoinCandidates`.
+  AD_CORRECTNESS_CHECK(type == OPTIONAL);
+  if (!candidates[0].optionalJoinCondition_.empty()) {
+    return false;
+  }
   // NOTE: The filter and text limit IDs of the plans are deliberately not
   // copied. They originate from the inner scope of the OPTIONAL clause and have
   // already been dealt with completely, copying them was the cause of
@@ -3258,8 +3376,16 @@ template <typename Arg>
 void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
   using T = std::decay_t<Arg>;
   planner_.checkCancellation();
-  if constexpr (std::is_same_v<T, p::Optional> ||
-                std::is_same_v<T, p::GroupGraphPattern>) {
+  if constexpr (std::is_same_v<T, p::Optional>) {
+    auto condition = extractOptionalJoinCondition(arg._child);
+    auto candidates = planner_.optimize(&arg._child);
+    applyConditionToOptionalGroup(condition, candidates);
+    for (auto& c : candidates) {
+      c.type = SubtreePlan::OPTIONAL;
+      c.optionalJoinCondition_ = condition;
+    }
+    visitGroupOptionalOrMinus(std::move(candidates));
+  } else if constexpr (std::is_same_v<T, p::GroupGraphPattern>) {
     // If this is a `GRAPH <graph> {...}` clause, then we have to overwrite the
     // default graphs while planning this clause, and reset them when leaving
     // the clause.
@@ -3272,43 +3398,32 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
           planner_.defaultGraphBehaviour_ = behaviour;
         }};
     auto& activeDatasets = planner_.activeDatasetClauses_;
-    if constexpr (std::is_same_v<T, p::GroupGraphPattern>) {
-      if (const auto* graphIri =
-              std::get_if<TripleComponent::Iri>(&arg.graphSpec_)) {
-        datasetBackup = std::exchange(
-            activeDatasets,
-            activeDatasets.getDatasetClauseForGraphClause(*graphIri));
-      } else if (const auto* graphPair = std::get_if<std::pair<
-                     Variable, p::GroupGraphPattern::GraphVariableBehaviour>>(
-                     &arg.graphSpec_)) {
-        datasetBackup = std::exchange(
-            activeDatasets,
-            activeDatasets.getDatasetClauseForVariableGraphClause());
+    if (const auto* graphIri =
+            std::get_if<TripleComponent::Iri>(&arg.graphSpec_)) {
+      datasetBackup = std::exchange(
+          activeDatasets,
+          activeDatasets.getDatasetClauseForGraphClause(*graphIri));
+    } else if (const auto* graphPair = std::get_if<std::pair<
+                   Variable, p::GroupGraphPattern::GraphVariableBehaviour>>(
+                   &arg.graphSpec_)) {
+      datasetBackup = std::exchange(
+          activeDatasets,
+          activeDatasets.getDatasetClauseForVariableGraphClause());
 
-        // We already have backed up the `activeGraphVariable_` and
-        // `defaultGraphBehaviour_`.
-        std::tie(planner_.activeGraphVariable_,
-                 planner_.defaultGraphBehaviour_) = *graphPair;
-      } else {
-        AD_CORRECTNESS_CHECK(
-            std::holds_alternative<std::monostate>(arg.graphSpec_));
-      }
+      // We already have backed up the `activeGraphVariable_` and
+      // `defaultGraphBehaviour_`.
+      std::tie(planner_.activeGraphVariable_, planner_.defaultGraphBehaviour_) =
+          *graphPair;
+    } else {
+      AD_CORRECTNESS_CHECK(
+          std::holds_alternative<std::monostate>(arg.graphSpec_));
     }
 
     auto candidates = planner_.optimize(&arg._child);
-
-    if constexpr (std::is_same_v<T, p::GroupGraphPattern>) {
-      if (const auto* graphPair = std::get_if<std::pair<
-              Variable, p::GroupGraphPattern::GraphVariableBehaviour>>(
-              &arg.graphSpec_)) {
-        bindGraphVariableIfUnbound(graphPair->first, candidates);
-      }
-    }
-
-    if constexpr (std::is_same_v<T, p::Optional>) {
-      for (auto& c : candidates) {
-        c.type = SubtreePlan::OPTIONAL;
-      }
+    if (const auto* graphPair = std::get_if<
+            std::pair<Variable, p::GroupGraphPattern::GraphVariableBehaviour>>(
+            &arg.graphSpec_)) {
+      bindGraphVariableIfUnbound(graphPair->first, candidates);
     }
     visitGroupOptionalOrMinus(std::move(candidates));
     if (datasetBackup.has_value()) {

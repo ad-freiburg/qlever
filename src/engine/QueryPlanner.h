@@ -170,6 +170,10 @@ class QueryPlanner {
     bool containsFilterSubstitute_ = false;
     bool containsBindSubstitute_ = false;
     Type type = Type::BASIC;
+    // Only for plans of type OPTIONAL: The outermost FILTERs of the OPTIONAL
+    // group that use variables of the preceding patterns. They are the
+    // condition of the `OptionalJoin`, see `OptionalJoin::JoinCondition`.
+    std::vector<sparqlExpression::SparqlExpressionPimpl> optionalJoinCondition_;
 
     size_t getCostEstimate() const;
 
@@ -754,6 +758,33 @@ class QueryPlanner {
     // undefined in all rows of the result, which is fine, as only the absence
     // of shared variables leads to a special case.
     ad_utility::HashSet<Variable> getVariablesOfPreviousPatterns() const;
+
+    // Remove the FILTERs from the group of an OPTIONAL that are the condition
+    // of the left join and return their expressions. These are the outermost
+    // FILTERs of the group that use a variable of the preceding patterns
+    // (SPARQL 1.1, section 18.2.2.6). A variable that is bound by a triple
+    // directly in the group doesn't count: it is never UNDEF in the group, so
+    // it has the same value there and in the joined row. All other FILTERs
+    // only depend on the group itself and stay in it, so that they can be
+    // applied early. FILTERs with `EXISTS` also stay (wrong if they use a
+    // variable only bound by the preceding patterns). A FILTER `a && b` is
+    // equivalent to the two FILTERs `a` and `b`, so its conjuncts are treated
+    // separately.
+    std::vector<sparqlExpression::SparqlExpressionPimpl>
+    extractOptionalJoinCondition(ParsedQuery::GraphPattern& group) const;
+
+    // Apply the parts of the `condition` of an OPTIONAL that only depend on its
+    // group as FILTERs to the `candidates` (the plans for the group) and remove
+    // them from the `condition`. These are the parts for which each variable
+    // of the preceding patterns is never UNDEF in the result of the group. Such
+    // a variable has the same value in the group and in the joined row.
+    // `extractOptionalJoinCondition` already decides this for the triples of
+    // the group, which lets the planner apply the FILTER before the joins of
+    // the group. Here the remaining cases (nested groups, UNION, VALUES,
+    // subqueries) are decided on the finished plans.
+    void applyConditionToOptionalGroup(
+        std::vector<sparqlExpression::SparqlExpressionPimpl>& condition,
+        SubtreePlanVec& candidates) const;
 
     // Helper function for `visitGroupOptionalOrMinus`. SPARQL queries like
     // `SELECT * { OPTIONAL { ?a ?b ?c }}`, `SELECT * { MINUS { ?a ?b ?c }}` or

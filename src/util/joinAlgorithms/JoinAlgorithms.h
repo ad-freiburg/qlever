@@ -1342,6 +1342,16 @@ struct BlockZipperJoinImplCRTP {
         AD_CORRECTNESS_CHECK(allBlocksWereFilled);
       }
       target = getEqualToCurrentEl(side.currentBlocks_, currentEl);
+      // If there are no more elements equal to `currentEl` on this side, the
+      // loop below has to stop. Otherwise `addAll` would be called with empty
+      // subranges for this side, and for an OPTIONAL join or a MINUS the
+      // (already matched) rows of the other side would wrongly be added as
+      // rows without a match.
+      if (ql::ranges::all_of(target, [](const auto& block) {
+            return ql::ranges::empty(block.subrange());
+          })) {
+        target.clear();
+      }
       if (allBlocksWereFilled) {
         blockStatus = BlockStatus::allFilled;
       }

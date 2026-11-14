@@ -3409,6 +3409,17 @@ TEST(QueryPlanner, UnconnectedMinusAndOptionalInGraphClause) {
       "SELECT * { GRAPH ?g { VALUES ?v { 1 } OPTIONAL { ?x <q> ?y } } }",
       h::CartesianProductJoin(h::ValuesClause("VALUES (?v) { (1) }"),
                               h::NeutralOptional(scan("?x", "<q>", "?y"))));
+  // With a condition, such an OPTIONAL becomes an `OptionalJoin` without join
+  // columns, and with a preceding triple it is joined on the graph variable.
+  h::expect(
+      "SELECT * { GRAPH ?g { VALUES ?v { 1 } "
+      "OPTIONAL { ?x <q> ?y FILTER(?y > ?v) } } }",
+      h::OptionalJoin(h::ValuesClause("VALUES (?v) { (1) }"),
+                      scan("?x", "<q>", "?y")));
+  h::expect(
+      "SELECT * { GRAPH ?g { ?a <p> ?b OPTIONAL { ?x <q> ?y FILTER(?y > ?b) } "
+      "} }",
+      optionalJoin);
 }
 
 // _____________________________________________________________________________
