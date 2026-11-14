@@ -41,8 +41,8 @@ TEST(PathSearchTest, constructor) {
   auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, std::move(sub), vars);
 
-  std::vector<Id> sources{V(0)};
-  std::vector<Id> targets{V(1)};
+  IdColumn sources{V(0)};
+  IdColumn targets{V(1)};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
                                  targets,
@@ -60,8 +60,8 @@ TEST(PathSearchTest, emptyGraph) {
   auto expected = makeIdTableFromVector({});
   expected.setNumColumns(4);
 
-  std::vector<Id> sources{V(0)};
-  std::vector<Id> targets{V(4)};
+  IdColumn sources{V(0)};
+  IdColumn targets{V(4)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
@@ -90,8 +90,8 @@ TEST(PathSearchTest, singlePath) {
       {V(3), V(4), I(0), I(3)},
   });
 
-  std::vector<Id> sources{V(0)};
-  std::vector<Id> targets{V(4)};
+  IdColumn sources{V(0)};
+  IdColumn targets{V(4)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
@@ -117,8 +117,8 @@ TEST(PathSearchTest, singlePathWithProperties) {
       {V(3), V(4), I(0), I(3), V(40)},
   });
 
-  std::vector<Id> sources{V(0)};
-  std::vector<Id> targets{V(4)};
+  IdColumn sources{V(0)};
+  IdColumn targets{V(4)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}, Variable{"?edgeProperty"}};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
@@ -149,7 +149,7 @@ TEST(PathSearchTest, singlePathAllSources) {
       {V(3), V(4), I(3), I(0), V(3)},
   });
 
-  std::vector<Id> targets{V(4)};
+  IdColumn targets{V(4)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  Var{"?sources"},
@@ -180,7 +180,7 @@ TEST(PathSearchTest, singlePathAllTargets) {
       {V(3), V(4), I(3), I(3), V(4)},
   });
 
-  std::vector<Id> sources{V(0)};
+  IdColumn sources{V(0)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
@@ -213,8 +213,8 @@ TEST(PathSearchTest, twoPathsOneTarget) {
       {V(1), V(2), I(1), I(1)},
   });
 
-  std::vector<Id> sources{V(0)};
-  std::vector<Id> targets{V(2)};
+  IdColumn sources{V(0)};
+  IdColumn targets{V(2)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
@@ -247,8 +247,8 @@ TEST(PathSearchTest, twoPathsTwoTargets) {
       {V(1), V(2), I(1), I(1)},
   });
 
-  std::vector<Id> sources{V(0)};
-  std::vector<Id> targets{V(2), V(4)};
+  IdColumn sources{V(0)};
+  IdColumn targets{V(2), V(4)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
@@ -280,7 +280,7 @@ TEST(PathSearchTest, cycle) {
       {V(1), V(2), I(1), I(1), V(2)},
   });
 
-  std::vector<Id> sources{V(0)};
+  IdColumn sources{V(0)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
@@ -312,7 +312,7 @@ TEST(PathSearchTest, twoCycle) {
                                          {V(0), V(1), I(2), I(0), V(2)},
                                          {V(1), V(2), I(2), I(1), V(2)}});
 
-  std::vector<Id> sources{V(0)};
+  IdColumn sources{V(0)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
@@ -350,7 +350,7 @@ TEST(PathSearchTest, allPaths) {
       {V(1), V(3), I(4), I(1), V(3)},
   });
 
-  std::vector<Id> sources{V(0)};
+  IdColumn sources{V(0)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
@@ -383,7 +383,7 @@ TEST(PathSearchTest, allPathsWithPropertiesSwitched) {
       {V(1), V(3), I(4), I(1), V(3), V(21), V(20)},
   });
 
-  std::vector<Id> sources{V(0)};
+  IdColumn sources{V(0)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}, Variable{"?edgeProperty1"},
                Variable{"?edgeProperty2"}};
   PathSearchConfiguration config{
@@ -423,7 +423,7 @@ TEST(PathSearchTest, allPathsPartialAllTargets) {
       {V(2), V(3), I(4), I(2), V(3)},
   });
 
-  std::vector<Id> sources{V(0)};
+  IdColumn sources{V(0)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
@@ -452,7 +452,7 @@ TEST(PathSearchTest, allPathsPartialAllSources) {
       {V(2), V(3), I(3), I(0), V(2)},
   });
 
-  std::vector<Id> targets{V(3)};
+  IdColumn targets{V(3)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  Var{"?sources"},
@@ -484,8 +484,8 @@ TEST(PathSearchTest, singlePathWithIrrelevantNode) {
       {V(3), V(4), I(0), I(3)},
   });
 
-  std::vector<Id> sources{V(0)};
-  std::vector<Id> targets{V(4)};
+  IdColumn sources{V(0)};
+  IdColumn targets{V(4)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
@@ -527,8 +527,8 @@ TEST(PathSearchTest, elongatedDiamond) {
       {V(4), V(5), I(1), I(3)},
   });
 
-  std::vector<Id> sources{V(0)};
-  std::vector<Id> targets{V(5)};
+  IdColumn sources{V(0)};
+  IdColumn targets{V(5)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
@@ -558,8 +558,8 @@ TEST(PathSearchTest, numPathsPerTarget) {
       {V(4), V(5), I(1), I(3)},
   });
 
-  std::vector<Id> sources{V(0)};
-  std::vector<Id> targets{V(4), V(5)};
+  IdColumn sources{V(0)};
+  IdColumn targets{V(4), V(5)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
@@ -584,8 +584,8 @@ TEST(PathSearchTest, targetBeyondMaxDepth) {
   auto expected = makeIdTableFromVector({});
   expected.setNumColumns(4);
 
-  std::vector<Id> sources{V(0)};
-  std::vector<Id> targets{V(4)};
+  IdColumn sources{V(0)};
+  IdColumn targets{V(4)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
@@ -615,8 +615,8 @@ TEST(PathSearchTest, maxDepthZeroYieldsNoPaths) {
   auto expected = makeIdTableFromVector({});
   expected.setNumColumns(4);
 
-  std::vector<Id> sources{V(0)};
-  std::vector<Id> targets{V(1)};
+  IdColumn sources{V(0)};
+  IdColumn targets{V(1)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
@@ -644,8 +644,8 @@ TEST(PathSearchTest, targetWithinMaxDepth) {
       {V(1), V(2), I(0), I(1)},
   });
 
-  std::vector<Id> sources{V(0)};
-  std::vector<Id> targets{V(2)};
+  IdColumn sources{V(0)};
+  IdColumn targets{V(2)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
@@ -689,8 +689,8 @@ TEST(PathSearchTest, multiSourceMultiTargetallPaths) {
       {V(3), V(4), I(3), I(2)},
   });
 
-  std::vector<Id> sources{V(0), V(1)};
-  std::vector<Id> targets{V(4), V(5)};
+  IdColumn sources{V(0), V(1)};
+  IdColumn targets{V(4), V(5)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
@@ -717,8 +717,8 @@ TEST(PathSearchTest, multiSourceMultiTargetallPathsNotCartesian) {
       {V(3), V(5), I(1), I(2)},
   });
 
-  std::vector<Id> sources{V(0), V(1)};
-  std::vector<Id> targets{V(4), V(5)};
+  IdColumn sources{V(0), V(1)};
+  IdColumn targets{V(4), V(5)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
@@ -745,7 +745,7 @@ TEST(PathSearchTest, sourceBound) {
       {V(3), V(4), I(0), I(3), V(0)},
   });
 
-  std::vector<Id> targets{V(4)};
+  IdColumn targets{V(4)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  Var{"?source"},
@@ -781,7 +781,7 @@ TEST(PathSearchTest, targetBound) {
       {V(3), V(4), I(0), I(3), V(4)},
   });
 
-  std::vector<Id> sources{V(0)};
+  IdColumn sources{V(0)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
