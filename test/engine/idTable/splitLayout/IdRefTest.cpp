@@ -242,20 +242,34 @@ TEST(IdRefTest, mutableRestrictedReferenceConvertsToConst) {
   }
 }
 
-#ifdef QLEVER_USE_SPLIT_LAYOUT
-// Test that an `IdRef` can refer to an `Id` itself (when `Id` is the
-// `SplitLayoutId`): it reads the current value of the `Id`, and assigning to it
-// changes exactly this `Id`, with all its bits. A `ConstIdRef` can also refer
-// to a `const Id`, but neither can refer to a temporary, which would dangle.
-TEST(IdRefTest, referenceToAnId) {
-  static_assert(std::is_convertible_v<Id&, IdRef>);
-  static_assert(std::is_convertible_v<Id&, ConstIdRef>);
-  static_assert(std::is_convertible_v<const Id&, ConstIdRef>);
-  static_assert(!std::is_constructible_v<IdRef, const Id&>);
-  static_assert(!std::is_constructible_v<IdRef, Id&&>);
-  static_assert(!std::is_constructible_v<ConstIdRef, Id&&>);
-  static_assert(!std::is_constructible_v<ConstIdRef, const Id&&>);
+// Test that an `IdRef` can be built from a `SplitLayoutId&` and a `ConstIdRef`
+// also from a `const SplitLayoutId&`, but neither from a temporary, which would
+// dangle. This holds in both builds, because the constructor is declared in
+// both.
+TEST(IdRefTest, conversionFromSplitLayoutId) {
+  static_assert(std::is_convertible_v<SplitLayoutId&, IdRef>);
+  static_assert(std::is_convertible_v<SplitLayoutId&, ConstIdRef>);
+  static_assert(std::is_convertible_v<const SplitLayoutId&, ConstIdRef>);
+  static_assert(!std::is_constructible_v<IdRef, const SplitLayoutId&>);
+  static_assert(!std::is_constructible_v<IdRef, SplitLayoutId&&>);
+  static_assert(!std::is_constructible_v<ConstIdRef, SplitLayoutId&&>);
+  static_assert(!std::is_constructible_v<ConstIdRef, const SplitLayoutId&&>);
 
+  // This is the requirement of `std::indirectly_unary_invocable` that needs the
+  // conversion: a range algorithm like `ql::ranges::for_each` only accepts a
+  // function with an `IdRef` parameter if it can also be called with an lvalue
+  // of the value type of the range.
+  auto setToTrue = [](IdRef id) { id = Id::makeFromBool(true); };
+  static_assert(ql::concepts::invocable<decltype(setToTrue)&, SplitLayoutId&>);
+}
+
+// The following tests read and write through an `IdRef` that refers to an `Id`
+// itself. An `IdRef` always reads and writes the global `Id`, which is only the
+// `SplitLayoutId` with `USE_SPLIT_LAYOUT`.
+#ifdef QLEVER_USE_SPLIT_LAYOUT
+// Test that an `IdRef` that refers to an `Id` reads the current value of the
+// `Id`, and that assigning to it changes exactly this `Id`, with all its bits.
+TEST(IdRefTest, referenceToAnId) {
   const auto ids = sampleIds();
   for (const Id original : ids) {
     for (const Id other : ids) {
