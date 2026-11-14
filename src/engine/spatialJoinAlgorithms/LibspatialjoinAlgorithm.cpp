@@ -12,7 +12,10 @@
 #include "engine/spatialJoinAlgorithms/LibspatialjoinAlgorithm.h"
 
 #include <spatialjoin/BoxIds.h>
+#include <spatialjoin/GeometryCache.h>
+#include <spatialjoin/Sweeper.h>
 
+#include <array>
 #include <thread>
 
 #include "backports/filesystem.h"
@@ -121,7 +124,7 @@ LibspatialjoinAlgorithm::getSweeperTempPath() const {
 }
 
 // ____________________________________________________________________________
-sj::SweeperCfg LibspatialjoinAlgorithm::sweeperConfig(
+sj::SpatialJoinCfg LibspatialjoinAlgorithm::sweeperConfig(
     size_t threads, ad_utility::MemorySize totalAllowedMemory) {
   using enum SpatialJoinType::Enum;
   // `libspatialjoin` reports a match for one of these relations by invoking
@@ -135,10 +138,10 @@ sj::SweeperCfg LibspatialjoinAlgorithm::sweeperConfig(
   };
   AD_CORRECTNESS_CHECK(threads > 0);
 
-  sj::SweeperCfg cfg;
+  sj::SpatialJoinCfg cfg;
   cfg.numThreads = threads;
-  cfg.numCacheThreads = threads;
-  // Cache memory per thread, in bytes
+  cfg.numCacheBuckets = threads;
+  // Cache memory per bucket, in bytes
   cfg.geomCacheMaxSize = totalAllowedMemory.getBytes() / threads;
   cfg.geomCacheMaxNumElements = 10'000;
   cfg.sepIsect = sep(INTERSECTS);
@@ -149,20 +152,12 @@ sj::SweeperCfg LibspatialjoinAlgorithm::sweeperConfig(
   cfg.sepOverlaps = sep(OVERLAPS);
   cfg.sepCrosses = sep(CROSSES);
   cfg.useBoxIds = true;
-  cfg.useArea = true;
-  cfg.useOBB = false;
   cfg.useDiagBox = true;
-  cfg.useFastSweepSkip = true;
   cfg.noGeometryChecks = false;
   cfg.euclideanDist = false;
   cfg.haversineApprox = false;
   cfg.computeDE9IM = false;
   cfg.de9imFilter = ::util::geo::FANY;
-  // Never let `libspatialjoin` fall back to a self-join when it considers one
-  // side to be empty; QLever's callbacks rely on the first geometry of each
-  // result pair coming from the left side and the second one from the right
-  // side (see #3068).
-  cfg.forceTwoSided = true;
   // This has to be set to a value < 0 to disable the `WITHIN_DIST`
   // calculation in `libspatialjoin`.
   cfg.withinDist = -1;
@@ -176,8 +171,9 @@ sj::SweeperCfg LibspatialjoinAlgorithm::sweeperConfig(
 
 // ____________________________________________________________________________
 LibspatialjoinAlgorithm::ParseMetadata LibspatialjoinAlgorithm::parse(
-    bool leftOrRightSide, ParseInput input, sj::Sweeper& sweeper,
-    size_t numThreads, std::optional<util::geo::I32Box> prefilterBox) const {
+    ParseInput input, sj::GeometryStore& store,
+    const sj::PreparedGeomMetaCb& metaCb, size_t numThreads,
+    std::optional<util::geo::I32Box> prefilterBox) const {
   const auto [idTable, column, boundingBoxes] = input;
 
   // Convert prefilter box to lat lng coordinates for comparing against geometry
@@ -211,7 +207,7 @@ LibspatialjoinAlgorithm::ParseMetadata LibspatialjoinAlgorithm::parse(
 
   // Initialize the parser.
   ad_utility::detail::parallel_wkt_parser::WKTParser parser(
-      &sweeper, numThreads, usePrefiltering, prefilterLatLngBox,
+      &store, metaCb, numThreads, usePrefiltering, prefilterLatLngBox,
       qec_->getIndex());
 
   // Iterate over all rows in `idTable` and add the geometries from `column`
@@ -219,10 +215,9 @@ LibspatialjoinAlgorithm::ParseMetadata LibspatialjoinAlgorithm::parse(
   const auto& geoms = idTable->getColumn(column);
   ad_utility::chunkedForLoop<wktParserChunkSizeForCancellationCheck>(
       0, idTable->size(),
-      [&parser, &geoms, &leftOrRightSide, &idTable,
-       &boundingBoxes](size_t row) {
+      [&parser, &geoms, &idTable, &boundingBoxes](size_t row) {
         parser.addValueIdToQueue(
-            geoms[row], row, leftOrRightSide,
+            geoms[row], row,
             getBoundingBoxFromIdTable(idTable, boundingBoxes, row));
       },
       [this]() { throwIfCancelled(); });
@@ -267,7 +262,7 @@ Result LibspatialjoinAlgorithm::run() {
                                                 NUM_THREADS);
 
   // Configure the sweeper.
-  sj::SweeperCfg sweeperCfg =
+  sj::SpatialJoinCfg sweeperCfg =
       sweeperConfig(NUM_THREADS, qec_->getAllocator().amountMemoryLeft());
   if (joinTypeVal == SpatialJoinType::WITHIN_DIST) {
     AD_CORRECTNESS_CHECK(maxDist_.has_value());
@@ -314,7 +309,15 @@ Result LibspatialjoinAlgorithm::run() {
 
   auto [sweeperTmpPath, sweeperPrefix] = getSweeperTempPath();
 
-  sj::Sweeper sweeper(sweeperCfg, sweeperTmpPath, sweeperPrefix);
+  // Both sides share one temporary `GeometryStore`. Each side has its own
+  // `SweepEventList`, indexed by `smallerIsRight` below (`0` for the left side,
+  // `1` for the right side).
+  sj::GeometryStore store{sweeperCfg, sweeperTmpPath, sweeperPrefix, false};
+  std::array events{
+      sj::SweepEventList{sweeperCfg, sweeperTmpPath, sweeperPrefix},
+      sj::SweepEventList{sweeperCfg, sweeperTmpPath, sweeperPrefix}};
+  sj::GeometryCache cache(sweeperCfg);
+  const auto storeId = cache.addStore(&store);
   ad_utility::Timer tParse{ad_utility::Timer::Started};
 
   // Parse the geometries from the left and right input table, starting with the
@@ -324,28 +327,30 @@ Result LibspatialjoinAlgorithm::run() {
   auto runParser = [&](ParseInput smaller, ParseInput larger,
                        bool smallerIsRight) {
     // Parse and add all geometries of the smaller side
+    auto& eventsSmall = events[smallerIsRight];
+    auto& eventsLarge = events[!smallerIsRight];
     auto [boxSmall, countSmall, droppedSmall, invalidSmall, threadsSmall] =
-        parse(smallerIsRight, smaller, sweeper, NUM_THREADS, std::nullopt);
+        parse(smaller, store, eventsSmall.addCb(storeId), NUM_THREADS,
+              std::nullopt);
     AD_CORRECTNESS_CHECK(droppedSmall == 0);
     spatialJoin_.value()->runtimeInfo().addDetail(
         "num-parser-threads-smaller-side", threadsSmall);
-    auto numValidGeomsSmall = sweeper.numElements();
+    auto numValidGeomsSmall = eventsSmall.numObjects();
 
     // Filtering by bounding box *after* parsing is only necessary if
     // precomputed bounding boxes for filtering *before* parsing are not
     // available.
     if (!qec_->getIndex().getVocab().isGeoInfoAvailable()) {
-      sweeper.setFilterBox(boxSmall);
+      store.setFilterBox(boxSmall);
     }
 
     // Parse and add the relevant (intersection with the bounding box)
     // geometries from the larger side
     auto [boxLarge, countLarge, droppedLarge, invalidLarge, threadsLarge] =
-        parse(!smallerIsRight, larger, sweeper, NUM_THREADS,
-              sweeper.getPaddedBoundingBox(boxSmall));
-    auto numValidGeomsTotal = sweeper.numElements();
-    AD_CORRECTNESS_CHECK(numValidGeomsTotal >= numValidGeomsSmall);
-    auto numValidGeomsLarge = numValidGeomsTotal - numValidGeomsSmall;
+        parse(larger, store, eventsLarge.addCb(storeId), NUM_THREADS,
+              store.getPaddedBoundingBox(boxSmall));
+    auto numValidGeomsLarge = eventsLarge.numObjects();
+    auto numValidGeomsTotal = numValidGeomsSmall + numValidGeomsLarge;
 
     spatialJoin_.value()->runtimeInfo().addDetail(
         "num-parser-threads-larger-side", threadsLarge);
@@ -360,8 +365,8 @@ Result LibspatialjoinAlgorithm::run() {
     addSkippedRowsWarning(smallerIsRight ? invalidLarge : invalidSmall,
                           smallerIsRight ? invalidSmall : invalidLarge);
 
-    // If we have filtered out all geometries or one side is otherwise empty,
-    // bail out early.
+    // Return whether both sides have at least one valid geometry (otherwise
+    // the sweep is skipped).
     return numValidGeomsSmall > 0 && numValidGeomsLarge > 0;
   };
 
@@ -373,19 +378,26 @@ Result LibspatialjoinAlgorithm::run() {
           ? runParser(leftTableAndCol, rightTableAndCol, false)
           : runParser(rightTableAndCol, leftTableAndCol, true);
 
-  // Flush the geometry caches and the sweepline event list cache to disk and
-  // add the time for parsing and processing the geometries to the runtime
-  // information.
-  sweeper.flush();
+  // Flush the geometry store, sort the sweepline event lists and replace
+  // duplicate geometries by references. Add the time for parsing and
+  // processing the geometries to the runtime information.
+  store.flush();
+  for (auto& sideEvents : events) {
+    sideEvents.finalize(NUM_THREADS);
+    sideEvents.duplicatesToReferences(cache);
+  }
   spatialJoin_.value()->runtimeInfo().addDetail("time-for-reading-geometries",
                                                 tParse.msecs().count());
 
-  // Now do the sweep, which performs the actual spatial join.
+  // Now do the sweep, which performs the actual spatial join. Passing both
+  // event lists makes it a non-self join, which only reports pairs with the
+  // first geometry from the left and the second from the right side (QLever's
+  // callbacks rely on this, see #3068).
   ad_utility::Timer tSweep{ad_utility::Timer::Started};
-  // The check for empty children is required to mitigate a libspatialjoin bug,
-  // but also for performance reasons.
+  // Skip the sweep if one side has no valid geometry (it cannot have a result).
   if (nonEmptyChildren) {
-    sweeper.sweep();
+    sj::Sweeper sweeper(sweeperCfg, &cache);
+    sweeper.sweep(&events[0], &events[1]);
   }
   spatialJoin_.value()->runtimeInfo().addDetail("time-for-spatialjoin-sweep",
                                                 tSweep.msecs().count());

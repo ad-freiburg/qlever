@@ -5,10 +5,15 @@
 #include <absl/base/casts.h>
 #include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
+#include <spatialjoin/GeometryCache.h>
+#include <spatialjoin/GeometryStore.h>
+#include <spatialjoin/SweepEventList.h>
+#include <spatialjoin/Sweeper.h>
 
 #include <algorithm>
 #include <cstring>
 #include <fstream>
+#include <set>
 
 #include "../../GeometryInfoTestHelpers.h"
 #include "VocabularyTestHelpers.h"
@@ -18,6 +23,7 @@
 #include "index/vocabulary/Vocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
+#include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "util/File.h"
 
 namespace {
@@ -315,9 +321,9 @@ TEST(GeoVocabularyTest, ReadVersion5) {
     ww->finish();
   }
 
-  // Turn the geoinfo file into one of version 5: the version 6 has the same
-  // record size, but in version 5, the bytes `[28, 32)` of a valid record could
-  // contain arbitrary content.
+  // Turn the geoinfo file into one of version 5: its records are the first
+  // `geometryInfoSize(5)` bytes of the current ones, and the bytes `[28, 32)`
+  // of a valid record could contain arbitrary content.
   const std::string geoInfoFilename = AnyGeoVocab::getGeoInfoFilename(filename);
   std::string contents;
   {
@@ -326,23 +332,29 @@ TEST(GeoVocabularyTest, ReadVersion5) {
   }
   constexpr size_t recordSize = 48;
   static_assert(geometryInfoSize(5) == recordSize);
-  ASSERT_EQ(contents.size(), sizeof(uint64_t) + literals.size() * recordSize);
+  ASSERT_EQ(contents.size(),
+            sizeof(uint64_t) + literals.size() * sizeof(GeometryInfo));
   const uint64_t version5 = 5;
-  std::memcpy(contents.data(), &version5, sizeof(version5));
+  std::string contents5(reinterpret_cast<const char*>(&version5),
+                        sizeof(version5));
   for (size_t i = 0; i < literals.size(); ++i) {
-    auto record = contents.begin() + sizeof(uint64_t) + i * recordSize;
-    if (std::any_of(record, record + recordSize,
+    std::string record = contents.substr(
+        sizeof(uint64_t) + i * sizeof(GeometryInfo), recordSize);
+    if (std::any_of(record.begin(), record.end(),
                     [](char c) { return c != 0; })) {
-      std::fill(record + 28, record + 32, '\xab');
+      std::fill(record.begin() + 28, record.begin() + 32, '\xab');
     }
+    contents5 += record;
   }
+  contents = std::move(contents5);
   {
     std::ofstream out{geoInfoFilename, std::ios::binary | std::ios::trunc};
     out << contents;
   }
 
   // Read the version 5 file. The fields in the bytes `[28, 32)` must be zero:
-  // the source CRS "not computed" and the serialization type `WKT`.
+  // the source CRS "not computed" and the serialization type `WKT`. The
+  // geometry is not in the geometry store, which version 5 did not have.
   AnyGeoVocab geoVocab;
   geoVocab.open(filename);
   using Bytes = std::array<uint8_t, sizeof(GeometryInfo)>;
@@ -353,6 +365,7 @@ TEST(GeoVocabularyTest, ReadVersion5) {
     if (expected.has_value()) {
       EXPECT_EQ(actual.value().getSourceCrsType(), std::nullopt);
       EXPECT_EQ(actual.value().getRequestedInfo<SourceCrsType>(), std::nullopt);
+      EXPECT_EQ(actual.value().getGeometryStoreId(), std::nullopt);
       auto expectedBytes = absl::bit_cast<Bytes>(expected.value());
       std::fill(expectedBytes.begin() + 28, expectedBytes.begin() + 32, 0);
       EXPECT_EQ(absl::bit_cast<Bytes>(actual.value()), expectedBytes);
@@ -549,6 +562,93 @@ TYPED_TEST(GeoVocabularyUnderlyingVocabTypedTest, GeoCellGridIndices) {
                                  ::testing::HasSubstr("Too many WKT literals"));
     ww->finish();
   }
+}
+
+// Test that the `WordWriter` parses the valid geometries into the geometry
+// store under their position, such that a spatial join can use them via the
+// ID and the bounding box in their `GeometryInfo`, without parsing.
+TEST(GeoVocabularyTest, GeometryStore) {
+  // Two overlapping squares, a line that crosses both, a square far away and
+  // an invalid literal.
+  const std::string filename = absl::StrCat(gtestCurrentTestName(), ".dat");
+  auto cleanup = vocabulary_test::makeVocabFileCleanup<AnyGeoVocab>(filename);
+  auto wkt = [](std::string_view content) {
+    return absl::StrCat("\"", content, GEO_LITERAL_SUFFIX);
+  };
+  std::string line = wkt("LINESTRING(1.5 0, 1.5 3)");
+  std::string square1 = wkt("POLYGON((0 0, 2 0, 2 2, 0 2, 0 0))");
+  std::string square2 = wkt("POLYGON((1 1, 3 1, 3 3, 1 3, 1 1))");
+  std::string farSquare = wkt("POLYGON((50 50, 51 50, 51 51, 50 51, 50 50))");
+  std::string invalid = wkt("NOTAGEOMETRY");
+  std::vector<std::string> literals{line, square1, square2, farSquare, invalid};
+  ql::ranges::sort(literals);
+  {
+    AnyGeoVocab writerVocab;
+    writerVocab.setBuildGeometryStore(true);
+    auto ww = writerVocab.makeDiskWriterPtr(filename);
+    for (const auto& lit : literals) {
+      (*ww)(lit, true);
+    }
+    ww->finish();
+  }
+  AnyGeoVocab geoVocab;
+  geoVocab.open(filename);
+  auto position = [&literals](const std::string& literal) {
+    return AnyGeoVocab::geometryStoreGid(ql::ranges::find(literals, literal) -
+                                         literals.begin());
+  };
+
+  // Exactly the valid geometries are in the store.
+  for (size_t i = 0; i < literals.size(); ++i) {
+    auto info = geoVocab.getGeoInfo(i);
+    EXPECT_EQ(info.has_value(), literals[i] != invalid);
+    if (info.has_value()) {
+      EXPECT_TRUE(info.value().getGeometryStoreId().has_value());
+    }
+  }
+
+  // The `gid` of a position is translated back, other strings are not.
+  EXPECT_EQ(AnyGeoVocab::positionOfGeometryStoreGid(
+                AnyGeoVocab::geometryStoreGid(42)),
+            42u);
+  EXPECT_EQ(AnyGeoVocab::positionOfGeometryStoreGid("42"), std::nullopt);
+  EXPECT_EQ(AnyGeoVocab::positionOfGeometryStoreGid("vx"), std::nullopt);
+
+  // A self join on the stored geometries reports the pairs of the first three
+  // geometries as intersecting, by the `gid`s of their positions.
+  sj::SpatialJoinCfg cfg;
+  cfg.numThreads = 1;
+  cfg.numCacheBuckets = 1;
+  const std::string sepIntersects = cfg.sepIsect;
+  std::set<std::pair<std::string, std::string>> intersecting;
+  cfg.writeRelCb = [&](size_t, const char* a, size_t aSize, const char* b,
+                       size_t bSize, const char* pred, size_t predSize) {
+    std::string first{a, aSize};
+    std::string second{b, bSize};
+    if (std::string_view{pred, predSize} == sepIntersects && first != second) {
+      intersecting.insert(std::minmax(first, second));
+    }
+  };
+  sj::GeometryStore store{cfg, "",
+                          AnyGeoVocab::getGeometryStorePrefix(filename)};
+  sj::GeometryCache cache{cfg};
+  const uint8_t storeId = cache.addStore(&store);
+  sj::SweepEventList events{cfg, ".", filename};
+  for (size_t i = 0; i < literals.size(); ++i) {
+    if (auto info = geoVocab.getGeoInfo(i); info.has_value()) {
+      events.add(info.value().getGeometryStoreId().value(),
+                 ad_utility::detail::boundingBoxToUtilBox(
+                     info.value().getBoundingBox()),
+                 ::util::geo::CRSType::CRS84, storeId);
+    }
+  }
+  events.finalize(1);
+  sj::Sweeper{cfg, &cache}.sweep(&events);
+  std::set<std::pair<std::string, std::string>> expected{
+      std::minmax(position(line), position(square1)),
+      std::minmax(position(line), position(square2)),
+      std::minmax(position(square1), position(square2))};
+  EXPECT_EQ(intersecting, expected);
 }
 
 }  // namespace
