@@ -133,15 +133,20 @@ std::string Service::getGraphPattern() const {
 
 // _____________________________________________________________________________
 Result Service::computeResult(bool requestLaziness) {
+  // With `SILENT`, compute the result eagerly, so that every error of the
+  // remote endpoint is thrown inside the `try` below.
+  //
+  // NOTE: A lazy result is consumed only after this function has returned,
+  // when the rows that were already passed on can no longer be replaced by the
+  // neutral element.
   try {
-    return computeResultImpl(requestLaziness);
+    return computeResultImpl(requestLaziness && !parsedServiceClause_.silent_);
   } catch (const ad_utility::CancellationException&) {
     throw;
   } catch (const ad_utility::detail::AllocationExceedsLimitException&) {
     throw;
   } catch (const std::exception&) {
-    // if the `SILENT` keyword is set in the service clause, catch the error and
-    // return a neutral Element.
+    // With `SILENT`, return the neutral element instead of throwing.
     if (parsedServiceClause_.silent_) {
       return makeNeutralElementResultForSilentFail();
     }

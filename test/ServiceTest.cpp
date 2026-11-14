@@ -199,14 +199,14 @@ TEST_F(ServiceTest, computeResult) {
         [&](const std::string& result,
             boost::beast::http::status status = boost::beast::http::status::ok,
             std::string contentType = "application/sparql-results+json",
-            bool silent = false,
+            bool silent = false, bool requestLaziness = false,
             ad_utility::source_location loc =
                 AD_CURRENT_SOURCE_LOC()) -> Result {
       Service s{
           testQec, silent ? parsedServiceClauseSilent : parsedServiceClause,
           getResultFunctionFactory(expectedUrl, expectedSparqlQuery, result,
                                    status, contentType, nullptr, loc)};
-      return s.computeResultOnlyForTesting();
+      return s.computeResultOnlyForTesting(requestLaziness);
     };
 
     // Compute the Result lazily for the given Service and check that the
@@ -269,6 +269,15 @@ TEST_F(ServiceTest, computeResult) {
               runComputeResult(result, status, contentType, false),
               ::testing::HasSubstr(errorMsg));
           EXPECT_NO_THROW(runComputeResult(result, status, contentType, true));
+
+          // With `SILENT`, a lazily requested result is computed eagerly, so
+          // that the error is silenced, too, and yields the neutral element.
+          auto silentLazyResult =
+              runComputeResult(result, status, contentType, true, true);
+          ASSERT_TRUE(silentLazyResult.isFullyMaterialized());
+          EXPECT_EQ(silentLazyResult.idTableView(),
+                    makeIdTableFromVector(
+                        {{Id::makeUndefined(), Id::makeUndefined()}}));
 
           // In the syntax test mode, all services (so also the failing ones)
           // return the neutral result.
