@@ -14,6 +14,7 @@
 #include <utility>
 
 #include "backports/concepts.h"
+#include "engine/idTable/splitLayout/SplitLayoutId.h"
 #include "global/Id.h"
 #include "util/IsProxy.h"
 
@@ -36,13 +37,7 @@ class BasicIdRef;
 // `toId()`. Assess in the future whether this is necessary, or whether the
 // generated code should be avoided.
 class BasicIdRefImpl {
-  template <bool IsConst>
-  friend class BasicIdRef;
-  template <bool IsConst>
-  friend class BasicIdColumnIterator;
-  template <bool IsConst>
-  friend class BasicIdColumnView;
-
+ public:
   template <bool IsConst>
   class BasicIdRefWithRestrictedAccess {
    public:
@@ -65,9 +60,6 @@ class BasicIdRefImpl {
                                    DatatypePointer datatype)
         : payload_{payload}, datatype_{datatype} {}
 
-    // TODO<pas-kes> With `SplitLayoutId`: implicit constructor from
-    // `SplitLayoutId&` (points to its members, rvalues deleted).
-
     // Explicitly defaulted, because the copy-assignment operator below is
     // user-provided (for good reason, see there), which would otherwise make
     // the implicit generation of these two deprecated-but-not-removed.
@@ -76,6 +68,19 @@ class BasicIdRefImpl {
 
     BasicIdRefWithRestrictedAccess(BasicIdRefWithRestrictedAccess&&) noexcept =
         default;
+
+    // The const and the mutable reference are friends of each other, needed
+    // for the conversion constructor below.
+    template <bool>
+    friend class BasicIdRefWithRestrictedAccess;
+
+    // Implicit conversion from the mutable to the const reference, like
+    // `Id&` -> `const Id&`.
+    CPP_template(typename = void)(requires IsConst)
+    QL_EXPLICIT(false)
+    BasicIdRefWithRestrictedAccess(
+        const BasicIdRefWithRestrictedAccess<false>& other)
+        : payload_{other.payload_}, datatype_{other.datatype_} {}
 
     // Implicit conversion to the legacy `Id`, e.g. to store the referenced
     // value in a variable, or to pass it to a function that expects a real
@@ -317,6 +322,18 @@ class BasicIdRef
   /*implicit*/
   BasicIdRef(Base base) : Base{std::move(base)} {}
 
+  // The conversion from a `SplitLayoutId&` to an `IdRef` must be declared (but
+  // not necessarily defined) to fulfill the concepts in `std::ranges`. It is
+  // not part of the restricted reference that `*it` of a column returns,
+  // because then the common reference of that reference and `Id` would be
+  // ambiguous.
+  QL_EXPLICIT(false)
+  BasicIdRef(
+      std::conditional_t<IsConst, const SplitLayoutId&, SplitLayoutId&> id)
+      : Base{&id.bits_.payload_, &id.bits_.datatype_} {}
+
+  BasicIdRef(const SplitLayoutId&&) = delete;
+
   // Explicitly defaulted, because the copy-assignment operator below is
   // user-provided (for good reason, see there), which would otherwise make
   // the implicit generation of these two deprecated-but-not-removed.
@@ -356,10 +373,15 @@ using ConstIdRef = BasicIdRef<true>;
 
 // The `IdRef` and the `ConstIdRef` are cheap to copy and refer to an element of
 // a column, so they may be stored by value, also in place of the restricted
-// references returned by `column[i]` (see `FullProxyType` there).
+// references returned by `column[i]` (see `FullProxyType` there). Like the
+// `RowReference` and its restricted base, both are proxies.
 template <bool IsConst>
 inline constexpr bool
     qlever::isProxy<columnBasedIdTable::splitLayout::BasicIdRef<IsConst> > =
         true;
+template <bool IsConst>
+inline constexpr bool
+    qlever::isProxy<columnBasedIdTable::splitLayout::BasicIdRefImpl::
+                        BasicIdRefWithRestrictedAccess<IsConst> > = true;
 
 #endif  // QLEVER_SRC_ENGINE_IDTABLE_SPLITLAYOUT_IDREF_H

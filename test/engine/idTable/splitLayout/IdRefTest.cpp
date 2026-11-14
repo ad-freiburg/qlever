@@ -11,8 +11,13 @@
 
 #include <sstream>
 #include <type_traits>
+#include <utility>
+#include <vector>
 
 #include "IdColumnTestHelpers.h"
+#include "backports/algorithm.h"
+#include "backports/concepts.h"
+#include "backports/type_traits.h"
 #include "engine/idTable/splitLayout/IdRef.h"
 
 using namespace columnBasedIdTable::splitLayout;
@@ -203,3 +208,96 @@ TEST(IdRefTest, restrictedReference) {
     EXPECT_EQ(datatype, third.getDatatypeBits());
   }
 }
+
+// Test that the mutable restricted reference converts to the const one, like
+// `Id&` to `const Id&`, but not the other way round. Then the two have a common
+// reference and are totally ordered with each other, which for example a sort
+// with a const pivot row needs.
+TEST(IdRefTest, mutableRestrictedReferenceConvertsToConst) {
+  using Restricted = IdRef::Base;
+  using ConstRestricted = ConstIdRef::Base;
+  static_assert(std::is_convertible_v<Restricted, ConstRestricted>);
+  static_assert(!std::is_convertible_v<ConstRestricted, Restricted>);
+  static_assert(std::is_same_v<ql::remove_cvref_t<ql::common_reference_t<
+                                   const Restricted&, const ConstRestricted&>>,
+                               ConstRestricted>);
+  static_assert(
+      ql::concepts::totally_ordered_with<Restricted, ConstRestricted>);
+
+  for (const Id id : sampleIds()) {
+    auto [datatype, payload] = getBitsCompat(id);
+    const Restricted restricted{&payload, &datatype};
+    const ConstRestricted converted = restricted;
+    EXPECT_EQ(static_cast<Id>(converted), id);
+
+    // The converted reference refers to the same slot, it sees a later write.
+    const Id other = Id::makeFromInt(7);
+    Restricted{&payload, &datatype} = other;
+    EXPECT_EQ(static_cast<Id>(converted), other);
+
+    // The mutable and the const reference can be compared with each other.
+    EXPECT_TRUE(restricted == converted);
+    EXPECT_FALSE(ql::ranges::less{}(restricted, converted));
+    EXPECT_FALSE(ql::ranges::less{}(converted, restricted));
+  }
+}
+
+// Test that an `IdRef` can be built from a `SplitLayoutId&` and a `ConstIdRef`
+// also from a `const SplitLayoutId&`, but neither from a temporary, which would
+// dangle. This holds in both builds, because the constructor is declared in
+// both.
+TEST(IdRefTest, conversionFromSplitLayoutId) {
+  static_assert(std::is_convertible_v<SplitLayoutId&, IdRef>);
+  static_assert(std::is_convertible_v<SplitLayoutId&, ConstIdRef>);
+  static_assert(std::is_convertible_v<const SplitLayoutId&, ConstIdRef>);
+  static_assert(!std::is_constructible_v<IdRef, const SplitLayoutId&>);
+  static_assert(!std::is_constructible_v<IdRef, SplitLayoutId&&>);
+  static_assert(!std::is_constructible_v<ConstIdRef, SplitLayoutId&&>);
+  static_assert(!std::is_constructible_v<ConstIdRef, const SplitLayoutId&&>);
+
+  // This is the requirement of `std::indirectly_unary_invocable` that needs the
+  // conversion: a range algorithm like `ql::ranges::for_each` only accepts a
+  // function with an `IdRef` parameter if it can also be called with an lvalue
+  // of the value type of the range.
+  auto setToTrue = [](IdRef id) { id = Id::makeFromBool(true); };
+  static_assert(ql::concepts::invocable<decltype(setToTrue)&, SplitLayoutId&>);
+}
+
+// The following tests read and write through an `IdRef` that refers to an `Id`
+// itself. An `IdRef` always reads and writes the global `Id`, which is only the
+// `SplitLayoutId` with `USE_SPLIT_LAYOUT`.
+#ifdef QLEVER_USE_SPLIT_LAYOUT
+// Test that an `IdRef` that refers to an `Id` reads the current value of the
+// `Id`, and that assigning to it changes exactly this `Id`, with all its bits.
+TEST(IdRefTest, referenceToAnId) {
+  const auto ids = sampleIds();
+  for (const Id original : ids) {
+    for (const Id other : ids) {
+      Id id = original;
+      Id neighbour = Id::makeFromInt(-1);
+      IdRef ref = id;
+      const ConstIdRef constRef = std::as_const(id);
+      EXPECT_EQ(getBitsCompat(ref), getBitsCompat(original));
+      EXPECT_EQ(getBitsCompat(constRef), getBitsCompat(original));
+
+      // Assigning to the reference changes the `Id`, and only this `Id`.
+      ref = other;
+      EXPECT_EQ(getBitsCompat(id), getBitsCompat(other));
+      EXPECT_EQ(neighbour, Id::makeFromInt(-1));
+
+      // The references see a later change of the `Id` (they are no copies).
+      id = original;
+      EXPECT_EQ(getBitsCompat(ref), getBitsCompat(original));
+      EXPECT_EQ(getBitsCompat(constRef), getBitsCompat(original));
+    }
+  }
+}
+
+// Test that a range algorithm accepts a function with an `IdRef` parameter for
+// a `std::vector<Id>` and changes its `Id`s in place.
+TEST(IdRefTest, rangeAlgorithmOnAVectorWithIdRef) {
+  std::vector<Id> vector = sampleIds();
+  ql::ranges::for_each(vector, [](IdRef id) { id = Id::makeFromBool(true); });
+  EXPECT_EQ(vector, std::vector<Id>(vector.size(), Id::makeFromBool(true)));
+}
+#endif
