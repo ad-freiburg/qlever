@@ -14,6 +14,7 @@
 #include <utility>
 
 #include "backports/concepts.h"
+#include "engine/idTable/splitLayout/SplitLayoutId.h"
 #include "global/Id.h"
 #include "util/IsProxy.h"
 
@@ -321,18 +322,17 @@ class BasicIdRef
   /*implicit*/
   BasicIdRef(Base base) : Base{std::move(base)} {}
 
-#ifdef QLEVER_USE_SPLIT_LAYOUT
-  // A reference to the `id` itself, so that a `std::vector<Id>` can be used
-  // where `IdRef`s are expected. Not from a temporary, which would dangle.
-  // Only here and not in the restricted reference, which `*it` of a column
-  // returns: with a conversion in both directions, the common reference of it
-  // and `Id` would be ambiguous, and a column would be no range for GCC.
+  // The conversion from a `SplitLayoutId&` to an `IdRef` must be declared (but
+  // not necessarily defined) to fulfill the concepts in `std::ranges`. It is
+  // not part of the restricted reference that `*it` of a column returns,
+  // because then the common reference of that reference and `Id` would be
+  // ambiguous.
   QL_EXPLICIT(false)
   BasicIdRef(
       std::conditional_t<IsConst, const SplitLayoutId&, SplitLayoutId&> id)
       : Base{&id.bits_.payload_, &id.bits_.datatype_} {}
+
   BasicIdRef(const SplitLayoutId&&) = delete;
-#endif
 
   // Explicitly defaulted, because the copy-assignment operator below is
   // user-provided (for good reason, see there), which would otherwise make
