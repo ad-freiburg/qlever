@@ -290,7 +290,7 @@ TEST_F(BinaryExportRoundTrip, allDatatypes) {
       blankNode,
       testContext.encodedIriId()};
   // Make sure that every datatype is covered.
-  ASSERT_EQ(ids.size(), static_cast<size_t>(Datatype::MaxValue) + 1);
+  ASSERT_EQ(ids.size(), qlever::enumSize<Datatype>);
   for (size_t i = 0; i < ids.size(); ++i) {
     ASSERT_EQ(static_cast<size_t>(ids[i].getDatatype()), i);
   }
