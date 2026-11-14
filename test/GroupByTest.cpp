@@ -2474,8 +2474,8 @@ TEST(GroupBy, AddedHavingRows) {
       " VALUES (?x ?y) {(0 1) (0 3) (0 5) (1 4) (1 3) } }"
       "GROUP BY ?x HAVING (?count > 2)";
   auto qec = ad_utility::testing::getQec();
-  auto pq =
-      SparqlParser::parseQuery(&qec->getIndex().encodedIriManager(), query);
+  auto pq = SparqlParser::parseQuery(&qec->getIndex().encodedIriManager(),
+                                     makeAllocator(), query);
   QueryPlanner qp{qec, std::make_shared<ad_utility::CancellationHandle<>>()};
   auto tree = qp.createExecutionTree(pq);
 
@@ -3977,7 +3977,8 @@ TEST(GroupBy, aggregateOfComputedEncodableIri) {
         setRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled_>(
             hashMapEnabled);
     qec->clearCacheUnpinnedOnly();
-    auto parsedQuery = SparqlParser::parseQuery(&encodedIriManager, query, {});
+    auto parsedQuery = SparqlParser::parseQuery(&encodedIriManager,
+                                                makeAllocator(), query, {});
     QueryPlanner qp{qec, std::make_shared<ad_utility::CancellationHandle<>>()};
     auto qet = qp.createExecutionTree(parsedQuery);
     auto result = qet->getResult();

@@ -356,7 +356,7 @@ TEST_F(LoadTest, clone) {
 TEST_F(LoadTest, Integration) {
   auto parsedUpdate = SparqlParser::parseUpdate(
       &blankNodeManager_, &testQec->getIndex().encodedIriManager(),
-      "LOAD <https://mundhahs.dev>");
+      testQec->getAllocator(), "LOAD <https://mundhahs.dev>");
   ASSERT_THAT(parsedUpdate, testing::SizeIs(1));
   auto qec =
       ad_utility::testing::getQec(ad_utility::testing::TestIndexConfig{});
@@ -381,7 +381,7 @@ TEST_F(LoadTest, Integration) {
 TEST_F(LoadTest, IntegrationWithBlankNodes) {
   auto parsedUpdate = SparqlParser::parseUpdate(
       &blankNodeManager_, &testQec->getIndex().encodedIriManager(),
-      "LOAD <https://mundhahs.dev>");
+      testQec->getAllocator(), "LOAD <https://mundhahs.dev>");
   ASSERT_THAT(parsedUpdate, testing::SizeIs(1));
   auto qec =
       ad_utility::testing::getQec(ad_utility::testing::TestIndexConfig{});

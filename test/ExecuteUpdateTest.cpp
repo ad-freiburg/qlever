@@ -54,7 +54,8 @@ TEST(ExecuteUpdate, executeUpdate) {
             std::make_shared<ad_utility::CancellationHandle<>>();
         const std::vector<DatasetClause> datasets = {};
         ad_utility::BlankNodeManager bnm;
-        auto pqs = SparqlParser::parseUpdate(&bnm, encodedIriManager(), update);
+        auto pqs = SparqlParser::parseUpdate(&bnm, encodedIriManager(),
+                                             qec.getAllocator(), update);
         index.deltaTriplesManager().modify<void>(
             [&index, &sharedHandle, &pqs, &qec](DeltaTriples& deltaTriples) {
               qec.setLocatedTriplesForEvaluation(
@@ -242,7 +243,8 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
     auto& index = qec->getIndex();
     DeltaTriples deltaTriples{index};
     ad_utility::BlankNodeManager bnm;
-    auto pqs = SparqlParser::parseUpdate(&bnm, encodedIriManager(), update);
+    auto pqs = SparqlParser::parseUpdate(&bnm, encodedIriManager(),
+                                         qec->getAllocator(), update);
     std::vector<std::pair<ExecuteUpdate::IdTriplesAndLocalVocab,
                           ExecuteUpdate::IdTriplesAndLocalVocab>>
         results;
