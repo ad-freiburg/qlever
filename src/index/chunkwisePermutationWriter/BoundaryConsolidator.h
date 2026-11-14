@@ -28,13 +28,13 @@ namespace chunkwisePermutationWriter {
 namespace net = boost::asio;
 
 // The consolidation of the results of the chunks of the chunkwise permutation
-// writer (see the explanation at the top of `ChunkWriter.h`): it is fed the
-// `ChunkResult`s in the order of the chunks, concatenates the `BoundaryPart`s
-// of the relations that cross the boundaries of the chunks, writes them (and
-// their twins), and emits the metadata of all the relations in the order of
-// the relations. It runs on a single thread, which must not be a thread of the
-// pool (it uses the blocking parts of the two writers and a parallel merge on
-// the `executor`).
+// writer (see the explanation at the top of `ChunkwisePermutationWriter.h`):
+// it is fed the `ChunkResult`s in the order of the chunks, concatenates the
+// `BoundaryPart`s of the relations that cross the boundaries of the chunks,
+// writes them (and their twins), and emits the metadata of all the relations
+// in the order of the relations. It runs on a single thread, which must not be
+// a thread of the pool (it uses the blocking parts of the two writers and a
+// parallel merge on the `executor`).
 //
 // NOTE on thread safety: The consolidator has no writers of its own, it uses
 // the `writer1_` and `writer2_` of the `ChunkWriterContext`, which the chunks
