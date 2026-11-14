@@ -6,6 +6,8 @@
 
 #include <absl/strings/str_format.h>
 
+#include <ctre-unicode.hpp>
+
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/type_traits.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
@@ -223,34 +225,40 @@ std::optional<std::string> ReplacementStringGetter::operator()(
   return convertToReplacementString(s.getContent());
 }
 
+// Each token of a replacement string is either literal text, an escaped `\` or
+// `$`, or a reference to a group. Regex pattern at namespace scope for C++17
+// compatibility.
+namespace {
+constexpr ctll::fixed_string replacementTokenRegex =
+    "[^\\\\$]+|\\\\[\\\\$]|\\$[0-9]";
+}  // namespace
+
 // ____________________________________________________________________________
-std::string ReplacementStringGetter::convertToReplacementString(
+std::optional<std::string> ReplacementStringGetter::convertToReplacementString(
     std::string_view view) {
   std::string result;
   // Rough estimate of the size of the result string.
   result.reserve(view.size());
-  for (size_t i = 0; i < view.size(); i++) {
-    char c = view.at(i);
-    switch (c) {
-      case '$':
-        // Re2 used \1, \2, ... for backreferences, so we change $ to \.
-        result.push_back('\\');
-        break;
-      case '\\':
-        // "\$" is unescaped to "$"
-        if (i + 1 < view.size() && view.at(i + 1) == '$') {
-          result.push_back('$');
-          i++;
-        } else {
-          // Escape existing backslashes.
-          result.push_back(c);
-          result.push_back(c);
-        }
-        break;
-      default:
-        result.push_back(c);
-        break;
+  size_t numConsumed = 0;
+  for (auto match : ctre::tokenize<replacementTokenRegex>(view)) {
+    std::string_view token = match.to_view();
+    numConsumed += token.size();
+    if (token == "\\$") {
+      // A literal dollar needs no escaping in re2.
+      result.push_back('$');
+    } else if (token.front() == '$') {
+      // Re2 uses `\N` instead of `$N` to refer to a group.
+      result.push_back('\\');
+      result.push_back(token[1]);
+    } else {
+      // Literal text, or `\\`, which is a literal backslash in re2 too.
+      result.append(token);
     }
+  }
+  // `ctre::tokenize` stops at the first position where no token starts, so
+  // the replacement string is valid iff all of it was consumed.
+  if (numConsumed != view.size()) {
+    return std::nullopt;
   }
   return result;
 }

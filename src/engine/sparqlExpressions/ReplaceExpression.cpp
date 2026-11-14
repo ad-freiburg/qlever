@@ -14,8 +14,12 @@
 // to reduce the memory needed for compiling and statically analyzing a single
 // translation unit.
 
+#include <charconv>
+#include <ctre-unicode.hpp>
+
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/StringExpressionsHelper.h"
+#include "util/Exception.h"
 
 namespace sparqlExpression {
 namespace detail::string_expressions {
@@ -43,6 +47,36 @@ struct MergeFlagsIntoRegex {
 using MergeRegexPatternAndFlagsExpression =
     StringExpressionImpl<2, MergeFlagsIntoRegex, LiteralFromIdGetter>;
 
+// Each token of a re2 rewrite string is either literal text, an escaped `\`, or
+// a reference to a group. Regex pattern at namespace scope for C++17
+// compatibility.
+constexpr ctll::fixed_string rewriteTokenRegex = "[^\\\\]+|\\\\\\\\|\\\\[0-9]";
+
+// Remove all references to groups that do not exist in `pattern` from the re2
+// rewrite string `rewrite`. In XPath, these are replaced by the empty string,
+// whereas re2 refuses to rewrite at all.
+std::string removeReferencesToMissingGroups(std::string_view rewrite,
+                                            const RE2& pattern) {
+  std::string result;
+  result.reserve(rewrite.size());
+  size_t numConsumed = 0;
+  for (auto match : ctre::tokenize<rewriteTokenRegex>(rewrite)) {
+    std::string_view token = match.to_view();
+    numConsumed += token.size();
+    int group = 0;
+    bool isReference =
+        token.front() == '\\' &&
+        std::from_chars(token.data() + 1, token.data() + token.size(), group)
+                .ec == std::errc{};
+    if (!isReference || group <= pattern.NumberOfCapturingGroups()) {
+      result.append(token);
+    }
+  }
+  // `ReplacementStringGetter` only produces valid rewrite strings.
+  AD_CORRECTNESS_CHECK(numConsumed == rewrite.size());
+  return result;
+}
+
 struct ReplaceImpl {
   IdOrLiteralOrIri operator()(
       std::optional<ad_utility::triple_component::Literal> s,
@@ -57,8 +91,8 @@ struct ReplaceImpl {
     if (!pat.ok()) {
       return Id::makeUndefined();
     }
-    const auto& repl = replacement.value();
-    RE2::GlobalReplace(&in, pat, repl);
+    RE2::GlobalReplace(
+        &in, pat, removeReferencesToMissingGroups(replacement.value(), pat));
     s.value().replaceContent(in);
     return LiteralOrIri(std::move(s.value()));
   }
