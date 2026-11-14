@@ -63,6 +63,10 @@ class LazyJsonParser {
   // Parses literals in the input.
   void parseLiteral(size_t& idx);
 
+  // Return true iff the complete JSON object has been parsed, that is, the end
+  // of the `arrayPath` and all the enclosing objects have been reached.
+  bool isParsingCompletelyDone() const;
+
   // Constructs the result to be returned after parsing a chunk.
   std::optional<nlohmann::json> constructResultFromParsedChunk(
       size_t materializeEnd);

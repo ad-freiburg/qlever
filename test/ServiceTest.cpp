@@ -503,6 +503,28 @@ TEST_F(ServiceTest, computeResult) {
     AD_EXPECT_THROW_WITH_MESSAGE(
         checkLazyResult(service8b, {}),
         ::testing::HasSubstr("Parser failed with error"));
+
+    // Check 8c: A truncated result must lead to an error, and not silently to
+    // only the rows before the truncation. This is how QLever truncates its
+    // result when the computation fails while the result is being sent (for
+    // example, because of a timeout).
+    const std::string completeResult = genJsonResult(
+        {"x", "y"}, {{"bla", "bli"}, {"blu", "bla"}, {"bli", "blu"}});
+    const std::string truncatedResult = absl::StrCat(
+        completeResult.substr(0, completeResult.rfind("blu")),
+        "\n !!!!>># An error has occurred while exporting the query result. "
+        "The error message was:\nOperation timed out.");
+    Service service8c{testQec, parsedServiceClause,
+                      getResultFunctionFactory(expectedUrl, expectedSparqlQuery,
+                                               truncatedResult)};
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        service8c.computeResultOnlyForTesting(),
+        ::testing::AllOf(::testing::HasSubstr("Parser failed with error"),
+                         ::testing::HasSubstr("ended before it was complete"),
+                         ::testing::HasSubstr("Operation timed out.'")));
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        checkLazyResult(service8c, {{"bla", "bli"}, {"blu", "bla"}}),
+        ::testing::HasSubstr("ended before it was complete"));
   }
 }
 
