@@ -81,27 +81,11 @@ struct SegmentMetaData {
 // The result of a call to `mergeVocabulary` (see `index/VocabularyMerger.h`).
 struct VocabularyMetaData {
   // This struct is used to incrementally construct the range of IDs that
-  // correspond to a given prefix. To use it, either pass all the words from
-  // the vocabulary to the member function `addIfWordMatches` in sorted order,
-  // or pass the index ranges of the matching words of consecutive segments to
-  // `extend` (see `addSegment`). After that, the range `[begin(), end())` is
-  // the range of all the words that start with the prefix.
+  // correspond to a given prefix. To use it, pass the index ranges of the
+  // matching words of consecutive segments to `extend` (see `addSegment`).
+  // After that, the range `[begin(), end())` is the range of all the words
+  // that start with the prefix.
   struct IdRangeForPrefix {
-    explicit IdRangeForPrefix(std::string prefix)
-        : prefix_{std::move(prefix)} {}
-    // Check if `word` starts with the `prefix_`. If so, `wordIndex`
-    // will become part of the range that this struct represents. The function
-    // returns `true` in this case, else `false`. For this to work, all the
-    // words that start with the `prefix_` have to be passed in consecutively
-    // and their indices have to be consecutive and ascending.
-    bool addIfWordMatches(std::string_view word, size_t wordIndex) {
-      if (!ql::starts_with(word, prefix_)) {
-        return false;
-      }
-      extend(wordIndex, wordIndex);
-      return true;
-    }
-
     // Extend the range by the words with the (global) indices `first` to
     // `last`, which have to come after all the words added so far.
     void extend(uint64_t first, uint64_t last) {
@@ -121,27 +105,10 @@ struct VocabularyMetaData {
    private:
     Id begin_ = Id::makeUndefined();
     Id end_ = Id::makeUndefined();
-    std::string prefix_;
     bool beginWasSeen_ = false;
   };
 
  public:
-  // This function has to be called for every *DISTINCT* word (IRI or literal,
-  // not blank nodes) and the index, which is assigned to this word by the merge
-  // procedure. It automatically updates the various prefix ranges, the total
-  // number of words, and the mapping of the special IDs.
-  void addWord(std::string_view word, size_t wordIndex) {
-    ++numWordsTotal_;
-    if (langTaggedPredicates_.addIfWordMatches(word, wordIndex)) {
-      return;
-    }
-    if (internalEntities_.addIfWordMatches(word, wordIndex)) {
-      if (globalSpecialIds_->contains(word)) {
-        specialIdMapping_[std::string{word}] = vocabIdFromIndex(wordIndex);
-      }
-    }
-  }
-
   // Return the index of the next blank node and increment the internal counter
   // of blank nodes. This has to be called for every distinct blank node that
   // is encountered.
@@ -170,13 +137,13 @@ struct VocabularyMetaData {
   }
 
   // The mapping from the `qlever::specialIds` to their actual IDs.
-  // This is created on the fly by the calls to `addWord` or `addSegment`.
+  // This is created on the fly by the calls to `addSegment`.
   const auto& specialIdMapping() const { return specialIdMapping_; }
   // The prefix range for the `@en@<predicate` style predicates.
   const auto& langTaggedPredicates() const { return langTaggedPredicates_; }
   // The prefix range for the internal IRIs in the `ql:` namespace.
   const auto& internalEntities() const { return internalEntities_; }
-  // The number of words that were added via `addWord()` or `addSegment()`.
+  // The number of words that were added via `addSegment()`.
   // Needs to return a reference to be used in combination with a
   // `ProgressBar`.
   const size_t& numWordsTotal() const { return numWordsTotal_; }
@@ -194,14 +161,10 @@ struct VocabularyMetaData {
   // The number of distinct blank nodes that were found and immediately
   // converted to an ID without becoming part of the vocabulary.
   size_t numBlankNodesTotal_ = 0;
-  IdRangeForPrefix langTaggedPredicates_{
-      std::string{LANGUAGE_TAGGED_PREDICATE_PREFIX}};
-  IdRangeForPrefix internalEntities_{
-      std::string{QLEVER_INTERNAL_PREFIX_IRI_WITHOUT_CLOSING_BRACKET}};
+  IdRangeForPrefix langTaggedPredicates_;
+  IdRangeForPrefix internalEntities_;
 
   ad_utility::HashMap<std::string, Id> specialIdMapping_;
-  const ad_utility::HashMap<std::string, Id>* globalSpecialIds_ =
-      &qlever::specialIds();
 };
 }  // namespace ad_utility::vocabulary_merger
 

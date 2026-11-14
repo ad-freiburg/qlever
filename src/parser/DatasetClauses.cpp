@@ -24,7 +24,7 @@ DatasetClauses DatasetClauses::fromClauses(
 DatasetClauses DatasetClauses::fromWithClause(
     const TripleComponent::Iri& withGraph) {
   DatasetClauses result;
-  result.defaultGraphs_.emplace({withGraph});
+  result.defaultGraphs_.emplace({TripleComponent{withGraph}});
   result.defaultGraphSpecifiedUsingWith_ = true;
   return result;
 }

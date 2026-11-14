@@ -429,8 +429,8 @@ TEST(Serializer, ManyTrivialDatatypes) {
 }
 
 TEST(Serializer, StringAndHashMap) {
-  auto testFunction = [](auto&& writer, auto makeReaderFromWriter) {
-    ad_utility::HashMap<std::string, int> m;
+  auto testFunction = [](auto&& writer, auto makeReaderFromWriter, auto m) {
+    using Map = decltype(m);
     m["hallo"] = 42;
     m["tschüss"] = 84;
 
@@ -441,11 +441,19 @@ TEST(Serializer, StringAndHashMap) {
     writer | m;
 
     auto reader = makeReaderFromWriter();
-    ad_utility::HashMap<std::string, int> n;
+    Map n;
     reader | n;
     ASSERT_EQ(m, n);
   };
-  testWithAllSerializers(testFunction);
+  // Test the flat and the node hash maps.
+  auto testWithMap = [&testFunction](auto map) {
+    testWithAllSerializers(
+        [&testFunction, &map](auto&& writer, auto makeReaderFromWriter) {
+          testFunction(AD_FWD(writer), std::move(makeReaderFromWriter), map);
+        });
+  };
+  testWithMap(ad_utility::HashMap<std::string, int>{});
+  testWithMap(ql::NodeHashMapTemplate<std::string, int>{});
 }
 
 TEST(Serializer, Vector) {

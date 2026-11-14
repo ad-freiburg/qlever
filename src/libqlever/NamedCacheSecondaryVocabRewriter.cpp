@@ -72,7 +72,7 @@ void collectNewWords(ConstIdColumnRef column,
     }
     const auto& word = entry->toStringRepresentation();
     if (!secondaryVocab.getId(word).has_value()) {
-      newWords.insert(std::string{word});
+      newWords.insert(word);
     }
   }
 }

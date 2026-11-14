@@ -202,13 +202,13 @@ struct ItemMapAndBuffer : public ad_utility::NoCopyNoMove {
   // Remove all the entries and deallocate all the strings, but keep the hash
   // map's memory for the next partial vocabulary.
   //
-  // NOTE: `erase(begin(), end())` is deliberately not `clear()`, which
-  // deallocates the backing array for all but very small maps (see
-  // `ClearBackingArray` in `absl/container/internal/raw_hash_set.cc`).
+  // NOTE: `clear()` keeps the table of the hash map for all the
+  // implementations that `ItemMap` can have (the Boost containers, and the
+  // `std` containers of libstdc++ and libc++), see the test
+  // `HashContainersWithAllocator.clearKeepsTable`. This is not the case for
+  // the Abseil containers.
   void clear() {
-    // The above holds for the Abseil hash maps only.
-    static_assert(ad_utility::isInstantiation<ItemMap, absl::flat_hash_map>);
-    map_.erase(map_.begin(), map_.end());
+    map_.clear();
     buffer_.clear();
   }
 };

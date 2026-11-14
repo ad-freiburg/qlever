@@ -656,11 +656,10 @@ VariableToColumnMap getSiblingVariables(const Operation& sibling,
   auto variables = sibling.getExternallyVisibleVariableColumns();
   const auto& visibleLeft = outerLeft.getExternallyVisibleVariableColumns();
   const auto& visibleRight = outerRight.getExternallyVisibleVariableColumns();
-  absl::erase_if(
-      variables, [&visibleLeft, &visibleRight](const auto& varAndCol) {
-        const auto& var = varAndCol.first;
-        return !visibleLeft.contains(var) || !visibleRight.contains(var);
-      });
+  ql::erase_if(variables, [&visibleLeft, &visibleRight](const auto& varAndCol) {
+    const auto& var = varAndCol.first;
+    return !visibleLeft.contains(var) || !visibleRight.contains(var);
+  });
   return variables;
 }
 }  // namespace
