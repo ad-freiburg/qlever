@@ -246,14 +246,14 @@ TEST(CanonicalRowOrder, columnsOverloads) {
 
   // Columns with the same number of rows.
   auto I = ad_utility::testing::IntId;
-  std::vector<Id> first{I(1), I(2), I(3)};
-  std::vector<Id> second{I(4), I(5), I(6)};
+  auto first = makeIdColumn({I(1), I(2), I(3)});
+  auto second = makeIdColumn({I(4), I(5), I(6)});
   std::vector<ConstIdColumnRef> columns{first, second};
   EXPECT_TRUE(isInCanonicalOrder(columns, {}));
   EXPECT_THAT(alignRows(columns, columns), ElementsAre(0, 1, 2));
 
   // Columns with different numbers of rows are rejected.
-  std::vector<Id> shorter{I(4), I(5)};
+  auto shorter = makeIdColumn({I(4), I(5)});
   std::vector<ConstIdColumnRef> inconsistent{first, shorter};
   EXPECT_ANY_THROW(isInCanonicalOrder(inconsistent, {}));
   EXPECT_ANY_THROW(alignRows(inconsistent, inconsistent));

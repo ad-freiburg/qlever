@@ -105,7 +105,14 @@ void readValue(Serializer& serializer, NamedResultCache::Value& arg,
     IdTableView<0>::ViewSpans columns;
     columns.reserve(numColumns);
     for (size_t i = 0; i < numColumns; ++i) {
-      auto column = zeroCopyDeserializeToSpan<Id>(serializer);
+      ConstIdColumnRef column = [&serializer] {
+        if constexpr (std::is_same_v<ConstIdColumnRef, ql::span<const Id>>) {
+          return zeroCopyDeserializeToSpan<Id>(serializer);
+        } else {
+          return columnBasedIdTable::splitLayout::zeroCopyDeserializeIdColumn(
+              serializer);
+        }
+      }();
       AD_CORRECTNESS_CHECK(column.size() == numRows);
       AD_CORRECTNESS_CHECK(
           ql::ranges::find(column, Datatype::LocalVocabIndex,
@@ -226,7 +233,7 @@ namespace namedResultCacheSerializer {
 // Write `value` to the `serializer`, in exactly the format that the read
 // branch of the serialization of a `NamedResultCache::Value` below reads.
 //
-// The `columns` (a range of ranges of `Id`, one per column of the result) and
+// The `columns` (one column of an `IdTable` per column of the result) and
 // the `resultSortedOn` are passed separately, so that a caller can write a
 // *rewritten* version of the `value`: a caller may for example replace the
 // `Id`s that refer to local vocab entries by `Id`s of the main or of a
