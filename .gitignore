@@ -50,6 +50,9 @@ sourcelist
 /cmake-build*
 /localIndices
 
+# Raster files for raster lookups (see `rasterFilePath`)
+/rasters/
+
 # Test index artifacts that are generated when a unit-test binary is run with
 # the repository root as its working directory.
 /_staticGlobalTestIndex*

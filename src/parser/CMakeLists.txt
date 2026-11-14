@@ -50,6 +50,7 @@ add_library(sparqlParser
         GraphPatternAnalysis.cpp
         ExternalValuesQuery.cpp
         RowNumberQuery.cpp
+        RasterQuery.cpp
         VariableCounter.cpp
 )
 qlever_target_link_libraries(sparqlParser basicParser antlrParser parserData sparqlExpressions rdfEscaping global qlever_util index rdfTypes)

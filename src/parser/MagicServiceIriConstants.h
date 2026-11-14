@@ -30,6 +30,9 @@ constexpr inline std::string_view ROW_NUMBER_IRI =
 constexpr inline std::string_view EXTERNAL_VALUES_IRI =
     "<https://qlever.cs.uni-freiburg.de/external-values/>";
 
+constexpr inline std::string_view RASTER_IRI =
+    "<https://qlever.cs.uni-freiburg.de/raster/>";
+
 // This prefix definition is used for backwards compatibility with the BMW use
 // case (they already use this syntax in some of their applications which we
 // do not want to break). New use cases of the `ExternalValues`
