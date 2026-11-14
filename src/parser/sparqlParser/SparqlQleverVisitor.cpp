@@ -2125,7 +2125,8 @@ qlm::vector<Visitor::ExpressionPtr> Visitor::visit(
   }
   // Visit the expression of each argument. An optional `DISTINCT` before the
   // argument list is handled by `processIriFunctionCall`.
-  // TODO<vrbommireddy> Use `visitVector` again once it returns a `qlm::vector`.
+  // TODO<vrbommireddy> Use `visitVector` again once it consistently returns a
+  // `qlm::vector`.
   arguments.reserve(ctx->expression().size());
   for (auto* expression : ctx->expression()) {
     arguments.push_back(visit(expression));
