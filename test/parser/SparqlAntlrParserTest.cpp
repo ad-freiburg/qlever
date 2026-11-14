@@ -1467,6 +1467,29 @@ TEST(SparqlParser, ensureExceptionOnInvalidGraphTerm) {
       ad_utility::Exception);
 }
 
+// Test that the containers of the `ParsedQuery` and of its clauses use the
+// allocator that is passed to the parser, i.e. they count towards its memory
+// limit and release the memory when the query is destroyed.
+TEST(SparqlParser, parsedQueryAllocationsCountTowardsMemoryLimit) {
+  auto expectLimited = [](const std::string& query) {
+    auto allocator = ad_utility::testing::makeAllocator(
+        ad_utility::MemorySize::megabytes(1));
+    const auto memoryLeftBefore = allocator.amountMemoryLeft();
+    {
+      auto pq = SparqlParser::parseQuery(encodedIriManager(), allocator, query);
+      EXPECT_LT(allocator.amountMemoryLeft(), memoryLeftBefore);
+    }
+    EXPECT_EQ(allocator.amountMemoryLeft(), memoryLeftBefore);
+  };
+  expectLimited("SELECT ?x ?y { ?x <p> ?y }");
+  expectLimited("SELECT * { ?x <p> ?y }");
+  expectLimited(
+      "SELECT ?x (COUNT(?y) AS ?c) { ?x <p> ?y } GROUP BY ?x HAVING (?c > 1) "
+      "ORDER BY ?x");
+  expectLimited("CONSTRUCT { ?x <q> ?y } WHERE { ?x <p> ?y }");
+  expectLimited("ASK { ?x <p> ?y }");
+}
+
 // Test that ASK queries are parsed as they should.
 TEST(SparqlParser, AskQuery) {
   // Some helper functions and abbreviations.

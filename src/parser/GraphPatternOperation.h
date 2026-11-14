@@ -14,6 +14,7 @@
 #include "backports/concepts.h"
 #include "engine/PathSearch.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
+#include "global/Id.h"
 #include "parser/DatasetClauses.h"
 #include "parser/ExternalValuesQuery.h"
 #include "parser/GraphPattern.h"
@@ -25,6 +26,7 @@
 #include "parser/TextSearchQuery.h"
 #include "parser/TripleComponent.h"
 #include "rdfTypes/Variable.h"
+#include "util/Allocator.h"
 #include "util/TransparentFunctors.h"
 #include "util/VisitMixin.h"
 
@@ -169,7 +171,7 @@ class Subquery {
   // `Subquery` is like a `ParsedQuery`, just with an own type).
   Subquery(const ParsedQuery&);
   Subquery(ParsedQuery&&) noexcept;
-  Subquery();
+  explicit Subquery(const qlever::Allocator<Id>& allocator);
   ~Subquery();
   Subquery(const Subquery&);
   Subquery(Subquery&&) noexcept;

@@ -701,7 +701,7 @@ TEST_F(GroupByOptimizations, existsInGroupByAlias) {
 
   auto makeExistsArgument = [](const std::vector<Variable>& variables,
                                const std::vector<std::vector<int64_t>>& rows) {
-    ParsedQuery pq;
+    ParsedQuery pq{makeAllocator()};
     parsedQuery::Values valuesClause;
     valuesClause._inlineValues._variables = variables;
     for (const auto& row : rows) {

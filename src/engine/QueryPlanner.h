@@ -18,6 +18,7 @@
 #include <boost/optional.hpp>
 #include <vector>
 
+#include "backports/span.h"
 #include "engine/CheckUsePatternTrick.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/RuntimeInformation.h"
@@ -520,7 +521,7 @@ class QueryPlanner {
                                 const SubtreePlanMatrix& dpTab) const;
 
   SubtreePlanVec getPatternTrickRow(
-      const std::vector<Alias>& aliases, const SubtreePlanMatrix& dpTab,
+      ql::span<const Alias> aliases, const SubtreePlanMatrix& dpTab,
       const checkUsePatternTrick::PatternTrickTuple& patternTrickTuple);
 
   SubtreePlanVec getHavingRow(const ParsedQuery& pq,

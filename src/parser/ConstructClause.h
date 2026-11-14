@@ -7,18 +7,22 @@
 #define QLEVER_SRC_PARSER_CONSTRUCTCLAUSE_H
 
 #include "backports/algorithm.h"
+#include "global/Id.h"
 #include "parser/SelectClause.h"
 #include "parser/data/Types.h"
 #include "rdfTypes/Variable.h"
+#include "util/Allocator.h"
 #include "util/TransparentFunctors.h"
 
 namespace parsedQuery {
 struct ConstructClause : ClauseBase {
   ad_utility::sparql_types::Triples triples_;
 
-  ConstructClause() = default;
-  explicit ConstructClause(ad_utility::sparql_types::Triples triples)
-      : triples_(std::move(triples)) {}
+  explicit ConstructClause(const qlever::Allocator<Id>& allocator)
+      : ClauseBase{allocator} {}
+  ConstructClause(const qlever::Allocator<Id>& allocator,
+                  ad_utility::sparql_types::Triples triples)
+      : ClauseBase{allocator}, triples_(std::move(triples)) {}
 
   // Lazily yields all variables that appear in this `ConstructClause`.
   // Variables that appear multiple times are also yielded multiple times.
