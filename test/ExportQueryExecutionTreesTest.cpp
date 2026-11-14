@@ -2232,8 +2232,8 @@ TEST(ExportQueryExecutionTrees, EncodedIriManagerUsage) {
   auto qec = ad_utility::testing::getQec(std::move(config));
 
   // Parse query with the same EncodedIriManager
-  auto parsedQuery =
-      SparqlParser::parseQuery(encodedIriManager.get(), query, {});
+  auto parsedQuery = SparqlParser::parseQuery(
+      encodedIriManager.get(), ad_utility::testing::makeAllocator(), query, {});
 
   auto cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();

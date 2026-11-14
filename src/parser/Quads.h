@@ -42,10 +42,12 @@ struct Quads {
   // Return the quads in a format for use as an update template.
   // The `defaultGraph` is used for the `freeTriples_`. It for example is set
   // when using a `WITH` clause. It can also be `std::monostate{}`, in which
-  // case the global default graph will be used later on.
+  // case the global default graph will be used later on. The `allocator` is
+  // used for the triples of the result.
   updateClause::UpdateTriples toTriplesWithGraph(
       const SparqlTripleSimpleWithGraph::Graph& defaultGraph,
-      BlankNodeAdder& blankNodeAdder) const;
+      BlankNodeAdder& blankNodeAdder,
+      const qlever::Allocator<Id>& allocator) const;
   // Return the quads in a format for use in a GraphPattern.
   std::vector<parsedQuery::GraphPatternOperation> toGraphPatternOperations()
       const;
