@@ -677,6 +677,56 @@ TEST(IndexScan, getResultSizeOfScanFromRelationMetadata) {
   EXPECT_EQ(sizeEstimate("<p>"), EstimateAndExact(50, true));
 }
 
+// Test that the size estimate of a scan with two fixed columns, none of whose
+// blocks lies completely in the scan, is at most the average number of rows
+// per value of the second column in the relation of the first column.
+TEST(IndexScan, getSizeEstimateFromMultiplicityOfRelation) {
+  // A relation `<p>` with two objects for each of 300 subjects, a relation
+  // `<q>` with 90 objects for each of three subjects, and a small relation
+  // `<r>`. With 100 rows per block, `<p>` and `<q>` are stored in blocks of
+  // their own and have a metadata entry, `<r>` has none.
+  std::string kg;
+  for (size_t i = 0; i < 300; ++i) {
+    kg += absl::StrCat("<x", i, "> <p> <y", i, "> , <z", i, "> .\n");
+  }
+  for (size_t i = 0; i < 3; ++i) {
+    for (size_t j = 0; j < 90; ++j) {
+      kg += absl::StrCat("<x", i, "> <q> <y", j, "> .\n");
+    }
+  }
+  kg += "<x0> <r> <y0> . <x1> <r> <y1> .";
+  TestIndexConfig config{kg};
+  config.rowsPerBlock = 100;
+  auto qec = getQec(std::move(config));
+  auto getId = makeGetId(qec->getIndex());
+  const auto& pso = qec->getIndex().getImpl().getPermutation(Permutation::PSO);
+  ASSERT_TRUE(pso.metaData().getMetaDataIfPresent(getId("<p>")).has_value());
+  ASSERT_TRUE(pso.metaData().getMetaDataIfPresent(getId("<q>")).has_value());
+  ASSERT_FALSE(pso.metaData().getMetaDataIfPresent(getId("<r>")).has_value());
+
+  // The size estimate of the scan `<x1> <predicate> ?y`.
+  auto sizeEstimate = [&](const std::string& predicate) {
+    SparqlTripleSimple scanTriple{TripleComponent::Iri::fromIriref("<x1>"),
+                                  TripleComponent::Iri::fromIriref(predicate),
+                                  Variable{"?y"}};
+    IndexScan scan{qec, Permutation::PSO, scanTriple};
+    return scan.getSizeEstimate();
+  };
+
+  // For `<p>`, the estimate is the two objects per subject, and not the fixed
+  // fraction of the block (100 / 5 with the default divisor).
+  EXPECT_EQ(sizeEstimate("<p>"), 2);
+
+  // For `<q>`, the fixed fraction of the block is smaller than the 90 objects
+  // per subject and remains the estimate. The 90 rows of `<x1>` lie in two
+  // blocks, neither of them completely in the scan.
+  EXPECT_EQ(sizeEstimate("<q>"), 40);
+
+  // For `<r>`, there is no stored multiplicity, and the estimate is unchanged
+  // (the block of `<r>` has fewer rows than the divisor).
+  EXPECT_EQ(sizeEstimate("<r>"), 1);
+}
+
 // _____________________________________________________________________________
 TEST(IndexScan, getResultSizeOfScanWithDeltaTriples) {
   auto index = std::make_shared<Index>(

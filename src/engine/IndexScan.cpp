@@ -499,7 +499,56 @@ std::pair<bool, size_t> IndexScan::computeSizeEstimate() const {
   // mean of `lower` and `upper` in a safe way.
   auto [lower, upper] = permutation().getSizeEstimateForScan(
       scanSpecAndBlocks_, locatedTriplesState());
-  return {lower == upper, lower + (upper - lower) / 2};
+  size_t sizeEstimate = lower + (upper - lower) / 2;
+
+  // For a scan with two fixed columns (think `<s> <p> ?o` in the PSO
+  // permutation), the estimate is at most the average number of rows per value
+  // of the second column in the relation of the first column (in the example:
+  // the average number of objects per subject of `<p>`).
+  //
+  // NOTE: This only applies if no block lies completely in the scan. Then the
+  // blocks only say that the result is a part of them, and the estimate from
+  // above is a fixed fraction of their size, whatever the relation (see
+  // `small-index-scan-size-estimate-divisor`). The multiplicity is only used
+  // if it is stored in the per-relation metadata, because computing it for a
+  // small relation reads its block.
+  if (auto multiplicity = col1MultiplicityIfNoBlockIsCompletelyInScan()) {
+    auto rowsPerValue =
+        static_cast<size_t>(std::ceil(std::max(1.0f, multiplicity.value())));
+    if (rowsPerValue < sizeEstimate) {
+      return {false, rowsPerValue};
+    }
+  }
+  return {lower == upper, sizeEstimate};
+}
+
+// _____________________________________________________________________________
+std::optional<float> IndexScan::col1MultiplicityIfNoBlockIsCompletelyInScan()
+    const {
+  if (numVariables() != 1) {
+    return std::nullopt;
+  }
+
+  // With three or more blocks, all but the first and the last one lie
+  // completely in the scan.
+  const auto& scanSpec = scanSpecAndBlocks_.scanSpec_;
+  if (scanSpecAndBlocks_.sizeBlockMetadata_ > 2 ||
+      ql::ranges::any_of(
+          scanSpecAndBlocks_.getBlockMetadataView(),
+          [&scanSpec](const auto& block) {
+            return CompressedRelationReader::isBlockCompletelyInScan(scanSpec,
+                                                                     block);
+          })) {
+    return std::nullopt;
+  }
+
+  const auto& col0Id = scanSpec.col0Id();
+  AD_CORRECTNESS_CHECK(col0Id.has_value());
+  auto metadata = permutation().metaData().getMetaDataIfPresent(*col0Id);
+  if (!metadata.has_value()) {
+    return std::nullopt;
+  }
+  return metadata->getCol1Multiplicity();
 }
 
 // _____________________________________________________________________________
