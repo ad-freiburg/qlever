@@ -18,6 +18,7 @@
 #include "backports/three_way_comparison.h"
 #include "backports/type_traits.h"
 #include "util/CancellationHandle.h"
+#include "util/EnumSize.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
 #include "util/Synchronized.h"
@@ -59,6 +60,7 @@ class QueryId {
 
 // Terminal status of a query, observed at `OwningQueryId` destruction.
 enum class QueryStatus { OK, FAILED, CANCELLED, TIMEOUT };
+QLEVER_ENUM_SIZE(QueryStatus, 4);
 
 inline std::string_view toString(QueryStatus s) noexcept {
   using enum QueryStatus;

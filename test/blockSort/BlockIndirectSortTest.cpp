@@ -39,6 +39,7 @@
 #include "backports/span.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
+#include "util/EnumSize.h"
 #include "util/blockSort/BlockIndirectSort.h"
 
 // The tests of this file are organized around one fuzzer per element type
@@ -190,7 +191,7 @@ enum class Shape {
   NearlySorted,
   SortedBlocksShuffled,
 };
-constexpr size_t numShapes = 10;
+QLEVER_ENUM_SIZE(Shape, 10);
 
 // `numKeys` keys of the given `shape`.
 std::vector<Key> makeKeys(Shape shape, size_t numKeys, std::mt19937_64& gen) {
@@ -292,7 +293,7 @@ void fuzzSort(size_t numIterations, bool withFailures, size_t maxBlockSize) {
       // An input without a tail.
       numKeys -= numKeys % params.blockSize;
     }
-    auto shape = static_cast<Shape>(random(0, numShapes - 1));
+    auto shape = static_cast<Shape>(random(0, qlever::enumSize<Shape> - 1));
     SCOPED_TRACE(absl::StrCat(
         "iteration=", iteration, " shape=", static_cast<int>(shape),
         " numKeys=", numKeys, " blockSize=", params.blockSize,
