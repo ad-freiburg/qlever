@@ -73,6 +73,8 @@ RuntimeParameters::RuntimeParameters() {
   add(disableCaching_);
   add(logLevel_);
   add(constructDeduplication_);
+  add(binaryServiceEnabled_);
+  add(serviceMaxBinaryBatchSize_);
 
 #ifdef QLEVER_HAS_REFLECTION
   // Check that all the parameters above were added. Without reflection, this
