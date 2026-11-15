@@ -263,20 +263,25 @@ TEST(IdRefTest, conversionFromSplitLayoutId) {
   static_assert(ql::concepts::invocable<decltype(setToTrue)&, SplitLayoutId&>);
 }
 
-// The following tests read and write through an `IdRef` that refers to an `Id`
-// itself. An `IdRef` always reads and writes the global `Id`, which is only the
-// `SplitLayoutId` with `USE_SPLIT_LAYOUT`.
-#ifdef QLEVER_USE_SPLIT_LAYOUT
-// Test that an `IdRef` that refers to an `Id` reads the current value of the
-// `Id`, and that assigning to it changes exactly this `Id`, with all its bits.
+// The reference to an `Id` itself: the `IdRef` with `USE_SPLIT_LAYOUT`, where
+// the `Id` is the `SplitLayoutId`, and a plain `Id&` without it, because the
+// folded `Id` keeps its payload and its datatype in one word, to which no
+// `IdRef` can refer.
+constexpr bool idIsSplitLayoutId = std::is_same_v<Id, SplitLayoutId>;
+using RefToId = std::conditional_t<idIsSplitLayoutId, IdRef, Id&>;
+using ConstRefToId =
+    std::conditional_t<idIsSplitLayoutId, ConstIdRef, const Id&>;
+
+// Test that a reference to an `Id` reads the current value of the `Id`, and
+// that assigning to it changes exactly this `Id`, with all its bits.
 TEST(IdRefTest, referenceToAnId) {
   const auto ids = sampleIds();
   for (const Id original : ids) {
     for (const Id other : ids) {
       Id id = original;
       Id neighbour = Id::makeFromInt(-1);
-      IdRef ref = id;
-      const ConstIdRef constRef = std::as_const(id);
+      RefToId ref = id;
+      const ConstRefToId constRef = std::as_const(id);
       EXPECT_EQ(getBitsCompat(ref), getBitsCompat(original));
       EXPECT_EQ(getBitsCompat(constRef), getBitsCompat(original));
 
@@ -293,11 +298,10 @@ TEST(IdRefTest, referenceToAnId) {
   }
 }
 
-// Test that a range algorithm accepts a function with an `IdRef` parameter for
-// a `std::vector<Id>` and changes its `Id`s in place.
+// Test that a range algorithm accepts a function that takes a reference to an
+// `Id` for a `std::vector<Id>` and changes its `Id`s in place.
 TEST(IdRefTest, rangeAlgorithmOnAVectorWithIdRef) {
   std::vector<Id> vector = sampleIds();
-  ql::ranges::for_each(vector, [](IdRef id) { id = Id::makeFromBool(true); });
+  ql::ranges::for_each(vector, [](RefToId id) { id = Id::makeFromBool(true); });
   EXPECT_EQ(vector, std::vector<Id>(vector.size(), Id::makeFromBool(true)));
 }
-#endif
