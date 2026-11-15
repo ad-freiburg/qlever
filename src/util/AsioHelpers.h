@@ -21,6 +21,48 @@ namespace ad_utility {
 
 namespace net = boost::asio;
 
+// Like `net::co_spawn(executor, awaitable, completionToken)`, but the
+// completion handler is never invoked inline. Instead, once the coroutine has
+// completed, the handler is posted to its associated executor (default:
+// `executor`).
+//
+// The completion signature is `void(std::exception_ptr)` if `T` is `void`, and
+// `void(std::exception_ptr, T)` otherwise. If the coroutine threw, the
+// `exception_ptr` holds the exception, and the `T` is default-constructed.
+//
+// This matters if the caller holds a resource (e.g. a strand or a lock) that
+// the handler must not run under: a plain `co_spawn` (or `net::dispatch`)
+// runs the handler inline when the current thread already belongs to the
+// handler's executor.
+template <typename T, typename Executor, typename CompletionToken>
+auto coSpawnWithPostedCompletion(Executor executor, net::awaitable<T> awaitable,
+                                 CompletionToken&& completionToken) {
+  static constexpr bool isVoid = std::is_void_v<T>;
+  using DummyRes = std::conditional_t<isVoid, int, T>;
+  using Signature = std::conditional_t<isVoid, void(std::exception_ptr),
+                                       void(std::exception_ptr, DummyRes)>;
+  auto initiatingFunction = [executor, awaitable = std::move(awaitable)](
+                                auto handler) mutable {
+    auto handlerExecutor = net::get_associated_executor(handler, executor);
+    // NOTE: The pack `result` lets the same lambda serve both completion
+    // signatures of `co_spawn`: it is empty if `T` is `void`, and holds
+    // exactly one element (the result of the coroutine) otherwise.
+    net::co_spawn(
+        executor, std::move(awaitable),
+        [handlerExecutor, handler = std::move(handler)](
+            std::exception_ptr exception, auto... result) mutable {
+          net::post(
+              handlerExecutor,
+              [handler = std::move(handler), exception = std::move(exception),
+               ... result = std::move(result)]() mutable {
+                std::move(handler)(std::move(exception), std::move(result)...);
+              });
+        });
+  };
+  return net::async_initiate<CompletionToken, Signature>(
+      std::move(initiatingFunction), completionToken);
+}
+
 /// Helper function, that checks a cancellation handle regularly while waiting
 /// on an awaitable object that doesn't do this on its own. It's always better
 /// to integrate cancellation checks right into the awaitable itself, but

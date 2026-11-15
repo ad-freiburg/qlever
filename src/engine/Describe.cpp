@@ -175,7 +175,7 @@ IdTable Describe::makeAndExecuteJoinWithFullIndex(
       VariableToColumnMap{
           {subjectVar,
            ColumnIndexAndTypeInfo{0, ColumnIndexAndTypeInfo::AlwaysDefined}}},
-      std::vector<ColumnIndex>{}, LocalVocab{},
+      qlm::vector<ColumnIndex>{allocator()}, LocalVocab{},
       absl::StrCat("INTERNAL DESCRIBE ", uniqueCounter++));
   SparqlTripleSimple triple{subjectVar, V{"?predicate"}, V{"?object"}};
   auto activeGraphs = describe_.datasetClauses_.activeDefaultGraphs();

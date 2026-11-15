@@ -277,6 +277,43 @@ inline Box<CoordType> boundingBoxToUtilBox(const BoundingBox& boundingBox) {
           geoPointToUtilPoint(boundingBox.upperRight())};
 }
 
+// Combine `info` (a `Centroid` or `BoundingBox`) and `crs` into a
+// `WithSourceCrs<T>`. Empty iff one of them is empty, in particular for a
+// `GeometryInfo` read from an index that predates the stored source CRS (see
+// `GeometryInfo::getSourceCrsType`).
+template <typename T>
+inline std::optional<WithSourceCrs<T>> getWithSourceCrs(
+    std::optional<T> info, std::optional<SourceCrsType> crs) {
+  if (!info.has_value() || !crs.has_value()) {
+    return std::nullopt;
+  }
+  return WithSourceCrs<T>{info.value(), crs.value()};
+}
+
+// Parse the WKT literal `wkt` and compute its `T` (a `Centroid` or
+// `BoundingBox`) together with its source CRS. Empty iff the literal cannot be
+// parsed or has an unsupported CRS.
+template <typename T>
+inline std::optional<WithSourceCrs<T>> getWithSourceCrsFromWkt(
+    std::string_view wkt) {
+  auto parseResult = detail::parseWkt(wkt);
+  if (!parseResult.parsedWkt_.has_value()) {
+    return std::nullopt;
+  }
+
+  // A literal with an unsupported CRS has no parsed geometry, see `parseWkt`.
+  AD_CORRECTNESS_CHECK(parseResult.sourceCrs_ != CRSType::UNSUPPORTED);
+  std::optional<T> info;
+  if constexpr (std::is_same_v<T, Centroid>) {
+    info = centroidAsGeoPoint(parseResult.parsedWkt_.value());
+  } else if constexpr (std::is_same_v<T, BoundingBox>) {
+    info = boundingBoxAsGeoPoints(parseResult.parsedWkt_.value());
+  } else {
+    static_assert(ad_utility::alwaysFalse<T>);
+  }
+  return getWithSourceCrs(info, SourceCrsType{parseResult.sourceCrs_});
+}
+
 // Constexpr helper to add the required suffixes to the OGC simple features IRI
 // prefix.
 template <const std::string_view& suffix>

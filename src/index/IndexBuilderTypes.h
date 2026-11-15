@@ -33,8 +33,8 @@
 #include "util/HashMap.h"
 #include "util/NoCopyNoMove.h"
 #include "util/RegexSet.h"
-#include "util/Serializer/Serializer.h"
 #include "util/TypeTraits.h"
+#include "util/serializer/Serializer.h"
 
 // Return true if `word` is a blank node. A word is a blank node if it starts
 // with `_:`, or, when `blankNodeIriRegexes` is given, if it is an IRI that is

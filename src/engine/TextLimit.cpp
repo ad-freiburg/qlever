@@ -11,14 +11,14 @@
 TextLimit::TextLimit(QueryExecutionContext* qec, const size_t limit,
                      std::shared_ptr<QueryExecutionTree> child,
                      const ColumnIndex& textRecordColumn,
-                     const std::vector<ColumnIndex>& entityColumns,
-                     const std::vector<ColumnIndex>& scoreColumns)
+                     ql::span<const ColumnIndex> entityColumns,
+                     ql::span<const ColumnIndex> scoreColumns)
     : Operation(qec),
       limit_(limit),
       child_(std::move(child)),
       textRecordColumn_(textRecordColumn),
-      entityColumns_(entityColumns),
-      scoreColumns_(scoreColumns) {
+      entityColumns_(entityColumns.begin(), entityColumns.end(), allocator()),
+      scoreColumns_(scoreColumns.begin(), scoreColumns.end(), allocator()) {
   AD_CONTRACT_CHECK(child_);
 }
 
@@ -176,9 +176,7 @@ uint64_t TextLimit::getSizeEstimateBeforeLimit() {
 
 // _____________________________________________________________________________
 qlm::vector<ColumnIndex> TextLimit::resultSortedOn() const {
-  // TODO<vrbommireddy>: Make `entityColumns_` a `qlm::vector<ColumnIndex>` and
-  // remove this conversion.
-  return {entityColumns_.begin(), entityColumns_.end(), allocator()};
+  return entityColumns_;
 }
 
 // _____________________________________________________________________________

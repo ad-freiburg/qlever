@@ -19,9 +19,9 @@
 #include "util/ExceptionHandling.h"
 #include "util/ExternalOverflowStorage.h"
 #include "util/HashMap.h"
-#include "util/Serializer/SerializeArrayOrTuple.h"
-#include "util/Serializer/Serializer.h"
 #include "util/TypeTraits.h"
+#include "util/serializer/SerializeArrayOrTuple.h"
+#include "util/serializer/Serializer.h"
 
 /// Several statistics for the patterns, as well as the functionality to
 /// serialize them.

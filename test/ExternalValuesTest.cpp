@@ -77,6 +77,10 @@ TEST(ExternalValues, knownEmptyResultWithEmptyValues) {
 
   // Should return false even though values are empty.
   EXPECT_FALSE(externalValuesOp.knownEmptyResult());
+
+  // Every column of the empty values has multiplicity 1.
+  EXPECT_FLOAT_EQ(externalValuesOp.getMultiplicity(0), 1.0f);
+  EXPECT_FLOAT_EQ(externalValuesOp.getMultiplicity(1), 1.0f);
 }
 
 // Check that `computeResult` works correctly.

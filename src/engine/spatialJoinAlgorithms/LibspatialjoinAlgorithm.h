@@ -19,7 +19,7 @@
 
 #include "engine/spatialJoinAlgorithms/SpatialJoinAlgorithmBase.h"
 #include "index/Index.h"
-#include "util/MemorySize/MemorySize.h"
+#include "util/memorySize/MemorySize.h"
 
 // Spatial join for all `SpatialJoinType`s (`INTERSECTS`, `CONTAINS`, `WITHIN`,
 // `WITHIN_DIST`, `DE9IM`, ...) and all geometry types, backed by the
