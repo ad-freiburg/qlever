@@ -330,7 +330,12 @@ class BasicIdRef
   QL_EXPLICIT(false)
   BasicIdRef(
       std::conditional_t<IsConst, const SplitLayoutId&, SplitLayoutId&> id)
-      : Base{&id.bits_.payload_, &id.bits_.datatype_} {}
+      : Base{&id.bits_.payload_, &id.bits_.datatype_} {
+    // Without `USE_SPLIT_LAYOUT` the constructor is only declared for the
+    // concepts. Using it would read the bits of a `SplitLayoutId` as an `Id`.
+    static_assert(std::is_same_v<std::decay_t<decltype(id)>, Id>,
+                  "An `IdRef` can only refer to the `Id` of the current build");
+  }
 
   BasicIdRef(const SplitLayoutId&&) = delete;
 
