@@ -18,6 +18,7 @@
 #include "backports/algorithm.h"
 #include "backports/concepts.h"
 #include "backports/type_traits.h"
+#include "engine/idTable/splitLayout/IdColumn.h"
 #include "engine/idTable/splitLayout/IdRef.h"
 
 using namespace columnBasedIdTable::splitLayout;
@@ -261,6 +262,12 @@ TEST(IdRefTest, conversionFromSplitLayoutId) {
   // of the value type of the range.
   auto setToTrue = [](IdRef id) { id = Id::makeFromBool(true); };
   static_assert(ql::concepts::invocable<decltype(setToTrue)&, SplitLayoutId&>);
+
+  // A split column has to stay a range. With GCC it would not be one if the
+  // restricted reference that `*it` returns could also be built from an `Id&`,
+  // because then its common reference with `Id` is ambiguous.
+  static_assert(ql::ranges::random_access_range<IdColumnRef>);
+  static_assert(ql::ranges::random_access_range<ConstIdColumnRef>);
 }
 
 // The reference to an `Id` itself: the `IdRef` with `USE_SPLIT_LAYOUT`, where
