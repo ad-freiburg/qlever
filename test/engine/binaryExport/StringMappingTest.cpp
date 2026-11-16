@@ -214,8 +214,8 @@ TEST(TransmittedStringRewriter, malformedStrings) {
   }
 }
 
-// Index-local term references require structural transport, which is not yet
-// part of the binary format. Never transmit their raw payload as a value.
+// Test that a triple term is rejected (the binary format cannot transport it
+// yet, and its payload must never be transmitted as a value).
 TEST(StringMapping, rejectsTripleTermReferences) {
   StringMapping mapping{getQecWithTextIndex()->getIndex()};
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(

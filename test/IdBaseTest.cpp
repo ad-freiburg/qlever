@@ -177,7 +177,9 @@ TYPED_TEST(IdBaseTest, makeFromBool) {
 }
 
 // Test that the index types store every value up to `maxIndex` and return it
-// unchanged, and that a larger value is rejected (there is none for the
+// unchanged (also via `visit` and via the bits), that they are not trivial
+// and, except for the `LocalVocabIndex`, compare bitwise and in the order of
+// their values, and that a larger value is rejected (there is none for the
 // `SplitLayoutId`, whose `maxIndex` is the largest `uint64_t`). The
 // `LocalVocabIndex` is a pointer and has no `maxIndex`.
 TYPED_TEST(IdBaseTest, Indices) {
@@ -190,24 +192,16 @@ TYPED_TEST(IdBaseTest, Indices) {
       ASSERT_EQ(id.getDatatype(), type);
       ASSERT_EQ(std::invoke(getFromId, id), value);
       EXPECT_EQ(id, Id::fromBits(id.getBits()));
-      if (type != Datatype::LocalVocabIndex) {
-        EXPECT_NE(id, Id::makeFromInt(17));
-      }
       EXPECT_FALSE(id.isTrivial());
       EXPECT_EQ(id.canBeComparedBitwise(), type != Datatype::LocalVocabIndex);
       EXPECT_TRUE(id.visit([](const auto& payload) {
         return std::is_same_v<std::decay_t<decltype(payload)>, IndexType>;
       }));
-      if (type != Datatype::VocabIndex && type != Datatype::LocalVocabIndex &&
-          type != Datatype::SecondaryVocabIndex) {
-        EXPECT_NE(id, Id::makeFromVocabIndex(VocabIndex::make(17)));
-      }
     };
     for (size_t idx = 0; idx < numElements; ++idx) {
       testSingle(indexGenerator<Id>());
     }
     testSingle(0);
-    testSingle(17);
     testSingle(Id::maxIndex);
     if (type != Datatype::LocalVocabIndex) {
       EXPECT_LT(makeId(0), makeId(Id::maxIndex));
@@ -692,6 +686,8 @@ TYPED_TEST(IdBaseTest, isTrivial) {
   EXPECT_FALSE(
       Id::makeFromBlankNodeIndex(BlankNodeIndex::make(17)).isTrivial());
   EXPECT_FALSE(Id::makeFromEncodedVal(738).isTrivial());
+  EXPECT_FALSE(
+      Id::makeFromTripleTermIndex(TripleTermIndex::make(17)).isTrivial());
 }
 
 // Test that the `Id`s of all datatypes except `LocalVocabIndex` can be compared

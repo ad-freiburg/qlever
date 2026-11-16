@@ -632,12 +632,9 @@ TEST(ExportIds, resolveNonVocabIndexIds) {
   check({2, 3});
 }
 
-}  // namespace
-
-// _____________________________________________________________________________
-// Test that triple-term references have no literal representation and that
-// string export rejects them until structural serialization is implemented.
-TEST(ExportIds, tripleTermReferencesHaveNoLiteralOrStringRepresentationYet) {
+// Test that a triple term has no literal or IRI representation and that its
+// export as a string is rejected (until triple terms can be serialized).
+TEST(ExportIds, tripleTerm) {
   const auto& index = ad_utility::testing::getQec()->getIndex();
   auto term = Id::makeFromTripleTermIndex(TripleTermIndex::make(17));
   EXPECT_FALSE(ql::exportIds::idToLiteral(index, term, LocalVocab{}));
@@ -647,3 +644,5 @@ TEST(ExportIds, tripleTermReferencesHaveNoLiteralOrStringRepresentationYet) {
       ::testing::StrEq("Export of triple-term references is not supported yet"),
       std::runtime_error);
 }
+
+}  // namespace
