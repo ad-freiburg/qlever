@@ -19,7 +19,7 @@
 #include "engine/idTable/splitLayout/IdRef.h"
 #include "global/Id.h"
 #include "util/Exception.h"
-#include "util/serializer/SerializeVector.h"
+#include "util/serializer/SerializeParallelArrays.h"
 #include "util/serializer/Serializer.h"
 
 namespace columnBasedIdTable::splitLayout {
@@ -140,17 +140,12 @@ class BasicIdColumnView {
     return {datatypes_, size_};
   }
 
-  // Serialization of a column: its size and its payloads (like a `ql::span`),
-  // then the bytes of its datatypes, of which there are as many. Like for
-  // `ql::span`, reading needs a view that already has the right size.
+  // Serialization of a column: its payloads and its datatypes as
+  // `ParallelArrays`. Like for `ql::span`, reading needs a view that already
+  // has the right size.
   AD_SERIALIZE_FRIEND_FUNCTION(BasicIdColumnView) {
-    serializer | arg.rawPayloads();
-    using CharPtr =
-        std::conditional_t<ad_utility::serialization::ReadSerializer<S>, char*,
-                           const char*>;
-    serializer.serializeBytes(
-        reinterpret_cast<CharPtr>(arg.rawDatatypes().data()),
-        arg.rawDatatypes().size_bytes());
+    serializer | ad_utility::serialization::ParallelArrays{arg.rawPayloads(),
+                                                           arg.rawDatatypes()};
   }
 };
 
@@ -164,15 +159,12 @@ using ConstIdColumnRef = BasicIdColumnView<true>;
 CPP_template(typename S)(
     requires ad_utility::serialization::ZeroCopyReadSerializer<S>)
 ConstIdColumnRef zeroCopyDeserializeIdColumn(S& serializer) {
-  auto payloads =
-      ad_utility::serialization::zeroCopyDeserializeToSpan<Id::PayloadType>(
-          serializer);
-  auto datatypes = serializer.getSpanToBytes(payloads.size());
-  AD_CORRECTNESS_CHECK(datatypes.size() == payloads.size());
-  return {payloads.data(),
-          reinterpret_cast<const Id::DatatypeType*>(datatypes.data()),
-          payloads.size()};
+  auto [payloads, datatypes] =
+      ad_utility::serialization::zeroCopyDeserializeParallelArrays<
+          Id::PayloadType, Id::DatatypeType>(serializer);
+  return {payloads.data(), datatypes.data(), payloads.size()};
 }
+
 }  // namespace columnBasedIdTable::splitLayout
 
 // `BasicIdColumnView` is a `borrowed_range` (like `ql::span`): a non-owning

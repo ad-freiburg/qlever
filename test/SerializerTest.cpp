@@ -691,6 +691,30 @@ TEST(Serializer, serializeSpan) {
   }
 }
 
+// Test that reading into a span with the wrong size also consumes the padding
+// that an aligned serializer writes before the elements of the span, so that
+// the next value can still be read.
+TEST(Serializer, serializeSpanWithWrongSizeAndPadding) {
+  AlignedByteBufferWriteSerializer writer;
+  std::vector doubles{1.5, 2.5};
+  // After the `char` and the size of the span, the elements of the span need
+  // padding to be aligned.
+  writer | 'x';
+  writer | ql::span{doubles};
+  writer | 42;
+
+  AlignedByteBufferReadSerializer reader{std::move(writer).data()};
+  char c = 0;
+  reader | c;
+  EXPECT_EQ(c, 'x');
+  std::vector<double> tooFewDoubles(1);
+  AD_EXPECT_THROW_WITH_MESSAGE(reader | ql::span{tooFewDoubles},
+                               ::testing::HasSubstr("must be properly sized"));
+  int next = 0;
+  reader | next;
+  EXPECT_EQ(next, 42);
+}
+
 // _____________________________________________________________________________
 TEST(Serializer, serializeOptional) {
   std::optional<std::string> s = "hallo";
