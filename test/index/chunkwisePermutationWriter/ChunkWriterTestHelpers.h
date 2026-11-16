@@ -20,9 +20,8 @@
 
 #include "../../util/GTestHelpers.h"
 #include "../../util/IndexTestHelpers.h"
+#include "../../util/PermutationPairTestHelpers.h"
 #include "global/Constants.h"
-#include "index/CompressedRelationReader.h"
-#include "index/LocatedTriples.h"
 #include "index/chunkwisePermutationWriter/ChunkWriter.h"
 #include "index/compressedRelationWriter/CompressedRelationWriter.h"
 #include "util/File.h"
@@ -35,17 +34,13 @@
 namespace chunkWriterTestHelpers {
 using namespace chunkwisePermutationWriter;
 using ad_utility::source_location;
-
-// Return an `Id` of type `VocabIndex` from `index`.
-inline Id V(int64_t index) {
-  AD_CONTRACT_CHECK(index >= 0);
-  return Id::makeFromVocabIndex(VocabIndex::make(index));
-}
-
-// A row of the test input (with the four columns `col0`, `col1`, `col2`, and
-// the graph), as integers which are converted via `V`.
-using TestRow = std::vector<int64_t>;
-using TestRows = std::vector<TestRow>;
+// The rows of the test input have the four columns `col0`, `col1`, `col2`, and
+// the graph.
+using permutationPairTestHelpers::scanRelation;
+using permutationPairTestHelpers::TestRow;
+using permutationPairTestHelpers::TestRows;
+using permutationPairTestHelpers::twinRows;
+using permutationPairTestHelpers::V;
 
 inline constexpr size_t NUM_COLUMNS = 4;
 // The blocksize of the permutations, so relations with more than 16 rows are
@@ -72,16 +67,6 @@ inline TestRows concat(const std::vector<TestRows>& relations) {
     result.insert(result.end(), rows.begin(), rows.end());
   }
   return result;
-}
-
-// Return the rows of the twin permutation of the `rows` (columns 1 and 2
-// swapped), sorted.
-inline TestRows twinRows(TestRows rows) {
-  for (auto& row : rows) {
-    std::swap(row[1], row[2]);
-  }
-  ql::ranges::sort(rows);
-  return rows;
 }
 
 // Return the rows `[begin, end)` of the `rows`.
@@ -157,19 +142,9 @@ class TwinWriters {
   // Scan the relation with the given `col0` from the first (`twin == false`)
   // or the second permutation. Return all its rows, including `col0`.
   TestRows scan(int64_t col0, bool twin) const {
-    const auto& blocks = twin ? blocks2_ : blocks1_;
-    CompressedRelationReader reader{
-        ad_utility::makeUnlimitedAllocator<Id>(),
-        ad_utility::File{basename_ + (twin ? ".perm2" : ".perm1"), "r"}};
-    BlockMetadataSpan blockSpan{blocks};
-    BlockMetadataRanges blockRanges{{blockSpan.begin(), blockSpan.end()}};
-    ScanSpecification scanSpec{V(col0), std::nullopt, std::nullopt};
-    static const LocatedTriplesPerBlock emptyLocatedTriples{};
-    auto scanned = reader.scan(
-        CompressedRelationReader::ScanSpecAndBlocks{scanSpec, blockRanges},
-        std::vector<ColumnIndex>{ADDITIONAL_COLUMN_GRAPH_ID},
-        std::make_shared<ad_utility::CancellationHandle<>>(),
-        emptyLocatedTriples, ad_utility::testing::multiThreadExecutor());
+    auto scanned =
+        scanRelation(basename_ + (twin ? ".perm2" : ".perm1"),
+                     twin ? blocks2_ : blocks1_, V(col0), NUM_COLUMNS);
     TestRows rows;
     for (size_t i = 0; i < scanned.numRows(); ++i) {
       TestRow row{col0};
