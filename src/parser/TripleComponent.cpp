@@ -27,6 +27,10 @@ std::ostream& operator<<(std::ostream& stream, const TripleComponent& obj) {
         stream << "DATE: " << v.toStringAndType().first;
       },
       [&stream](bool v) { stream << (v ? "true" : "false"); },
+      [&stream](const TripleComponent::TripleTerm& v) {
+        stream << "<<( " << v.subject() << " " << v.predicate() << " "
+               << v.object() << " )>>";
+      },
       [&stream](const GeoPoint& v) { stream << Id::makeFromGeoPoint(v); },
       [&stream](const auto& v) {
         static_assert(ad_utility::SameAsAny<std::decay_t<decltype(v)>, Id,
@@ -41,4 +45,43 @@ std::ostream& operator<<(std::ostream& stream, const TripleComponent& obj) {
   std::stringstream stream;
   stream << *this;
   return std::move(stream).str();
+}
+
+// ____________________________________________________________________________
+struct ParsedTripleTerm::Components {
+  TripleComponent subject_, predicate_, object_;
+};
+
+// ____________________________________________________________________________
+ParsedTripleTerm::ParsedTripleTerm(TripleComponent subject,
+                                   TripleComponent predicate,
+                                   TripleComponent object)
+    : components_{std::make_shared<const Components>(Components{
+          std::move(subject), std::move(predicate), std::move(object)})} {}
+
+// ____________________________________________________________________________
+const TripleComponent& ParsedTripleTerm::subject() const {
+  AD_CORRECTNESS_CHECK(components_ != nullptr);
+  return components_->subject_;
+}
+
+// ____________________________________________________________________________
+const TripleComponent& ParsedTripleTerm::predicate() const {
+  AD_CORRECTNESS_CHECK(components_ != nullptr);
+  return components_->predicate_;
+}
+
+// ____________________________________________________________________________
+const TripleComponent& ParsedTripleTerm::object() const {
+  AD_CORRECTNESS_CHECK(components_ != nullptr);
+  return components_->object_;
+}
+
+// ____________________________________________________________________________
+bool operator==(const ParsedTripleTerm& a, const ParsedTripleTerm& b) {
+  if (!a.components_ || !b.components_) {
+    return a.components_ == b.components_;
+  }
+  return a.subject() == b.subject() && a.predicate() == b.predicate() &&
+         a.object() == b.object();
 }

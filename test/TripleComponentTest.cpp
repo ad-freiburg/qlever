@@ -3,8 +3,10 @@
 // Author: Johannes Kalmbach(joka921) <johannes.kalmbach@gmail.com>
 //
 
+#include <absl/hash/hash.h>
 #include <gmock/gmock.h>
 
+#include "./util/GTestHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "./util/ParsedQueryTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
@@ -434,4 +436,71 @@ TEST(TripleComponent, toIdOrLocalVocabEntry) {
   expectEntry(LiteralOrIri{Iri::fromIriref("<http://example.org/5a>")});
   expectEntry(
       LiteralOrIri{Literal::literalWithoutQuotes("<http://example.org/69>")});
+}
+
+// _____________________________________________________________________________
+TEST(TripleComponent, recursiveTripleTerm) {
+  auto makeTerm = [](int64_t value) -> TripleComponent {
+    return TripleComponent::TripleTerm{
+        iri("<s>"), iri("<p>"),
+        TripleComponent::TripleTerm{iri("<inner>"), iri("<q>"), value}};
+  };
+  auto term = makeTerm(42);
+  ASSERT_TRUE(term.isTripleTerm());
+  const auto& outer = term.getTripleTerm();
+  EXPECT_EQ(outer.subject(), iri("<s>"));
+  EXPECT_EQ(outer.predicate(), iri("<p>"));
+  ASSERT_TRUE(outer.object().isTripleTerm());
+  EXPECT_EQ(outer.object().getTripleTerm().object(), int64_t{42});
+  auto copy = term;
+  auto moved = std::move(term);
+  term = false;
+  EXPECT_EQ(copy, moved);
+  auto independentlyAllocated = makeTerm(42);
+  EXPECT_EQ(copy, independentlyAllocated);
+  EXPECT_NE(copy, makeTerm(43));
+  EXPECT_EQ(absl::Hash<TripleComponent>{}(copy),
+            absl::Hash<TripleComponent>{}(independentlyAllocated));
+  copy = true;
+  EXPECT_EQ(moved, independentlyAllocated);
+  EXPECT_EQ(moved.toString(), "<<( <s> <p> <<( <inner> <q> 42 )>> )>>");
+  EXPECT_FALSE(moved.getNumber().has_value());
+  TripleComponent assigned;
+  assigned = moved;
+  EXPECT_EQ(assigned, moved);
+  assigned = makeTerm(43);
+  EXPECT_EQ(assigned, makeTerm(43));
+}
+
+// _____________________________________________________________________________
+TEST(TripleComponent, tripleTermConversionsAreUnsupported) {
+  TripleComponent term =
+      TripleComponent::TripleTerm{iri("<s>"), iri("<p>"), lit("object")};
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      (void)toValueIdIfNotString(term, encodedIriManager()),
+      ::testing::HasSubstr(
+          "Converting parsed triple terms to IDs is not supported"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      (void)toRdfLiteral(term),
+      ::testing::HasSubstr(
+          "Converting parsed triple terms to RDF output is not yet supported"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      (void)toRdfLiteralView(term),
+      ::testing::HasSubstr(
+          "Converting parsed triple terms to RDF output is not yet supported"));
+  auto qec = getQec("<s> <p> <o> .");
+  const auto& index = qec->getIndex();
+  LocalVocab localVocab;
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      (void)toValueId(term, index),
+      ::testing::HasSubstr(
+          "Converting parsed triple terms to IDs is not supported"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      (void)toValueIdOrBounds(term, index),
+      ::testing::HasSubstr(
+          "Converting parsed triple terms to IDs is not supported"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      (void)toValueId(std::move(term), index, localVocab),
+      ::testing::HasSubstr(
+          "Converting parsed triple terms to IDs is not supported"));
 }

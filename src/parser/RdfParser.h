@@ -361,6 +361,9 @@ class TurtleParser : public RdfParserBase {
   bool blankNodePropertyList();
   bool objectList();
   bool object();
+  // Parse without asserting the embedded triple or changing the active subject
+  // and predicate. `nquad` selects the stricter N-Triples component rules.
+  bool tripleTerm(bool nquad = false, size_t depth = 0);
   bool verb();
   bool predicateSpecialA();
   bool predicate();

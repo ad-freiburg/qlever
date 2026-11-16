@@ -2862,3 +2862,205 @@ TEST(RdfParserTest, findEndOfLastStatementIgnoresComments) {
   expectIsCompleteStatement("<s> <p> \"unclosed .\n");
   expectIsCompleteStatement("<s> <p> 'unclosed .\n");
 }
+
+// _____________________________________________________________________________
+TEST(RdfParserTest, recursiveTripleTermContents) {
+  auto run = [](auto parser) {
+    parser.setBlankNodePrefixOnlyForTesting(42);
+    parser.setInputStream(
+        "<outer> <relation> <<( _:b <p> <<( <s> <q> \"hello\"@en )>> )>> . "
+        "<next> <r> <o> .");
+    auto triples = parser.parseAndReturnAllTriples();
+    ASSERT_EQ(triples.size(), 2);
+    EXPECT_EQ(triples[0].subject_, iri("<outer>"));
+    EXPECT_EQ(triples[0].predicate_, iri("<relation>"));
+    ASSERT_TRUE(triples[0].object_.isTripleTerm());
+    const auto& term = triples[0].object_.getTripleTerm();
+    EXPECT_EQ(term.subject(), "_:u_42_b");
+    EXPECT_EQ(term.predicate(), iri("<p>"));
+    ASSERT_TRUE(term.object().isTripleTerm());
+    const auto& nested = term.object().getTripleTerm();
+    EXPECT_EQ(nested.subject(), iri("<s>"));
+    EXPECT_EQ(nested.predicate(), iri("<q>"));
+    EXPECT_EQ(nested.object(), lit("hello", "@en"));
+    EXPECT_EQ(triples[1].subject_, iri("<next>"));
+    EXPECT_EQ(triples[1].predicate_, iri("<r>"));
+    EXPECT_EQ(triples[1].object_, iri("<o>"));
+  };
+  run(Re2Parser{encodedIriManager()});
+  run(CtreParser{encodedIriManager()});
+  run(NQuadRe2Parser{encodedIriManager()});
+  run(NQuadCtreParser{encodedIriManager()});
+}
+
+// _____________________________________________________________________________
+TEST(RdfParserTest, turtleTripleTermContents) {
+  auto run = [](auto parser) {
+    parser.setBlankNodePrefixOnlyForTesting(42);
+    parser.setInputStream(
+        "@base <http://example.org/> . @prefix ex: <http://example.org/> . "
+        "ex:outer ex:p <<( [] a 42 )>>, <<( <relative> ex:q true )>>, "
+        "<<( _:b ex:q _:b )>>; ex:next <<( ex:s ex:p ex:o )>> .");
+    auto triples = parser.parseAndReturnAllTriples();
+    ASSERT_EQ(triples.size(), 4);
+    for (const auto& triple : triples) {
+      EXPECT_EQ(triple.subject_, iri("<http://example.org/outer>"));
+      ASSERT_TRUE(triple.object_.isTripleTerm());
+    }
+    const auto& first = triples[0].object_.getTripleTerm();
+    EXPECT_EQ(first.subject(), "_:g_42_0");
+    EXPECT_EQ(first.predicate(),
+              iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"));
+    EXPECT_EQ(first.object(), int64_t{42});
+    const auto& second = triples[1].object_.getTripleTerm();
+    EXPECT_EQ(second.subject(), iri("<http://example.org/relative>"));
+    EXPECT_EQ(second.predicate(), iri("<http://example.org/q>"));
+    EXPECT_EQ(second.object(), true);
+    const auto& third = triples[2].object_.getTripleTerm();
+    EXPECT_EQ(third.subject(), "_:u_42_b");
+    EXPECT_EQ(third.object(), third.subject());
+    EXPECT_EQ(triples[3].predicate_, iri("<http://example.org/next>"));
+    const auto& fourth = triples[3].object_.getTripleTerm();
+    EXPECT_EQ(fourth.subject(), iri("<http://example.org/s>"));
+    EXPECT_EQ(fourth.predicate(), iri("<http://example.org/p>"));
+    EXPECT_EQ(fourth.object(), iri("<http://example.org/o>"));
+  };
+  run(Re2Parser{encodedIriManager()});
+  run(CtreParser{encodedIriManager()});
+}
+
+// _____________________________________________________________________________
+TEST(RdfParserTest, tripleTermErrors) {
+  auto run = [](auto parser) {
+    auto fails = [&parser](const std::string& input, std::string_view message) {
+      parser.setInputStream(input);
+      AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+          (void)parser.parseAndReturnAllTriples(),
+          ::testing::HasSubstr(message), ParseException);
+    };
+    for (const auto& subject :
+         {"\"literal\"", "42", "?s", "(<s>)", "[<p> <o>]"}) {
+      fails(absl::StrCat("<s> <p> <<( ", subject, " <p> <o> )>> ."),
+            "Expected an IRI or blank node as triple-term subject");
+    }
+    fails("<s> <p> <<( <s> _:b <o> )>> .",
+          "Expected an IRI as triple-term predicate");
+    fails("<s> <p> <<( <s> <p> )>> .",
+          "Expected an IRI, blank node, literal, or triple term");
+    fails("<s> <p> <<( <s> <p> <o> .", "Expected )>>");
+    fails("<s> <p> <<( <s> <p> <o> <extra> )>> .", "Expected )>>");
+    fails("<s> <p> <<( <s> <p> (<o>) )>> .",
+          "Expected an IRI, blank node, literal, or triple term");
+    fails("<s> <p> <<( <s> <p> [<p> <o>] )>> .",
+          "Expected an IRI, blank node, literal, or triple term");
+    fails("<s> <p> << <s> <p> <o> >> .",
+          "reification shorthand is not supported");
+    for (const auto& input :
+         {"<<( <s> <p> <o> )>> <p> <o> .", "<s> <<( <s> <p> <o> )>> <o> .",
+          "<s> <p> <<( <<( <s> <p> <o> )>> <p> <o> )>> .",
+          "<s> <p> <<( <s> <<( <s> <p> <o> )>> <o> )>> ."}) {
+      fails(input, "Triple terms are only allowed in object position");
+    }
+    std::string deep = "<s> <p> ";
+    for (size_t i = 0; i < 129; ++i) {
+      deep += "<<( <s> <p> ";
+    }
+    deep += "<o>";
+    for (size_t i = 0; i < 129; ++i) {
+      deep += " )>>";
+    }
+    fails(deep + " .",
+          "Triple-term nesting exceeds the supported limit of 128");
+  };
+  run(Re2Parser{encodedIriManager()});
+  run(CtreParser{encodedIriManager()});
+  run(NQuadRe2Parser{encodedIriManager()});
+  run(NQuadCtreParser{encodedIriManager()});
+}
+
+// _____________________________________________________________________________
+TEST(RdfParserTest, nQuadTripleTermRestrictions) {
+  auto run = [](auto parser) {
+    for (const auto& object : {"42", "true", "[]", "ex:o"}) {
+      parser.setInputStream(
+          absl::StrCat("<s> <p> <<( <s> <p> ", object, " )>> ."));
+      AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+          (void)parser.parseAndReturnAllTriples(),
+          ::testing::HasSubstr(
+              "Expected an IRI, blank node, literal, or triple term"),
+          ParseException);
+    }
+    parser.setInputStream("<s> <p> <<( <s> a <o> )>> .");
+    AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+        (void)parser.parseAndReturnAllTriples(),
+        ::testing::HasSubstr("Expected an IRI as triple-term predicate"),
+        ParseException);
+    parser.setInputStream("<s> <p> <<( <s> <p> <o> )>> <graph> .");
+    auto triples = parser.parseAndReturnAllTriples();
+    ASSERT_EQ(triples.size(), 1);
+    EXPECT_EQ(triples[0].graphIri_, iri("<graph>"));
+    EXPECT_EQ(triples[0].object_.getTripleTerm().object(), iri("<o>"));
+    parser.setInputStream("<s> <p> <o> <<( <s> <p> <o> )>> .");
+    AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+        (void)parser.parseAndReturnAllTriples(),
+        ::testing::HasSubstr(
+            "Triple terms are only allowed in object position"),
+        ParseException);
+  };
+  run(NQuadRe2Parser{encodedIriManager()});
+  run(NQuadCtreParser{encodedIriManager()});
+}
+
+// _____________________________________________________________________________
+TEST(RdfParserTest, tripleTermEncodedIrisAndTypedLiterals) {
+  EncodedIriManager manager{std::vector<std::string>{"http://example.org/"}};
+  ASSERT_TRUE(manager.encode("<http://example.org/1>").has_value());
+  auto run = [](auto parser) {
+    parser.setInputStream(
+        "<http://example.org/1> <p> <<( <http://example.org/2> "
+        "<http://example.org/3> <http://example.org/4> )>> . "
+        "<s> <p> <<( <s> <p> "
+        "\"42\"^^<http://www.w3.org/2001/XMLSchema#integer> )>> . "
+        "<s> <p> <<( <s> <p> \"value\"^^<http://example.org/type> )>> .");
+    auto triples = parser.parseAndReturnAllTriples();
+    ASSERT_EQ(triples.size(), 3);
+    ASSERT_TRUE(triples[0].object_.isTripleTerm());
+    const auto& term = triples[0].object_.getTripleTerm();
+    EXPECT_EQ(term.subject(), iri("<http://example.org/2>"));
+    EXPECT_EQ(term.predicate(), iri("<http://example.org/3>"));
+    EXPECT_EQ(term.object(), iri("<http://example.org/4>"));
+    EXPECT_EQ(triples[1].object_.getTripleTerm().object(), int64_t{42});
+    EXPECT_EQ(triples[2].object_.getTripleTerm().object(),
+              lit("value", "^^<http://example.org/type>"));
+  };
+  run(Re2Parser{&manager});
+  run(CtreParser{&manager});
+  run(NQuadRe2Parser{&manager});
+  run(NQuadCtreParser{&manager});
+}
+
+// _____________________________________________________________________________
+TEST(RdfParserTest, tripleTermsFromFile) {
+  std::string filename = "recursiveTripleTerms.ttl";
+  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
+  std::vector<TurtleTriple> expected;
+  {
+    auto file = ad_utility::makeOfstream(filename);
+    for (size_t i = 0; i < 30; ++i) {
+      file << "<s> <p> <<( <inner> <q> <<( <nested> <r> " << i
+           << " )>> )>> .\n";
+      expected.push_back(
+          {iri("<s>"), iri("<p>"),
+           TripleComponent::TripleTerm{
+               iri("<inner>"), iri("<q>"),
+               TripleComponent::TripleTerm{iri("<nested>"), iri("<r>"),
+                                           static_cast<int64_t>(i)}}});
+    }
+  }
+  auto run = [&](auto type) {
+    using Parser = typename decltype(type)::type;
+    EXPECT_THAT(parseFromFile<Parser>(filename, 256_B),
+                ::testing::UnorderedElementsAreArray(expected));
+  };
+  forAllParsers(run);
+}

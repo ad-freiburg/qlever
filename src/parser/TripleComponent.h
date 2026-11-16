@@ -7,6 +7,7 @@
 #define QLEVER_SRC_PARSER_TRIPLECOMPONENT_H
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <variant>
 
@@ -34,15 +35,44 @@ CPP_concept MoveAssignableWith =
 
 }  // namespace ad_utility::detail
 
+class TripleComponent;
+
+// Immutable, recursively owned parsed contents. Sharing keeps copies cheap;
+// equality and hashing compare contents rather than allocation addresses.
+// The RDF parser enforces the permitted component kinds. This syntactic type
+// does not assign IDs or define SPARQL value equality.
+class ParsedTripleTerm {
+  struct Components;
+  std::shared_ptr<const Components> components_;
+
+ public:
+  ParsedTripleTerm(TripleComponent subject, TripleComponent predicate,
+                   TripleComponent object);
+  // Access requires a non-moved-from term. Copies share immutable contents;
+  // moves transfer ownership, and a moved-from term can be assigned again.
+  const TripleComponent& subject() const;
+  const TripleComponent& predicate() const;
+  const TripleComponent& object() const;
+  friend bool operator==(const ParsedTripleTerm& a, const ParsedTripleTerm& b);
+  friend bool operator!=(const ParsedTripleTerm& a, const ParsedTripleTerm& b) {
+    return !(a == b);
+  }
+  template <typename H>
+  friend H AbslHashValue(H h, const ParsedTripleTerm& term) {
+    return H::combine(std::move(h), term.subject(), term.predicate(),
+                      term.object());
+  }
+};
+
 // A wrapper around a `std::variant` that can hold the different types that the
 // subject, predicate, or object of a triple can have in the Turtle Parser.
-// Those currently are `double` (xsd:double and xsd:decimal), `int64_t`
-// (xsd:int and xsd:integer) and `std::string` (variables, IRIs, and literals
-// of any other type).
+// This includes scalar RDF terms, variables, encoded values, and recursive
+// parsed triple terms.
 class TripleComponent {
  public:
   using Literal = ad_utility::triple_component::Literal;
   using Iri = ad_utility::triple_component::Iri;
+  using TripleTerm = ParsedTripleTerm;
   // Own class for the UNDEF value.
   struct UNDEF {
     // Default equality operator.
@@ -59,7 +89,7 @@ class TripleComponent {
   // The underlying variant type.
   using Variant =
       std::variant<Id, std::string, double, int64_t, bool, UNDEF, Variable,
-                   Literal, Iri, DateYearOrDuration, GeoPoint>;
+                   Literal, Iri, DateYearOrDuration, GeoPoint, TripleTerm>;
   Variant _variant;
 
  public:
@@ -181,6 +211,13 @@ class TripleComponent {
 
   Iri& getIri() { return std::get<Iri>(_variant); }
   const Iri& getIri() const { return std::get<Iri>(_variant); }
+
+  bool isTripleTerm() const {
+    return std::holds_alternative<TripleTerm>(_variant);
+  }
+  const TripleTerm& getTripleTerm() const {
+    return std::get<TripleTerm>(_variant);
+  }
 
   bool isUndef() const { return std::holds_alternative<UNDEF>(_variant); }
 
