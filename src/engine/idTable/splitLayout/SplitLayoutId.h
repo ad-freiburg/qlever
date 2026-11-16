@@ -68,6 +68,11 @@ class SplitLayoutId
   // datatype and the zeroed padding, together 16 bytes.
   T bits_;
 
+  // `IdRef` can refer to the two members of `bits_` (see its constructor from a
+  // `SplitLayoutId&` in `IdRef.h`).
+  template <bool IsConst>
+  friend class BasicIdRef;
+
   // The datatype byte has exactly `numDatatypeBits` bits, so every value of
   // `DatatypeType` fits into the datatype bits (see `fromBits`).
   static_assert(numDatatypeBits == 8 * sizeof(DatatypeType));

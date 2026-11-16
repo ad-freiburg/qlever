@@ -20,6 +20,33 @@
 
 namespace ql {
 
+namespace detail {
+// An iterator can have its own `shiftLeft`, see `BasicIdColumnIterator`.
+template <typename It>
+CPP_requires(hasMemberShiftLeft_,
+             requires(It first, It last)(first.shiftLeft(last, 0)));
+template <typename It>
+CPP_concept HasMemberShiftLeft = CPP_requires_ref(hasMemberShiftLeft_, It);
+
+struct ShiftLeftFn {
+  CPP_template(typename It)(requires ql::concepts::forward_iterator<It>)
+  constexpr It operator()(It first, It last,
+                          ql::iter_difference_t<It> n) const {
+    assert(n >= 0);
+    if constexpr (HasMemberShiftLeft<It>) {
+      return first.shiftLeft(last, n);
+    } else {
+      auto mid = ql::ranges::next(first, n, last);
+      if (n == 0 || mid == last) {
+        return first;
+      }
+      // Unlike the classic `std::move`, this also works for proxy references.
+      return ql::ranges::move(mid, last, first).out;
+    }
+  }
+};
+}  // namespace detail
+
 ///
 // Shifts the elements in the range [first, last) by n positions towards the
 // beginning of the range.
@@ -27,23 +54,11 @@ namespace ql {
 // If n == 0 || n >= last - first, there are no effects.
 // Otherwise, for every integer i in [0, last - first - n), moves the element
 // at position first + n + i to position first + i.
+//
+// A customization point object (like `ql::ranges::swap`): if the iterator has a
+// member `first.shiftLeft(last, n)`, it is used instead.
 ///
-CPP_template(typename ForwardIt)(
-    requires ql::concepts::forward_iterator<ForwardIt>)
-constexpr ForwardIt
-    shift_left(ForwardIt first, ForwardIt last,
-               typename std::iterator_traits<ForwardIt>::difference_type n) {
-  assert(n >= 0);
-  if (n == 0) {
-    return first;
-  }
-
-  auto mid = ql::ranges::next(first, n, last);
-  if (mid == last) {
-    return first;
-  }
-  return std::move(std::move(mid), std::move(last), std::move(first));
-}
+inline constexpr detail::ShiftLeftFn shift_left{};
 
 ///
 // Shifts the elements in the range [first, last) by n positions towards the end
