@@ -2677,6 +2677,9 @@ TEST(SparqlExpression, ReplaceExpression) {
   checkReplaceAbc("b", "[$2]", lit("a[]c"));
   checkReplaceAbc("(a)(b)", "$3$2$1$9", lit("bac"));
   checkReplaceAbc("(b)", "$10", lit("ab0c"));
+  // A group that exists but did not participate in the match is empty.
+  checkReplaceAbc("(x)?b", "[$1]", lit("a[]c"));
+  checkReplaceAbc("(a)|(b)", "[$1|$2]", lit("[a|][|b]c"));
   // An unescaped `$` that is not followed by a digit, or a `\` that is not
   // followed by `\` or `$`, is an error.
   checkReplaceAbc("b", "$", U);
