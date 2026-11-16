@@ -159,7 +159,8 @@ TEST(TextIndexScanForWord, TextScoringMetric) {
   ASSERT_EQ(getTextScoringMetricAsString(EXPLICIT), "explicit");
   ASSERT_EQ(getTextScoringMetricAsString(TFIDF), "tf-idf");
   ASSERT_EQ(getTextScoringMetricAsString(BM25), "bm25");
-  ASSERT_EQ(getTextScoringMetricAsString(static_cast<TextScoringMetric>(999)),
+  ASSERT_EQ(getTextScoringMetricAsString(
+                static_cast<TextScoringMetric>(enumSize<TextScoringMetric>)),
             "explicit");
 
   ASSERT_EQ(getTextScoringMetricFromString("explicit"), EXPLICIT);

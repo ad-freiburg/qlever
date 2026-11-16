@@ -110,6 +110,14 @@ TEST(RowNumber, maxRowNumber) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       makeRowNumber(Id::maxInt - 1).computeResultOnlyForTesting(false),
       HasSubstr("exceed the maximum integer value"));
+
+  // An offset beyond the maximum integer value throws as well (with the split
+  // layout, there is no such `int64_t`).
+#ifndef QLEVER_USE_SPLIT_LAYOUT
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      makeRowNumber(Id::maxInt + 2).computeResultOnlyForTesting(false),
+      HasSubstr("exceed the maximum integer value"));
+#endif
 }
 
 // Test that any order that starts with the row number column is provided
