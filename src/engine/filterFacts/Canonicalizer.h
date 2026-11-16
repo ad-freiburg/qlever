@@ -18,15 +18,17 @@
 #include "global/ValueIdComparators.h"
 #include "parser/TripleComponent.h"
 
-// The recognition of facts in FILTERs. A FILTER can be written in many
-// equivalent ways, for example `geof:distance(?a, ?b, unit:M) <= 500`,
-// `geof:distance(?a, ?b) <= 0.5`, or as one of several conditions combined
-// with `&&`. A rewrite of the query (e.g. to a `SpatialJoin`) should not have
-// to match each of them. Instead, each FILTER is brought into a canonical form
-// (`canonicalize`, this file), in which typed facts are recognized (see
-// `Recognizers.h`). The rewrites only use these facts.
+// The recognition of facts in FILTERs. Each FILTER is brought into a canonical
+// form (`canonicalize`, this file), in which typed facts are recognized (see
+// `Recognizers.h`). The rewrites of the query (e.g. to a `SpatialJoin`) only
+// use these facts.
 //
-// NOTE: The canonical form only models the shapes that the recognizers need.
+// NOTE 1: A FILTER can be written in many equivalent ways, for example
+// `geof:distance(?a, ?b, unit:M) <= 500`, `geof:distance(?a, ?b) <= 0.5`, or
+// as one of several conditions combined with `&&`. A rewrite should not have
+// to match each of them.
+//
+// NOTE 2: The canonical form only models the shapes that the recognizers need.
 // Every other expression stays `Opaque`, so it is never rewritten.
 namespace filterFacts {
 
