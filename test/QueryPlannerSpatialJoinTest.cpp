@@ -1669,8 +1669,9 @@ TEST(QueryPlanner, SpatialJoinDistanceVariableFromBindResult) {
 // the spatial condition, because the `SpatialJoin` would not check that the
 // values of such a variable are equal.
 TEST(QueryPlanner, SpatialJoinChildrenShareNoVariable) {
-  // A region `<f1>` that contains 50 points `<r...> <p> ...` and 50 points `<t...>
-  // <q> ...`, of which only `<t0>` is close to the `<r...>`. A second region
+  // A region `<f1>` that contains 50 points `<r...> <p> ...` and 50 points
+  // `<t...> <q> ...`, of which only `<t0>` is close to the `<r...>`. A second
+  // region
   // `<f2>` contains `<t0>` and the `<r...>` as well. Further points `<u...> <q>
   // ...` in no region make it cheap to join `?f <contains> ?t` and `?t <q> ?tg`
   // before the `SpatialJoin`.
