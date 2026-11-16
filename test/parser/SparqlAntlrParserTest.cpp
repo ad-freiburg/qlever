@@ -252,7 +252,7 @@ TEST(SparqlParser, TripleTermTranslationNotSupported) {
         "<<( ?s <p> <<(?s <p> ?o)>> )>>"}) {
     SCOPED_TRACE(input);
     auto fails = testing::HasSubstr(
-        "Triple terms in SPARQL patterns are currently not supported by "
+        "The triple-term syntax <<( ... )>> is currently not supported by "
         "QLever.");
     AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(parse<&Parser::varOrTerm>(input),
                                           fails, NotSupportedException);

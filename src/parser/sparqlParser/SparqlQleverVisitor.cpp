@@ -2686,9 +2686,12 @@ GraphTerm Visitor::visit(Parser::VarOrTermContext* ctx) {
 
 // ____________________________________________________________________________________
 GraphTerm Visitor::visit(Parser::TripleTermContext* ctx) {
-  // TODO<Prashanth0703> Translate `tripleTerm` once a recursive representation
-  // and evaluation are available. Mentioning a triple term must not assert it.
-  reportNotSupported(ctx, "Triple terms in SPARQL patterns are");
+  // TODO<Prashanth0703> Translate the triple term once `GraphTerm` can
+  // represent one. A triple term in a pattern only matches a triple term in
+  // the data, it does not assert the contained triple. A triple term in the
+  // subject position never matches, because an RDF triple cannot have a
+  // triple term as its subject (SPARQL 1.2, definition of a triple pattern).
+  reportNotSupported(ctx, "The triple-term syntax <<( ... )>> is");
 }
 
 // ____________________________________________________________________________________
