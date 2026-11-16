@@ -641,6 +641,8 @@ addLinkAndDiscoverTest(GeoCellGridTest vocabulary)
 
 addLinkAndDiscoverTest(QueryRewriteUtilTest engine)
 
+addLinkAndDiscoverTest(FilterFactsTest filterFacts sparqlParser)
+
 addLinkAndDiscoverTest(HttpErrorTest engine)
 
 addLinkAndDiscoverTest(TimeTracerTest)
@@ -682,6 +684,8 @@ addLinkAndDiscoverTest(ConstructBatchEvaluatorTest engine)
 addLinkAndDiscoverTest(ExportIdsTest engine sparqlParser)
 
 addLinkAndDiscoverTestNoLibs(EnumWithStringsTest Boost::program_options)
+
+addLinkAndDiscoverTestNoLibs(EnumSizeTest)
 
 addLinkAndDiscoverTest(ConstructTripleGeneratorTest engine)
 
