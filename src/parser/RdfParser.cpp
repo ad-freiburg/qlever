@@ -621,6 +621,101 @@ bool NQuadParser<T>::nQuadGraphLabel() {
   return false;
 }
 
+// _____________________________________________________________________________
+template <typename T>
+bool TriGParser<T>::statement() {
+  return Base::directive() || block();
+}
+
+// _____________________________________________________________________________
+template <typename T>
+bool TriGParser<T>::block() {
+  // [2g] block ::= "GRAPH" labelOrSubject wrappedGraph | triplesOrGraph
+  //              | wrappedGraph | triples2
+  return namedGraph() || triplesOrGraph() || wrappedGraph() ||
+         (Base::triples() && this->template skip<TurtleTokenId::Dot>());
+}
+
+// _____________________________________________________________________________
+template <typename T>
+bool TriGParser<T>::namedGraph() {
+  // namedGraph ::= "GRAPH" labelOrSubject wrappedGraph
+  if (!this->template parseTerminal<TurtleTokenId::SparqlGraph>()) {
+    return false;
+  }
+
+  // if GRAPH keyword, then label must follow
+  this->check(labelOrSubject());
+
+  // label switch
+  auto savedGraph = this->defaultGraphIri_;
+  this->defaultGraphIri_ = this->lastParseResult_;
+
+  // if GRAPH keyword and label then wrappedGraph must follow
+  this->check(wrappedGraph());
+  this->defaultGraphIri_ = savedGraph;
+  return true;
+}
+
+// _____________________________________________________________________________
+template <typename T>
+bool TriGParser<T>::triplesOrGraph() {
+  // no starting label for graph or subject means - not fulfilled
+  if (!labelOrSubject()) {
+    return false;
+  }
+
+  // possible label switch, need to prepare now
+  auto label = this->lastParseResult_;
+  auto savedGraph = this->defaultGraphIri_;
+  this->defaultGraphIri_ = label;
+
+  // check whether it is actually graph coming next or not
+  if (wrappedGraph()) {
+    this->defaultGraphIri_ = savedGraph;
+    return true;
+  }
+
+  // return to the default graph
+  this->defaultGraphIri_ = savedGraph;
+
+  // it was a plain subject all along, activeSubject_ already set, from
+  // labelOrSubject()
+  this->check(Base::predicateObjectList());
+  this->check(this->template skip<TurtleTokenId::Dot>());
+  return true;
+}
+
+// _____________________________________________________________________________
+template <typename T>
+bool TriGParser<T>::labelOrSubject() {
+  if (!(Base::iri() || Base::blankNodeLabel())) {
+    return false;
+  }
+  this->activeSubject_ = this->lastParseResult_;
+  return true;
+}
+
+template <typename T>
+bool TriGParser<T>::wrappedGraph() {
+  // no leading open { means that it is not a wrapped graph
+  if (!this->template parseTerminal<TurtleTokenId::OpenCurly>()) {
+    return false;
+  }
+
+  // keep checking for the triples, here cannot be do decleratives
+  while (!this->template skip<TurtleTokenId::CloseCurly>()) {
+    this->check(Base::triples());
+
+    // if no dot after the triples,
+    if (!this->template skip<TurtleTokenId::Dot>()) {
+      this->check(this->template skip<TurtleTokenId::CloseCurly>());
+      break;
+    }
+  }
+  return true;
+}
+
 // ______________________________________________________________________
 template <class T>
 bool TurtleParser<T>::rdfLiteralImpl(bool allowMultilineLiterals) {

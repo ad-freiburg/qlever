@@ -520,6 +520,27 @@ class NQuadParser : public TurtleParser<Tokenizer_T> {
   bool nQuadLiteral();
 };
 
+// Parser supporting the TriG format: https://www.w3.org/TR/trig/. This allows
+// assigning to triples different graphs, similar as in N-Quad, but keeping the
+// turtle format.
+template <class Tokenizer_T>
+class TriGParser : public TurtleParser<Tokenizer_T> {
+  using Base = TurtleParser<Tokenizer_T>;
+
+ public:
+  using Base::Base;
+
+ protected:
+  bool statement() override;
+
+ private:
+  bool block();
+  bool labelOrSubject();
+  bool wrappedGraph();
+  bool triplesOrGraph();
+  bool namedGraph();
+};
+
 /**
  * Parses turtle from std::string. Used to perform unit tests for
  * the different parser rules
