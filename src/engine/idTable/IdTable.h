@@ -976,7 +976,12 @@ using DefaultAllocator =
     ad_utility::default_init_allocator<Id, ad_utility::AllocatorWithLimit<Id>>;
 // The storage of a column of an `IdTable`. The types of its columns and
 // elements (`IdColumnRef`, `IdRef` etc. below) follow from it.
+#ifndef QLEVER_USE_SPLIT_LAYOUT
 using IdVector = std::vector<Id, DefaultAllocator>;
+#else
+using IdVector =
+    columnBasedIdTable::splitLayout::IdColumnVector<DefaultAllocator>;
+#endif
 }  // namespace detail
 
 /// The general IdTable class. Can be modified and owns its data. If COLS > 0,
@@ -1089,10 +1094,18 @@ static_assert(!qlever::isProxy<IdTableView<3>>);
 // Type aliases for the columns of an `IdTable` (a mutable view, a read-only
 // view, and an owning column) and for the references to a single element (a
 // mutable and a const one). They follow from the column storage
-// `detail::IdVector`, so they are `ql::span<Id>`, `ql::span<const Id>`, `Id&`
-// and `const Id&`. `IdColumn` is an owning column with the default allocator
-// that is not part of an `IdTable`, a `std::vector<Id>`.
+// `detail::IdVector`: without `USE_SPLIT_LAYOUT` they are `ql::span<Id>`,
+// `ql::span<const Id>`, `Id&` and `const Id&`. With it, an `IdTable` stores the
+// payload and the datatype of each `Id` in two separate arrays, and they are
+// views of these two arrays and proxies. `IdColumn` is an owning column with
+// the default allocator that is not part of an `IdTable`, a `std::vector<Id>`
+// or an `IdColumnVector`.
+#ifndef QLEVER_USE_SPLIT_LAYOUT
 using IdColumn = std::vector<Id>;
+#else
+using IdColumn =
+    columnBasedIdTable::splitLayout::IdColumnVector<std::allocator<Id>>;
+#endif
 
 namespace detail {
 using IdVectorTraits = columnBasedIdTable::ColumnStorageTraits<IdVector, Id>;
