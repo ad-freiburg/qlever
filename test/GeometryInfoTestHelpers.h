@@ -5,8 +5,11 @@
 #ifndef QLEVER_TEST_GEOMETRYINFOTESTHELPERS_H
 #define QLEVER_TEST_GEOMETRYINFOTESTHELPERS_H
 
+#include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 #include <util/geo/Geo.h>
+
+#include <boost/type_index.hpp>
 
 #include "./printers/GeometryInfoPrinters.h"
 #include "rdfTypes/GeometryInfo.h"
@@ -115,11 +118,13 @@ inline auto geoInfoMatcher = liftOptionalMatcher<GeometryInfo>(
 
 // Return a matcher that applies `matcher` to the result of
 // `getRequestedInfo<T>` for a `GeometryInfo` instance or a WKT literal (type
-// `Input`).
+// `Input`). The name of `T` is part of the mismatch message, so that it says
+// which of the requested types did not match.
 template <typename T, typename Input, typename M>
 auto requestedInfoIs(M matcher) {
   return ResultOf(
-      "`getRequestedInfo`",
+      absl::StrCat("`getRequestedInfo<",
+                   boost::typeindex::type_id<T>().pretty_name(), ">`"),
       [](const Input& input) {
         if constexpr (std::is_same_v<Input, GeometryInfo>) {
           return input.template getRequestedInfo<T>();
