@@ -224,7 +224,8 @@ inline NumericOperandClassification classifyNumericOperand(ValueId value) {
 }
 
 // Classify a supported operand representation. Constants are classified
-// directly, while vector-like operands are viewed as spans of `ValueId`.
+// directly. Vectors of `ValueId` are viewed as spans, so that they share one
+// instantiation, and the columns of the split layout are passed on as they are.
 template <bool IncludeDates = false, typename Operand>
 inline NumericOperandClassification classifyNumericOperand(
     const Operand& operand, const EvaluationContext* context) {

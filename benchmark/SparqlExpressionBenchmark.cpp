@@ -606,9 +606,6 @@ class SparqlExpressionBenchmark : public BenchmarkInterface {
     mixedCases.push_back(mixedCase(
         "30% integer, 25% double, 25% bool, 20% vocab index",
         {{Int, 6}, {Double, 5}, {Bool, 5}, {VocabIndex, 4}}, NumericType::Int));
-    auto columnOf = [](const IdColumn& storage) {
-      return ConstIdColumnRef{storage};
-    };
 
     auto legacyVectorVector = makeLegacyVectorVectorExpression();
     auto newVectorVector = makeNewVectorVectorExpression();
@@ -661,7 +658,7 @@ class SparqlExpressionBenchmark : public BenchmarkInterface {
     };
 
     for (const auto& mixed : mixedCases) {
-      warmUpMixedCase(columnOf(mixed.storage_), rightIds);
+      warmUpMixedCase(ConstIdColumnRef{mixed.storage_}, rightIds);
     }
 
     BenchmarkResults results{};
@@ -780,7 +777,7 @@ class SparqlExpressionBenchmark : public BenchmarkInterface {
     // (speculative or generic, depending on the majority type), and the
     // classification alone.
     for (const auto& mixed : mixedCases) {
-      const auto left = columnOf(mixed.storage_);
+      const ConstIdColumnRef left = mixed.storage_;
       const std::string suffix = absl::StrCat(mixed.name_, ", 100k rows x 50");
       results.addMeasurement(
           absl::StrCat("Generic mixed add: ", suffix), [&]() {

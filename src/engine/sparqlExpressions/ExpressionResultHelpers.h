@@ -70,7 +70,9 @@ auto makeIndexedValueGetter(Operand&& operand, EvaluationContext* context) {
     // getters, but should be revisited for move-sensitive value types.
     return [&operand, context](size_t i) {
       if constexpr (qlever::isProxy<std::decay_t<decltype(operand[i])>>) {
-        // An element of a split column, as the `Id` it refers to.
+        // An element of a split column is passed on as the `Id` it refers to.
+        // The value getters take a `ValueId` or an `IdOrLocalVocabEntry`, and
+        // the proxy converts to both, so the call would be ambiguous.
         return ValueGetter{}(Id{operand[i]}, context);
       } else {
         return ValueGetter{}(operand[i], context);
