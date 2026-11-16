@@ -167,7 +167,8 @@ class AsyncTransformView
     const Transformation& transformation_;
     ql::any_io_executor executor_;
     size_t maxNumRunners_;
-    // One more runner is started per this many queued slots.
+    // One more runner is started per this many unfinished slots (queued or
+    // held by a runner).
     size_t numSlotsPerRunner_;
     // After this time, a runner ends and the remaining slots are left to a
     // runner that is posted to the end of the queue of the `executor_`.
