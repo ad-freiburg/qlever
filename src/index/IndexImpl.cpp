@@ -942,27 +942,6 @@ inline void atomicMax(std::atomic<uint64_t>& maximum, uint64_t value) {
   while (current < value && !maximum.compare_exchange_weak(current, value)) {
   }
 }
-
-// If the graph of the `triple` is a graph that QLever has created itself (an
-// encoded IRI with the given `newGraphPrefixIdx`), return the index after the
-// one that is encoded in it. Else return `std::nullopt`.
-template <typename Triple>
-std::optional<uint64_t> nextIndexAfterInternalGraph(
-    const Triple& triple, uint64_t newGraphPrefixIdx) {
-  const auto& graph = triple[3];
-  if (graph.getDatatype() != Datatype::EncodedVal) {
-    return std::nullopt;
-  }
-  // NOTE: The payload may only be decoded after the prefix has been
-  // checked, because the payload of a general pattern is not a single
-  // decimal number (see `EncodedIriManager`).
-  auto [prefix, payload] =
-      EncodedIriManager::splitIntoPrefixIdxAndPayload(graph);
-  if (prefix != newGraphPrefixIdx) {
-    return std::nullopt;
-  }
-  return EncodedIriManager::decodeDecimalFrom64Bit(payload) + 1;
-}
 }  // namespace
 
 // _____________________________________________________________________________
@@ -2265,20 +2244,26 @@ void IndexImpl::createPSOAndPOSImpl(size_t numColumns, Input sortedTriples,
     return std::move(prefix).value();
   }();
   auto determineNextAvailableInternalGraph =
-      [&nextAvailableIndex, newGraphPrefixIdx](const IdTableStatic<0>& block) {
-        uint64_t maxOfBlock = 0;
-        for (const auto& triple : block) {
-          auto next = nextIndexAfterInternalGraph(triple, newGraphPrefixIdx);
-          if (next.has_value()) {
-            maxOfBlock = std::max(maxOfBlock, next.value());
-          }
+      [&nextAvailableIndex, newGraphPrefixIdx](const auto& triple) mutable {
+        const auto& graph = triple[3];
+        if (graph.getDatatype() != Datatype::EncodedVal) {
+          return;
         }
-        atomicMax(nextAvailableIndex, maxOfBlock);
+        // NOTE: The payload may only be decoded after the prefix has been
+        // checked, because the payload of a general pattern is not a single
+        // decimal number (see `EncodedIriManager`).
+        auto [prefix, payload] =
+            EncodedIriManager::splitIntoPrefixIdxAndPayload(graph);
+        if (prefix != newGraphPrefixIdx) {
+          return;
+        }
+        atomicMax(nextAvailableIndex,
+                  EncodedIriManager::decodeDecimalFrom64Bit(payload) + 1);
       };
   size_t numPredicates =
       createPermutationPair(numColumns, std::move(sortedTriples), *pso_, *pos_,
                             pushToNextSorter(nextSorter)..., countTriples,
-                            determineNextAvailableInternalGraph);
+                            liftCallback(determineNextAvailableInternalGraph));
   configurationJson_["num-predicates"] =
       NumNormalAndInternal::fromNormal(numPredicates);
   configurationJson_["num-triples"] =
@@ -2308,7 +2293,7 @@ std::optional<PatternCreator::TripleSorter> IndexImpl::createSPOAndSOP(
   std::optional<PatternCreator::TripleSorter> result;
   if (usePatterns_) {
     // The pattern creation needs the triples in order.
-    AD_CONTRACT_CHECK(
+    AD_CORRECTNESS_CHECK(
         (!ad_utility::isInstantiation<Input, ChunkwiseInput>),
         "The patterns can't be built while the SPO and SOP permutations are "
         "written chunkwise");
