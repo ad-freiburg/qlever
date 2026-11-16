@@ -5,6 +5,7 @@
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 #include <absl/cleanup/cleanup.h>
+#include <absl/functional/any_invocable.h>
 #include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -15,6 +16,7 @@
 #include <boost/asio/use_future.hpp>
 #include <chrono>
 #include <future>
+#include <thread>
 #include <tuple>
 
 #include "../../util/AllocatorTestHelpers.h"
@@ -1832,6 +1834,55 @@ TEST(CompressedExternalIdTable, asyncPushBlock) {
   // Mixing the concurrent pushes with sequential ones.
   testAsyncPushBlock(tables, 64, 20);
   testAsyncPushBlock(tables, 100'000, 20);
+}
+
+// _____________________________________________________________________________
+// The callback of `makeAsyncPushBlockCallback` pushes its blocks via
+// `asyncPushBlock` (also from several threads at the same time), keeps them
+// alive until the push has completed, and reports the completion to its `done`
+// callback.
+TEST(CompressedExternalIdTable, makeAsyncPushBlockCallback) {
+  auto alloc = ad_utility::testing::makeAllocator();
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
+  std::string filename = absl::StrCat(gtestCurrentTestName(), ".dat");
+  absl::Cleanup cleanup = [&filename] {
+    ad_utility::deleteFile(filename, false);
+  };
+  // The pool has to outlive the sorter, see `setMergeExecutor`.
+  net::thread_pool pool{4};
+  ad_utility::CompressedExternalIdTableSorter<SortByOSP, 0> sorter{
+      filename, NUM_COLS, memoryForBlocksize(64, NUM_COLS), alloc};
+  sorter.setMergeExecutor(pool.get_executor(), 4);
+  auto callback = sorter.makeAsyncPushBlockCallback();
+
+  IdTable expected{NUM_COLS, alloc};
+  std::vector<std::future<std::exception_ptr>> results;
+  std::vector<std::thread> threads;
+  for (size_t i = 0; i < 8; ++i) {
+    auto table = createRandomlyFilledIdTable(200 + 37 * i, NUM_COLS);
+    expected.insertAtEnd(table);
+    // Only the callback holds on to the block, so it has to keep it alive.
+    auto block = std::make_shared<const IdTableStatic<0>>(std::move(table));
+    std::promise<std::exception_ptr> promise;
+    results.push_back(promise.get_future());
+    absl::AnyInvocable<void(std::exception_ptr) &&> done =
+        [promise = std::move(promise)](std::exception_ptr e) mutable {
+          promise.set_value(std::move(e));
+        };
+    threads.emplace_back([&callback, block = std::move(block),
+                          done = std::move(done)]() mutable {
+      callback(std::move(block), std::move(done));
+    });
+  }
+  for (auto& thread : threads) {
+    thread.join();
+  }
+  for (auto& result : results) {
+    EXPECT_EQ(result.get(), nullptr);
+  }
+  EXPECT_EQ(sorter.size(), expected.numRows());
+  ql::ranges::sort(expected, SortByOSP{});
+  EXPECT_THAT(sortedOutput(sorter), ::testing::ElementsAreArray(expected));
 }
 
 // The tests below cover the output of the sorter as the input of an external
