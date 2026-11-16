@@ -11,6 +11,7 @@
 #include "rdfTypes/GeometryInfo.h"
 
 #include <absl/base/casts.h>
+#include <absl/strings/str_cat.h>
 
 #include <array>
 #include <cmath>
@@ -26,11 +27,8 @@
 
 namespace ad_utility {
 
-// `util` is only included in this file (GeometryInfoHelpersImpl.h) and not in
-// `GeometryInfo.h`. In `SparqlExpressionValueGetters.h` `CRSTypeValueGetter`
-// can only be declared using `GeometryInfo.h`s forward declaration of
-// `util::geo::CRSType` and its constant `crsTypeUnsupported`. We need to check
-// that the constant actually matches `CRSType::UNSUPPORTED`.
+// Check that the constant `crsTypeUnsupported` of `GeometryInfo.h` (which only
+// forward-declares `CRSType`) is the enum value it stands for.
 static_assert(crsTypeUnsupported == ::util::geo::CRSType::UNSUPPORTED);
 
 // ____________________________________________________________________________
@@ -223,15 +221,10 @@ std::optional<std::string_view> SourceCrsType::asIri() const {
 
 // _____________________________________________________________________________
 ::util::geo::CRSType SourceCrsType::iriToCrsType(std::string_view uri) {
-  // `::util::geo::getCRSType` expects the input string to be wrapped in
-  // angle brackets (e.g., <http://...>) and returns a default value
-  // (CRS84) if the opening bracket is missing. We wrap the content here
-  // to ensure that `::util::geo::getCRSType` handles the IRIs correctly.
-  std::string content{uri};
-  if (content.empty() || content.front() != '<') {
-    content = "<" + content + ">";
-  }
-  return ::util::geo::getCRSType(content);
+  // Wrap the IRI in angle brackets, because `getCRSType` parses the CRS
+  // prefix of a WKT literal (`<http://...> POINT(...)`) and treats a missing
+  // opening bracket as "no CRS given", which is CRS84 and not `UNSUPPORTED`.
+  return ::util::geo::getCRSType(absl::StrCat("<", uri, ">"));
 }
 
 // ____________________________________________________________________________
