@@ -49,9 +49,9 @@ std::string CountAvailablePredicates::getDescriptor() const {
 size_t CountAvailablePredicates::getResultWidth() const { return 2; }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> CountAvailablePredicates::resultSortedOn() const {
+qlm::vector<ColumnIndex> CountAvailablePredicates::resultSortedOn() const {
   // The result is not sorted on any column.
-  return {};
+  return qlm::vector<ColumnIndex>{allocator()};
 }
 
 // _____________________________________________________________________________

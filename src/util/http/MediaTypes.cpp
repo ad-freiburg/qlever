@@ -11,8 +11,8 @@
 #include "util/Algorithm.h"
 #include "util/StringUtils.h"
 #include "util/antlr/ANTLRErrorHandling.h"
-#include "util/http/HttpParser/AcceptHeaderQleverVisitor.h"
-#include "util/http/HttpParser/generated/AcceptHeaderLexer.h"
+#include "util/http/httpParser/AcceptHeaderQleverVisitor.h"
+#include "util/http/httpParser/generated/AcceptHeaderLexer.h"
 
 using std::string;
 namespace ad_utility {

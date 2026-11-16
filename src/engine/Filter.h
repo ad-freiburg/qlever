@@ -35,7 +35,7 @@ class Filter : public Operation {
  public:
   std::string getDescriptor() const override;
 
-  std::vector<ColumnIndex> resultSortedOn() const override {
+  qlm::vector<ColumnIndex> resultSortedOn() const override {
     return _subtree->resultSortedOn();
   }
 
@@ -46,6 +46,10 @@ class Filter : public Operation {
   size_t getCostEstimate() override;
 
   std::shared_ptr<QueryExecutionTree> getSubtree() const { return _subtree; }
+
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithStrippedColumns(
+      const std::set<Variable>& requestedVariables) const override;
 
  private:
   qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
@@ -62,7 +66,7 @@ class Filter : public Operation {
   std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
       const parsedQuery::Bind& bind) const override;
   std::unique_ptr<Operation> cloneWithNewChildren(
-      std::vector<std::shared_ptr<QueryExecutionTree>> children) const override;
+      qlm::vector<std::shared_ptr<QueryExecutionTree>> children) const override;
 
  private:
   [[nodiscard]] bool isDeterministicImpl() const override;

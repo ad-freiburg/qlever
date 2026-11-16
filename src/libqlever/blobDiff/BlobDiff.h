@@ -17,8 +17,8 @@
 #include <vector>
 
 #include "backports/span.h"
-#include "util/MemorySize/MemorySize.h"
 #include "util/UninitializedAllocator.h"
+#include "util/memorySize/MemorySize.h"
 
 namespace qlever::blobDiff {
 

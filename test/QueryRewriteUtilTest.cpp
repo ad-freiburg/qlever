@@ -4,6 +4,9 @@
 
 #include <gtest/gtest.h>
 
+#include <cmath>
+#include <limits>
+
 #include "./QueryRewriteUtilTestHelpers.h"
 #include "./util/IndexTestHelpers.h"
 #include "engine/QueryExecutionTree.h"
@@ -45,6 +48,79 @@ TEST(QueryRewriteUtilTest, GetGeoDistanceExpressionParameters) {
 
   auto [expr4, exp4] = makeUnrelated();
   checkGeoDistanceCall(getGeoDistanceExpressionParameters(*expr4), exp4);
+
+  // An unsupported expression type (neither a variable, `IdExpression`, nor
+  // `StringLiteralExpression`) as the left or right argument is rejected.
+  auto unsupportedLeftPtr = makeMetricDistExpression(
+      makePowExpression(getExpr(V{"?a"}), getExpr(V{"?c"})), getExpr(V{"?b"}));
+  checkGeoDistanceCall(getGeoDistanceExpressionParameters(*unsupportedLeftPtr),
+                       std::nullopt);
+  auto unsupportedRightPtr = makeMetricDistExpression(
+      getExpr(V{"?a"}), makePowExpression(getExpr(V{"?b"}), getExpr(V{"?c"})));
+  checkGeoDistanceCall(getGeoDistanceExpressionParameters(*unsupportedRightPtr),
+                       std::nullopt);
+}
+
+// Test that a unit given as a variable is replaced by its constant from
+// `constantOfVariable`.
+TEST(QueryRewriteUtilTest, GetGeoDistanceExpressionParametersUnitVariable) {
+  // `geof:distance(?a, ?b, ?u)` and the constants of `?u`.
+  auto expr = makeDistWithUnitExpression(getExpr(V{"?a"}), getExpr(V{"?b"}),
+                                         getExpr(V{"?u"}));
+  auto miles = TripleComponent{
+      Iri::fromIrirefWithoutBrackets("http://qudt.org/vocab/unit/MI")};
+  auto meters = TripleComponent{Literal::fromStringRepresentation(absl::StrCat(
+      "\"http://qudt.org/vocab/unit/M\"^^<", XSD_ANYURI_TYPE, ">"))};
+  auto constantOf = [](std::optional<TripleComponent> constant) {
+    return [constant](const Variable& variable) {
+      EXPECT_EQ(variable, V{"?u"});
+      return constant;
+    };
+  };
+
+  // The unit is the IRI or the `xsd:anyURI` literal of `?u`.
+  checkGeoDistanceCall(
+      getGeoDistanceExpressionParameters(*expr, constantOf(miles)),
+      GeoDistanceCall{{WITHIN_DIST, V{"?a"}, V{"?b"}}, MILES});
+  checkGeoDistanceCall(
+      getGeoDistanceExpressionParameters(*expr, constantOf(meters)),
+      GeoDistanceCall{{WITHIN_DIST, V{"?a"}, V{"?b"}}, METERS});
+
+  // Without a constant of `?u` (no `constantOfVariable`, `std::nullopt`, a
+  // number or `UNDEF`), the call is not recognized.
+  checkGeoDistanceCall(getGeoDistanceExpressionParameters(*expr), std::nullopt);
+  checkGeoDistanceCall(
+      getGeoDistanceExpressionParameters(*expr, constantOf(std::nullopt)),
+      std::nullopt);
+  checkGeoDistanceCall(getGeoDistanceExpressionParameters(
+                           *expr, constantOf(TripleComponent{int64_t{5}})),
+                       std::nullopt);
+  checkGeoDistanceCall(
+      getGeoDistanceExpressionParameters(
+          *expr, constantOf(TripleComponent{TripleComponent::UNDEF{}})),
+      std::nullopt);
+
+  // A unit that is neither a constant nor a variable is not recognized.
+  auto unitPow = makeDistWithUnitExpression(
+      getExpr(V{"?a"}), getExpr(V{"?b"}),
+      makePowExpression(getExpr(V{"?u"}), getExpr(V{"?c"})));
+  checkGeoDistanceCall(
+      getGeoDistanceExpressionParameters(*unitPow, constantOf(miles)),
+      std::nullopt);
+
+  // An IRI or literal of `?u` that is not a unit gives `UNKNOWN`, as for a unit
+  // written directly in the call.
+  auto unknown = GeoDistanceCall{{WITHIN_DIST, V{"?a"}, V{"?b"}}, UNKNOWN};
+  checkGeoDistanceCall(
+      getGeoDistanceExpressionParameters(
+          *expr, constantOf(TripleComponent{Iri::fromIrirefWithoutBrackets(
+                     "http://example.org/nexistepas")})),
+      unknown);
+  checkGeoDistanceCall(
+      getGeoDistanceExpressionParameters(
+          *expr, constantOf(TripleComponent{
+                     Literal::fromStringRepresentation("\"m\"")})),
+      unknown);
 }
 
 // _____________________________________________________________________________
@@ -71,15 +147,32 @@ TEST(QueryRewriteUtilTest, GetGeoDistanceFilter) {
   auto expr4 = leSprql(std::move(dExpr4), D(10));
   checkGeoDistanceFilter(getGeoDistanceFilter(*expr4), dExp4, 10);
 
-  // "<" relation is unsupported
+  // "<" relation: the maximum distance is the largest `double` below the
+  // constant.
   auto [dExpr5, dExp5] = makeMetricDist();
   auto expr5 = ltSprql(std::move(dExpr5), D(10));
-  checkGeoDistanceFilter(getGeoDistanceFilter(*expr5), std::nullopt, 10);
+  auto filter5 = getGeoDistanceFilter(*expr5);
+  checkGeoDistanceFilter(filter5, dExp5, 10);
+  EXPECT_LT(filter5.value().second, 10.0);
+  EXPECT_EQ(filter5.value().second,
+            std::nextafter(10.0, -std::numeric_limits<double>::infinity()));
 
   // Non-numeric comparison is unsupported
   auto [dExpr6, dExp6] = makeMetricDist();
   auto expr6 = ltSprql(std::move(dExpr6), ValueId::makeFromGeoPoint({1, 1}));
   checkGeoDistanceFilter(getGeoDistanceFilter(*expr6), std::nullopt, 10);
+
+  // A negative maximum distance ("< 0" or a negative constant) is not
+  // rewritten, "<= 0" is.
+  auto [dExpr7, dExp7] = makeMetricDist();
+  auto expr7 = ltSprql(std::move(dExpr7), D(0));
+  checkGeoDistanceFilter(getGeoDistanceFilter(*expr7), std::nullopt, 0);
+  auto [dExpr8, dExp8] = makeMetricDist();
+  auto expr8 = leSprql(std::move(dExpr8), D(-1));
+  checkGeoDistanceFilter(getGeoDistanceFilter(*expr8), std::nullopt, 0);
+  auto [dExpr9, dExp9] = makeMetricDist();
+  auto expr9 = leSprql(std::move(dExpr9), D(0));
+  checkGeoDistanceFilter(getGeoDistanceFilter(*expr9), dExp9, 0);
 }
 
 // _____________________________________________________________________________
@@ -135,6 +228,12 @@ TEST(QueryRewriteUtilTest, GetDe9imRelationExpressionParameters) {
       getExpr(Literal::literalWithoutQuotes("T*T***T**")));
   checkDe9imRelationCall(
       getDe9imRelationExpressionParameters(*unsupportedArgPtr), std::nullopt);
+  auto unsupportedRightArgPtr = makeDe9imRelationExpression(
+      getExpr(V{"?a"}), makePowExpression(getExpr(V{"?b"}), getExpr(V{"?c"})),
+      getExpr(Literal::literalWithoutQuotes("T*T***T**")));
+  checkDe9imRelationCall(
+      getDe9imRelationExpressionParameters(*unsupportedRightArgPtr),
+      std::nullopt);
 
   // A syntactically valid pattern that could still match disjoint geometries
   // is rejected, because `geof:relate` currently only supports patterns that

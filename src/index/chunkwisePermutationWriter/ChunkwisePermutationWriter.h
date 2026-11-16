@@ -10,30 +10,32 @@
 #ifndef QLEVER_SRC_INDEX_CHUNKWISEPERMUTATIONWRITER_CHUNKWISEPERMUTATIONWRITER_H
 #define QLEVER_SRC_INDEX_CHUNKWISEPERMUTATIONWRITER_CHUNKWISEPERMUTATIONWRITER_H
 
-#include <atomic>
-#include <condition_variable>
 #include <exception>
-#include <functional>
 #include <future>
 #include <memory>
-#include <mutex>
-#include <optional>
 #include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "backports/asio.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "index/KeyOrder.h"
+#include "index/chunkwisePermutationWriter/BoundaryConsolidator.h"
 #include "index/chunkwisePermutationWriter/ChunkWriter.h"
+#include "index/chunkwisePermutationWriter/ConcurrentCallbackDispatcher.h"
 #include "index/chunkwisePermutationWriter/Options.h"
-#include "index/compressedRelationWriter/CompressedRelationHelpersImpl.h"
+#include "index/chunkwisePermutationWriter/Statistics.h"
 #include "index/compressedRelationWriter/CompressedRelationWriter.h"
-#include "util/AsyncResourcePool.h"
 #include "util/GlobalExecutor.h"
 #include "util/NoCopyNoMove.h"
-#include "util/ProgressBar.h"
-#include "util/Timer.h"
+#include "util/ThreadSafeReorderBuffer.h"
+
+// NOTE: `AsioHelpers.h` needs a newer Boost than the C++17 build of `libqlever`
+// has, and the writer only exists in the C++20 mode anyway.
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+#include "util/AsioHelpers.h"
+#endif
 
 // Write a pair of twin permutations (e.g. PSO and POS) directly from the
 // chunks of the parallel merge of an external sorter, see
@@ -54,26 +56,25 @@
 // (small) consolidation step, which runs in order on the thread that drives
 // the merge:
 //
-// * Every chunk handles all the relations that start and end inside of it
-//   exactly like the classical writer does: small relations are batched into
-//   blocks of small relations, large relations are written as blocks of their
-//   own, and the twin of a large relation is sorted with a twin sorter that is
-//   private to the chunk (and that merges serially, in the thread of the
-//   chunk). The metadata of these relations is collected per chunk.
+// * Every chunk handles the relations that start and end inside of it exactly
+//   like the classical writer does (small relations are batched into shared
+//   blocks, large relations are written as blocks of their own, and the twin
+//   of a large relation is sorted by a twin sorter that is private to the
+//   chunk), and collects their metadata.
 // * The first and the last relation of a chunk may continue in the neighboring
-//   chunks, so the chunk returns them as a `BoundaryPart` (see below) instead
-//   of writing them: for a small part all the rows are kept in memory, for a
-//   large part the chunk writes the complete blocks in its middle directly and
-//   keeps only the rows before the first and after the last of those blocks in
-//   memory, together with its twin sorter. A relation may also span several
-//   complete chunks, each of which then consists of a single such part.
+//   chunks, so the chunk returns them as `BoundaryPart`s (see `ChunkWriter.h`)
+//   instead of writing them. A part keeps only the rows of its incomplete
+//   blocks in memory, and the sorted runs of its twin rows on disk (see
+//   `BoundaryPart::twinRuns_`). A relation may also span several complete
+//   chunks, each of which is then a single such part.
 // * The consolidation on the driving thread concatenates the parts of a
-//   relation in chunk order: the rows that two adjacent parts keep in memory
-//   are written as blocks (such that triples which are equal when disregarding
-//   the graph never end up in different blocks), the counts are folded, the
-//   twin rows of all the parts are merged with a single parallel merge over the
-//   runs of all their twin sorters, and the metadata of the relation is emitted
-//   at the right place in the sequence of all relations.
+//   relation in chunk order: it writes the rows that adjacent parts keep in
+//   memory as blocks (such that triples which are equal when disregarding the
+//   graph never end up in different blocks), folds the counts, sorts the
+//   complete twin with a single parallel merge over the runs of all the parts
+//   (see `BoundaryConsolidator::writeTwinOfBoundaryRelation`), and emits the
+//   metadata of the relation at the right place in the sequence of all
+//   relations.
 //
 // IMPORTANT: The callbacks that are invoked for the input blocks (see
 // `ConcurrentBlockCallback`) are invoked concurrently and in an arbitrary order
@@ -90,94 +91,106 @@ namespace net = boost::asio;
 // the parallel merge. It is the sink of the merge (see
 // `parallelBlockMerge::SinkConcept`), and at the same time the object through
 // which the driving thread consolidates the results of the chunks (see
-// `finish`). It is always owned by a `shared_ptr` (see `create`), because the
-// merge holds on to its sink until the last of its coroutines is done.
+// `finish`). It is always owned by a `shared_ptr`, see `create`.
+//
+// The work is split among the following components, which this class owns and
+// drives:
+// * A `ChunkWriter` per chunk writes everything that lies inside the chunk.
+// * The `ThreadSafeReorderBuffer` hands the results of the chunks over to the
+//   driving thread, in the order of the chunks, and holds the first exception
+//   and the stop state that the chunks, the callbacks, and the driving thread
+//   share.
+// * The `BoundaryConsolidator` consolidates the results of the chunks on the
+//   driving thread.
+// * The `ConcurrentCallbackDispatcher` invokes the `ConcurrentBlockCallback`s
+//   for the blocks of the chunks.
+// * The `Statistics` report the progress and the timing.
 class ChunkwisePermutationWriter
     : public std::enable_shared_from_this<ChunkwisePermutationWriter>,
       public ad_utility::NoCopyNoMove {
  private:
-  using BlockToWrite = CompressedRelationWriter::BlockToWrite;
-  using Semaphore = ad_utility::AsyncResourcePool<void>;
-  using Permit = Semaphore::Handle;
-
-  std::string basename_;
+  // The writers of the two permutations, which the `context_` refers to.
   std::unique_ptr<CompressedRelationWriter> writer1_;
   std::unique_ptr<CompressedRelationWriter> writer2_;
-  compressedRelationHelpers::PairMetadataWriter writeMetadata_;
-  qlever::KeyOrder permutation_;
-  const size_t blocksize_;
-  const size_t numColumns_;
-  Options options_;
-  std::vector<ConcurrentBlockCallback> callbacks_;
-
   net::any_io_executor executor_;
-  // Bounds the number of blocks for which the callbacks are in flight.
-  Semaphore callbackPermits_;
   // The state that is shared by all the `ChunkWriter`s (including the
   // statistics that they count).
   ChunkWriterContext context_;
-
-  // The state that is shared between the chunks and the driving thread, all of
-  // it protected by `mutex_` (except for the atomics).
-  std::mutex mutex_;
-  std::condition_variable conditionVariable_;
-  size_t numChunks_ = 0;
-  std::vector<std::unique_ptr<ChunkWriter>> chunkWriters_;
+  BoundaryConsolidator consolidator_;
+  Statistics statistics_;
   // The results of the chunks that the consolidation has not taken yet. A
   // chunk releases its permit of the merge as soon as it has stored its
   // result here, which only holds a few blocks of rows in memory (the twin
   // rows of the boundary parts are on disk, see `BoundaryPart::twinRuns_`), so
   // the results may safely pile up while the consolidation is busy.
-  std::vector<std::optional<ChunkResult>> chunkResults_;
-  std::vector<bool> chunkIsDone_;
-  std::exception_ptr exception_;
-  std::atomic<bool> stopRequested_{false};
-  // The number of blocks for which the callbacks are currently in flight.
-  size_t numCallbackBlocksInFlight_ = 0;
+  ad_utility::ThreadSafeReorderBuffer<ChunkResult> chunkResults_;
+  ConcurrentCallbackDispatcher callbackDispatcher_;
 
-  // Statistics. The `ChunkWriterContext::numRowsProcessed_` are counted by the
-  // chunks, and the driving thread reports them via the `progressBar_` while it
-  // waits for the chunks (see `takeChunkResult`), by copying them into
-  // `numRowsForProgressBar_` (the progress bar needs a plain counter).
-  size_t numRowsForProgressBar_ = 0;
-  ad_utility::ProgressBar progressBar_{numRowsForProgressBar_,
-                                       "Triples sorted: "};
-  size_t numDistinctCol0_ = 0;
-  size_t numRows_ = 0;
-  ad_utility::timer::ThreadSafeTimer chunkTimer_;
-  ad_utility::Timer consolidationWaitTimer_{ad_utility::Timer::Stopped};
-  ad_utility::Timer consolidationWorkTimer_{ad_utility::Timer::Stopped};
+  // The writers of the chunks, which are created on demand (see
+  // `chunkWriter`). The vector has one slot per chunk and is never resized.
+  const size_t numChunks_;
+  std::vector<std::unique_ptr<ChunkWriter>> chunkWriters_;
 
   struct PrivateTag {};
 
  public:
-  // The constructor is effectively private, use `create()` instead.
-  ChunkwisePermutationWriter(PrivateTag, std::string basename,
+  // Use `create` instead. The constructor has to be public, because
+  // `std::make_shared` (which `create` uses) can only call a public
+  // constructor, but as the `PrivateTag` is private, only `create` can call
+  // it.
+  ChunkwisePermutationWriter(PrivateTag, size_t numChunks,
+                             const std::string& basename,
                              WriterAndCallback writerAndCallback1,
                              WriterAndCallback writerAndCallback2,
-                             qlever::KeyOrder permutation,
+                             const qlever::KeyOrder& permutation,
                              std::vector<ConcurrentBlockCallback> callbacks,
-                             Options options);
+                             const Options& options,
+                             net::any_io_executor executor);
 
-  // Create a writer, see the constructor for the arguments. The `basename` is
-  // the prefix of the names of the temporary files (the twin sorters).
+  // Create a writer, which is at the same time the sink of a parallel merge
+  // with `numChunks` chunks (at least one). The arguments:
+  // * `basename`: The prefix of the names of the temporary files (of the twin
+  //   sorters).
+  // * `writerAndCallback1`, `writerAndCallback2`: The writers of the two
+  //   permutations, together with the callbacks that receive the metadata of
+  //   the large relations (see `CompressedRelationWriter::WriterAndCallback`).
+  //   Both writers must have the same number of columns and the same
+  //   blocksize.
+  // * `permutation`: The permutation that is written by `writerAndCallback1`.
+  //   The input of the merge has to be sorted by it, and the graph has to be
+  //   its fourth column. The second permutation is its twin, with the second
+  //   and third column swapped.
+  // * `callbacks`: Invoked for every input block, see
+  //   `ConcurrentBlockCallback`.
+  // * `options`: See `Options`.
+  // * `executor`: The executor on which the chunks write their blocks, the
+  //   callbacks are dispatched, and the twins of the boundary relations are
+  //   merged. Typically the executor of the merge.
+  //
+  // The writer is always owned by a `shared_ptr`, which is why it can only be
+  // created by this function: the merge holds on to its sink via a
+  // `shared_ptr` until the last of its coroutines is done (possibly after the
+  // driving thread has returned from `finish`), and the callbacks that are
+  // still in flight keep the writer alive via `shared_from_this()` (see
+  // `pushImpl`).
   static std::shared_ptr<ChunkwisePermutationWriter> create(
-      std::string basename, WriterAndCallback writerAndCallback1,
-      WriterAndCallback writerAndCallback2, qlever::KeyOrder permutation,
-      std::vector<ConcurrentBlockCallback> callbacks, Options options);
-
-  // The sink factory for the merge, see
-  // `parallelBlockMerge::SinkFactoryConcept`. Is called exactly once, with the
-  // number of chunks of the merge.
-  std::shared_ptr<ChunkwisePermutationWriter> makeSink(size_t numChunks);
+      size_t numChunks, const std::string& basename,
+      WriterAndCallback writerAndCallback1,
+      WriterAndCallback writerAndCallback2, const qlever::KeyOrder& permutation,
+      std::vector<ConcurrentBlockCallback> callbacks, const Options& options,
+      net::any_io_executor executor);
 
   // Consolidate the results of the chunks (as they become available, in the
   // order of the chunks), wait for the merge (the `mergeCompletion` is the
   // future that `CompressedExternalIdTableSorter::mergeToSink` returned) and
   // for the callbacks, rethrow the first exception that a chunk or a callback
   // reported, finish the two writers and return their blocks. May only be
-  // called once, by the thread that drives the merge (which must not be a
-  // thread of the executor).
+  // called once, by the thread that drives the merge. That thread must not be
+  // a thread of the `executor_` (or of the executor of the merge), because
+  // this function blocks it until all the chunks are done, see
+  // `createPermutationPair`. This also holds if an exception is thrown: the
+  // remaining chunks are then stopped, and the exception only propagates once
+  // all the chunks and callbacks are done.
   PermutationPairResult finish(std::future<void> mergeCompletion);
 
   // The number of rows that were pushed to this writer before the removal of
@@ -185,19 +198,22 @@ class ChunkwisePermutationWriter
   size_t numInputRows() const { return context_.numInputRows_.load(); }
 
   // The interface of the sink, see `parallelBlockMerge::SinkConcept`.
-  bool stopRequested() const noexcept { return stopRequested_.load(); }
+  bool stopRequested() const noexcept { return chunkResults_.stopRequested(); }
 
   template <typename CompletionToken>
   auto asyncPush(size_t chunkIndex, Block block,
                  CompletionToken&& completionToken) {
-    return spawnOnExecutor(pushImpl(chunkIndex, std::move(block)),
-                           AD_FWD(completionToken));
+    // NOTE: The completion is always posted, never invoked inline, see the
+    // IMPORTANT note at `parallelBlockMerge::SinkConcept`.
+    return ad_utility::coSpawnWithPostedCompletion(
+        executor_, pushImpl(chunkIndex, std::move(block)),
+        AD_FWD(completionToken));
   }
 
   template <typename CompletionToken>
   auto asyncFinishChunk(size_t chunkIndex, CompletionToken&& completionToken) {
-    return spawnOnExecutor(finishChunkImpl(chunkIndex),
-                           AD_FWD(completionToken));
+    return ad_utility::coSpawnWithPostedCompletion(
+        executor_, finishChunkImpl(chunkIndex), AD_FWD(completionToken));
   }
 
   template <typename CompletionToken>
@@ -218,54 +234,22 @@ class ChunkwisePermutationWriter
   }
 
  private:
-  // Run the coroutine `awaitable` on the executor and complete the
-  // `completionToken` with its result, via a `post` to the executor that is
-  // associated with the token (never inline, see the IMPORTANT note at
-  // `parallelBlockMerge::SinkConcept`).
-  template <typename CompletionToken>
-  auto spawnOnExecutor(net::awaitable<bool> awaitable,
-                       CompletionToken&& completionToken) {
-    return net::async_initiate<CompletionToken, void(std::exception_ptr, bool)>(
-        [this, awaitable = std::move(awaitable)](auto handler) mutable {
-          auto executor = net::get_associated_executor(handler, executor_);
-          net::co_spawn(executor_, std::move(awaitable),
-                        [executor, handler = std::move(handler)](
-                            std::exception_ptr exception, bool result) mutable {
-                          net::post(executor, [handler = std::move(handler),
-                                               exception = std::move(exception),
-                                               result]() mutable {
-                            std::move(handler)(std::move(exception), result);
-                          });
-                        });
-        },
-        completionToken);
-  }
-
   // The bodies of `asyncPush` and `asyncFinishChunk`.
   net::awaitable<bool> pushImpl(size_t chunkIndex, Block block);
   net::awaitable<bool> finishChunkImpl(size_t chunkIndex);
 
-  // Invoke all the `callbacks_` for the `block`, and give the `permit` back
-  // once all of them are done.
-  void invokeCallbacks(SharedBlock block, Permit permit);
-
   // Store the `exception` (if it is the first one) and stop the merge.
   void storeException(std::exception_ptr exception);
+  // Stop the merge: wake up the chunks that wait for the callbacks and the
+  // driving thread.
   void requestStop();
 
   // Return the writer of the chunk with the given index (created on demand).
   ChunkWriter& chunkWriter(size_t chunkIndex);
 
-  // The consolidation, see `finish` and the explanation at the top of this
-  // file. `takeChunkResult` waits for the chunk to finish, and reports the
-  // progress of the chunks while it waits (see `reportProgress`).
-  ChunkResult takeChunkResult(size_t chunkIndex);
-  void reportProgress();
+  // Feed the results of all the chunks to the `consolidator_`, in order, as
+  // they become available.
   void consolidate();
-  void writeBoundaryRelation(std::vector<BoundaryPart> parts);
-  CompressedRelationMetadata writeTwinOfBoundaryRelation(
-      Id col0Id, std::vector<BoundaryPart>& parts);
-  void waitForCallbacks();
 };
 
 #endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
@@ -278,7 +262,16 @@ class ChunkwisePermutationWriter
 // consumed (see `CompressedExternalIdTableSorter::mergeToSink`) and is released
 // again when this function returns. The `callbacks` are invoked for every
 // input block, concurrently and in an arbitrary order, see
-// `ConcurrentBlockCallback`.
+// `ConcurrentBlockCallback`. The `executor` is the one of the writer, see
+// `ChunkwisePermutationWriter::create`. It should typically be the executor
+// that the merge of the `sortedInput` runs on (see
+// `CompressedExternalIdTableSorter::setMergeExecutor`), which is also the
+// global executor by default.
+//
+// IMPORTANT: This function blocks the calling thread until the merge and all
+// the chunks (and callbacks) are done, so it must not be called from a thread
+// of the `executor` or of the executor of the merge: if all the threads of
+// such a pool were blocked like this, the chunks could never run.
 //
 // NOTE: In the C++17 mode of the build there is no parallel merge and hence
 // no chunkwise writer, so this function throws. A caller has to use the
@@ -288,20 +281,34 @@ PermutationPairResult createPermutationPair(
     const std::string& basename, WriterAndCallback writerAndCallback1,
     WriterAndCallback writerAndCallback2, Sorter& sortedInput,
     qlever::KeyOrder permutation,
-    std::vector<ConcurrentBlockCallback> callbacks, Options options = {}) {
+    std::vector<ConcurrentBlockCallback> callbacks, Options options = {},
+    ql::any_io_executor executor = ad_utility::globalExecutor()) {
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   (void)basename, (void)writerAndCallback1, (void)writerAndCallback2,
-      (void)sortedInput, (void)permutation, (void)callbacks, (void)options;
+      (void)sortedInput, (void)permutation, (void)callbacks, (void)options,
+      (void)executor;
   throw std::runtime_error{
       "The chunkwise permutation writer is not available in the C++17 mode "
       "of the build"};
 #else
-  auto writer = ChunkwisePermutationWriter::create(
-      basename, std::move(writerAndCallback1), std::move(writerAndCallback2),
-      std::move(permutation), std::move(callbacks), options);
   const size_t numRowsInSorter = sortedInput.size();
-  auto mergeCompletion = sortedInput.template mergeToSink<0>(
-      [&writer](size_t numChunks) { return writer->makeSink(numChunks); });
+  // The number of chunks is only known once the merge has started, so the
+  // writer is created by the sink factory, which the merge calls exactly once
+  // (also for an empty input, see `parallelBlockMerge::SinkFactoryConcept`).
+  std::shared_ptr<ChunkwisePermutationWriter> writer;
+  auto chunkwisePermutationWriterFactory =
+      [&writer, &basename, &writerAndCallback1, &writerAndCallback2,
+       &permutation, &callbacks, &options, &executor](size_t numChunks) {
+        AD_CORRECTNESS_CHECK(writer == nullptr);
+        writer = ChunkwisePermutationWriter::create(
+            numChunks, basename, std::move(writerAndCallback1),
+            std::move(writerAndCallback2), permutation, std::move(callbacks),
+            options, std::move(executor));
+        return writer;
+      };
+  auto mergeCompletion =
+      sortedInput.template mergeToSink<0>(chunkwisePermutationWriterFactory);
+  AD_CORRECTNESS_CHECK(writer != nullptr);
   auto result = writer->finish(std::move(mergeCompletion));
   AD_CORRECTNESS_CHECK(writer->numInputRows() == numRowsInSorter,
                        "The number of rows that the sorter has yielded (",
