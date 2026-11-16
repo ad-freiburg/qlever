@@ -238,7 +238,8 @@ const auto getAllExpectedParseResults = []() {
 constexpr std::array<uint32_t, 9> allTestLiteralNumGeometries{1, 1, 1, 1, 1,
                                                               2, 2, 2, 3};
 
-// ____________________________________________________________________________
+// Test the constructor and the getters of `GeometryInfo` and that the value
+// types reject out-of-range values.
 TEST(GeometryInfoTest, BasicTests) {
   // Constructor and getters
   GeometryInfo g{5,
@@ -305,7 +306,9 @@ TEST(GeometryInfoTest, BasicTests) {
       ::testing::HasSubstr("Metric area must be positive"));
 }
 
-// ____________________________________________________________________________
+// Test that `fromWktLiteral` computes the expected `GeometryInfo` for a literal
+// of each geometry type and each supported CRS, and `std::nullopt` for an
+// invalid geometry type.
 TEST(GeometryInfoTest, FromWktLiteral) {
   // To avoid hard-coding lengths for unit tests unrelated to actual length
   // computation, we compute the expected values.
@@ -456,7 +459,7 @@ TEST(GeometryInfoTest, IsValidWktStrict) {
   EXPECT_EQ(GeometryInfo::getBoundingBox(litInvalidCoord), std::nullopt);
 }
 
-// ____________________________________________________________________________
+// Test that `fromGeoPoint` yields the `GeometryInfo` of a point.
 TEST(GeometryInfoTest, FromGeoPoint) {
   GeoPoint p{1.234, 5.678};
   auto g = GeometryInfo::fromGeoPoint(p);
@@ -501,7 +504,7 @@ TEST(GeometryInfoTest, RequestedInfoLiteral) {
   }
 }
 
-// ____________________________________________________________________________
+// Test the WKT representation of a `BoundingBox`.
 TEST(GeometryInfoTest, BoundingBoxAsWKT) {
   BoundingBox bb1{{0, 0}, {1, 1}};
   ASSERT_EQ(bb1.asWkt(), "POLYGON((0 0,1 0,1 1,0 1,0 0))");
@@ -531,7 +534,7 @@ TEST(GeometryInfoTest, BoundingBoxGetBoundingCoordinate) {
   EXPECT_NEAR(bb2.getBoundingCoordinate<MAX_Y>(), -4, 0.0001);
 }
 
-// ____________________________________________________________________________
+// Test the IRI of each `GeometryType`.
 TEST(GeometryInfoTest, GeometryTypeAsIri) {
   EXPECT_THAT(GeometryType{1}.asIri(),
               Optional(Eq("http://www.opengis.net/ont/sf#Point")));
@@ -578,7 +581,8 @@ namespace {
 constexpr std::string_view example = "Example";
 }
 
-// ____________________________________________________________________________
+// Test the helper functions of `GeometryInfoHelpersImpl.h` (point conversion,
+// parsing, centroid, bounding box, IRIs, length and area, `getWithSourceCrs`).
 TEST(GeometryInfoTest, GeometryInfoHelpers) {
   using namespace ad_utility::detail;
   Point<double> p{50, 60};
@@ -826,7 +830,8 @@ TEST(GeometryInfoTest, WebMercProjection) {
   EXPECT_THAT(result1, utilBoxNear(b1));
 }
 
-// _____________________________________________________________________________
+// Test the number of geometries of each test literal, computed from the
+// literal and from its `GeometryInfo`.
 TEST(GeometryInfoTest, NumGeometries) {
   const auto testLiterals = getAllTestLiterals();
   ASSERT_EQ(testLiterals.size(), allTestLiteralNumGeometries.size());
@@ -858,10 +863,9 @@ TEST(GeometryInfoTest, AnyGeometryMember) {
   EXPECT_THAT(DAnyGeometry{DCollection{}}, anyGeometryMemberIs(COLLECTION));
 }
 
-// _____________________________________________________________________________
+// Test `computeMetricLength` on a geometry collection that contains one
+// geometry of every supported geometry type.
 TEST(GeometryInfoTest, ComputeMetricLengthCollectionAnyGeom) {
-  // This test builds a big geometry collection containing one geometry of every
-  // supported geometry type and feeds it to `computeMetricLength`.
   using namespace ad_utility::detail;
 
   double expected = 0.0;

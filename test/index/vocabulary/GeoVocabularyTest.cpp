@@ -209,7 +209,8 @@ TYPED_TEST(GeoVocabularyUnderlyingVocabTypedTest, LookupBatchesStreamed) {
   this->testLookupBatchesStreamed();
 }
 
-// _____________________________________________________________________________
+// Test that a `PolymorphicVocabulary` returns the precomputed `GeometryInfo`
+// of a WKT literal iff its underlying vocabulary is a `GeoVocabulary`.
 TEST(GeoVocabularyTest, VocabularyGetGeoInfoFromUnderlyingGeoVocab) {
   const VocabularyType geoSplitVocabType{
       VocabularyType::Enum::OnDiskCompressedGeoSplit};
