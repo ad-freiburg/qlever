@@ -175,6 +175,12 @@ void rewriteFiltersWithFacts(parsedQuery::GraphPattern& group) {
     }
 
     // Keep a FILTER without a `DistanceBound` or a replaced conjunct as it is.
+    //
+    // NOTE: Keeping such a FILTER unsplit is for efficiency, not for
+    // correctness. Splitting every FILTER would also be correct (a FILTER
+    // holds iff all its conjuncts hold), but each conjunct would then become
+    // its own `Filter` operation and its own filter in the query planning,
+    // without any rewrite.
     if (ql::ranges::none_of(bounds,
                             [](const auto& b) { return b.has_value(); }) &&
         ql::ranges::none_of(isReplaced, std::identity{})) {
