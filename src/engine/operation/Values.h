@@ -4,8 +4,8 @@
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_ENGINE_VALUES_H
-#define QLEVER_SRC_ENGINE_VALUES_H
+#ifndef QLEVER_SRC_ENGINE_OPERATION_VALUES_H
+#define QLEVER_SRC_ENGINE_OPERATION_VALUES_H
 
 #include "engine/operation/Operation.h"
 #include "parser/ParsedQuery.h"
@@ -82,4 +82,4 @@ class Values : virtual public Operation {
 std::shared_ptr<QueryExecutionTree> makeValuesForSingleValue(
     QueryExecutionContext* qec, Variable variable, TripleComponent value);
 
-#endif  // QLEVER_SRC_ENGINE_VALUES_H
+#endif  // QLEVER_SRC_ENGINE_OPERATION_VALUES_H

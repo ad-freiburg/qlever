@@ -4,8 +4,8 @@
 //   2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2020-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
-#ifndef QLEVER_SRC_ENGINE_FILTER_H
-#define QLEVER_SRC_ENGINE_FILTER_H
+#ifndef QLEVER_SRC_ENGINE_OPERATION_FILTER_H
+#define QLEVER_SRC_ENGINE_OPERATION_FILTER_H
 
 #include <utility>
 #include <vector>
@@ -96,4 +96,4 @@ class Filter : public Operation {
       filterIdTable(qlm::vector<ColumnIndex> sortedBy, Table&& idTable) const;
 };
 
-#endif  // QLEVER_SRC_ENGINE_FILTER_H
+#endif  // QLEVER_SRC_ENGINE_OPERATION_FILTER_H

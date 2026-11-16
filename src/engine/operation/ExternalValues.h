@@ -7,8 +7,8 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_ENGINE_EXTERNALVALUES_H
-#define QLEVER_SRC_ENGINE_EXTERNALVALUES_H
+#ifndef QLEVER_SRC_ENGINE_OPERATION_EXTERNALVALUES_H
+#define QLEVER_SRC_ENGINE_OPERATION_EXTERNALVALUES_H
 
 #include "engine/operation/Values.h"
 
@@ -78,4 +78,4 @@ class ExternalValues : private Values, virtual public Operation {
   std::unique_ptr<Operation> cloneImpl() const override;
 };
 
-#endif  // QLEVER_SRC_ENGINE_EXTERNALVALUES_H
+#endif  // QLEVER_SRC_ENGINE_OPERATION_EXTERNALVALUES_H

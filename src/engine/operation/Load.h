@@ -4,8 +4,8 @@
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
-#ifndef QLEVER_LOAD_H
-#define QLEVER_LOAD_H
+#ifndef QLEVER_SRC_ENGINE_OPERATION_LOAD_H
+#define QLEVER_SRC_ENGINE_OPERATION_LOAD_H
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include <string>
@@ -98,4 +98,4 @@ class Load final : public Operation {
 };
 
 #endif
-#endif  // QLEVER_LOAD_H
+#endif  // QLEVER_SRC_ENGINE_OPERATION_LOAD_H

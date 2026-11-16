@@ -9,8 +9,8 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_ENGINE_SORT_H
-#define QLEVER_SRC_ENGINE_SORT_H
+#ifndef QLEVER_SRC_ENGINE_OPERATION_SORT_H
+#define QLEVER_SRC_ENGINE_OPERATION_SORT_H
 
 #include "engine/QueryExecutionTree.h"
 #include "engine/Result.h"
@@ -141,4 +141,4 @@ class Sort : public Operation {
   std::string getCacheKeyImpl() const override;
 };
 
-#endif  // QLEVER_SRC_ENGINE_SORT_H
+#endif  // QLEVER_SRC_ENGINE_OPERATION_SORT_H

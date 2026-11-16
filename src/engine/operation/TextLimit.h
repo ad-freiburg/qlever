@@ -2,8 +2,8 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Nick Göckel <nick.goeckel@students.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_ENGINE_TEXTLIMIT_H
-#define QLEVER_SRC_ENGINE_TEXTLIMIT_H
+#ifndef QLEVER_SRC_ENGINE_OPERATION_TEXTLIMIT_H
+#define QLEVER_SRC_ENGINE_OPERATION_TEXTLIMIT_H
 
 #include "engine/QueryExecutionTree.h"
 #include "engine/operation/Operation.h"
@@ -75,4 +75,4 @@ class TextLimit : public Operation {
   }
 };
 
-#endif  // QLEVER_SRC_ENGINE_TEXTLIMIT_H
+#endif  // QLEVER_SRC_ENGINE_OPERATION_TEXTLIMIT_H

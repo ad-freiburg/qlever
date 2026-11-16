@@ -2,8 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@netpun.uni-freiburg.de)
 
-#ifndef QLEVER_SRC_ENGINE_MINUS_H
-#define QLEVER_SRC_ENGINE_MINUS_H
+#ifndef QLEVER_SRC_ENGINE_OPERATION_MINUS_H
+#define QLEVER_SRC_ENGINE_OPERATION_MINUS_H
 
 #include <array>
 #include <vector>
@@ -139,4 +139,4 @@ class Minus : public Operation {
       const std::set<Variable>& variables) const override;
 };
 
-#endif  // QLEVER_SRC_ENGINE_MINUS_H
+#endif  // QLEVER_SRC_ENGINE_OPERATION_MINUS_H

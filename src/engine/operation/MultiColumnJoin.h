@@ -2,8 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@netpun.uni-freiburg.de)
 
-#ifndef QLEVER_SRC_ENGINE_MULTICOLUMNJOIN_H
-#define QLEVER_SRC_ENGINE_MULTICOLUMNJOIN_H
+#ifndef QLEVER_SRC_ENGINE_OPERATION_MULTICOLUMNJOIN_H
+#define QLEVER_SRC_ENGINE_OPERATION_MULTICOLUMNJOIN_H
 
 #include <array>
 #include <vector>
@@ -90,4 +90,4 @@ class MultiColumnJoin : public Operation {
   void computeSizeEstimateAndMultiplicities();
 };
 
-#endif  // QLEVER_SRC_ENGINE_MULTICOLUMNJOIN_H
+#endif  // QLEVER_SRC_ENGINE_OPERATION_MULTICOLUMNJOIN_H

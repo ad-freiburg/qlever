@@ -8,8 +8,8 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_ENGINE_CARTESIANPRODUCTJOIN_H
-#define QLEVER_SRC_ENGINE_CARTESIANPRODUCTJOIN_H
+#ifndef QLEVER_SRC_ENGINE_OPERATION_CARTESIANPRODUCTJOIN_H
+#define QLEVER_SRC_ENGINE_OPERATION_CARTESIANPRODUCTJOIN_H
 
 #include "engine/QueryExecutionTree.h"
 #include "engine/operation/Operation.h"
@@ -176,4 +176,4 @@ class CartesianProductJoin : public Operation {
       std::shared_ptr<const Result> lazyResult) const;
 };
 
-#endif  // QLEVER_SRC_ENGINE_CARTESIANPRODUCTJOIN_H
+#endif  // QLEVER_SRC_ENGINE_OPERATION_CARTESIANPRODUCTJOIN_H

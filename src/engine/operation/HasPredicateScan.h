@@ -2,8 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
 
-#ifndef QLEVER_SRC_ENGINE_HASPREDICATESCAN_H
-#define QLEVER_SRC_ENGINE_HASPREDICATESCAN_H
+#ifndef QLEVER_SRC_ENGINE_OPERATION_HASPREDICATESCAN_H
+#define QLEVER_SRC_ENGINE_OPERATION_HASPREDICATESCAN_H
 
 #include <memory>
 #include <string>
@@ -135,4 +135,4 @@ class HasPredicateScan : public Operation {
       QueryExecutionContext* qec, TripleComponent subject, Variable object);
 };
 
-#endif  // QLEVER_SRC_ENGINE_HASPREDICATESCAN_H
+#endif  // QLEVER_SRC_ENGINE_OPERATION_HASPREDICATESCAN_H

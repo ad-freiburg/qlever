@@ -5,8 +5,8 @@
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
-#ifndef QLEVER_SRC_ENGINE_TRANSITIVEPATHBASE_H
-#define QLEVER_SRC_ENGINE_TRANSITIVEPATHBASE_H
+#ifndef QLEVER_SRC_ENGINE_OPERATION_TRANSITIVEPATHBASE_H
+#define QLEVER_SRC_ENGINE_OPERATION_TRANSITIVEPATHBASE_H
 
 #include <absl/hash/hash.h>
 
@@ -397,6 +397,6 @@ class TransitivePathBase : public Operation {
   static size_t firstGraphOrPayloadColumnIndex() { return 2; }
 };
 
-#endif  // QLEVER_SRC_ENGINE_TRANSITIVEPATHBASE_H
+#endif  // QLEVER_SRC_ENGINE_OPERATION_TRANSITIVEPATHBASE_H
 
 #endif

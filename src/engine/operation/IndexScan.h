@@ -2,8 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-#ifndef QLEVER_SRC_ENGINE_INDEXSCAN_H
-#define QLEVER_SRC_ENGINE_INDEXSCAN_H
+#ifndef QLEVER_SRC_ENGINE_OPERATION_INDEXSCAN_H
+#define QLEVER_SRC_ENGINE_OPERATION_INDEXSCAN_H
 
 #include <absl/functional/function_ref.h>
 
@@ -462,4 +462,4 @@ class IndexScan final : public Operation {
       absl::FunctionRef<void(const Variable&, ColumnIndex)> f) const;
 };
 
-#endif  // QLEVER_SRC_ENGINE_INDEXSCAN_H
+#endif  // QLEVER_SRC_ENGINE_OPERATION_INDEXSCAN_H

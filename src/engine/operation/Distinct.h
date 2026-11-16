@@ -4,8 +4,8 @@
 //
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
-#ifndef QLEVER_SRC_ENGINE_DISTINCT_H
-#define QLEVER_SRC_ENGINE_DISTINCT_H
+#ifndef QLEVER_SRC_ENGINE_OPERATION_DISTINCT_H
+#define QLEVER_SRC_ENGINE_OPERATION_DISTINCT_H
 
 #include <vector>
 
@@ -112,4 +112,4 @@ class Distinct : public Operation {
   IdTable outOfPlaceDistinct(const IdTableView<0>& dynInput) const;
 };
 
-#endif  // QLEVER_SRC_ENGINE_DISTINCT_H
+#endif  // QLEVER_SRC_ENGINE_OPERATION_DISTINCT_H

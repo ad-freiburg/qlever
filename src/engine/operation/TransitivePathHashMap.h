@@ -6,8 +6,8 @@
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
-#ifndef QLEVER_SRC_ENGINE_TRANSITIVEPATHHASHMAP_H
-#define QLEVER_SRC_ENGINE_TRANSITIVEPATHHASHMAP_H
+#ifndef QLEVER_SRC_ENGINE_OPERATION_TRANSITIVEPATHHASHMAP_H
+#define QLEVER_SRC_ENGINE_OPERATION_TRANSITIVEPATHHASHMAP_H
 
 #include <absl/container/inlined_vector.h>
 
@@ -82,6 +82,6 @@ class TransitivePathHashMap : public TransitivePathImpl<HashMapWrapper> {
       const TransitivePathSide& targetSide) const override;
 };
 
-#endif  // QLEVER_SRC_ENGINE_TRANSITIVEPATHHASHMAP_H
+#endif  // QLEVER_SRC_ENGINE_OPERATION_TRANSITIVEPATHHASHMAP_H
 
 #endif

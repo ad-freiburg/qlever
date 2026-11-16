@@ -3,8 +3,8 @@
 // Author: Hannah Bast (bast@cs.uni-freiburg.de)
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
-#ifndef QLEVER_SRC_ENGINE_SERVICE_H
-#define QLEVER_SRC_ENGINE_SERVICE_H
+#ifndef QLEVER_SRC_ENGINE_OPERATION_SERVICE_H
+#define QLEVER_SRC_ENGINE_OPERATION_SERVICE_H
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
@@ -210,4 +210,4 @@ struct Service {
 };
 #endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
-#endif  // QLEVER_SRC_ENGINE_SERVICE_H
+#endif  // QLEVER_SRC_ENGINE_OPERATION_SERVICE_H

@@ -9,8 +9,8 @@
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
-#ifndef QLEVER_SRC_ENGINE_EMPTYPATH_H
-#define QLEVER_SRC_ENGINE_EMPTYPATH_H
+#ifndef QLEVER_SRC_ENGINE_OPERATION_EMPTYPATH_H
+#define QLEVER_SRC_ENGINE_OPERATION_EMPTYPATH_H
 
 #include <absl/functional/function_ref.h>
 
@@ -200,6 +200,6 @@ class EmptyPath : public Operation {
                     Id graph) const;
 };
 
-#endif  // QLEVER_SRC_ENGINE_EMPTYPATH_H
+#endif  // QLEVER_SRC_ENGINE_OPERATION_EMPTYPATH_H
 
 #endif

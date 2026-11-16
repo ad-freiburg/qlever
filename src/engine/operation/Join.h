@@ -9,8 +9,8 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_ENGINE_JOIN_H
-#define QLEVER_SRC_ENGINE_JOIN_H
+#ifndef QLEVER_SRC_ENGINE_OPERATION_JOIN_H
+#define QLEVER_SRC_ENGINE_OPERATION_JOIN_H
 
 #include <memory>
 
@@ -76,4 +76,4 @@ class Join : public Operation {
       const parsedQuery::Bind& bind) const override;
 };
 
-#endif  // QLEVER_SRC_ENGINE_JOIN_H
+#endif  // QLEVER_SRC_ENGINE_OPERATION_JOIN_H

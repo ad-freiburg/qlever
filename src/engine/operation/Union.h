@@ -2,8 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
 
-#ifndef QLEVER_SRC_ENGINE_UNION_H
-#define QLEVER_SRC_ENGINE_UNION_H
+#ifndef QLEVER_SRC_ENGINE_OPERATION_UNION_H
+#define QLEVER_SRC_ENGINE_OPERATION_UNION_H
 
 #include <array>
 #include <memory>
@@ -197,4 +197,4 @@ class Union : public Operation {
       const std::set<Variable>& variables) const override;
 };
 
-#endif  // QLEVER_SRC_ENGINE_UNION_H
+#endif  // QLEVER_SRC_ENGINE_OPERATION_UNION_H

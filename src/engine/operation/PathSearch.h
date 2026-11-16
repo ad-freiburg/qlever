@@ -2,8 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Herrmann (johannes.r.herrmann(at)gmail.com)
 
-#ifndef QLEVER_SRC_ENGINE_PATHSEARCH_H
-#define QLEVER_SRC_ENGINE_PATHSEARCH_H
+#ifndef QLEVER_SRC_ENGINE_OPERATION_PATHSEARCH_H
+#define QLEVER_SRC_ENGINE_OPERATION_PATHSEARCH_H
 
 #include <memory>
 #include <optional>
@@ -307,4 +307,4 @@ class PathSearch : public Operation {
                           const pathSearch::BinSearchWrapper& binSearch) const;
 };
 
-#endif  // QLEVER_SRC_ENGINE_PATHSEARCH_H
+#endif  // QLEVER_SRC_ENGINE_OPERATION_PATHSEARCH_H

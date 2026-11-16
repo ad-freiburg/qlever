@@ -5,8 +5,8 @@
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 //                  Chair of Algorithms and Data Structures.
 
-#ifndef QLEVER_SRC_ENGINE_EXPLICITIDTABLEOPERATION_H
-#define QLEVER_SRC_ENGINE_EXPLICITIDTABLEOPERATION_H
+#ifndef QLEVER_SRC_ENGINE_OPERATION_EXPLICITIDTABLEOPERATION_H
+#define QLEVER_SRC_ENGINE_OPERATION_EXPLICITIDTABLEOPERATION_H
 
 #include <variant>
 
@@ -80,4 +80,4 @@ class ExplicitIdTableOperation : public Operation {
   [[nodiscard]] bool isDeterministicImpl() const override { return true; }
 };
 
-#endif  // QLEVER_SRC_ENGINE_EXPLICITIDTABLEOPERATION_H
+#endif  // QLEVER_SRC_ENGINE_OPERATION_EXPLICITIDTABLEOPERATION_H

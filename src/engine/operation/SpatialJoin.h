@@ -9,8 +9,8 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_ENGINE_SPATIALJOIN_H
-#define QLEVER_SRC_ENGINE_SPATIALJOIN_H
+#ifndef QLEVER_SRC_ENGINE_OPERATION_SPATIALJOIN_H
+#define QLEVER_SRC_ENGINE_OPERATION_SPATIALJOIN_H
 
 #include <memory>
 #include <optional>
@@ -239,4 +239,4 @@ class SpatialJoin : public Operation {
   bool substitutesFilterOp_ = false;
 };
 
-#endif  // QLEVER_SRC_ENGINE_SPATIALJOIN_H
+#endif  // QLEVER_SRC_ENGINE_OPERATION_SPATIALJOIN_H

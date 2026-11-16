@@ -2,8 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
 
-#ifndef QLEVER_SRC_ENGINE_COUNTAVAILABLEPREDICATES_H
-#define QLEVER_SRC_ENGINE_COUNTAVAILABLEPREDICATES_H
+#ifndef QLEVER_SRC_ENGINE_OPERATION_COUNTAVAILABLEPREDICATES_H
+#define QLEVER_SRC_ENGINE_OPERATION_COUNTAVAILABLEPREDICATES_H
 
 #include <memory>
 #include <string>
@@ -119,4 +119,4 @@ class CountAvailablePredicates : public Operation {
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap() const override;
 };
 
-#endif  // QLEVER_SRC_ENGINE_COUNTAVAILABLEPREDICATES_H
+#endif  // QLEVER_SRC_ENGINE_OPERATION_COUNTAVAILABLEPREDICATES_H

@@ -4,8 +4,8 @@
 //   2019      Florian Kramer (florian.kramer@neptun.uni-freiburg.de)
 //   2022-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
-#ifndef QLEVER_SRC_ENGINE_RUNTIMEINFORMATION_H
-#define QLEVER_SRC_ENGINE_RUNTIMEINFORMATION_H
+#ifndef QLEVER_SRC_ENGINE_OPERATION_RUNTIMEINFORMATION_H
+#define QLEVER_SRC_ENGINE_OPERATION_RUNTIMEINFORMATION_H
 
 #include <string>
 #include <vector>
@@ -207,4 +207,4 @@ struct QueryPlanningInfo {
   friend void to_json(nlohmann::ordered_json& j, const QueryPlanningInfo& qpi);
 };
 
-#endif  // QLEVER_SRC_ENGINE_RUNTIMEINFORMATION_H
+#endif  // QLEVER_SRC_ENGINE_OPERATION_RUNTIMEINFORMATION_H

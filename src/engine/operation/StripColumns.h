@@ -8,8 +8,8 @@
 // You may not use this file except in compliance with the Apache 2.0 License,
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
-#ifndef QLEVER_SRC_ENGINE_STRIPCOLUMNS_H
-#define QLEVER_SRC_ENGINE_STRIPCOLUMNS_H
+#ifndef QLEVER_SRC_ENGINE_OPERATION_STRIPCOLUMNS_H
+#define QLEVER_SRC_ENGINE_OPERATION_STRIPCOLUMNS_H
 
 #include <set>
 
@@ -67,4 +67,4 @@ class StripColumns : public Operation {
   VariableToColumnMap computeVariableToColumnMap() const override;
 };
 
-#endif  // QLEVER_SRC_ENGINE_STRIPCOLUMNS_H
+#endif  // QLEVER_SRC_ENGINE_OPERATION_STRIPCOLUMNS_H

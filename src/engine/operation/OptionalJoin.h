@@ -3,8 +3,8 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //         Florian Kramer (florian.kramer@netpun.uni-freiburg.de)
 
-#ifndef QLEVER_SRC_ENGINE_OPTIONALJOIN_H
-#define QLEVER_SRC_ENGINE_OPTIONALJOIN_H
+#ifndef QLEVER_SRC_ENGINE_OPERATION_OPTIONALJOIN_H
+#define QLEVER_SRC_ENGINE_OPERATION_OPTIONALJOIN_H
 
 #include "backports/span.h"
 #include "engine/QueryExecutionTree.h"
@@ -150,4 +150,4 @@ class OptionalJoin : public Operation {
       ql::span<const std::array<ColumnIndex, 2>>);
 };
 
-#endif  // QLEVER_SRC_ENGINE_OPTIONALJOIN_H
+#endif  // QLEVER_SRC_ENGINE_OPERATION_OPTIONALJOIN_H

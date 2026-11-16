@@ -3,8 +3,8 @@
 // Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de>    [2015 - 2017]
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de> [2018 - 2024]
 
-#ifndef QLEVER_SRC_ENGINE_OPERATION_H
-#define QLEVER_SRC_ENGINE_OPERATION_H
+#ifndef QLEVER_SRC_ENGINE_OPERATION_OPERATION_H
+#define QLEVER_SRC_ENGINE_OPERATION_OPERATION_H
 
 #include <absl/cleanup/cleanup.h>
 #include <gtest/gtest_prod.h>
@@ -816,4 +816,4 @@ class Operation : public std::enable_shared_from_this<Operation> {
   FRIEND_TEST(Operation, checkMaxCacheSizeIsComputedCorrectly);
 };
 
-#endif  // QLEVER_SRC_ENGINE_OPERATION_H
+#endif  // QLEVER_SRC_ENGINE_OPERATION_OPERATION_H

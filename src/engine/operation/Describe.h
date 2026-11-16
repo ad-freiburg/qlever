@@ -2,8 +2,8 @@
 // Chair of Algorithms and Data Structures
 // Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_ENGINE_DESCRIBE_H
-#define QLEVER_SRC_ENGINE_DESCRIBE_H
+#ifndef QLEVER_SRC_ENGINE_OPERATION_DESCRIBE_H
+#define QLEVER_SRC_ENGINE_OPERATION_DESCRIBE_H
 
 #include "engine/operation/Operation.h"
 #include "parser/GraphPatternOperation.h"
@@ -81,4 +81,4 @@ class Describe : public Operation {
   IdTable getIdsToDescribe(const Result& result, LocalVocab& localVocab) const;
 };
 
-#endif  // QLEVER_SRC_ENGINE_DESCRIBE_H
+#endif  // QLEVER_SRC_ENGINE_OPERATION_DESCRIBE_H

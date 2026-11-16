@@ -2,8 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach (kalmbach@cs.uni-freiburg.de)
 
-#ifndef QLEVER_SRC_ENGINE_NEUTRALELEMENTOPERATION_H
-#define QLEVER_SRC_ENGINE_NEUTRALELEMENTOPERATION_H
+#ifndef QLEVER_SRC_ENGINE_OPERATION_NEUTRALELEMENTOPERATION_H
+#define QLEVER_SRC_ENGINE_OPERATION_NEUTRALELEMENTOPERATION_H
 
 #include "engine/operation/Operation.h"
 #include "util/ContainersWithAllocator.h"
@@ -65,4 +65,4 @@ class NeutralElementOperation : public Operation {
   }
 };
 
-#endif  // QLEVER_SRC_ENGINE_NEUTRALELEMENTOPERATION_H
+#endif  // QLEVER_SRC_ENGINE_OPERATION_NEUTRALELEMENTOPERATION_H

@@ -2,8 +2,8 @@
 // Chair of Algorithms and Data Structures
 // Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SRC_ENGINE_EXISTSJOIN_H
-#define QLEVER_SRC_ENGINE_EXISTSJOIN_H
+#ifndef QLEVER_SRC_ENGINE_OPERATION_EXISTSJOIN_H
+#define QLEVER_SRC_ENGINE_OPERATION_EXISTSJOIN_H
 
 #include "engine/QueryExecutionTree.h"
 #include "engine/operation/Operation.h"
@@ -140,4 +140,4 @@ class ExistsJoin : public Operation {
               addExistsJoinsToSubtreeDoesntCollideForHiddenVariables);
 };
 
-#endif  // QLEVER_SRC_ENGINE_EXISTSJOIN_H
+#endif  // QLEVER_SRC_ENGINE_OPERATION_EXISTSJOIN_H

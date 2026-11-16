@@ -5,8 +5,8 @@
 //
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
-#ifndef QLEVER_SRC_ENGINE_GROUPBYIMPL_H
-#define QLEVER_SRC_ENGINE_GROUPBYIMPL_H
+#ifndef QLEVER_SRC_ENGINE_OPERATION_GROUPBYIMPL_H
+#define QLEVER_SRC_ENGINE_OPERATION_GROUPBYIMPL_H
 
 #include <gtest/gtest_prod.h>
 
@@ -670,4 +670,4 @@ CPP_concept VectorOfAggregationData =
     ad_utility::SameAsAnyTypeIn<A, GroupByImpl::AggregationDataVectors>;
 }
 
-#endif  // QLEVER_SRC_ENGINE_GROUPBYIMPL_H
+#endif  // QLEVER_SRC_ENGINE_OPERATION_GROUPBYIMPL_H
