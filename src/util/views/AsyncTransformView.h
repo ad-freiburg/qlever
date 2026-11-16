@@ -198,8 +198,11 @@ class AsyncTransformView
     // Return true if one more runner should be posted, and count it as
     // running and queued. Requires that `mutex_` is held.
     bool reserveRunnerIfWanted() {
-      size_t wanted =
-          std::min(maxNumRunners_, ceilDiv(todo_.size(), numSlotsPerRunner_));
+      // The slots that busy runners hold count as well, as these runners
+      // can't take a queued slot. Popping a slot thus never lowers `wanted`.
+      size_t numUnfinishedSlots = todo_.size() + numBusyRunners_;
+      size_t wanted = std::min(maxNumRunners_,
+                               ceilDiv(numUnfinishedSlots, numSlotsPerRunner_));
       if (numQueuedRunners_ > 0 || numRunners_ >= wanted) {
         return false;
       }
