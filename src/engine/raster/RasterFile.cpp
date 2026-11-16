@@ -21,6 +21,7 @@
 #include <stdexcept>
 #include <vector>
 
+#include "backports/algorithm.h"
 #include "backports/filesystem.h"
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "util/Exception.h"
@@ -161,6 +162,20 @@ struct ToOgrGeometry {
 }  // namespace
 
 // _____________________________________________________________________________
+PixelTable::PixelTable(size_t numBands, const qlm::Allocator<char>& allocator)
+    : centers_{allocator}, valuesPerBand_(numBands, BandValues{allocator}) {}
+
+// _____________________________________________________________________________
+PixelTable::PixelTable(qlm::vector<GeoPoint> centers,
+                       std::vector<BandValues> valuesPerBand)
+    : centers_{std::move(centers)}, valuesPerBand_{std::move(valuesPerBand)} {
+  for (const BandValues& values : valuesPerBand_) {
+    AD_CONTRACT_CHECK(values.size() == centers_.size());
+  }
+}
+
+// _____________________________________________________________________________
+
 struct RasterFile::Impl {
   // A rectangle of whole pixels, for example the pixels under a polygon.
   struct PixelWindow {
@@ -185,8 +200,8 @@ struct RasterFile::Impl {
     PixelValue readPixel(int column, int row) const;
 
     // Return the values of all pixels in `window`, row by row.
-    std::variant<std::vector<int64_t>, std::vector<double>> readWindow(
-        const PixelWindow& window) const;
+    std::variant<qlm::vector<int64_t>, qlm::vector<double>> readWindow(
+        const PixelWindow& window, const qlm::Allocator<char>& allocator) const;
 
     // Return whether `value`, which was read from this band, is its NoData
     // value.
@@ -209,6 +224,9 @@ struct RasterFile::Impl {
 
   explicit Impl(const std::string& path);
 
+  // Check that `bands` is not empty and that each band exists.
+  void checkBands(ql::span<const int> bands) const;
+
   // Return the center of the pixel at `column`, `row`.
   GeoPoint pixelCenter(int column, int row);
 
@@ -221,16 +239,18 @@ struct RasterFile::Impl {
   // default rule: the pixel center lies inside a polygon, the pixel is on the
   // thin line drawn along a line, or the pixel contains a point. `geometry`
   // is not `const`, because GDAL takes the geometries as non-const handles.
-  std::vector<uint8_t> rasterizeMask(OGRGeometry& geometry,
-                                     const PixelWindow& window) const;
+  qlm::vector<uint8_t> rasterizeMask(
+      OGRGeometry& geometry, const PixelWindow& window,
+      const qlm::Allocator<char>& allocator) const;
 
-  // Return the pixels of `band` that belong to `geometry`, which is in CRS84
-  // (see `rasterizeMask`). With a `radius` in metres, `geometry` is first
-  // widened by that radius. Takes ownership, because `geometry` is changed in
-  // place.
-  std::vector<Pixel> lookupOgrGeometry(std::unique_ptr<OGRGeometry> geometry,
-                                       const Band& band,
-                                       std::optional<double> radius);
+  // Return the pixels that belong to `geometry`, which is in CRS84 (see
+  // `rasterizeMask`), with their values in `bands`. With a `radius` in metres,
+  // `geometry` is first widened by that radius. Takes ownership, because
+  // `geometry` is changed in place.
+  PixelTable lookupOgrGeometry(std::unique_ptr<OGRGeometry> geometry,
+                               ql::span<const int> bands,
+                               std::optional<double> radius,
+                               const qlm::Allocator<char>& allocator);
 };
 
 // _____________________________________________________________________________
@@ -319,8 +339,9 @@ PixelValue RasterFile::Impl::Band::readPixel(int column, int row) const {
 }
 
 // _____________________________________________________________________________
-std::variant<std::vector<int64_t>, std::vector<double>>
-RasterFile::Impl::Band::readWindow(const PixelWindow& window) const {
+std::variant<qlm::vector<int64_t>, qlm::vector<double>>
+RasterFile::Impl::Band::readWindow(
+    const PixelWindow& window, const qlm::Allocator<char>& allocator) const {
   // GDAL converts the pixels to `type` while reading them into `values`.
   auto read = [this, &window](auto& values, GDALDataType type) {
     values.resize(static_cast<size_t>(window.width_) * window.height_);
@@ -336,11 +357,11 @@ RasterFile::Impl::Band::readWindow(const PixelWindow& window) const {
     }
   };
   if (isInteger_) {
-    std::vector<int64_t> values;
+    qlm::vector<int64_t> values{allocator};
     read(values, GDT_Int64);
     return values;
   }
-  std::vector<double> values;
+  qlm::vector<double> values{allocator};
   read(values, GDT_Float64);
   return values;
 }
@@ -356,6 +377,14 @@ bool RasterFile::Impl::Band::isNoData(const PixelValue& value) const {
     return std::isnan(std::get<double>(value));
   }
   return value == noData_.value();
+}
+
+// _____________________________________________________________________________
+void RasterFile::Impl::checkBands(ql::span<const int> bands) const {
+  AD_CONTRACT_CHECK(!bands.empty());
+  for (int band : bands) {
+    AD_CONTRACT_CHECK(1 <= band && band <= static_cast<int>(bands_.size()));
+  }
 }
 
 // _____________________________________________________________________________
@@ -415,8 +444,9 @@ std::optional<RasterFile::Impl::PixelWindow> RasterFile::Impl::pixelWindow(
 }
 
 // _____________________________________________________________________________
-std::vector<uint8_t> RasterFile::Impl::rasterizeMask(
-    OGRGeometry& geometry, const PixelWindow& window) const {
+qlm::vector<uint8_t> RasterFile::Impl::rasterizeMask(
+    OGRGeometry& geometry, const PixelWindow& window,
+    const qlm::Allocator<char>& allocator) const {
   // An image in memory that covers exactly the window, all pixels 0.
   GDALDriver* memDriver = GetGDALDriverManager()->GetDriverByName("MEM");
   GDALDatasetUniquePtr mask{memDriver->Create("", window.width_, window.height_,
@@ -442,8 +472,8 @@ std::vector<uint8_t> RasterFile::Impl::rasterizeMask(
           /*pTransformArg=*/nullptr, &burnValue, /*papszOptions=*/nullptr,
           /*pfnProgress=*/nullptr, /*pProgressArg=*/nullptr) == CE_None);
 
-  std::vector<uint8_t> belongsToGeometry(static_cast<size_t>(window.width_) *
-                                         window.height_);
+  qlm::vector<uint8_t> belongsToGeometry(
+      static_cast<size_t>(window.width_) * window.height_, allocator);
   AD_CORRECTNESS_CHECK(mask->GetRasterBand(1)->RasterIO(
                            GF_Read, 0, 0, window.width_, window.height_,
                            belongsToGeometry.data(), window.width_,
@@ -453,14 +483,17 @@ std::vector<uint8_t> RasterFile::Impl::rasterizeMask(
 }
 
 // _____________________________________________________________________________
-std::vector<Pixel> RasterFile::Impl::lookupOgrGeometry(
-    std::unique_ptr<OGRGeometry> geometry, const Band& band,
-    std::optional<double> radius) {
+PixelTable RasterFile::Impl::lookupOgrGeometry(
+    std::unique_ptr<OGRGeometry> geometry, ql::span<const int> bands,
+    std::optional<double> radius, const qlm::Allocator<char>& allocator) {
+  checkBands(bands);
+  auto noPixels = [&]() { return PixelTable(bands.size(), allocator); };
+
   // An edge that is straight in CRS84 is curved in the CRS of the file. Extra
   // vertices let the transformed edge follow that curve.
   geometry->segmentize(MAX_SEGMENT_LENGTH_DEGREES);
   if (geometry->transform(crs84ToRaster_.get()) != OGRERR_NONE) {
-    return {};
+    return noPixels();
   }
   // Widen in the CRS of the file, where distances are in its own unit, not in
   // degrees.
@@ -474,60 +507,88 @@ std::vector<Pixel> RasterFile::Impl::lookupOgrGeometry(
     // `Buffer` returns a new geometry, which `geometry` now owns.
     geometry.reset(geometry->Buffer(radius.value() / metresPerUnit_.value()));
     if (!geometry) {
-      return {};
+      return noPixels();
     }
   }
   OGREnvelope envelope;
   geometry->getEnvelope(&envelope);
   std::optional<PixelWindow> window = pixelWindow(envelope);
   if (!window.has_value()) {
-    return {};
+    return noPixels();
   }
-  std::vector<uint8_t> belongsToGeometry =
-      rasterizeMask(*geometry, window.value());
+  qlm::vector<uint8_t> belongsToGeometry =
+      rasterizeMask(*geometry, window.value(), allocator);
 
-  // The values of the pixels to return, and their centers in the CRS of the
-  // file.
-  std::vector<PixelValue> values;
-  std::vector<double> centersX;
-  std::vector<double> centersY;
-  std::visit(
-      [&](const auto& windowValues) {
-        for (int row = 0; row < window->height_; ++row) {
-          for (int column = 0; column < window->width_; ++column) {
-            size_t index = static_cast<size_t>(row) * window->width_ + column;
-            if (!belongsToGeometry[index]) {
-              continue;
-            }
-            PixelValue value{windowValues[index]};
-            if (band.isNoData(value)) {
-              continue;
-            }
-            double x = 0.0;
-            double y = 0.0;
-            GDALApplyGeoTransform(pixelToRaster_.data(),
-                                  window->column_ + column + 0.5,
-                                  window->row_ + row + 0.5, &x, &y);
-            values.push_back(value);
-            centersX.push_back(x);
-            centersY.push_back(y);
-          }
-        }
-      },
-      band.readWindow(window.value()));
+  // The values of all pixels of the window, one entry per entry of `bands`.
+  std::vector<std::variant<qlm::vector<int64_t>, qlm::vector<double>>>
+      windowValuesPerBand;
+  windowValuesPerBand.reserve(bands.size());
+  for (int band : bands) {
+    windowValuesPerBand.push_back(
+        bands_[band - 1].readWindow(window.value(), allocator));
+  }
+
+  // The value of `bands[bandIndex]` at `index` of the window, or nothing if it
+  // is NoData.
+  auto valueAt = [&](size_t bandIndex,
+                     size_t index) -> std::optional<PixelValue> {
+    PixelValue value = std::visit(
+        [index](const auto& windowValues) {
+          return PixelValue{windowValues[index]};
+        },
+        windowValuesPerBand[bandIndex]);
+    if (bands_[bands[bandIndex] - 1].isNoData(value)) {
+      return std::nullopt;
+    }
+    return value;
+  };
+
+  // The columns of the result, and the centers in the CRS of the file.
+  std::vector<BandValues> valuesPerBand(bands.size(), BandValues{allocator});
+  qlm::vector<double> centersX{allocator};
+  qlm::vector<double> centersY{allocator};
+  // The values of the current pixel, reused so that the loop does not
+  // allocate.
+  std::vector<std::optional<PixelValue>> pixelValues(bands.size());
+  for (int row = 0; row < window->height_; ++row) {
+    for (int column = 0; column < window->width_; ++column) {
+      size_t index = static_cast<size_t>(row) * window->width_ + column;
+      if (!belongsToGeometry[index]) {
+        continue;
+      }
+      for (size_t bandIndex = 0; bandIndex < bands.size(); ++bandIndex) {
+        pixelValues[bandIndex] = valueAt(bandIndex, index);
+      }
+      if (!ql::ranges::any_of(pixelValues, [](const auto& value) {
+            return value.has_value();
+          })) {
+        continue;
+      }
+      for (size_t bandIndex = 0; bandIndex < bands.size(); ++bandIndex) {
+        valuesPerBand[bandIndex].push_back(pixelValues[bandIndex]);
+      }
+      double x = 0.0;
+      double y = 0.0;
+      GDALApplyGeoTransform(pixelToRaster_.data(),
+                            window->column_ + column + 0.5,
+                            window->row_ + row + 0.5, &x, &y);
+      centersX.push_back(x);
+      centersY.push_back(y);
+    }
+  }
 
   // Transform all centers to CRS84 in one call.
-  if (!values.empty()) {
+  if (!centersX.empty()) {
     AD_CORRECTNESS_CHECK(rasterToCrs84_->Transform(
         centersX.size(), centersX.data(), centersY.data()));
   }
-  std::vector<Pixel> pixels;
-  pixels.reserve(values.size());
-  for (size_t i = 0; i < values.size(); ++i) {
+  qlm::vector<GeoPoint> centers{allocator};
+  centers.reserve(centersX.size());
+  for (size_t pixelIndex = 0; pixelIndex < centersX.size(); ++pixelIndex) {
     // `GeoPoint` takes the latitude first.
-    pixels.push_back(Pixel{GeoPoint{centersY[i], centersX[i]}, values[i]});
+    centers.push_back(GeoPoint{centersY[pixelIndex], centersX[pixelIndex]});
   }
-  return pixels;
+  return PixelTable{std::move(centers), std::move(valuesPerBand)};
 }
 
 // _____________________________________________________________________________
@@ -546,14 +607,17 @@ int RasterFile::numBands() const {
 }
 
 // _____________________________________________________________________________
-std::optional<Pixel> RasterFile::lookupPoint(const GeoPoint& point, int band) {
-  AD_CONTRACT_CHECK(1 <= band && band <= numBands());
+PixelTable RasterFile::lookupPoint(const GeoPoint& point,
+                                   ql::span<const int> bands,
+                                   const qlm::Allocator<char>& allocator) {
   Impl& impl = *impl_;
+  impl.checkBands(bands);
+  auto noPixels = [&]() { return PixelTable(bands.size(), allocator); };
 
   double x = point.getLng();
   double y = point.getLat();
   if (!impl.crs84ToRaster_->Transform(1, &x, &y)) {
-    return std::nullopt;
+    return noPixels();
   }
 
   double column = 0.0;
@@ -566,43 +630,59 @@ std::optional<Pixel> RasterFile::lookupPoint(const GeoPoint& point, int band) {
   // Written as "inside" so that NaN counts as outside.
   if (!(0 <= column && column < impl.width_ && 0 <= row &&
         row < impl.height_)) {
-    return std::nullopt;
+    return noPixels();
   }
   int pixelColumn = static_cast<int>(column);
   int pixelRow = static_cast<int>(row);
 
-  const Impl::Band& bandInfo = impl.bands_[band - 1];
-  PixelValue value = bandInfo.readPixel(pixelColumn, pixelRow);
-  if (bandInfo.isNoData(value)) {
-    return std::nullopt;
+  // The value of the pixel in each band, or nothing where it is NoData.
+  std::vector<std::optional<PixelValue>> pixelValues;
+  pixelValues.reserve(bands.size());
+  for (int band : bands) {
+    const Impl::Band& bandInfo = impl.bands_[band - 1];
+    PixelValue value = bandInfo.readPixel(pixelColumn, pixelRow);
+    pixelValues.push_back(bandInfo.isNoData(value)
+                              ? std::nullopt
+                              : std::optional<PixelValue>{value});
   }
-  return Pixel{impl.pixelCenter(pixelColumn, pixelRow), value};
+  if (!ql::ranges::any_of(
+          pixelValues, [](const auto& value) { return value.has_value(); })) {
+    return noPixels();
+  }
+
+  // A table with one row.
+  qlm::vector<GeoPoint> centers({impl.pixelCenter(pixelColumn, pixelRow)},
+                                allocator);
+  std::vector<BandValues> valuesPerBand;
+  valuesPerBand.reserve(bands.size());
+  for (const std::optional<PixelValue>& value : pixelValues) {
+    valuesPerBand.push_back(BandValues({value}, allocator));
+  }
+  return PixelTable{std::move(centers), std::move(valuesPerBand)};
 }
 
 // _____________________________________________________________________________
-std::vector<Pixel> RasterFile::lookupCircle(const GeoPoint& center, int band,
-                                            double radius) {
-  AD_CONTRACT_CHECK(1 <= band && band <= numBands());
+PixelTable RasterFile::lookupCircle(const GeoPoint& center,
+                                    ql::span<const int> bands, double radius,
+                                    const qlm::Allocator<char>& allocator) {
   return impl_->lookupOgrGeometry(
-      std::make_unique<OGRPoint>(center.getLng(), center.getLat()),
-      impl_->bands_[band - 1], radius);
+      std::make_unique<OGRPoint>(center.getLng(), center.getLat()), bands,
+      radius, allocator);
 }
 
 // _____________________________________________________________________________
-std::vector<Pixel> RasterFile::lookupGeometry(std::string_view wktLiteral,
-                                              int band,
-                                              std::optional<double> radius) {
-  AD_CONTRACT_CHECK(1 <= band && band <= numBands());
+PixelTable RasterFile::lookupGeometry(std::string_view wktLiteral,
+                                      ql::span<const int> bands,
+                                      std::optional<double> radius,
+                                      const qlm::Allocator<char>& allocator) {
   std::optional<ad_utility::detail::ParsedWkt> geometry =
       ad_utility::detail::parseWkt(wktLiteral).parsedWkt_;
   if (!geometry.has_value()) {
-    return {};
+    return PixelTable(bands.size(), allocator);
   }
-  const Impl::Band& bandInfo = impl_->bands_[band - 1];
 
   return std::visit(
-      [this, band, &bandInfo,
-       radius](const auto& parsed) -> std::vector<Pixel> {
+      [this, bands, radius, &allocator](const auto& parsed) -> PixelTable {
         using T = std::decay_t<decltype(parsed)>;
         // A point without a radius is one pixel, read directly.
         if constexpr (std::is_same_v<T, ::util::geo::DPoint>) {
@@ -611,19 +691,15 @@ std::vector<Pixel> RasterFile::lookupGeometry(std::string_view wktLiteral,
             try {
               point = ad_utility::detail::utilPointToGeoPoint(parsed);
             } catch (const CoordinateOutOfRangeException&) {
-              return {};
+              return PixelTable(bands.size(), allocator);
             }
-            std::optional<Pixel> pixel = lookupPoint(point.value(), band);
-            if (!pixel.has_value()) {
-              return {};
-            }
-            return {pixel.value()};
+            return lookupPoint(point.value(), bands, allocator);
           }
         }
         // Lines, polygons, their multi types and collections, and every
         // geometry widened by a radius, each by the rule of `rasterizeMask`.
-        return impl_->lookupOgrGeometry(ToOgrGeometry{}(parsed), bandInfo,
-                                        radius);
+        return impl_->lookupOgrGeometry(ToOgrGeometry{}(parsed), bands, radius,
+                                        allocator);
       },
       geometry.value());
 }

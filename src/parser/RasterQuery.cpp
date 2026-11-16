@@ -11,14 +11,48 @@
 
 #include <absl/strings/str_cat.h>
 
-#include <limits>
+#include <charconv>
+#include <optional>
 #include <string_view>
+#include <system_error>
 
+#include "backports/StartsWithAndEndsWith.h"
+#include "backports/algorithm.h"
 #include "parser/MagicServiceIriConstants.h"
 #include "parser/SparqlTriple.h"
 #include "util/Exception.h"
 
 namespace parsedQuery {
+
+namespace {
+
+// The number `N` of a parameter `bandN`, for example 3 for `band3`. Nothing if
+// `parameter` does not have this form.
+std::optional<int> parseBandNumber(std::string_view parameter) {
+  constexpr std::string_view prefix = "band";
+  if (!ql::starts_with(parameter, prefix)) {
+    return std::nullopt;
+  }
+  std::string_view digits = parameter.substr(prefix.size());
+  int number = 0;
+  auto [end, error] =
+      std::from_chars(digits.data(), digits.data() + digits.size(), number);
+  if (error == std::errc::result_out_of_range) {
+    throw RasterException(
+        absl::StrCat("The band number of `<", parameter, ">` is too large"));
+  }
+  // Also for no digits at all (`band`) and for characters after the digits.
+  if (error != std::errc{} || end != digits.data() + digits.size()) {
+    return std::nullopt;
+  }
+  if (number < 1) {
+    throw RasterException(
+        absl::StrCat("Band numbers start at 1: `<", parameter, ">`"));
+  }
+  return number;
+}
+
+}  // namespace
 
 // ____________________________________________________________________________
 void RasterQuery::addParameter(const SparqlTriple& triple) {
@@ -38,23 +72,18 @@ void RasterQuery::addParameter(const SparqlTriple& triple) {
           "The parameter `<dataset>` expects a string literal");
     }
     dataset_ = std::string{object.getLiteral().getContent()};
-  } else if (predString == "band") {
-    if (band_.has_value()) {
-      throw RasterException(
-          "The parameter `<band>` must not be set more than once");
+  } else if (std::optional<int> number = parseBandNumber(predString);
+             number.has_value()) {
+    // The real upper bound of the number depends on the file and is checked
+    // by `RasterLookup`.
+    Variable variable = getVariable(predString, object);
+    if (ql::ranges::any_of(bands_, [&number](const auto& band) {
+          return band.number_ == number.value();
+        })) {
+      throw RasterException(absl::StrCat("The parameter `<", predString,
+                                         ">` must not be set more than once"));
     }
-    if (!object.isInt()) {
-      throw RasterException("The parameter `<band>` expects an integer");
-    }
-    // The real upper bound depends on the file and is checked by
-    // `RasterLookup`. This one only keeps the value inside an `int`.
-    if (object.getInt() < 1) {
-      throw RasterException("The parameter `<band>` must be at least 1");
-    }
-    if (object.getInt() > std::numeric_limits<int>::max()) {
-      throw RasterException("The parameter `<band>` is too large");
-    }
-    band_ = static_cast<int>(object.getInt());
+    bands_.push_back({number.value(), std::move(variable)});
   } else if (predString == "radius") {
     if (radius_.has_value()) {
       throw RasterException(
@@ -69,15 +98,13 @@ void RasterQuery::addParameter(const SparqlTriple& triple) {
     radius_ = radius;
   } else if (predString == "geometry") {
     setVariable("geometry", object, geometry_);
-  } else if (predString == "value") {
-    setVariable("value", object, value_);
   } else if (predString == "center") {
     setVariable("center", object, center_);
   } else {
     throw RasterException(absl::StrCat(
         "Unknown parameter for raster lookup: `<", predString,
-        ">`. Supported parameters: `<dataset>`, `<band>`, `<radius>`, "
-        "`<geometry>`, `<value>`, `<center>`"));
+        ">`. Supported parameters: `<dataset>`, `<bandN>` (for example "
+        "`<band1>`), `<radius>`, `<geometry>`, `<center>`"));
   }
 }
 
@@ -91,7 +118,11 @@ void RasterQuery::validate() const {
   };
   throwIfMissing(!dataset_.has_value(), "dataset");
   throwIfMissing(!geometry_.has_value(), "geometry");
-  throwIfMissing(!value_.has_value(), "value");
+  if (bands_.empty()) {
+    throw RasterException(
+        "A raster lookup requires at least one band, for example "
+        "`raster:band1 ?value`");
+  }
   if (!childGraphPattern_.has_value()) {
     throw RasterException(
         "A raster lookup requires a group graph pattern that binds the "
@@ -103,10 +134,9 @@ void RasterQuery::validate() const {
 // ____________________________________________________________________________
 RasterLookupConfiguration RasterQuery::toRasterLookupConfiguration() const {
   AD_CORRECTNESS_CHECK(dataset_.has_value() && geometry_.has_value() &&
-                       value_.has_value());
-  return RasterLookupConfiguration{dataset_.value(), band_.value_or(1),
-                                   radius_,          geometry_.value(),
-                                   value_.value(),   center_};
+                       !bands_.empty());
+  return RasterLookupConfiguration{dataset_.value(), bands_, radius_,
+                                   geometry_.value(), center_};
 }
 
 }  // namespace parsedQuery

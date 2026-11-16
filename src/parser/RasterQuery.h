@@ -14,6 +14,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "engine/RasterLookupConfig.h"
 #include "parser/MagicServiceQuery.h"
@@ -31,22 +32,23 @@ class RasterException : public std::runtime_error {
 // SELECT * {
 //   SERVICE raster: {
 //     [] raster:dataset "vorratskarte" ;
-//        raster:band 1 ;
+//        raster:band1 ?species ;
+//        raster:band2 ?height ;
 //        raster:radius 500 ;
 //        raster:geometry ?geometry ;
-//        raster:value ?value ;
 //        raster:center ?center .
 //     { ?plot geo:hasGeometry/geo:asWKT ?geometry }
 //   }
 // }
-// The band (default 1), the radius (in metres) and the center are optional.
+// At least one band is required. The radius (in metres) and the center are
+// optional.
 struct RasterQuery : MagicServiceQuery {
   // Empty until set by a configuration triple.
   std::optional<std::string> dataset_;
-  std::optional<int> band_;
+  // In the order of the configuration triples.
+  std::vector<RasterLookupConfiguration::Band> bands_;
   std::optional<double> radius_;
   std::optional<Variable> geometry_;
-  std::optional<Variable> value_;
   std::optional<Variable> center_;
 
   // See MagicServiceQuery - processes configuration triples.
@@ -55,8 +57,7 @@ struct RasterQuery : MagicServiceQuery {
   // Throw if a required parameter or the group graph pattern is missing.
   void validate() const override;
 
-  // The configuration for `RasterLookup`, with the default band. Requires a
-  // successful `validate()`.
+  // The configuration for `RasterLookup`. Requires a successful `validate()`.
   RasterLookupConfiguration toRasterLookupConfiguration() const;
 
   std::string_view name() const override { return "raster lookup"; }

@@ -18,7 +18,9 @@
 #include <variant>
 #include <vector>
 
+#include "backports/span.h"
 #include "rdfTypes/GeoPoint.h"
+#include "util/ContainersWithAllocator.h"
 
 namespace qlever::raster {
 
@@ -26,10 +28,25 @@ namespace qlever::raster {
 // point bands.
 using PixelValue = std::variant<int64_t, double>;
 
-// One pixel of a lookup result: its center and its value.
-struct Pixel {
-  GeoPoint center_;
-  PixelValue value_;
+// The values of one band, one per pixel. Empty where the band is NoData.
+using BandValues = qlm::vector<std::optional<PixelValue>>;
+
+// Pixels with their centers and their values in several bands, stored column
+// by column. Entry `i` of every vector belongs to pixel `i`.
+// The vectors use the given allocator, so they count towards its memory limit.
+struct PixelTable {
+  qlm::vector<GeoPoint> centers_;
+  // One entry per requested band, in the order of the request.
+  std::vector<BandValues> valuesPerBand_;
+
+  // An empty table for `numBands` bands.
+  PixelTable(size_t numBands, const qlm::Allocator<char>& allocator);
+
+  // A table from complete columns, which must all have the same length.
+  PixelTable(qlm::vector<GeoPoint> centers,
+             std::vector<BandValues> valuesPerBand);
+
+  size_t numPixels() const { return centers_.size(); }
 };
 
 // A raster file (for example a GeoTIFF), opened for lookups with geometries in
@@ -52,20 +69,25 @@ class RasterFile {
   // The number of bands. Bands are numbered from 1, as in GDAL.
   int numBands() const;
 
-  // The pixel under `point` in `band`, or nothing if the point is outside the
-  // grid or the pixel is NoData.
-  std::optional<Pixel> lookupPoint(const GeoPoint& point, int band);
+  // All lookups return one column of values per entry of `bands`, in the same
+  // order. A pixel is left out if it is NoData in all of `bands`.
 
-  // The pixels in `band` with their center inside the circle of `radius`
-  // metres around `center`, without NoData pixels.
-  std::vector<Pixel> lookupCircle(const GeoPoint& center, int band,
-                                  double radius);
+  // The pixel under `point`, or nothing if the point is outside the grid.
+  PixelTable lookupPoint(const GeoPoint& point, ql::span<const int> bands,
+                         const qlm::Allocator<char>& allocator);
 
-  // The pixels in `band` under a point, on a line, or with their center inside
-  // a polygon of `wktLiteral`, without NoData pixels and duplicates. With a
-  // `radius` in metres, the geometry is first widened by that radius.
-  std::vector<Pixel> lookupGeometry(std::string_view wktLiteral, int band,
-                                    std::optional<double> radius);
+  // The pixels with their center inside the circle of `radius` metres around
+  // `center`.
+  PixelTable lookupCircle(const GeoPoint& center, ql::span<const int> bands,
+                          double radius, const qlm::Allocator<char>& allocator);
+
+  // The pixels under a point, on a line, or with their center inside a polygon
+  // of `wktLiteral`, without duplicates. With a `radius` in metres, the
+  // geometry is first widened by that radius.
+  PixelTable lookupGeometry(std::string_view wktLiteral,
+                            ql::span<const int> bands,
+                            std::optional<double> radius,
+                            const qlm::Allocator<char>& allocator);
 };
 
 // The path of the raster file for `datasetName`, which is the name of a `.tif`

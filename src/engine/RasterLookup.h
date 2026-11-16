@@ -17,7 +17,8 @@
 #include "engine/RasterLookupConfig.h"
 
 // For each row of the child, looks up the pixels under its geometry and
-// returns one row per pixel: the child's columns plus value (and center).
+// returns one row per pixel: the child's columns plus one value per band (and
+// center).
 class RasterLookup : public Operation {
  private:
   std::shared_ptr<QueryExecutionTree> subtree_;

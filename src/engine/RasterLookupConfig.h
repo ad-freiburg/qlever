@@ -12,6 +12,7 @@
 
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "rdfTypes/Variable.h"
 
@@ -19,16 +20,22 @@
 // In its own header, so that the parser can use it without including the
 // `RasterLookup` operation.
 struct RasterLookupConfiguration {
+  // A band of the raster and the variable that is bound to its pixel values.
+  struct Band {
+    // Numbered from 1, as in GDAL.
+    int number_;
+    Variable variable_;
+  };
+
   // The name of the raster, see `qlever::raster::rasterFilePath`.
   std::string dataset_;
-  // Numbered from 1, as in GDAL. The parser sets the default.
-  int band_;
+  // At least one, in the order of the query.
+  std::vector<Band> bands_;
   // In metres. If set, each geometry is first widened by this radius.
   std::optional<double> radius_;
   // The child's column with the geometries.
   Variable geometry_;
-  // The new columns: the pixel value and, if wanted, the pixel center.
-  Variable value_;
+  // The variable that is bound to the pixel centers, if wanted.
   std::optional<Variable> center_;
 };
 

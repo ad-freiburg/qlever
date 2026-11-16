@@ -187,7 +187,9 @@ void VariableCounter::operator()(const RowNumberQuery& op) {
 // _____________________________________________________________________________
 void VariableCounter::operator()(const RasterQuery& op) {
   (*this)(op.geometry_);
-  (*this)(op.value_);
+  for (const RasterLookupConfiguration::Band& band : op.bands_) {
+    (*this)(band.variable_);
+  }
   (*this)(op.center_);
   (*this)(op.childGraphPattern_);
 }
