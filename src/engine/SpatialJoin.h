@@ -184,7 +184,7 @@ class SpatialJoin : public Operation {
   makeTreeWithDistanceVariable(const parsedQuery::Bind& bind) const;
 
   std::unique_ptr<Operation> cloneWithNewChildren(
-      std::vector<std::shared_ptr<QueryExecutionTree>> children) const override;
+      qlm::vector<std::shared_ptr<QueryExecutionTree>> children) const override;
 
   // Get the internal variable names of bounding box columns.
   static std::pair<Variable, Variable> getBoundingBoxColumnNames(

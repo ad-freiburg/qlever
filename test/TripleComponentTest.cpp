@@ -91,6 +91,19 @@ TEST(TripleComponent, setAndGetId) {
   ASSERT_EQ(tcConst.getId(), id);
 }
 
+// Test that a `TripleComponent` constructed from a `LiteralOrIri` holds the
+// contained `Iri` or `Literal`.
+TEST(TripleComponent, constructFromLiteralOrIri) {
+  using ad_utility::triple_component::LiteralOrIri;
+  TripleComponent iri{LiteralOrIri::fromStringRepresentation("<x>")};
+  ASSERT_TRUE(iri.isIri());
+  EXPECT_EQ(iri.getIri().toStringRepresentation(), "<x>");
+
+  TripleComponent literal{LiteralOrIri::fromStringRepresentation("\"abc\"@en")};
+  ASSERT_TRUE(literal.isLiteral());
+  EXPECT_EQ(literal.getLiteral().toStringRepresentation(), "\"abc\"@en");
+}
+
 // Test that `getNumber` returns the value of an integer or a double (also as an
 // `Id`), and `std::nullopt` for every other value.
 TEST(TripleComponent, getNumber) {

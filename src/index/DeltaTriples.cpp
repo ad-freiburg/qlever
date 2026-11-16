@@ -26,7 +26,7 @@
 #include "index/LocatedTriples.h"
 #include "index/TripleComponentConversions.h"
 #include "util/ChunkedForLoop.h"
-#include "util/Serializer/TripleSerializer.h"
+#include "util/serializer/TripleSerializer.h"
 
 // ____________________________________________________________________________
 template <bool isInternal>
@@ -826,7 +826,7 @@ DeltaTriples::copyLocalVocab() const {
   std::vector<LocalVocabIndex> entries = ::ranges::to_vector(
       localVocab_.primaryWordSet() |
       ql::views::transform(
-          [](const LocalVocabEntry& entry) { return &entry; }));
+          [](const LocalVocabEntryView& entry) { return &entry; }));
   return std::make_pair(std::move(entries),
                         localVocab_.getOwnedLocalBlankNodeBlocks());
 }
@@ -892,9 +892,10 @@ void DeltaTriples::remapId(
       // first seen by updates after the rebuild snapshot was taken). It still
       // points to an entry that is anchored to the OLD index; in particular,
       // its lazily cached position refers to the old vocabulary. Insert a
-      // *re-anchored* copy (anchored to the new index, with an empty position
-      // cache) into the local vocab and rewrite the id, so that no entry of the
-      // new index references the old index, which is destroyed after the swap.
+      // *re-anchored* view of it (anchored to the new index, with an empty
+      // position cache) into the local vocab, which copies its characters, and
+      // rewrite the id, so that no entry of the new index references the old
+      // index, which is destroyed after the swap.
       id = Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
           id.getLocalVocabIndex()->reanchoredTo(index.getLocalVocabContext())));
     }

@@ -55,6 +55,7 @@
 #include "util/AllocatorWithLimit.h"
 #include "util/CancellationHandle.h"
 #include "util/CompilerWarnings.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 
@@ -529,6 +530,41 @@ TEST_F(MaterializedViewsTest, ColumnPermutation) {
       EXPECT_FALSE(
           qet.getRootOperation()->columnOriginatesFromGraphOrUndef(var));
     }
+  }
+
+  // Test that an `IndexScan` with a fixed first column or a skipped additional
+  // column takes the `UndefStatus` from the view column of each variable.
+  {
+    // In this view, ?s, ?o and ?d are always defined, but ?u and ?v are
+    // undefined for one of the two rows in the view.
+    manager.writeViewToDisk("testView7", qlv().parseAndPlanQuery(R"(
+      SELECT ?s ?o ?u ?d ?v {
+        ?s <p1> ?o .
+        BIND(1 AS ?d)
+        OPTIONAL { ?s <p2> ?u }
+        BIND(?u AS ?v)
+      }
+    )"));
+    auto scanMap = [this](std::string_view triple) {
+      return qlv()
+          .parseAndPlanQuery(
+              absl::StrCat("PREFIX view: <https://qlever.cs.uni-freiburg.de/"
+                           "materializedView/> SELECT * { ",
+                           triple, " }"))
+          .queryExecutionTree()
+          .getVariableColumns();
+    };
+
+    // The first column is fixed, the view column of `?u` is 2.
+    EXPECT_THAT(scanMap("<s1> view:testView7-u ?u"),
+                ::testing::UnorderedElementsAre(
+                    ::testing::Pair(V{"?u"}, makePossiblyUndefinedColumn(0))));
+
+    // The additional column 3 is skipped, the view column of `?v` is 4.
+    EXPECT_THAT(scanMap("?s view:testView7-v ?v"),
+                ::testing::UnorderedElementsAre(
+                    ::testing::Pair(V{"?s"}, makeAlwaysDefinedColumn(0)),
+                    ::testing::Pair(V{"?v"}, makePossiblyUndefinedColumn(1))));
   }
 }
 
@@ -2217,7 +2253,8 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
   {
     auto plan = qlv().parseAndPlanQuery("SELECT * { ?s <p1> ?o }");
     AD_EXPECT_THROW_WITH_MESSAGE(
-        plan.queryExecutionTree().getRootOperation()->cloneWithNewChildren({}),
+        plan.queryExecutionTree().getRootOperation()->cloneWithNewChildren(
+            {{}, plan.queryExecutionContext().getAllocator()}),
         ::testing::HasSubstr("`cloneWithNewChildren` is not implemented"));
   }
 
@@ -2511,8 +2548,9 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
       return makeExecutionTree<Union>(qec, left, right);
     };
     auto cartesian = [qec](auto left, auto right) {
-      return makeExecutionTree<CartesianProductJoin>(qec,
-                                                     std::vector{left, right});
+      return makeExecutionTree<CartesianProductJoin>(
+          qec,
+          CartesianProductJoin::Children{{left, right}, qec->getAllocator()});
     };
 
     // Push the `BIND` into `tree` (like the query planner does) and check the
@@ -2715,14 +2753,14 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
 
     VariableToColumnMap expectedVarToColResult{
         {V{"?x"}, makeAlwaysDefinedColumn(0)},
-        {V{"?y"}, makeAlwaysDefinedColumn(1)},
+        {V{"?y"}, makePossiblyUndefinedColumn(1)},
     };
     EXPECT_THAT(indexScan.getExternallyVisibleVariableColumns(),
                 ::testing::UnorderedElementsAreArray(expectedVarToColResult));
 
     VariableToColumnMap expectedVarToColPermutation{
         {V{"?x"}, makeAlwaysDefinedColumn(1)},
-        {V{"?y"}, makeAlwaysDefinedColumn(4)},
+        {V{"?y"}, makePossiblyUndefinedColumn(4)},
     };
     EXPECT_THAT(
         indexScan.computePermutationColumnIndices(),

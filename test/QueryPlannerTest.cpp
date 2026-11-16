@@ -971,6 +971,21 @@ TEST(QueryPlanner, TransitivePathBindRight) {
       ad_utility::testing::getQec("<x> <p> <o>. <x2> <p> <o2>"));
 }
 
+TEST(QueryPlanner, TransitivePathBindBoth) {
+  auto scan = h::IndexScanFromStrings;
+  TransitivePathSide left{std::nullopt, 0, Variable("?x"), 0};
+  TransitivePathSide right{std::nullopt, 1, Variable("?y"), 1};
+  h::expect(
+      "SELECT ?x ?y WHERE {"
+      "?x <p>+ ?y."
+      "?x <p> ?y }",
+      h::transitivePath(
+          left, right, 1, std::numeric_limits<size_t>::max(),
+          scan("?x", "<p>", "?y"),
+          scan(internalVar(0), "<p>", internalVar(1), {Permutation::PSO})),
+      ad_utility::testing::getQec("<x> <p> <o>. <x2> <p> <o2>. <x1> <p> <x2>"));
+}
+
 // Test that two row number services on the same sorted subquery with different
 // offsets (the equivalent of the SQL window function `LAG`) are joined without
 // sorting, and that invalid configurations are rejected.
@@ -2036,6 +2051,34 @@ TEST(QueryPlanner, BindAtBeginningOfQuery) {
       "SELECT * WHERE {"
       " BIND (3 + 5 AS ?x) }",
       h::Bind(h::NeutralElement(), "3 + 5", Variable{"?x"}));
+}
+
+// Test that a `BIND` of a constant that equals a fixed component of a triple is
+// computed by the `IndexScan` of this triple, but not pushed through other
+// operations.
+TEST(QueryPlanner, BindOfFixedComponentOfTriple) {
+  // A knowledge graph with the predicates `<p>` and `<q>`.
+  auto qec = ad_utility::testing::getQec("<x> <p> <o>. <x> <q> <y>.");
+  auto scan = h::IndexScanFromStrings;
+
+  // A `BIND` directly after the triple becomes a constant column of its scan.
+  h::expect("SELECT * { ?s <p> ?o BIND(<p> AS ?x) }",
+            scan("?s", "<p>", "?o", {}, {}, {}, {}, 3), qec);
+
+  // A `BIND` after a join stays on top of the join.
+  h::expect("SELECT * { ?s <p> ?o . ?s <q> ?y BIND(<p> AS ?x) }",
+            h::Bind(h::Join(scan("?s", "<p>", "?o"), scan("?s", "<q>", "?y")),
+                    "<p>", Variable{"?x"}),
+            qec);
+
+  // A `BIND` to a variable that a subquery strips from the scan (here `?o`,
+  // with `strip-columns` enabled) stays on top of the scan.
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::stripColumns_>(true);
+  h::expect("SELECT * { { SELECT ?s { ?s <p> ?o } } BIND(<p> AS ?o) }",
+            h::Bind(scan("?s", "<p>", "?o", {}, {}, {}, {}, 1), "<p>",
+                    Variable{"?o"}),
+            qec);
 }
 
 namespace {
@@ -3871,20 +3914,17 @@ TEST(QueryPlanner, PropertyPathWithGraphVariable) {
         query, h::MultiColumnJoin(h::Sort(values), h::Sort(completeHull(1))),
         std::nullopt, greedyBudgets);
 
-    // Ensure join with too many columns doesn't result in an exception. (This
-    // could be optimized in the future.)
+    // Ensure join with too many columns doesn't result in an exception and that
+    // both sides are bound at once.
     h::expect(
         "SELECT * "
         "{ VALUES (?g ?a ?b) { (1 1 1) } GRAPH ?g { ?a <label>+ ?b } }",
-        h::MultiColumnJoin(
-            h::Sort(h::ValuesClause("VALUES (?g\t?a\t?b) { (1 1 1) }")),
-            h::Sort(h::transitivePath(
-                left, right, 1, std::numeric_limits<size_t>::max(),
-                // Sort by ?g
-                h::Sort(h::IndexScanFromStrings(
-                    "?_QLever_internal_variable_qp_0", "<label>",
-                    "?_QLever_internal_variable_qp_1", {}, NamedTag{},
-                    {Variable{"?g"}}, {3}))))));
+        h::transitivePath(left, right, 1, std::numeric_limits<size_t>::max(),
+                          h::ValuesClause("VALUES (?g\t?a\t?b) { (1 1 1) }"),
+                          h::Sort(h::IndexScanFromStrings(
+                              "?_QLever_internal_variable_qp_0", "<label>",
+                              "?_QLever_internal_variable_qp_1", {}, NamedTag{},
+                              {Variable{"?g"}}, {3}))));
 
     h::expectWithGivenBudgets(
         "SELECT * WHERE { GRAPH ?g { ?a <label>+ ?b . VALUES ?a { UNDEF } } }",
@@ -4328,18 +4368,16 @@ TEST(QueryPlanner, bindTransitivePathWithGraphTwice) {
                       {Variable{"?g"}}, {3})))),
               h::IndexScanFromStrings("?g", "<b>", "?g2")),
       qec, {16, 64'000'000});
-  // Double bind is currently not supported
-  h::expect("SELECT * { GRAPH ?g { ?s <a>+ ?o } ?s <b> ?o }",
-            h::MultiColumnJoin(
-                h::Sort(h::transitivePath(
-                    left, right1, 1, std::numeric_limits<size_t>::max(),
-                    // The sort is because of missing graph permutations.
-                    h::Sort(h::IndexScanFromStrings(
-                        "?_QLever_internal_variable_qp_0", "<a>",
-                        "?_QLever_internal_variable_qp_1", {}, NamedTag{},
-                        {Variable{"?g"}}, {3})))),
-                h::IndexScanFromStrings("?s", "<b>", "?o")),
-            qec);
+  // This tests double binding (both columns at once).
+  h::expect(
+      "SELECT * { GRAPH ?g { ?s <a>+ ?o } ?s <b> ?o }",
+      h::transitivePath(left, right1, 1, std::numeric_limits<size_t>::max(),
+                        h::IndexScanFromStrings("?s", "<b>", "?o"),
+                        h::Sort(h::IndexScanFromStrings(
+                            "?_QLever_internal_variable_qp_0", "<a>",
+                            "?_QLever_internal_variable_qp_1", {}, NamedTag{},
+                            {Variable{"?g"}}, {3}))),
+      qec);
 
   TransitivePathSide right2{std::nullopt, 1, Variable{"?g"}, 1};
   h::expect("SELECT * { { GRAPH ?g { ?s <a>+ ?g } ?s <b> ?s2 } . ?g <b> ?g2 }",

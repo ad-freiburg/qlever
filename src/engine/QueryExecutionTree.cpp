@@ -456,9 +456,9 @@ QueryExecutionTree::makeTreeWithStrippedColumns(
 }
 
 // _____________________________________________________________________________
-std::vector<std::array<ColumnIndex, 2>> QueryExecutionTree::getJoinColumns(
+qlm::vector<std::array<ColumnIndex, 2>> QueryExecutionTree::getJoinColumns(
     const QueryExecutionTree& qetA, const QueryExecutionTree& qetB) {
-  std::vector<std::array<ColumnIndex, 2>> jcs;
+  qlm::vector<std::array<ColumnIndex, 2>> jcs{qetA.getQec()->getAllocator()};
   const auto& aVarCols = qetA.getVariableColumns();
   const auto& bVarCols = qetB.getVariableColumns();
   for (const auto& aVarCol : aVarCols) {
@@ -479,7 +479,7 @@ std::pair<std::shared_ptr<QueryExecutionTree>,
 QueryExecutionTree::createSortedTrees(
     std::shared_ptr<QueryExecutionTree> qetA,
     std::shared_ptr<QueryExecutionTree> qetB,
-    const std::vector<std::array<ColumnIndex, 2>>& sortColumns) {
+    ql::span<const std::array<ColumnIndex, 2>> sortColumns) {
   std::vector<ColumnIndex> sortColumnsA, sortColumnsB;
   for (auto [sortColumnA, sortColumnB] : sortColumns) {
     sortColumnsA.push_back(sortColumnA);

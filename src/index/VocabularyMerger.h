@@ -18,17 +18,17 @@
 #include "index/IndexBuilderTypes.h"
 #include "index/PartialVocabularyFilenames.h"
 #include "index/vocabulary/Vocabulary.h"
-#include "index/vocabulary_merger/Concepts.h"
-#include "index/vocabulary_merger/IdMap.h"
-#include "index/vocabulary_merger/MergeBlock.h"
-#include "index/vocabulary_merger/VocabularyMetaData.h"
+#include "index/vocabularyMerger/Concepts.h"
+#include "index/vocabularyMerger/IdMap.h"
+#include "index/vocabularyMerger/MergeBlock.h"
+#include "index/vocabularyMerger/VocabularyMetaData.h"
 #include "util/HashMap.h"
-#include "util/MemorySize/MemorySize.h"
 #include "util/TypeTraits.h"
+#include "util/memorySize/MemorySize.h"
 
 // This header is the public interface of the vocabulary merger. The parts of
 // it that are understandable (and testable) on their own live in
-// `src/index/vocabulary_merger/`, and all of them are made available by this
+// `src/index/vocabularyMerger/`, and all of them are made available by this
 // header: the `VocabularyMetaData` (the return type of `mergeVocabulary`), the
 // concepts for its callbacks, the `IdMap` types, the `detail::MergedWord`, and
 // the individual stages of the merging pipeline (see below).
@@ -52,31 +52,31 @@ namespace ad_utility::vocabulary_merger {
 // The partial vocabularies are merged by the parallel block merge (see
 // `util/parallelBlockMerge/ParallelBlockMerge.h`) on the global thread pool:
 // the words are split into ranges by the block index of the partial
-// vocabulary files (see `index/vocabulary_merger/PartialVocabularyFile.h`),
+// vocabulary files (see `index/vocabularyMerger/PartialVocabularyFile.h`),
 // each range is merged by a chunk of its own, and the merged blocks arrive in
 // the order of the vocabulary on the thread that calls this function. That
 // thread does no per-word work at all (see
-// `index/vocabulary_merger/SegmentPipeline.h`):
+// `index/vocabularyMerger/SegmentPipeline.h`):
 //
 // 1. It cuts the merged blocks into segments (see
-//    `index/vocabulary_merger/Segment.h`), each of which is a task on the
+//    `index/vocabularyMerger/Segment.h`), each of which is a task on the
 //    thread pool: eliminate the duplicates, detect the blank nodes, assign the
 //    words to the sub-vocabularies of the `writer` and give them their
 //    segment-local IDs, collect the ID map entries, and destroy the merged
 //    words.
 // 2. It commits the finished segments in order (see
-//    `index/vocabulary_merger/SegmentCommitter.h`): the global IDs are the
+//    `index/vocabularyMerger/SegmentCommitter.h`): the global IDs are the
 //    segment-local IDs plus the number of words in the previous segments, the
 //    ID map entries go to the tasks that write the partial ID maps (see
-//    `index/vocabulary_merger/IdMapWriters.h`), and the words go to the blocks
+//    `index/vocabularyMerger/IdMapWriters.h`), and the words go to the blocks
 //    of their sub-vocabulary, which are prepared (compressed) on the thread
 //    pool and appended to the files in order, by one strand of the pool per
-//    sub-vocabulary (see `index/vocabulary_merger/AsyncBlockWriter.h`).
+//    sub-vocabulary (see `index/vocabularyMerger/AsyncBlockWriter.h`).
 //
 // The `memoryToUse` is split between the chunks of the merge in flight and the
 // data behind the merge (see `VOCAB_MERGER_MEMORY_SHARE_OF_CHUNKS` in
 // `index/ConstantsIndexBuilding.h`), which is accounted for in a memory budget
-// of its own (see `index/vocabulary_merger/MemoryBudget.h`).
+// of its own (see `index/vocabularyMerger/MemoryBudget.h`).
 template <typename W>
 auto mergeVocabulary(const std::string& basename, size_t numPartialVocabularies,
                      W comparator, ParallelWordWriterBase& writer,

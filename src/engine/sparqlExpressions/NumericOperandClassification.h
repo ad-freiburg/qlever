@@ -120,8 +120,7 @@ inline NumericOperandClassification classifyNumericOperand(
     return {};
   }
   context->cancellationHandle_->throwIfCancelled();
-  constexpr size_t numDatatypes = static_cast<size_t>(Datatype::MaxValue) + 1;
-  std::array<size_t, numDatatypes> counts{};
+  std::array<size_t, qlever::enumSize<Datatype>> counts{};
   constexpr size_t blockSize = 32;
   ad_utility::chunkedForLoop<100'000 / blockSize>(
       0, values.size() / blockSize,
