@@ -214,47 +214,47 @@ TEST(UnitOfMeasurementValueGetter, OperatorWithLiteralOrIri) {
 // Test that the `CRSTypeValueGetter` turns IDs into the corresponding `CRSType`
 // value.
 TEST(CRSTypeValueGetter, OperatorWithId) {
-  sparqlExpression::detail::CRSTypeValueGetter unitValueGetter;
+  sparqlExpression::detail::CRSTypeValueGetter crsValueGetter;
   using CRSType = ::util::geo::CRSType;
   checkEnumValueGetterFromId("<http://www.opengis.net/def/crs/OGC/1.3/CRS84>",
-                             CRSType::CRS84, unitValueGetter);
+                             CRSType::CRS84, crsValueGetter);
   checkEnumValueGetterFromId("<http://www.opengis.net/def/crs/EPSG/0/4326>",
-                             CRSType::WGS84, unitValueGetter);
+                             CRSType::WGS84, crsValueGetter);
   checkEnumValueGetterFromId("<http://www.opengis.net/def/crs/EPSG/0/3857>",
-                             CRSType::WEB_MERCATOR, unitValueGetter);
+                             CRSType::WEB_MERCATOR, crsValueGetter);
   checkEnumValueGetterFromId(
       "\"http://www.opengis.net/def/crs/OGC/1.3/CRS84\"^^<http://www.w3.org/"
       "2001/"
       "XMLSchema#anyURI>",
-      CRSType::CRS84, unitValueGetter);
+      CRSType::CRS84, crsValueGetter);
   checkEnumValueGetterFromId(
       "\"http://www.opengis.net/def/crs/EPSG/0/4326\"^^<http://www.w3.org/2001/"
       "XMLSchema#anyURI>",
-      CRSType::WGS84, unitValueGetter);
+      CRSType::WGS84, crsValueGetter);
   checkEnumValueGetterFromId(
       "\"http://www.opengis.net/def/crs/EPSG/0/3857\"^^<http://www.w3.org/2001/"
       "XMLSchema#anyURI>",
-      CRSType::WEB_MERCATOR, unitValueGetter);
+      CRSType::WEB_MERCATOR, crsValueGetter);
   checkEnumValueGetterFromId(
       "\"http://www.opengis.net/def/crs/EPSG/0/unsupported\"^^<http://"
       "www.w3.org/2001/"
       "XMLSchema#anyURI>",
-      CRSType::UNSUPPORTED, unitValueGetter);
+      CRSType::UNSUPPORTED, crsValueGetter);
 
-  checkEnumValueGetterFromId("\"x\"", CRSType::UNSUPPORTED, unitValueGetter);
+  checkEnumValueGetterFromId("\"x\"", CRSType::UNSUPPORTED, crsValueGetter);
   checkEnumValueGetterFromId("\"1.5\"^^<http://example.com>",
-                             CRSType::UNSUPPORTED, unitValueGetter);
+                             CRSType::UNSUPPORTED, crsValueGetter);
 
   // A word of a secondary vocabulary is resolved just like a word of the
   // vocabulary of the main index.
   checkEnumValueGetterFromSecondaryVocabId(secondaryCrsIri, CRSType::WGS84,
-                                           unitValueGetter);
+                                           crsValueGetter);
   checkEnumValueGetterFromSecondaryVocabId(
-      secondaryUnitIri, CRSType::UNSUPPORTED, unitValueGetter);
+      secondaryUnitIri, CRSType::UNSUPPORTED, crsValueGetter);
   checkEnumValueGetterFromSecondaryVocabId(secondaryIri, CRSType::UNSUPPORTED,
-                                           unitValueGetter);
+                                           crsValueGetter);
   checkEnumValueGetterFromSecondaryVocabId(
-      secondaryPlainLiteral, CRSType::UNSUPPORTED, unitValueGetter);
+      secondaryPlainLiteral, CRSType::UNSUPPORTED, crsValueGetter);
 }
 
 // Test that the `CRSTypeValueGetter` skips encoded values.

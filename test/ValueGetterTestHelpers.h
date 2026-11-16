@@ -263,9 +263,8 @@ inline void checkLiteralContentAndDatatypeFromSecondaryVocabId(
 
 namespace enumVGTestHelpers {
 
-using namespace ad_utility;
 using namespace valueGetterTestHelpers;
-using Loc = source_location;
+using Loc = ad_utility::source_location;
 
 // Test turtle for
 const std::string unitTtl = R"(
@@ -360,8 +359,7 @@ inline void checkEnumValueGetterFromSecondaryVocabId(
 // Helper to test EnumValueGetter using ValueId input
 template <auto iriToValue, auto undefined>
 inline void checkEnumValueGetterFromLiteralOrIri(
-    const std::string& unitIriWithoutBrackets,
-    decltype(undefined) expectedResult,
+    const std::string& iriWithoutBrackets, decltype(undefined) expectedResult,
     sparqlExpression::detail::EnumValueGetter<iriToValue, undefined> getter,
     Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(sourceLocation);
@@ -383,15 +381,15 @@ inline void checkEnumValueGetterFromLiteralOrIri(
   };
 
   litTest(
-      unitIriWithoutBrackets,
+      iriWithoutBrackets,
       Iri::fromIrirefWithoutBrackets("http://www.w3.org/2001/XMLSchema#anyURI"),
       true);
-  litTest(unitIriWithoutBrackets, std::nullopt, false);
-  litTest(unitIriWithoutBrackets,
+  litTest(iriWithoutBrackets, std::nullopt, false);
+  litTest(iriWithoutBrackets,
           Iri::fromIrirefWithoutBrackets("http://example.com/"), false);
 
   // Test IRI method
-  doTest(LiteralOrIri{Iri::fromIrirefWithoutBrackets(unitIriWithoutBrackets)},
+  doTest(LiteralOrIri{Iri::fromIrirefWithoutBrackets(iriWithoutBrackets)},
          true);
 };
 
