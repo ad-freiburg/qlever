@@ -127,6 +127,13 @@ void splitFiltersWithFacts(std::vector<SparqlFilter>& filters) {
     bool hasFact = ql::ranges::any_of(conjuncts, [](const auto& conjunct) {
       return filterFacts::recognizeDistanceBound(conjunct).has_value();
     });
+
+    // Split the FILTER only if one of its conjuncts is a fact.
+    //
+    // NOTE: This is for efficiency, not for correctness. Splitting every
+    // FILTER would also be correct (a FILTER holds iff all its conjuncts
+    // hold), but each conjunct would then become its own `Filter` operation
+    // and its own filter in the query planning, without any rewrite.
     if (conjuncts.size() > 1 && hasFact) {
       for (auto& conjunct : conjuncts) {
         result.push_back(SparqlFilter{std::move(conjunct.expression_)});
