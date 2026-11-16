@@ -280,12 +280,10 @@ void classifyRepeatedly(const Left& left, const Right& right,
   }
 }
 
-VectorWithMemoryLimit<Id> makeVectorWithDoubleAt(ql::span<const ValueId> input,
-                                                 size_t mismatchIndex,
-                                                 EvaluationContext* context) {
+IdColumn makeVectorWithDoubleAt(ConstIdColumnRef input, size_t mismatchIndex) {
   AD_CORRECTNESS_CHECK(mismatchIndex < input.size());
 
-  VectorWithMemoryLimit<Id> result{context->_allocator};
+  IdColumn result;
   result.reserve(input.size());
 
   for (size_t i = 0; i < input.size(); ++i) {
@@ -308,16 +306,15 @@ using DatatypePattern = std::vector<std::pair<Datatype, size_t>>;
 // Build a vector from `input` whose datatypes follow `pattern`. Integers keep
 // the input value, doubles get the same value converted, booleans alternate,
 // and vocabulary ids are the row index.
-VectorWithMemoryLimit<Id> makeMixedVector(ql::span<const ValueId> input,
-                                          const DatatypePattern& pattern,
-                                          EvaluationContext* context) {
+IdColumn makeMixedVector(ConstIdColumnRef input,
+                         const DatatypePattern& pattern) {
   std::vector<Datatype> datatypes;
   for (const auto& [datatype, count] : pattern) {
     datatypes.insert(datatypes.end(), count, datatype);
   }
   AD_CORRECTNESS_CHECK(!datatypes.empty());
 
-  VectorWithMemoryLimit<Id> result{context->_allocator};
+  IdColumn result;
   result.reserve(input.size());
 
   for (size_t i = 0; i < input.size(); ++i) {
@@ -344,9 +341,8 @@ VectorWithMemoryLimit<Id> makeMixedVector(ql::span<const ValueId> input,
   return result;
 }
 
-VectorWithMemoryLimit<Id> makeDoubleVector(ql::span<const ValueId> input,
-                                           EvaluationContext* context) {
-  VectorWithMemoryLimit<Id> result{context->_allocator};
+IdColumn makeDoubleVector(ConstIdColumnRef input) {
+  IdColumn result;
   result.reserve(input.size());
 
   for (const auto& id : input) {
@@ -356,9 +352,9 @@ VectorWithMemoryLimit<Id> makeDoubleVector(ql::span<const ValueId> input,
   return result;
 }
 
-void evaluateMixedTernaryAddRepeatedly(ql::span<const ValueId> left,
-                                       ql::span<const ValueId> middle,
-                                       ql::span<const ValueId> right,
+void evaluateMixedTernaryAddRepeatedly(ConstIdColumnRef left,
+                                       ConstIdColumnRef middle,
+                                       ConstIdColumnRef right,
                                        EvaluationContext& context,
                                        size_t repetitions) {
   sparqlExpression::detail::BenchmarkTernaryAdd function;
@@ -371,9 +367,9 @@ void evaluateMixedTernaryAddRepeatedly(ql::span<const ValueId> left,
     ad_utility::chunkedForLoop<1000>(
         0, context.size(),
         [&](size_t i) {
-          result.push_back(function(getter(left[i], &context),
-                                    getter(middle[i], &context),
-                                    getter(right[i], &context)));
+          result.push_back(function(getter(Id{left[i]}, &context),
+                                    getter(Id{middle[i]}, &context),
+                                    getter(Id{right[i]}, &context)));
         },
         [&context]() { context.cancellationHandle_->throwIfCancelled(); });
   }
@@ -559,21 +555,15 @@ class SparqlExpressionBenchmark : public BenchmarkInterface {
     mixedTernaryContext.context._inputTable =
         mixedTernaryContext.table.asStaticView<0>();
 
-    auto mixedTernaryStorage =
-        makeVectorWithDoubleAt(leftIds, numRows / 2, &benchmarkContext.context);
+    auto mixedTernaryStorage = makeVectorWithDoubleAt(leftIds, numRows / 2);
 
-    auto doubleLeftStorage =
-        makeDoubleVector(leftIds, &benchmarkContext.context);
-    auto doubleRightStorage =
-        makeDoubleVector(rightIds, &benchmarkContext.context);
+    auto doubleLeftStorage = makeDoubleVector(leftIds);
+    auto doubleRightStorage = makeDoubleVector(rightIds);
 
-    ql::span<const ValueId> doubleLeft{doubleLeftStorage.data(),
-                                       doubleLeftStorage.size()};
-    ql::span<const ValueId> doubleRight{doubleRightStorage.data(),
-                                        doubleRightStorage.size()};
+    ConstIdColumnRef doubleLeft = doubleLeftStorage;
+    ConstIdColumnRef doubleRight = doubleRightStorage;
 
-    ql::span<const ValueId> mixedTernary{mixedTernaryStorage.data(),
-                                         mixedTernaryStorage.size()};
+    ConstIdColumnRef mixedTernary = mixedTernaryStorage;
 
     const ValueId constantTwo = Id::makeFromInt(2);
     const ValueId constantTwoDouble = Id::makeFromDouble(2.0);
@@ -582,22 +572,19 @@ class SparqlExpressionBenchmark : public BenchmarkInterface {
     // operand is `Other` (not homogeneous) plus the given majority type.
     struct MixedCase {
       std::string name_;
-      VectorWithMemoryLimit<Id> storage_;
+      IdColumn storage_;
       NumericType expectedMajority_;
     };
     using enum Datatype;
     auto mixedCase = [&](std::string name, const DatatypePattern& pattern,
                          NumericType expectedMajority) {
-      return MixedCase{
-          std::move(name),
-          makeMixedVector(leftIds, pattern, &benchmarkContext.context),
-          expectedMajority};
+      return MixedCase{std::move(name), makeMixedVector(leftIds, pattern),
+                       expectedMajority};
     };
     std::vector<MixedCase> mixedCases;
-    mixedCases.push_back(MixedCase{
-        "mismatch at 50000",
-        makeVectorWithDoubleAt(leftIds, numRows / 2, &benchmarkContext.context),
-        NumericType::Int});
+    mixedCases.push_back(MixedCase{"mismatch at 50000",
+                                   makeVectorWithDoubleAt(leftIds, numRows / 2),
+                                   NumericType::Int});
     mixedCases.push_back(mixedCase("99.9% integer", {{Double, 1}, {Int, 999}},
                                    NumericType::Int));
     mixedCases.push_back(
@@ -619,9 +606,6 @@ class SparqlExpressionBenchmark : public BenchmarkInterface {
     mixedCases.push_back(mixedCase(
         "30% integer, 25% double, 25% bool, 20% vocab index",
         {{Int, 6}, {Double, 5}, {Bool, 5}, {VocabIndex, 4}}, NumericType::Int));
-    auto spanOf = [](const VectorWithMemoryLimit<Id>& storage) {
-      return ql::span<const ValueId>{storage.data(), storage.size()};
-    };
 
     auto legacyVectorVector = makeLegacyVectorVectorExpression();
     auto newVectorVector = makeNewVectorVectorExpression();
@@ -674,7 +658,7 @@ class SparqlExpressionBenchmark : public BenchmarkInterface {
     };
 
     for (const auto& mixed : mixedCases) {
-      warmUpMixedCase(spanOf(mixed.storage_), rightIds);
+      warmUpMixedCase(ConstIdColumnRef{mixed.storage_}, rightIds);
     }
 
     BenchmarkResults results{};
@@ -793,7 +777,7 @@ class SparqlExpressionBenchmark : public BenchmarkInterface {
     // (speculative or generic, depending on the majority type), and the
     // classification alone.
     for (const auto& mixed : mixedCases) {
-      const auto left = spanOf(mixed.storage_);
+      const ConstIdColumnRef left = mixed.storage_;
       const std::string suffix = absl::StrCat(mixed.name_, ", 100k rows x 50");
       results.addMeasurement(
           absl::StrCat("Generic mixed add: ", suffix), [&]() {

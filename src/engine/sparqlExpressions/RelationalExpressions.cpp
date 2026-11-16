@@ -104,7 +104,7 @@ auto getGenerators(S1&& value1, S2&& value2, size_t targetSize,
 // for comparisons other than `EQ` and `NE` with an encoded IRI (see below).
 template <Comparison Comp>
 std::optional<ad_utility::SetOfIntervals> evaluateWithBinarySearch(
-    ql::span<const Id> column, ValueId valueId) {
+    ConstIdColumnRef column, ValueId valueId) {
   // The binary search orders encoded IRIs by their encoding, which differs from
   // the semantic (string) order of the IRIs, see issue #2448. Only `EQ` and
   // `NE` are therefore safe to evaluate via binary search.

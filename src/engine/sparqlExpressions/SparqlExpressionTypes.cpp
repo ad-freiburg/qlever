@@ -33,7 +33,7 @@ EvaluationContext::EvaluationContext(
 }
 
 // _____________________________________________________________________________
-std::optional<ql::span<const Id>> EvaluationContext::getSortedColumnOrNullopt(
+std::optional<ConstIdColumnRef> EvaluationContext::getSortedColumnOrNullopt(
     const Variable& variable) const {
   auto columnIndex = getColumnIndexForVariable(variable);
   if (!columnIndex.has_value() || _columnsByWhichResultIsSorted.empty() ||
@@ -45,7 +45,7 @@ std::optional<ql::span<const Id>> EvaluationContext::getSortedColumnOrNullopt(
 }
 
 // _____________________________________________________________________________
-std::optional<ql::span<const Id>>
+std::optional<ConstIdColumnRef>
 EvaluationContext::getSortedAlwaysDefinedColumnOrNullopt(
     const Variable& variable) const {
   auto column = getSortedColumnOrNullopt(variable);
