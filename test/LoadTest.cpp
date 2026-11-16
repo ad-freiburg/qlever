@@ -17,6 +17,7 @@
 #include "util/HttpClientTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
+#include "util/LocalVocabEntryTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 #include "util/RuntimeParametersTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
@@ -160,10 +161,11 @@ TEST_F(LoadTest, computeResult) {
               ASSERT_THAT(field.isLiteral() || field.isIri(),
                           testing::IsTrue());
               using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
-              auto lveOpt = lv.getIndexOrNullopt(LocalVocabEntry{
-                  field.isLiteral() ? LiteralOrIri{field.getLiteral()}
-                                    : LiteralOrIri{field.getIri()},
-                  testQec->getLocalVocabContext()});
+              auto lveOpt =
+                  lv.getIndexOrNullopt(ad_utility::testing::localVocabEntry(
+                      field.isLiteral() ? LiteralOrIri{field.getLiteral()}
+                                        : LiteralOrIri{field.getIri()},
+                      testQec->getLocalVocabContext()));
               ASSERT_THAT(lveOpt, testing::Not(testing::Eq(std::nullopt)));
               idOpt = Id::makeFromLocalVocabIndex(lveOpt.value());
             }

@@ -14,6 +14,7 @@
 #include "engine/ConstructTripleInstantiator.h"
 #include "engine/Result.h"
 #include "util/CancellationHandle.h"
+#include "util/ContainersWithAllocator.h"
 
 namespace {
 
@@ -79,7 +80,9 @@ class ConstructTripleGeneratorTest : public ::testing::Test {
   // Wrap an `IdTable` in a shared Result (moves the table in).
   static std::shared_ptr<const Result> makeResult(IdTable table) {
     return std::make_shared<const Result>(
-        std::move(table), std::vector<ColumnIndex>{}, LocalVocab{});
+        std::move(table),
+        qlm::vector<ColumnIndex>{ad_utility::testing::makeAllocator()},
+        LocalVocab{});
   }
 
   // Create a `TableWithRange` referencing the Result's `IdTable`, covering rows

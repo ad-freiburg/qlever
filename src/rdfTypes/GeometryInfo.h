@@ -22,7 +22,6 @@
 #include "backports/three_way_comparison.h"
 #include "concepts/concepts.hpp"
 #include "global/Constants.h"
-#include "global/Id.h"
 #include "rdfTypes/GeoPoint.h"
 #include "util/BitUtils.h"
 
@@ -190,6 +189,18 @@ struct MetricArea {
 // are WKT literals, see the rules at `GEOMETRY_INFO_VERSION`.
 enum class SerializationType : uint16_t { WKT };
 
+// A `Centroid` or `BoundingBox` together with the `SourceCrsType` of the
+// geometry it was computed from. The `info_` is stored in `CRS84` regardless of
+// `crs_`. This is needed by functions that return a geometry in the CRS of
+// their input, such as `geof:centroid` or `geof:envelope`.
+template <typename Info>
+struct WithSourceCrs {
+  using InfoType = Info;
+
+  Info info_;
+  SourceCrsType crs_;
+};
+
 // Class for internal exception handling of errors from `s2geometry`.
 class InvalidPolygonError : public std::runtime_error {
  public:
@@ -202,12 +213,14 @@ class InvalidPolygonError : public std::runtime_error {
 class GeometryInfo;
 
 // Concept for the `RequestedInfo` template parameter: any of these types is
-// allowed to be requested.
+// allowed to be requested. `Centroid` and `BoundingBox` can additionally
+// be requested wrapped in `WithSourceCrs`.
 template <typename T>
 CPP_concept RequestedInfoT =
     SameAsAny<T, GeometryInfo, Centroid, BoundingBox, GeometryType,
               SourceCrsType, NumGeometries, MetricLength, MetricArea,
-              SerializationType>;
+              SerializationType> ||
+    SameAsAny<T, WithSourceCrs<Centroid>, WithSourceCrs<BoundingBox>>;
 
 // Where the actual geometries are required, this type can be used.
 using GeoPointOrWkt = std::variant<GeoPoint, std::string>;
@@ -296,9 +309,9 @@ class GeometryInfo {
   //   int64_t parsedGeometryOffset_ = -1;
 
   static constexpr uint64_t bitMaskGeometryType =
-      bitMaskForHigherBits(ValueId::numDatatypeBits);
+      bitMaskForHigherBits(GeoPoint::numTypeBits);
   static constexpr uint64_t bitMaskCentroid =
-      bitMaskForLowerBits(ValueId::numDataBits);
+      bitMaskForLowerBits(GeoPoint::numDataBits);
 
  public:
   GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
@@ -327,9 +340,8 @@ class GeometryInfo {
   // to the strict parsing mode of `pb_util`. This is a purely syntactic check.
   //
   // NOTE: A valid literal does not necessarily yield a geometry in
-  // `fromWktLiteral`. In particular, `EMPTY` geometries (except `POINT EMPTY`,
-  // which the strict mode rejects), an unsupported CRS IRI, and coordinates
-  // out of range are all valid.
+  // `fromWktLiteral`. In particular, `EMPTY` geometries, an unsupported CRS
+  // IRI, and coordinates out of range are all valid.
   static bool isValidWktStrict(std::string_view wkt);
 
   // Create geometry info for a GeoPoint object.
@@ -394,12 +406,12 @@ class GeometryInfo {
   // stored in this object (see `getSourceCrsType`).
   CPP_template(typename RequestedInfo = GeometryInfo)(
       requires RequestedInfoT<RequestedInfo>)
-      std::optional<RequestedInfo> getRequestedInfo() const;
+  std::optional<RequestedInfo> getRequestedInfo() const;
 
   // Parse the given WKT literal and compute only the requested information.
   CPP_template(typename RequestedInfo = GeometryInfo)(
-      requires RequestedInfoT<RequestedInfo>) static std::
-      optional<RequestedInfo> getRequestedInfo(std::string_view wkt);
+      requires RequestedInfoT<RequestedInfo>)
+  static std::optional<RequestedInfo> getRequestedInfo(std::string_view wkt);
 };
 
 // The binary representation of a `GeometryInfo` must not contain implicit

@@ -45,10 +45,9 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
   } else if (predString == "right") {
     setVariable("right", object, right_);
   } else if (predString == "numNearestNeighbors") {
-    throwIf(!object.isInt(),
-            "The parameter `<numNearestNeighbors>` expects an integer (the "
-            "maximum "
-            "number of nearest neighbors)");
+    throwIf(!object.isInt() || object.getInt() <= 0,
+            "The parameter `<numNearestNeighbors>` expects a positive integer "
+            "(the maximum number of nearest neighbors)");
     maxResults_ = object.getInt();
   } else if (predString == "maxDistance") {
     if (object.isInt()) {
@@ -323,6 +322,11 @@ SpatialQuery::SpatialQuery(const SparqlTriple& triple) {
     maxDist_ = matchToInt(match.get<detail::distCaptureGroup>());
     ignoreMissingRightChild_ = true;
     AD_CORRECTNESS_CHECK(maxResults_.has_value());
+    // A limit of zero also results from a number too large for `from_chars`,
+    // which then leaves the result untouched.
+    throwIf(maxResults_.value() == 0,
+            "The number of nearest neighbors in `<nearest-neighbors:...>` must "
+            "be a positive integer");
   } else {
     AD_THROW(absl::StrCat("Tried to perform spatial join with unknown triple ",
                           input,

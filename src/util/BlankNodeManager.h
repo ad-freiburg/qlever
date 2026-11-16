@@ -25,9 +25,9 @@
 #include "util/HashMap.h"
 #include "util/HashSet.h"
 #include "util/Random.h"
-#include "util/Serializer/SerializeVector.h"
-#include "util/Serializer/Serializer.h"
 #include "util/Synchronized.h"
+#include "util/serializer/SerializeVector.h"
+#include "util/serializer/Serializer.h"
 
 namespace ad_utility {
 /*
@@ -50,9 +50,12 @@ class BlankNodeManager {
   // Number of indices that make up a single block.
   static constexpr uint32_t blockSize_ = 1000;
 
-  // Number of blocks available.
+  // Number of blocks available. This is `(maxIndex - minIndex_ + 1) /
+  // blockSize_`, but computed without the `+ 1` on the left, which overflows
+  // for `minIndex_ == 0` if `maxIndex` is the maximum of `uint64_t`.
   const uint64_t totalAvailableBlocks_ =
-      (ValueId::maxIndex - minIndex_ + 1) / blockSize_;
+      (ValueId::maxIndex - minIndex_) / blockSize_ +
+      ((ValueId::maxIndex - minIndex_) % blockSize_ == blockSize_ - 1);
 
  private:
   // Forward declaration because of cyclic dependency.
@@ -182,8 +185,8 @@ class BlankNodeManager {
 
     // Merge passed `LocalBlankNodeManager`s to keep alive their reserved
     // BlankNodeIndex blocks.
-    CPP_template(typename R)(requires ql::ranges::range<R>) void mergeWith(
-        const R& localBlankNodeManagers) {
+    CPP_template(typename R)(requires ql::ranges::range<R>)
+    void mergeWith(const R& localBlankNodeManagers) {
       auto inserter = std::back_inserter(otherBlocks_);
       for (const auto& l : localBlankNodeManagers) {
         if (l == nullptr) {

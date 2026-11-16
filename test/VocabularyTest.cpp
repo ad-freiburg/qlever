@@ -17,8 +17,8 @@
 #include "index/vocabulary/VocabularyType.h"
 #include "rdfTypes/GeoCellGrid.h"
 #include "util/GTestHelpers.h"
-#include "util/Serializer/ByteBufferSerializer.h"
 #include "util/json.h"
+#include "util/serializer/ByteBufferSerializer.h"
 
 using json = nlohmann::json;
 using std::string;
@@ -229,6 +229,15 @@ TEST(VocabularyTest, getIdRangeForFullTextPrefixTest) {
   retVal = v.getIdRangeForFullTextPrefix("foo*");
   ASSERT_FALSE(retVal.has_value());
   ad_utility::deleteFile(filename);
+}
+
+// Test that `getIdRangeForFullTextPrefix` finds nothing in an empty text
+// vocabulary (the state on a server without a text index), in particular for
+// the bare `*`, whose range used to underflow to `[0, UINT64_MAX]`.
+TEST(VocabularyTest, getIdRangeForFullTextPrefixEmptyVocabulary) {
+  TextVocabulary v;
+  EXPECT_FALSE(v.getIdRangeForFullTextPrefix("*").has_value());
+  EXPECT_FALSE(v.getIdRangeForFullTextPrefix("word*").has_value());
 }
 
 // _____________________________________________________________________________

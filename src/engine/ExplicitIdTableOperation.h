@@ -39,14 +39,14 @@ class ExplicitIdTableOperation : public Operation {
   // class) after `view_` has been computed from it.
   IdTableView<0> view_;
   VariableToColumnMap variables_;
-  std::vector<ColumnIndex> sortedColumns_;
+  qlm::vector<ColumnIndex> sortedColumns_;
   LocalVocab localVocab_;
   std::string cacheKey_;
 
  public:
   ExplicitIdTableOperation(QueryExecutionContext* ctx, IdTableOrView table,
                            VariableToColumnMap variables,
-                           std::vector<ColumnIndex> sortedColumns,
+                           qlm::vector<ColumnIndex> sortedColumns,
                            LocalVocab localVocab, std::string cacheKey);
 
   // Return a non-owning view of `table`, regardless of which alternative of
@@ -71,7 +71,7 @@ class ExplicitIdTableOperation : public Operation {
   float getMultiplicity(size_t col) override;
   bool knownEmptyResult() override;
   std::unique_ptr<Operation> cloneImpl() const override;
-  std::vector<ColumnIndex> resultSortedOn() const override;
+  qlm::vector<ColumnIndex> resultSortedOn() const override;
   VariableToColumnMap computeVariableToColumnMap() const override;
   Result computeResult(bool requestLaziness) override;
 

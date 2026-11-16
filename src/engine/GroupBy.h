@@ -36,7 +36,7 @@ class GroupBy : public Operation {
   std::string getDescriptor() const override;
   std::string getCacheKeyImpl() const override;
   size_t getResultWidth() const override;
-  std::vector<ColumnIndex> resultSortedOn() const override;
+  qlm::vector<ColumnIndex> resultSortedOn() const override;
   bool knownEmptyResult() override;
   float getMultiplicity(size_t col) override;
   uint64_t getSizeEstimateBeforeLimit() override;
@@ -49,6 +49,9 @@ class GroupBy : public Operation {
   VariableToColumnMap computeVariableToColumnMap() const override;
   Result computeResult(bool requestLaziness) override;
   std::unique_ptr<Operation> cloneImpl() const override;
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithStrippedColumns(
+      const std::set<Variable>& requestedVariables) const override;
 
   // Getters for testing.
   const std::vector<Variable>& groupByVariables() const;

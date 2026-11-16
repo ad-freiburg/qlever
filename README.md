@@ -56,3 +56,18 @@ To get started with QLever, use our native packages released for [Debian, Ubuntu
 
 For the official documentation, see [docs.qlever.dev](https://docs.qlever.dev/). Additional
 information (though potentially outdated) can be found on the [QLever Wiki](https://github.com/ad-freiburg/qlever/wiki).
+
+# Known issue: Linux 7.0 and 7.1 on arm64
+
+The Linux kernels 7.0 and 7.1 (up to 7.1.8) have a bug on arm64 that can cause
+random stalls, crashes, and corrupt data in programs that return memory to the
+kernel, like QLever. It is fixed by [this
+commit](https://github.com/torvalds/linux/commit/478a1c3abebfc717db0d1281a9cdd7befafee542),
+which is contained in Linux 7.1.9, 7.2, and later, and in the updated kernels of
+some distributions (for example in Ubuntu 26.04's `7.0.0-39` and later). On an
+arm64 kernel that may have the bug, QLever uses a workaround (it doesn't return
+freed memory to the operating system, so its memory usage stays at its peak)
+and logs a warning. Note that the Docker and Podman images use the kernel of the
+host. If you are sure that your kernel contains the fix, you can disable the
+workaround by setting the environment variable
+`QLEVER_DISABLE_KERNEL_BUG_WORKAROUND`.

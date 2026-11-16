@@ -15,9 +15,9 @@
 #include <vector>
 
 #include "util/File.h"
-#include "util/Serializer/FileSerializer.h"
-#include "util/Serializer/Serializer.h"
 #include "util/TypeTraits.h"
+#include "util/serializer/FileSerializer.h"
+#include "util/serializer/Serializer.h"
 
 namespace ad_utility {
 
@@ -84,8 +84,9 @@ class ExternalOverflowStorage {
   }
 
   // Call `function` for each stored element, in insertion order.
-  CPP_template(typename F)(requires ad_utility::InvocableWithExactReturnType<
-                           F, void, const T&>) void forEach(F function) {
+  CPP_template(typename F)(
+      requires ad_utility::InvocableWithExactReturnType<F, void, const T&>)
+  void forEach(F function) {
     ql::ranges::for_each(std::as_const(buffer_), function);
     if (numOverflowElements_ == 0) {
       return;

@@ -19,7 +19,7 @@
 
 #include "engine/spatialJoinAlgorithms/SpatialJoinAlgorithmBase.h"
 #include "index/Index.h"
-#include "util/MemorySize/MemorySize.h"
+#include "util/memorySize/MemorySize.h"
 
 // Spatial join for all `SpatialJoinType`s (`INTERSECTS`, `CONTAINS`, `WITHIN`,
 // `WITHIN_DIST`, `DE9IM`, ...) and all geometry types, backed by the
@@ -109,15 +109,6 @@ class LibspatialjoinAlgorithm : public SpatialJoinAlgorithmBase {
   // defaults to the parent directory of the index's on-disk base path, but
   // can be overridden via the `spatial-join-tmp-dir` runtime parameter.
   SweeperTempPath getSweeperTempPath() const;
-
-  // Add a warning to the `SpatialJoin` operation if rows of the left and/or
-  // right input were skipped because their geometry literal is invalid or
-  // unsupported (e.g. an unsupported CRS).
-  //
-  // TODO<ullingerc>: Replace by
-  // `SpatialJoinAlgorithmBase::addSkippedRowsWarning` once #3774 is merged.
-  void addInvalidGeometriesWarning(size_t numInvalidLeft,
-                                   size_t numInvalidRight) const;
 
   // Maximum area of bounding box in square coordinates for prefiltering
   // libspatialjoin input by bounding box. If exceeded, prefiltering is

@@ -30,9 +30,18 @@ Permutation::Permutation(Enum permutation, Allocator allocator,
       permutation_{permutation} {}
 
 // _____________________________________________________________________
+void Permutation::throwIfNotLoaded() const {
+  if (!isLoaded_) {
+    throw std::runtime_error("This query requires the permutation " +
+                             readableName_ + ", which was not loaded");
+  }
+}
+
+// _____________________________________________________________________
 CompressedRelationReader::ScanSpecAndBlocks Permutation::getScanSpecAndBlocks(
     const ScanSpecification& scanSpec,
     const LocatedTriplesState& locatedTriplesState) const {
+  throwIfNotLoaded();
   return {scanSpec, BlockMetadataRanges(getAugmentedMetadataForPermutation(
                         locatedTriplesState))};
 }
@@ -96,10 +105,7 @@ IdTable Permutation::scan(const ScanSpecAndBlocks& scanSpecAndBlocks,
                           const LocatedTriplesState& locatedTriplesState,
                           qlever::Executor executor,
                           const LimitOffsetClause& limitOffset) const {
-  if (!isLoaded_) {
-    throw std::runtime_error("This query requires the permutation " +
-                             readableName_ + ", which was not loaded");
-  }
+  throwIfNotLoaded();
   return reader().scan(scanSpecAndBlocks, additionalColumns, cancellationHandle,
                        getLocatedTriplesForPermutation(locatedTriplesState),
                        std::move(executor), limitOffset);
@@ -108,9 +114,11 @@ IdTable Permutation::scan(const ScanSpecAndBlocks& scanSpecAndBlocks,
 // _____________________________________________________________________
 size_t Permutation::getResultSizeOfScan(
     const ScanSpecAndBlocks& scanSpecAndBlocks,
-    const LocatedTriplesState& locatedTriplesState) const {
+    const LocatedTriplesState& locatedTriplesState,
+    const CancellationHandle& cancellationHandle) const {
   return reader().getResultSizeOfScan(
-      scanSpecAndBlocks, getLocatedTriplesForPermutation(locatedTriplesState));
+      scanSpecAndBlocks, getLocatedTriplesForPermutation(locatedTriplesState),
+      cancellationHandle);
 }
 
 // _____________________________________________________________________
@@ -310,6 +318,7 @@ BlockMetadataRanges Permutation::getAugmentedMetadataForPermutation(
 
 // ______________________________________________________________________
 const Permutation& Permutation::internalPermutation() const {
+  throwIfNotLoaded();
   AD_CONTRACT_CHECK(internalPermutation_ != nullptr);
   return *internalPermutation_;
 }

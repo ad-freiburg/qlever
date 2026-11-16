@@ -25,8 +25,7 @@ class GroupByHashMapOptimizationTest : public ::testing::Test {
       table_.asStaticView<0>(),
       qec_->getAllocator(),
       localVocab_,
-      std::make_shared<ad_utility::CancellationHandle<>>(),
-      sparqlExpression::EvaluationContext::TimePoint::max()};
+      std::make_shared<ad_utility::CancellationHandle<>>()};
 
   template <typename Data>
   Id calculate(const Data& data) {
@@ -44,7 +43,8 @@ class GroupByHashMapOptimizationTest : public ::testing::Test {
 
   std::string idToString(Id result, bool stripQuotes = true) const {
     auto index = result.getLocalVocabIndex();
-    auto resultString = localVocab_.getWord(index).toStringRepresentation();
+    std::string resultString{
+        localVocab_.getWord(index).toStringRepresentation()};
     if (!stripQuotes) {
       return resultString;
     }
@@ -292,6 +292,7 @@ TEST_F(GroupByHashMapOptimizationTest,
   EXPECT_TRUE(calc().isUndefined());
 
   data.reset();
-  addValue(localVocab_.getWord(idFromString("Abc").getLocalVocabIndex()));
+  addValue(
+      localVocab_.getWord(idFromString("Abc").getLocalVocabIndex()).toOwned());
   EXPECT_EQ(calc(), idFromString("Abc"));
 }

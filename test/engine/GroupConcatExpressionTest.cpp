@@ -7,6 +7,7 @@
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/LocalVocabEntryTestHelpers.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 
@@ -29,14 +30,12 @@ void expectIdsAreConcatenatedTo(
   VariableToColumnMap map{
       {var, {0, ColumnIndexAndTypeInfo::PossiblyUndefined}}};
 
-  EvaluationContext context{
-      *qec,
-      map,
-      idTable.asStaticView<0>(),
-      idTable.getAllocator(),
-      localVocab,
-      std::move(cancellationHandle),
-      std::chrono::time_point<std::chrono::steady_clock>::max()};
+  EvaluationContext context{*qec,
+                            map,
+                            idTable.asStaticView<0>(),
+                            idTable.getAllocator(),
+                            localVocab,
+                            std::move(cancellationHandle)};
 
   GroupConcatExpression expression{
       distinct, std::make_unique<VariableExpression>(var), ";"};
@@ -105,8 +104,8 @@ TEST(GroupConcatExpression, concatenationWithUndefined) {
                              ExpressionResult{Id::makeUndefined()});
 
   auto idx = localVocab.getIndexAndAddIfNotContained(
-      LocalVocabEntry::fromStringRepresentation("\"a\"",
-                                                qec->getLocalVocabContext()));
+      ad_utility::testing::localVocabEntryFromStringRepresentation(
+          "\"a\"", qec->getLocalVocabContext()));
   auto a = Id::makeFromLocalVocabIndex(idx);
   expectIdsAreConcatenatedTo(
       qec, false, makeIdTableFromVector({{Id::makeUndefined()}, {a}}),

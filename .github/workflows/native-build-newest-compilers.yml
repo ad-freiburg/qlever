@@ -44,7 +44,13 @@ jobs:
         warnings: [  "-Wall -Wextra -Werror -Woverloaded-virtual " ]
         build-type: [Release]
         expensive-tests: [true]
-        additional-cmake-options: [""]
+        # Also check that QLever compiles with the newest C++ standards that
+        # the respective compiler supports.
+        include:
+          - compiler-version: 15
+            additional-cmake-options: "-DCMAKE_CXX_STANDARD_MANUALLY_OVERRIDDEN=23"
+          - compiler-version: 16
+            additional-cmake-options: "-DCMAKE_CXX_STANDARD_MANUALLY_OVERRIDDEN=26"
 
     runs-on: ubuntu-24.04
     # Run all steps of the job inside a Docker container of Ubuntu 26.04, so
@@ -64,10 +70,15 @@ jobs:
         # `add-apt-repository`. The steps run as `root`, so `sudo` isn't
         # available (and isn't needed) yet. For the significance of
         # `DEBIAN_FRONTEND=noninteractive`, see `cpp-17-libqlever.yml`.
+        #
+        # `cmake` is installed from the repositories of Ubuntu 26.04 (version
+        # 4.2), because otherwise `install-dependencies-ubuntu` installs CMake
+        # 3.27, which does not know the C++26 mode of GCC (that requires at
+        # least CMake 3.30).
         run: |
           export DEBIAN_FRONTEND=noninteractive
           apt-get update
-          apt-get install -y --no-install-recommends ca-certificates git sudo software-properties-common wget
+          apt-get install -y --no-install-recommends ca-certificates git sudo software-properties-common wget cmake
       - uses: actions/checkout@v7
         with:
           submodules: 'recursive'

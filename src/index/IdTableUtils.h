@@ -9,20 +9,16 @@
 #include <vector>
 
 #include "backports/algorithm.h"
+#include "backports/span.h"
 #include "backports/type_traits.h"
 #include "engine/idTable/IdTable.h"
 #include "index/SortConfig.h"
 #include "util/Log.h"
-#include "util/blockSort/BlockIndirectSort.h"
 
 class IdTableUtils {
  public:
-  // The `sort` functions below sort in place (not stable) via
-  // `blockIndirectSort`, as configured by the `sortConfig`. They block the
-  // calling thread, which therefore must not belong to its executor.
-  //
-  // TODO<RobinTF> Pass the query's cancellation handle once
-  // `blockIndirectSort` supports it.
+  // The `sort` functions below sort in place via `SortConfig::sort`, see
+  // there for the details (blocking, cancellation, and exceptions).
 
   // Sort the rows of `tab` by the column `keyColumn`.
   template <size_t WIDTH>
@@ -50,15 +46,13 @@ class IdTableUtils {
   static void sort(IdTable* tab, C comp, const SortConfig& sortConfig) {
     AD_LOG_DEBUG << "Sorting " << tab->size() << " elements.\n";
     IdTableStatic<WIDTH> stab = std::move(*tab).toStatic<WIDTH>();
-    ad_utility::blockSort::blockIndirectSort(stab, std::move(comp),
-                                             sortConfig.numTasksInFlight_,
-                                             sortConfig.executor_);
+    sortConfig.sort(stab, std::move(comp));
     *tab = std::move(stab).toDynamic();
     AD_LOG_DEBUG << "Sort done.\n";
   }
 
   // Sort the rows of `idTable` lexicographically by the columns `sortCols`.
-  static void sort(IdTable& idTable, const std::vector<ColumnIndex>& sortCols,
+  static void sort(IdTable& idTable, ql::span<const ColumnIndex> sortCols,
                    const SortConfig& sortConfig);
 
   // Return the number of distinct rows in the `input`. The input must have all

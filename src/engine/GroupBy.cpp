@@ -38,7 +38,7 @@ std::string GroupBy::getCacheKeyImpl() const {
 size_t GroupBy::getResultWidth() const { return _impl->getResultWidth(); }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> GroupBy::resultSortedOn() const {
+qlm::vector<ColumnIndex> GroupBy::resultSortedOn() const {
   return _impl->resultSortedOn();
 }
 
@@ -94,6 +94,13 @@ std::unique_ptr<Operation> GroupBy::cloneImpl() const {
       static_cast<GroupByImpl*>(_impl->cloneImpl().release())};
   return std::make_unique<GroupBy>(_impl->getExecutionContext(),
                                    std::move(ptr));
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+GroupBy::makeTreeWithStrippedColumns(
+    const std::set<Variable>& requestedVariables) const {
+  return _impl->makeTreeWithStrippedColumns(requestedVariables);
 }
 
 // _____________________________________________________________________________

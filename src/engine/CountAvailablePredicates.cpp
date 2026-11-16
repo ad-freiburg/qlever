@@ -9,6 +9,7 @@
 #include "engine/IndexScan.h"
 #include "global/Pattern.h"
 #include "global/RuntimeParameters.h"
+#include "util/ChunkedForLoop.h"
 #include "util/ContainersWithAllocator.h"
 #include "util/ParallelExecutor.h"
 
@@ -48,9 +49,9 @@ std::string CountAvailablePredicates::getDescriptor() const {
 size_t CountAvailablePredicates::getResultWidth() const { return 2; }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> CountAvailablePredicates::resultSortedOn() const {
+qlm::vector<ColumnIndex> CountAvailablePredicates::resultSortedOn() const {
   // The result is not sorted on any column.
-  return {};
+  return qlm::vector<ColumnIndex>{allocator()};
 }
 
 // _____________________________________________________________________________
@@ -161,7 +162,7 @@ Result CountAvailablePredicates::computeResult(
     ad_utility::callFixedSizeVi(width, [&](auto width) {
       return computePatternTrick<width>(
           subresult->idTableView(), &idTable, patterns, subjectColumnIndex_,
-          patternColumn, runtimeInfo(), executor());
+          patternColumn, runtimeInfo(), executor(), cancellationHandle());
     });
     return {std::move(idTable), resultSortedOn(),
             subresult->getSharedLocalVocab()};
@@ -183,17 +184,22 @@ void CountAvailablePredicates::computePatternTrickAllEntities(
   // Note: In contrast to `computePatternTrick` the subjects don't have to be
   // deduplicated, because the `ql:has-pattern` relation contains exactly one
   // triple per entity.
-  auto countPatterns = [&patternCounts, &patterns,
+  auto countPatterns = [this, &patternCounts, &patterns,
                         patternColumn](const auto& idTable) {
-    for (Id patternId : idTable.getColumn(patternColumn)) {
-      AD_CORRECTNESS_CHECK(patternId.getDatatype() == Datatype::Int);
-      size_t patternIdx = patternId.getInt();
-      if (patternIdx >= patterns.size()) {
-        AD_CONTRACT_CHECK(patternIdx == Pattern::NoPattern);
-        patternIdx = patterns.size();
-      }
-      patternCounts[patternIdx]++;
-    }
+    // A materialized `idTable` contains the complete `ql:has-pattern`
+    // relation, so check for cancellation within the loop.
+    ad_utility::chunkedForEach(
+        idTable.getColumn(patternColumn),
+        [&patternCounts, &patterns](Id patternId) {
+          AD_CORRECTNESS_CHECK(patternId.getDatatype() == Datatype::Int);
+          size_t patternIdx = patternId.getInt();
+          if (patternIdx >= patterns.size()) {
+            AD_CONTRACT_CHECK(patternIdx == Pattern::NoPattern);
+            patternIdx = patterns.size();
+          }
+          patternCounts[patternIdx]++;
+        },
+        cancellationChecker());
   };
   // The subresult is lazy unless it was already fully materialized (for
   // example because it was read from the cache).
@@ -249,7 +255,8 @@ void CountAvailablePredicates::computePatternTrick(
     const IdTableView<0>& dynInput, IdTable* dynResult,
     const CompactVectorOfStrings<Id>& patterns, const size_t subjectColumnIdx,
     const size_t patternColumnIdx, RuntimeInformation& runtimeInfo,
-    const qlever::Executor& executor) {
+    const qlever::Executor& executor,
+    const ad_utility::SharedCancellationHandle& cancellationHandle) {
   const IdTableView<WIDTH> input = dynInput.asStaticView<WIDTH>();
   IdTableStatic<2> result = std::move(*dynResult).toStatic<2>();
   AD_LOG_DEBUG << "For " << input.size() << " entities in column "
@@ -265,8 +272,9 @@ void CountAvailablePredicates::computePatternTrick(
       getRuntimeParameter<&RuntimeParameters::patternTrickNumTasksInFlight_>();
   CountMap<size_t> patternCounts = ad_utility::computeInParallelChunks(
       executor, input.size(), CHUNK_SIZE_ROWS,
-      [&subjectColumn, &patternColumn](CountMap<size_t>& counts, size_t begin,
-                                       size_t end) {
+      [&subjectColumn, &patternColumn, &cancellationHandle](
+          CountMap<size_t>& counts, size_t begin, size_t end) {
+        cancellationHandle->throwIfCancelled();
         for (size_t i = begin; i < end; ++i) {
           // Skip over elements with the same subject (don't count them
           // twice). Note: The element before the first one of a chunk is
@@ -306,7 +314,9 @@ void CountAvailablePredicates::computePatternTrick(
                << std::endl;
   CountMap<Id> predicateCounts = ad_utility::computeInParallelChunks(
       executor, patternVec.size(), CHUNK_SIZE_PATTERNS,
-      [&patternVec, &patterns](CountMap<Id>& counts, size_t begin, size_t end) {
+      [&patternVec, &patterns, &cancellationHandle](CountMap<Id>& counts,
+                                                    size_t begin, size_t end) {
+        cancellationHandle->throwIfCancelled();
         for (auto [patternIndex, patternCount] : ql::ranges::subrange(
                  patternVec.begin() + begin, patternVec.begin() + end)) {
           // Entities without a pattern contribute no predicates. All other

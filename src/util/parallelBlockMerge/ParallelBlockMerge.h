@@ -107,7 +107,9 @@ namespace ad_utility::parallelBlockMerge {
 // If `moveElements` is `true`, then the elements are moved out of the input
 // blocks.
 CPP_template(bool moveElements, typename Input,
-             typename Comparator)(requires InputConcept<Input>) ad_utility::
+             typename Comparator)(
+    requires InputConcept<Input>)
+ad_utility::
     InputRangeTypeErased<detail::OutputBlockT<Input>> serialBlockMergeToRange(
         Input input, Comparator comparator, MergeOptions options = {},
         ad_utility::SharedCancellationHandle cancellationHandle =
@@ -272,7 +274,8 @@ auto parallelBlockMergeToSink(
 // convenience wrapper around `serialBlockMergeToRange` and in particular
 // ignores the `executor` and the `storageFactory`.
 CPP_template(bool moveElements, typename Input, typename Comparator,
-             typename StorageFactory)(requires InputConcept<Input>) ad_utility::
+             typename StorageFactory)(requires InputConcept<Input>)
+ad_utility::
     InputRangeTypeErased<detail::OutputBlockT<Input>> parallelBlockMergeToRange(
         ql::any_io_executor executor, Input input, Comparator comparator,
         StorageFactory storageFactory, MergeOptions options = {},

@@ -14,11 +14,12 @@
 #include "engine/NamedResultCache.h"
 #include "engine/NamedResultCacheFormatVersion.h"
 #include "util/AllocatorWithLimit.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/Exception.h"
-#include "util/Serializer/SerializeString.h"
-#include "util/Serializer/SerializeVector.h"
-#include "util/Serializer/Serializer.h"
-#include "util/Serializer/TripleSerializer.h"
+#include "util/serializer/SerializeString.h"
+#include "util/serializer/SerializeVector.h"
+#include "util/serializer/Serializer.h"
+#include "util/serializer/TripleSerializer.h"
 
 namespace namedResultCacheSerializer::detail {
 // An arbitrary magic byte that is written at the very beginning of a
@@ -46,13 +47,11 @@ using Value = NamedResultCache::Value;
 // `entriesVersion`, and the legacy version can only represent geo indices
 // with a single segment.
 CPP_template(typename Serializer, typename WriteEntry)(
-    requires ad_utility::serialization::WriteSerializer<Serializer> CPP_and
-        ql::concepts::invocable<
-            const WriteEntry&, Serializer&, const std::string&,
-            const Value&>) void writeEntries(Serializer& serializer,
-                                             const Entries& entries,
-                                             const WriteEntry& writeEntry,
-                                             uint16_t entriesVersion) {
+    requires ad_utility::serialization::WriteSerializer<Serializer> &&
+    ql::concepts::invocable<const WriteEntry&, Serializer&, const std::string&,
+                            const Value&>)
+void writeEntries(Serializer& serializer, const Entries& entries,
+                  const WriteEntry& writeEntry, uint16_t entriesVersion) {
   AD_CONTRACT_CHECK(entriesVersion == formatVersion ||
                     entriesVersion == legacyFormatVersion);
   // Write the magic byte and format version first, s.t. `readFromSerializer`
@@ -80,10 +79,9 @@ namespace namedResultCacheSerializer {
 // generic serialization of a `NamedResultCache::Value` below does (for the
 // current version).
 CPP_template(typename Serializer)(
-    requires ad_utility::serialization::ReadSerializer<
-        Serializer>) void readValue(Serializer& serializer,
-                                    NamedResultCache::Value& arg,
-                                    uint16_t entriesVersion) {
+    requires ad_utility::serialization::ReadSerializer<Serializer>)
+void readValue(Serializer& serializer, NamedResultCache::Value& arg,
+               uint16_t entriesVersion) {
   using namespace ad_utility::serialization;
   // Deserialize the LocalVocab and get the ID mapping.
   AD_CORRECTNESS_CHECK(arg.contextForSerialization_ != nullptr);
@@ -134,7 +132,8 @@ CPP_template(typename Serializer)(
   serializeDeterministically(serializer, varToColMap);
 
   // Deserialize `resultSortedOn`.
-  std::vector<ColumnIndex> resultSortedOn;
+  qlm::vector<ColumnIndex> resultSortedOn{
+      arg.allocatorForSerialization_.value()};
   serializer >> resultSortedOn;
 
   // Deserialize `cacheKey`.
@@ -211,8 +210,9 @@ void NamedResultCache::readFromSerializer(Serializer& serializer,
     Key key;
     serializer >> key;
 
-    // Deserialize the value.
-    Value value;
+    // Deserialize the value (a `Value` has no default constructor, because
+    // its `resultSortedOn_` needs an allocator).
+    Value value{{}, {}, qlm::vector<ColumnIndex>{allocator}, {}, {}, {}};
     value.allocatorForSerialization_ = allocator;
     value.contextForSerialization_ = &context;
     namedResultCacheSerializer::readValue(serializer, value, readFormatVersion);
@@ -240,14 +240,11 @@ namespace namedResultCacheSerializer {
 // given to `writeEntries`. In the legacy version, the geo index must have a
 // single segment.
 CPP_template(typename Serializer, typename Columns)(
-    requires ad_utility::serialization::WriteSerializer<
-        Serializer>) void writeValue(Serializer& serializer,
-                                     const NamedResultCache::Value& value,
-                                     const Columns& columns,
-                                     const std::vector<ColumnIndex>&
-                                         resultSortedOn,
-                                     bool writeLocalVocabWords,
-                                     uint16_t entriesVersion) {
+    requires ad_utility::serialization::WriteSerializer<Serializer>)
+void writeValue(Serializer& serializer, const NamedResultCache::Value& value,
+                const Columns& columns,
+                ql::span<const ColumnIndex> resultSortedOn,
+                bool writeLocalVocabWords, uint16_t entriesVersion) {
   // Serialize the `LocalVocab` first (required for ID remapping).
   if (writeLocalVocabWords) {
     ad_utility::detail::serializeLocalVocab(serializer, value.localVocab_);

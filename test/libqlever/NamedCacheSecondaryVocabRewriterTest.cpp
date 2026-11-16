@@ -22,13 +22,16 @@
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/LocalVocabEntryTestHelpers.h"
 #include "engine/ExplicitIdTableOperation.h"
 #include "engine/NamedResultCache.h"
 #include "index/LocalVocabEntry.h"
 #include "index/vocabulary/SecondaryVocabulary.h"
 #include "libqlever/NamedCacheSecondaryVocabRewriter.h"
+#include "util/ContainersWithAllocator.h"
 
 using namespace qlever::namedCacheSecondaryVocab;
+using ad_utility::testing::iriLocalVocabEntry;
 using secondaryVocabTestHelpers::secondaryVocabIs;
 using ::testing::ElementsAre;
 using ::testing::HasSubstr;
@@ -37,6 +40,7 @@ using ::testing::Optional;
 
 namespace {
 using Value = NamedResultCache::Value;
+const auto alloc = ad_utility::testing::makeAllocator();
 
 // Return the `Id` of the word of a secondary vocabulary at the given `index`.
 Id secondaryId(uint64_t index) {
@@ -82,8 +86,7 @@ Id localVocabIdOf(const std::vector<Id>& column, std::string_view iriref) {
 Value addAndRewrite(const std::shared_ptr<const Value>& value,
                     SecondaryVocabulary& secondaryVocab) {
   addNewWordsToSecondaryVocab({{"entry", value}}, secondaryVocab);
-  return canonicalizeForSerialization(*value, secondaryVocab,
-                                      ad_utility::testing::makeAllocator());
+  return canonicalizeForSerialization(*value, secondaryVocab, alloc);
 }
 
 // The data of the tests below. Most of the new words that the tests use are
@@ -140,10 +143,9 @@ TEST(NamedCacheSecondaryVocabRewriter, addNewWordsAndRewriteIds) {
             Id::makeFromInt(42));
   // A local vocab entry whose word is contained in the main vocabulary is
   // rewritten to the `Id` of that word.
-  auto entryOfM =
-      LocalVocabEntry::fromIriref("<m>", qec->getLocalVocabContext());
-  EXPECT_EQ(rewriteId(Id::makeFromLocalVocabIndex(&entryOfM), secondaryVocab),
-            m);
+  auto getLocalVocabId = ad_utility::testing::makeGetLocalVocabId();
+  auto entryOfM = iriLocalVocabEntry("<m>", qec->getLocalVocabContext());
+  EXPECT_EQ(rewriteId(getLocalVocabId(entryOfM), secondaryVocab), m);
 
   // A word that has not been added to the secondary vocabulary cannot be
   // rewritten.
@@ -263,7 +265,7 @@ TEST(NamedCacheSecondaryVocabRewriter, localVocabEntriesOfExistingWords) {
   LocalVocab localVocab;
   auto idOf = [&localVocab, &context](std::string_view iriref) {
     return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
-        LocalVocabEntry::fromIriref(iriref, context)));
+        iriLocalVocabEntry(iriref, context)));
   };
   Id m = idOf("<m>");
   Id a = idOf("<a>");
@@ -275,7 +277,7 @@ TEST(NamedCacheSecondaryVocabRewriter, localVocabEntriesOfExistingWords) {
   auto value = std::make_shared<const Value>(Value{
       std::make_shared<const IdTable>(makeIdTableFromVector({{m}, {a}, {y}})),
       VariableToColumnMap{{Variable{"?x"}, makeAlwaysDefinedColumn(0)}},
-      std::vector<ColumnIndex>{}, std::move(localVocab), "handmade",
+      qlm::vector<ColumnIndex>{alloc}, std::move(localVocab), "handmade",
       std::nullopt});
 
   // The secondary vocabulary that is passed in has to be an extension of the
@@ -291,8 +293,7 @@ TEST(NamedCacheSecondaryVocabRewriter, localVocabEntriesOfExistingWords) {
   EXPECT_EQ(rewriteId(m, secondaryVocab), getId("<m>"));
   EXPECT_EQ(rewriteId(a, secondaryVocab), secondaryId(0));
   EXPECT_EQ(rewriteId(y, secondaryVocab), secondaryId(1));
-  auto rewritten = canonicalizeForSerialization(
-      *value, secondaryVocab, ad_utility::testing::makeAllocator());
+  auto rewritten = canonicalizeForSerialization(*value, secondaryVocab, alloc);
   EXPECT_THAT(column(rewritten, 0),
               ElementsAre(getId("<m>"), secondaryId(0), secondaryId(1)));
 }
@@ -319,19 +320,19 @@ TEST(NamedCacheSecondaryVocabRewriter, canonicalColumnOrder) {
   EXPECT_THAT(canonicalColumnOrder(twoVariables, 2), ElementsAre(0, 1));
 
   auto makeValue = [&map](std::vector<ColumnIndex> sortedOn) {
-    return Value{std::make_shared<const IdTable>(makeIdTableFromVector(
-                     {{1, 7, 5, 3}, {2, 6, 5, 4}}, ad_utility::testing::IntId)),
-                 map,
-                 std::move(sortedOn),
-                 LocalVocab{},
-                 "handmade",
-                 std::nullopt};
+    return Value{
+        std::make_shared<const IdTable>(makeIdTableFromVector(
+            {{1, 7, 5, 3}, {2, 6, 5, 4}}, ad_utility::testing::IntId)),
+        map,
+        qlm::vector<ColumnIndex>{sortedOn.begin(), sortedOn.end(), alloc},
+        LocalVocab{},
+        "handmade",
+        std::nullopt};
   };
   SecondaryVocabulary secondaryVocab;
-  auto allocator = ad_utility::testing::makeAllocator();
   // The table is sorted by its first column.
   auto value = makeValue({0});
-  auto copy = canonicalizeForSerialization(value, secondaryVocab, allocator);
+  auto copy = canonicalizeForSerialization(value, secondaryVocab, alloc);
   // The column without a variable is dropped.
   EXPECT_EQ(ExplicitIdTableOperation::viewOf(copy.result_),
             makeIdTableFromVector({{5, 3, 1}, {5, 4, 2}},
@@ -346,7 +347,7 @@ TEST(NamedCacheSecondaryVocabRewriter, canonicalColumnOrder) {
   // The sort order is kept up to the first dropped column.
   auto keptSortOrder = [&](std::vector<ColumnIndex> sortedOn) {
     auto value = makeValue(std::move(sortedOn));
-    return canonicalizeForSerialization(value, secondaryVocab, allocator)
+    return canonicalizeForSerialization(value, secondaryVocab, alloc)
         .resultSortedOn_;
   };
   EXPECT_THAT(keptSortOrder({}), IsEmpty());
@@ -376,15 +377,14 @@ TEST(NamedCacheSecondaryVocabRewriter, canonicalCacheKey) {
     return Value{std::make_shared<const IdTable>(makeIdTableFromVector(
                      {{1, 2}, {3, 4}}, ad_utility::testing::IntId)),
                  std::move(map),
-                 {},
+                 qlm::vector<ColumnIndex>{alloc},
                  LocalVocab{},
                  "handmade",
                  std::nullopt};
   };
   SecondaryVocabulary secondaryVocab;
-  auto allocator = ad_utility::testing::makeAllocator();
   auto canonicalize = [&](const Value& value) {
-    return canonicalizeForSerialization(value, secondaryVocab, allocator);
+    return canonicalizeForSerialization(value, secondaryVocab, alloc);
   };
   // NOTE: The copies are views of the columns of the values (see
   // `canonicalizeForSerialization`), so the values have to outlive them.
@@ -414,13 +414,12 @@ TEST(NamedCacheSecondaryVocabRewriter, canonicalizeWithoutCopy) {
             makeIdTableFromVector(table, ad_utility::testing::IntId)),
         VariableToColumnMap{{Variable{"?b"}, makeAlwaysDefinedColumn(0)},
                             {Variable{"?a"}, makeAlwaysDefinedColumn(2)}},
-        std::move(sortedOn),
+        qlm::vector<ColumnIndex>{sortedOn.begin(), sortedOn.end(), alloc},
         LocalVocab{},
         "handmade",
         std::nullopt};
   };
   SecondaryVocabulary secondaryVocab;
-  auto allocator = ad_utility::testing::makeAllocator();
   auto isView = [](const Value& value) {
     return std::holds_alternative<IdTableView<0>>(value.result_);
   };
@@ -429,8 +428,7 @@ TEST(NamedCacheSecondaryVocabRewriter, canonicalizeWithoutCopy) {
   // canonical order. The copy is a view of the columns `?a` and `?b` of the
   // table of the value.
   auto sorted = makeValue({{1, 9, 4}, {2, 8, 3}}, {0});
-  auto canonical =
-      canonicalizeWithPermutation(sorted, secondaryVocab, allocator);
+  auto canonical = canonicalizeWithPermutation(sorted, secondaryVocab, alloc);
   EXPECT_TRUE(isView(canonical.value_));
   EXPECT_FALSE(canonical.oldRowOfNewRow_.has_value());
   auto view = ExplicitIdTableOperation::viewOf(canonical.value_.result_);
@@ -442,7 +440,7 @@ TEST(NamedCacheSecondaryVocabRewriter, canonicalizeWithoutCopy) {
 
   // A table that is not in canonical order is copied and sorted.
   auto unsorted = makeValue({{2, 9, 4}, {1, 8, 3}}, {});
-  auto copy = canonicalizeWithPermutation(unsorted, secondaryVocab, allocator);
+  auto copy = canonicalizeWithPermutation(unsorted, secondaryVocab, alloc);
   EXPECT_FALSE(isView(copy.value_));
   EXPECT_THAT(copy.oldRowOfNewRow_, Optional(ElementsAre(1, 0)));
   EXPECT_EQ(
@@ -451,16 +449,15 @@ TEST(NamedCacheSecondaryVocabRewriter, canonicalizeWithoutCopy) {
 
   // A table with rows but no columns (the result of a triple pattern without
   // variables) is not copied either, and keeps its number of rows.
-  IdTable noColumns{0, allocator};
+  IdTable noColumns{0, alloc};
   noColumns.resize(1);
   Value zeroColumns{std::make_shared<const IdTable>(std::move(noColumns)),
                     VariableToColumnMap{},
-                    {},
+                    qlm::vector<ColumnIndex>{alloc},
                     LocalVocab{},
                     "handmade",
                     std::nullopt};
-  auto zero =
-      canonicalizeWithPermutation(zeroColumns, secondaryVocab, allocator);
+  auto zero = canonicalizeWithPermutation(zeroColumns, secondaryVocab, alloc);
   EXPECT_TRUE(isView(zero.value_));
   EXPECT_FALSE(zero.oldRowOfNewRow_.has_value());
   auto zeroView = ExplicitIdTableOperation::viewOf(zero.value_.result_);

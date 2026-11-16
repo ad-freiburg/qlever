@@ -115,6 +115,11 @@ class SparqlQleverVisitor {
   // corresponding pattern.
   ad_utility::HashMap<std::string, NamedSubquery> namedSubqueries_{};
 
+  // True while the body of a (non-magic) `SERVICE` is parsed. Such a body is
+  // sent to the remote endpoint as the original query text, so it must not
+  // contain an `INCLUDE`.
+  bool isInsideRemoteService_ = false;
+
   // The `BASE` IRI of the query if any.
   std::optional<qlever::util::ParsedUri> baseIri_{};
 
@@ -414,7 +419,7 @@ class SparqlQleverVisitor {
   // services do not need `args`. For them this can be left out.
   CPP_variadic_template(typename T, typename... Args)(
       requires std::is_constructible_v<T, Args...>)
-      parsedQuery::GraphPatternOperation
+  parsedQuery::GraphPatternOperation
       visitMagicServiceQuery(Parser::ServiceGraphPatternContext* ctx,
                              Args&&... args);
 
@@ -703,9 +708,11 @@ class SparqlQleverVisitor {
       const antlr4::ParserRuleContext* context);
 
   // Process an IRI function call. This is used in both `visitFunctionCall` and
-  // `visitIriOrFunction`.
+  // `visitIriOrFunction`. `distinct` is true if the argument list starts with
+  // `DISTINCT`, which is only allowed for custom aggregates like `ql:stdev`.
   ExpressionPtr processIriFunctionCall(const TripleComponent::Iri& iri,
                                        std::vector<ExpressionPtr> argList,
+                                       bool distinct,
                                        const antlr4::ParserRuleContext*);
 
   void addVisibleVariable(Variable var);
@@ -723,16 +730,14 @@ class SparqlQleverVisitor {
   }
 
   CPP_template(typename Ctx)(
-      requires SparqlQleverVisitor::voidWhenVisited<
-          SparqlQleverVisitor, Ctx>) void visitVector(const std::vector<Ctx*>&
-                                                          childContexts);
+      requires SparqlQleverVisitor::voidWhenVisited<SparqlQleverVisitor, Ctx>)
+  void visitVector(const std::vector<Ctx*>& childContexts);
 
   // Call `visit` for each of the `childContexts` and return the results of
   // those calls as a `vector`.
   CPP_template(typename Ctx)(requires CPP_NOT(
-      SparqlQleverVisitor::voidWhenVisited<
-          SparqlQleverVisitor, Ctx>)) auto visitVector(const std::vector<Ctx*>&
-                                                           childContexts)
+              SparqlQleverVisitor::voidWhenVisited<SparqlQleverVisitor, Ctx>))
+  auto visitVector(const std::vector<Ctx*>& childContexts)
       -> std::vector<decltype(visit(childContexts[0]))>;
 
   // Check that exactly one of the `ctxs` is not `null`, visit that context,
@@ -756,8 +761,9 @@ class SparqlQleverVisitor {
   template <typename Target, typename Intermediate = Target, typename Ctx>
   void visitIf(Target* target, Ctx* ctx);
 
-  CPP_template(typename Ctx)(requires SparqlQleverVisitor::voidWhenVisited<
-                             SparqlQleverVisitor, Ctx>) void visitIf(Ctx* ctx);
+  CPP_template(typename Ctx)(
+      requires SparqlQleverVisitor::voidWhenVisited<SparqlQleverVisitor, Ctx>)
+  void visitIf(Ctx* ctx);
 
  public:
   [[noreturn]] static void reportError(const antlr4::ParserRuleContext* ctx,

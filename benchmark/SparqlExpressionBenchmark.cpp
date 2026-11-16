@@ -132,8 +132,7 @@ struct NumericExpressionBenchmarkContext {
       table.asStaticView<0>(),
       qec->getAllocator(),
       localVocab,
-      std::make_shared<ad_utility::CancellationHandle<>>(),
-      EvaluationContext::TimePoint::max()};
+      std::make_shared<ad_utility::CancellationHandle<>>()};
 
   explicit NumericExpressionBenchmarkContext(size_t numRows) {
     table.setNumColumns(2);

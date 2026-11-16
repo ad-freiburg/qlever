@@ -6,6 +6,7 @@
 
 #include "../util/GTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/LocalVocabEntryTestHelpers.h"
 #include "parser/UpdateTriples.h"
 #include "util/CompilerWarnings.h"
 
@@ -23,8 +24,8 @@ TEST(UpdateTriples, DefaultConstructor) {
 TEST(UpdateTriples, ConstructorsAndAssignments) {
   auto* qec = ad_utility::testing::getQec();
   LocalVocab l;
-  auto iri =
-      LocalVocabEntry::fromIriref("<hallo>", qec->getLocalVocabContext());
+  auto iri = ad_utility::testing::iriLocalVocabEntry(
+      "<hallo>", qec->getLocalVocabContext());
   l.getIndexAndAddIfNotContained(iri);
   std::vector<SparqlTripleSimpleWithGraph> triples;
 

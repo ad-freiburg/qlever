@@ -25,6 +25,7 @@
 #include "index/LocalVocabEntry.h"
 #include "libqlever/CanonicalRowOrder.h"
 #include "util/CompactStringVector.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
 
@@ -39,7 +40,7 @@ namespace {
 // vocabulary of its own index is the `Id` in that vocabulary. For such an
 // entry, `std::nullopt` is returned as well, because its word is looked up in
 // the secondary vocabulary that is passed to the functions of this file.
-std::optional<Id> idInMainVocab(const LocalVocabEntry& entry) {
+std::optional<Id> idInMainVocab(const LocalVocabEntryView& entry) {
   auto [lowerBound, upperBound] = entry.positionInVocab();
   if (lowerBound == upperBound) {
     return std::nullopt;
@@ -56,22 +57,22 @@ std::optional<Id> idInMainVocab(const LocalVocabEntry& entry) {
 // index nor in the `secondaryVocab` (see `addNewWordsToSecondaryVocab`). The
 // `handledEntries` are the `LocalVocabEntry`s that have already been handled
 // (also by previous calls), each of which is handled only once.
-void collectNewWords(
-    ConstIdColumnRef column, const SecondaryVocabulary& secondaryVocab,
-    ad_utility::HashSet<const LocalVocabEntry*>& handledEntries,
-    ad_utility::HashSet<std::string>& newWords) {
+void collectNewWords(ConstIdColumnRef column,
+                     const SecondaryVocabulary& secondaryVocab,
+                     ad_utility::HashSet<LocalVocabIndex>& handledEntries,
+                     ad_utility::HashSet<std::string>& newWords) {
   for (Id id : column) {
     if (id.getDatatype() != Datatype::LocalVocabIndex) {
       continue;
     }
-    const LocalVocabEntry* entry = id.getLocalVocabIndex();
+    LocalVocabIndex entry = id.getLocalVocabIndex();
     if (!handledEntries.insert(entry).second ||
         idInMainVocab(*entry).has_value()) {
       continue;
     }
     const auto& word = entry->toStringRepresentation();
     if (!secondaryVocab.getId(word).has_value()) {
-      newWords.insert(word);
+      newWords.insert(std::string{word});
     }
   }
 }
@@ -88,7 +89,7 @@ size_t addNewWordsToSecondaryVocab(const Entries& entries,
                                    SecondaryVocabulary& secondaryVocab) {
   // The same `LocalVocabEntry` typically occurs in many rows, so each of them
   // is handled only once.
-  ad_utility::HashSet<const LocalVocabEntry*> handledEntries;
+  ad_utility::HashSet<LocalVocabIndex> handledEntries;
   ad_utility::HashSet<std::string> newWords;
   for (const auto& [key, value] : entries) {
     auto view = ExplicitIdTableOperation::viewOf(value->result_);
@@ -117,7 +118,7 @@ Id rewriteId(Id id, const SecondaryVocabulary& secondaryVocab) {
   if (id.getDatatype() != Datatype::LocalVocabIndex) {
     return id;
   }
-  const LocalVocabEntry& entry = *id.getLocalVocabIndex();
+  const LocalVocabEntryView& entry = *id.getLocalVocabIndex();
   if (auto idOfWord = idInMainVocab(entry); idOfWord.has_value()) {
     return idOfWord.value();
   }
@@ -191,7 +192,7 @@ CanonicalizedValue canonicalizeWithPermutation(
   }
   // The rows are still sorted by the prefix of `resultSortedOn` that consists
   // only of columns that were not dropped.
-  std::vector<ColumnIndex> resultSortedOn;
+  qlm::vector<ColumnIndex> resultSortedOn{allocator};
   for (ColumnIndex column : value.resultSortedOn_) {
     if (newColumnOfOldColumn[column] == droppedColumn) {
       break;

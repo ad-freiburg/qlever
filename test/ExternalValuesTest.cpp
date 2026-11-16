@@ -19,6 +19,7 @@
 #include "engine/Result.h"
 #include "engine/idTable/IdTable.h"
 #include "util/IndexTestHelpers.h"
+#include "util/LocalVocabEntryTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 
 using TC = TripleComponent;
@@ -76,6 +77,10 @@ TEST(ExternalValues, knownEmptyResultWithEmptyValues) {
 
   // Should return false even though values are empty.
   EXPECT_FALSE(externalValuesOp.knownEmptyResult());
+
+  // Every column of the empty values has multiplicity 1.
+  EXPECT_FLOAT_EQ(externalValuesOp.getMultiplicity(0), 1.0f);
+  EXPECT_FLOAT_EQ(externalValuesOp.getMultiplicity(1), 1.0f);
 }
 
 // Check that `computeResult` works correctly.
@@ -96,7 +101,8 @@ TEST(ExternalValues, computeResult) {
   Id x = ad_utility::testing::makeGetId(testQec->getIndex())("<x>");
   auto I = ad_utility::testing::IntId;
   auto l = result->localVocab().getIndexOrNullopt(
-      LocalVocabEntry::fromIriref("<y>", testQec->getLocalVocabContext()));
+      ad_utility::testing::iriLocalVocabEntry("<y>",
+                                              testQec->getLocalVocabContext()));
   ASSERT_TRUE(l.has_value());
   auto U = Id::makeUndefined();
   ASSERT_EQ(table,

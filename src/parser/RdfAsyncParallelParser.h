@@ -23,7 +23,7 @@
 #include "parser/AsyncRdfParserBase.h"
 #include "parser/RdfParser.h"
 #include "util/AsyncResourcePool.h"
-#include "util/MemorySize/MemorySize.h"
+#include "util/memorySize/MemorySize.h"
 
 // An RDF parser that parses a single input file by splitting it into batches
 // and parsing those batches in parallel, scheduling all of its work via
