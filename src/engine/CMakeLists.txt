@@ -3,7 +3,8 @@ add_subdirectory(filterFacts)
 add_library(engine
         QueryExecutionTree.cpp Result.cpp
         OrderByOnSortedNumericInput.cpp NumericRun.cpp
-        QueryPlanner.cpp QueryRewriteUtils.cpp CheckUsePatternTrick.cpp
+        QueryPlanner.cpp QueryRewriteUtils.cpp OptionalJoinConditionPlanning.cpp
+        CheckUsePatternTrick.cpp
         VariableToColumnMap.cpp ExportQueryExecutionTrees.cpp
         LazyGroupBy.cpp GroupByHashMapOptimization.cpp
         CountConnectedSubgraphs.cpp ExecuteUpdate.cpp

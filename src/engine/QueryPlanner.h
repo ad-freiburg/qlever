@@ -171,6 +171,10 @@ class QueryPlanner {
     bool containsFilterSubstitute_ = false;
     bool containsBindSubstitute_ = false;
     Type type = Type::BASIC;
+    // Only for the plans of the group of an OPTIONAL: The FILTERs of the group
+    // that are the condition of the left join and thus have not been applied
+    // to the plan, see `isPartOfOptionalJoinCondition`.
+    std::vector<sparqlExpression::SparqlExpressionPimpl> optionalJoinCondition_;
 
     size_t getCostEstimate() const;
 
@@ -318,7 +322,14 @@ class QueryPlanner {
   // and the functions that call it are `const`.
   mutable size_t numCandidatePlans_ = 0;
 
-  SubtreePlanVec optimize(ParsedQuery::GraphPattern* rootPattern);
+  // Plan the `rootPattern`. If it is the group of an OPTIONAL, then
+  // `variablesOfLeftSideOfOptional` has to contain the variables of the
+  // patterns that precede the OPTIONAL. The FILTERs of the group that are the
+  // condition of the left join are then not applied, but stored in the
+  // `optionalJoinCondition_` of the returned plans.
+  SubtreePlanVec optimize(ParsedQuery::GraphPattern* rootPattern,
+                          const std::optional<ad_utility::HashSet<Variable>>&
+                              variablesOfLeftSideOfOptional = std::nullopt);
 
   // Add all the possible index scans for the triple represented by the node.
   // The triple is "ordinary" in the sense that it is neither a text triple with
