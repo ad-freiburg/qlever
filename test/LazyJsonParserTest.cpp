@@ -2,29 +2,35 @@
 // Chair of Algorithms and Data Structures.
 // Author: Moritz Dom (domm@informatik.uni-freiburg.de)
 
+#include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 
 #include <string>
 
+#include "util/GTestHelpers.h"
 #include "util/LazyJsonParser.h"
 
 using ad_utility::LazyJsonParser;
 
+namespace {
+// Yield `s` in chunks of `chunkSize` characters.
+cppcoro::generator<std::string_view> yieldInChunks(std::string_view s,
+                                                   size_t chunkSize) {
+  for (size_t i = 0; i < s.size(); i += chunkSize) {
+    co_yield s.substr(i, chunkSize);
+  }
+}
+}  // namespace
+
 TEST(parseTest, parse) {
   const std::vector<std::string> arrayPath = {"results", "bindings"};
 
-  auto yieldChars =
-      [](const std::string_view s) -> cppcoro::generator<std::string_view> {
-    for (size_t i = 0; i < s.size(); ++i) {
-      co_yield std::string_view(s.data() + i, 1);
-    }
-  };
   // Check if the parser yields the expected results when parsing each char
   // individually.
-  auto expectYields = [&yieldChars](const std::string& s,
-                                    const std::vector<std::string>& exp,
-                                    const std::vector<std::string> arrayPath) {
-    auto parsedResult = LazyJsonParser::parse(yieldChars(s), arrayPath);
+  auto expectYields = [](const std::string& s,
+                         const std::vector<std::string>& exp,
+                         const std::vector<std::string> arrayPath) {
+    auto parsedResult = LazyJsonParser::parse(yieldInChunks(s, 1), arrayPath);
 
     size_t expIdx = 0;
     for (const auto& y : parsedResult) {
@@ -95,4 +101,65 @@ TEST(parseTest, parse) {
       R"({"results": {"bindings": [{"x": {"value": "\"esc\""}}]}}{"k": "v"})",
       {R"({"results": {"bindings": [{"x": {"value": "\"esc\""}}]}})"},
       arrayPath);
+}
+
+// Test that the parser throws if the input ends after the `arrayPath` has been
+// reached, but before the JSON object is complete (as it does when the sender
+// aborts the transmission, for example because of a timeout), instead of
+// silently ignoring the rest of the input.
+TEST(parseTest, truncatedInputThrows) {
+  const std::vector<std::string> arrayPath = {"results", "bindings"};
+  // Consume all the parts that the parser yields for `s` (split into chunks of
+  // size `chunkSize`) and return the number of parts.
+  auto parseAll = [](std::string_view s, size_t chunkSize,
+                     const std::vector<std::string>& path) {
+    size_t numParts = 0;
+    for ([[maybe_unused]] const auto& part :
+         LazyJsonParser::parse(yieldInChunks(s, chunkSize), path)) {
+      ++numParts;
+    }
+    return numParts;
+  };
+
+  const std::string complete =
+      R"({"head": {"vars": ["x"]}, "results": {"bindings": [)"
+      R"({"x": {"type": "uri", "value": "a"}},)"
+      R"({"x": {"type": "uri", "value": "b]}}\"\\"}},)"
+      R"({"x": {"type": "uri", "value": "c"}}]}})";
+  const size_t arrayStart = complete.find('[', complete.find("bindings")) + 1;
+  for (size_t chunkSize : {size_t{1}, size_t{7}, complete.size()}) {
+    SCOPED_TRACE(chunkSize);
+    EXPECT_NO_THROW(parseAll(complete, chunkSize, arrayPath));
+    // Every proper prefix that reaches the `arrayPath` is incomplete.
+    for (size_t end = arrayStart; end < complete.size(); ++end) {
+      SCOPED_TRACE(end);
+      AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+          parseAll(complete.substr(0, end), chunkSize, arrayPath),
+          ::testing::HasSubstr("ended before it was complete"),
+          LazyJsonParser::Error);
+    }
+    // This is what the result of QLever looks like when its computation fails
+    // while it is being sent.
+    std::string truncatedByError = absl::StrCat(
+        complete.substr(0, complete.find("\"c\"")),
+        "\n !!!!>># An error has occurred while exporting the query result. "
+        "The error message was:\nOperation timed out.");
+    AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+        parseAll(truncatedByError, chunkSize, arrayPath),
+        ::testing::HasSubstr("ended before it was complete"),
+        LazyJsonParser::Error);
+  }
+
+  // The same for an empty `arrayPath`.
+  EXPECT_EQ(parseAll("[1,2,3]", 1, {}), 3);
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      parseAll("[1,2", 1, {}),
+      ::testing::HasSubstr("ended before it was complete"),
+      LazyJsonParser::Error);
+
+  // If the `arrayPath` is never reached, nothing is yielded, but there is also
+  // no exception (the caller has to handle the missing results).
+  EXPECT_EQ(
+      parseAll(R"({"head": {"vars": ["x"]}, "results": {"bindi)", 1, arrayPath),
+      0);
 }
