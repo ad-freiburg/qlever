@@ -40,14 +40,12 @@ inline auto geoPointNear =
           Property(&GeoPoint::getLng,
                    DoubleNear(expected.getLng(), allowedCoordinateError)));
     });
-#define EXPECT_GEOPOINT_NEAR(a, b) EXPECT_THAT(a, geoPointNear(b))
 
 // ____________________________________________________________________________
 inline auto centroidNear =
     liftOptionalMatcher<Centroid>([](Centroid expected) -> Matcher<Centroid> {
       return Property(&Centroid::centroid, geoPointNear(expected.centroid()));
     });
-#define EXPECT_CENTROID_NEAR(a, b) EXPECT_THAT(a, centroidNear(b))
 
 // ____________________________________________________________________________
 inline auto boundingBoxNear = liftOptionalMatcher<BoundingBox>(
@@ -57,7 +55,6 @@ inline auto boundingBoxNear = liftOptionalMatcher<BoundingBox>(
           Property(&BoundingBox::lowerLeft, geoPointNear(lowerLeft)),
           Property(&BoundingBox::upperRight, geoPointNear(upperRight)));
     });
-#define EXPECT_BOUNDINGBOX_NEAR(a, b) EXPECT_THAT(a, boundingBoxNear(b))
 
 // ____________________________________________________________________________
 inline auto metricLengthNear = liftOptionalMatcher<MetricLength>(
@@ -67,7 +64,6 @@ inline auto metricLengthNear = liftOptionalMatcher<MetricLength>(
       return Property(&MetricLength::length,
                       DoubleNear(expected.length(), allowedError));
     });
-#define EXPECT_METRICLENGTH_NEAR(a, b) EXPECT_THAT(a, metricLengthNear(b))
 
 // ____________________________________________________________________________
 inline auto metricAreaNear = liftOptionalMatcher<MetricArea>(
@@ -77,7 +73,6 @@ inline auto metricAreaNear = liftOptionalMatcher<MetricArea>(
       return Property(&MetricArea::area,
                       DoubleNear(expected.area(), allowedError));
     });
-#define EXPECT_METRICAREA_NEAR(a, b) EXPECT_THAT(a, metricAreaNear(b))
 
 // ____________________________________________________________________________
 template <typename T>
@@ -117,7 +112,6 @@ inline auto geoInfoMatcher = liftOptionalMatcher<GeometryInfo>(
           Property(&GeometryInfo::getSerializationType,
                    Eq(expected.getSerializationType())));
     });
-#define EXPECT_GEOMETRYINFO(a, b) EXPECT_THAT(a, geoInfoMatcher(b))
 
 // Return a matcher that applies `matcher` to the result of
 // `getRequestedInfo<T>` for a `GeometryInfo` instance or a WKT literal (type
@@ -167,24 +161,6 @@ Matcher<Input> requestedInfoMatches(const GeometryInfo& expected) {
                   expected.getBoundingBox(), expected.getSourceCrsType()))));
 }
 
-// ____________________________________________________________________________
-inline auto requestedInfoOfInstanceMatches =
-    liftOptionalMatcher<GeometryInfo>(requestedInfoMatches<GeometryInfo>);
-
-// Return a matcher for a WKT literal for which `getRequestedInfo` returns the
-// respective part of `expected` for each type of requested info.
-//
-// NOTE: If `expected` is `std::nullopt`, only check that the requested
-// `GeometryInfo` is `std::nullopt` as well (other parts like the geometry type
-// may still be valid, see `isInvalidWktLiteral`).
-inline Matcher<std::string_view> requestedInfoOfWktMatches(
-    std::optional<GeometryInfo> expected) {
-  if (!expected.has_value()) {
-    return requestedInfoIs<GeometryInfo, std::string_view>(Eq(std::nullopt));
-  }
-  return requestedInfoMatches<std::string_view>(expected.value());
-}
-
 // Return a matcher for a WKT literal for which neither a `GeometryInfo` nor a
 // centroid or bounding box can be computed. The geometry type and the number
 // of geometries can be computed iff `expectValidGeometryType` and
@@ -194,9 +170,7 @@ inline Matcher<std::string_view> isInvalidWktLiteral(
   using GI = GeometryInfo;
   using SV = std::string_view;
   auto hasValue = [](bool expected) {
-    return ResultOf(
-        "`has_value()`", [](const auto& opt) { return opt.has_value(); },
-        expected);
+    return Conditional(expected, Ne(std::nullopt), Eq(std::nullopt));
   };
   return AllOf(
       ResultOf(
@@ -296,8 +270,8 @@ Matcher<std::string_view> metricAreaOfWktNear(double expectedArea,
   }
   return ResultOf(
       "parsed geometry",
-      [](std::string_view wkt) { return getGeometryOfTypeOrThrow<T>(wkt); },
-      parsedMatcher);
+      [](std::string_view wkt) { return parseWkt(wkt).parsedWkt_; },
+      Optional(VariantWith<T>(SafeMatcherCast<const T&>(parsedMatcher))));
 }
 
 // ____________________________________________________________________________
