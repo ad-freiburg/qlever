@@ -1,7 +1,7 @@
 // Copyright 2024 - 2026 The QLever Authors, in particular:
 //
 // 2024 - 2025 Jonathan Zeller github@Jonathan24680, UFR
-// 2024 - 2026 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
+// 2024 - 2026 Christoph Ullinger <ullingec@cs.uni-freiburg.de>, UFR
 // 2025        Patrick Brosi <brosi@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
@@ -167,6 +167,17 @@ sj::SpatialJoinCfg LibspatialjoinAlgorithm::sweeperConfig(
   cfg.sweepProgressCb = {};
   cfg.sweepCancellationCb = {};
   return cfg;
+}
+
+// ____________________________________________________________________________
+void LibspatialjoinAlgorithm::prepareSweep(
+    sj::GeometryStore& store, std::array<sj::SweepEventList, 2>& events,
+    sj::GeometryCache& cache, size_t numThreads) {
+  store.flush();
+  for (auto& sideEvents : events) {
+    sideEvents.finalize(numThreads);
+    sideEvents.duplicatesToReferences(cache);
+  }
 }
 
 // ____________________________________________________________________________
@@ -339,8 +350,18 @@ Result LibspatialjoinAlgorithm::run() {
 
     // Filtering by bounding box *after* parsing is only necessary if
     // precomputed bounding boxes for filtering *before* parsing are not
-    // available.
-    if (!qec_->getIndex().getVocab().isGeoInfoAvailable()) {
+    // available. It only gives the correct result for the join types below.
+    //
+    // NOTE: The filter box of `store` drops each member of a multi-geometry
+    // that does not intersect it, and the remaining members are joined as if
+    // they were the whole geometry. A dropped member is disjoint from all
+    // geometries of the smaller side, which does not change `INTERSECTS`,
+    // `TOUCHES` and `WITHIN_DIST`, but for example `CONTAINS`.
+    bool filterBoxIsCorrect = joinTypeVal == SpatialJoinType::INTERSECTS ||
+                              joinTypeVal == SpatialJoinType::TOUCHES ||
+                              joinTypeVal == SpatialJoinType::WITHIN_DIST;
+    if (!qec_->getIndex().getVocab().isGeoInfoAvailable() &&
+        filterBoxIsCorrect) {
       store.setFilterBox(boxSmall);
     }
 
@@ -378,14 +399,9 @@ Result LibspatialjoinAlgorithm::run() {
           ? runParser(leftTableAndCol, rightTableAndCol, false)
           : runParser(rightTableAndCol, leftTableAndCol, true);
 
-  // Flush the geometry store, sort the sweepline event lists and replace
-  // duplicate geometries by references. Add the time for parsing and
-  // processing the geometries to the runtime information.
-  store.flush();
-  for (auto& sideEvents : events) {
-    sideEvents.finalize(NUM_THREADS);
-    sideEvents.duplicatesToReferences(cache);
-  }
+  // Prepare the store and the event lists for the sweep. Add the time for
+  // parsing and processing the geometries to the runtime information.
+  prepareSweep(store, events, cache, NUM_THREADS);
   spatialJoin_.value()->runtimeInfo().addDetail("time-for-reading-geometries",
                                                 tParse.msecs().count());
 
