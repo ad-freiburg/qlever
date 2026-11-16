@@ -16,6 +16,9 @@
 #include <spatialjoin/WKTParse.h>
 #include <util/geo/Geo.h>
 
+#include <chrono>
+#include <thread>
+
 #include "../util/LocalVocabEntryTestHelpers.h"
 #include "./SpatialJoinPrefilterTestHelpers.h"
 #include "./SpatialJoinTestHelpers.h"
@@ -201,11 +204,10 @@ TEST(SpatialJoinParser, InvalidWktIsSkipped) {
   EXPECT_EQ(events.numObjects(), 3);
 }
 
-// Test that an exception on a worker thread of the parser is thrown by `done()`
-// (instead of terminating the program).
-TEST(SpatialJoinParser, WorkerExceptionIsThrownByDone) {
-  // A geometry store in a directory that does not exist, which writes its
-  // geometries to a file right away (maximum memory size `0`).
+// Test that an exception on a worker thread of the parser is thrown on the main
+// thread by `done()` and `throwIfWorkerFailed()` (instead of terminating the
+// program).
+TEST(SpatialJoinParser, WorkerExceptionIsRethrown) {
   auto qec = buildQec(buildLibSJTestDataset(), true);
   auto [vMap, nMap] = resolveValIdTable(qec, 6);
   SweeperResult results;
@@ -214,17 +216,42 @@ TEST(SpatialJoinParser, WorkerExceptionIsThrownByDone) {
       makeSweeperCfg(LibSpatialJoinConfig{SpatialJoinType::Enum::INTERSECTS},
                      results, resultDists, -1);
   std::string sweeperPath = qec->getIndex().getOnDiskBase() + ".spatialjoin";
-  sj::GeometryStore store{cfg, "/nonexistent-directory", sweeperPath, false, 0};
   sj::SweepEventList events{cfg, ".", sweeperPath};
+  auto uni = getValId(nMap, "uni");
+  auto matcher = ::testing::HasSubstr("Could not open geometry store file");
 
-  // The worker thread that adds the geometry to the store cannot open the
-  // file of the store.
-  WKTParser parser(&store, events.addCb(0), 2, true, std::nullopt,
-                   qec->getIndex());
-  parser.addValueIdToQueue(getValId(nMap, "uni"), 0, std::nullopt);
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      parser.done(),
-      ::testing::HasSubstr("Could not open geometry store file"));
+  // Each block below uses a new geometry store in a directory that does not
+  // exist, which writes its geometries to a file right away (maximum memory
+  // size `0`). The worker thread that adds a geometry to it fails.
+
+  // With a single geometry, `done()` throws the exception of the worker.
+  {
+    sj::GeometryStore store{cfg, "/nonexistent-directory", sweeperPath, false,
+                            0};
+    WKTParser parser(&store, events.addCb(0), 2, true, std::nullopt,
+                     qec->getIndex());
+    parser.addValueIdToQueue(uni, 0, std::nullopt);
+    AD_EXPECT_THROW_WITH_MESSAGE(parser.done(), matcher);
+  }
+
+  // With a full batch, the worker thread fails before `done()`, and
+  // `throwIfWorkerFailed()` throws its exception (wait at most 10 seconds).
+  {
+    sj::GeometryStore store{cfg, "/nonexistent-directory", sweeperPath, false,
+                            0};
+    WKTParser parser(&store, events.addCb(0), 2, true, std::nullopt,
+                     qec->getIndex());
+    for (size_t row = 0; row < WKT_PARSER_BATCH_SIZE; ++row) {
+      parser.addValueIdToQueue(uni, row, std::nullopt);
+    }
+    auto waitForFailure = [&parser]() {
+      for (size_t i = 0; i < 1000; ++i) {
+        parser.throwIfWorkerFailed();
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+      }
+    };
+    AD_EXPECT_THROW_WITH_MESSAGE(waitForFailure(), matcher);
+  }
 }
 
 // Test that `SpatialJoinParseJob`s are compared by their `ValueId` and row,

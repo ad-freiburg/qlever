@@ -59,6 +59,10 @@ class WKTParser : public sj::WKTParserBase<SpatialJoinParseJob> {
   // but also rethrow the first exception of a worker thread, if any.
   void done();
 
+  // If a worker thread has failed, wait for all worker threads to finish and
+  // rethrow its exception (see `done()`). Otherwise, do nothing.
+  void throwIfWorkerFailed();
+
   // Enqueue a new row from the input table (given the `ValueId` of the
   // geometry: `GeoPoint` or `VocabIndex` or `LocalVocabIndex` and the
   // `rowIndex` in the input table). If available as part of the `IdTable`,

@@ -94,13 +94,15 @@ class LibspatialjoinAlgorithm : public SpatialJoinAlgorithmBase {
   static sj::SpatialJoinCfg sweeperConfig(
       size_t threads, ad_utility::MemorySize totalAllowedMemory = 8_GB);
 
-  // Flush `store`, sort the two `events` lists and replace the duplicate
-  // geometries in them by references, as needed after parsing and before the
-  // sweep. This function is only `public` for testing purposes and should
-  // otherwise not be used outside of this class.
+  // Flush `store`, sort the two `events` lists (with at most `maxSortMemory`
+  // bytes of memory) and replace the duplicate geometries in them by
+  // references, as needed after parsing and before the sweep. This function is
+  // only `public` for testing purposes and should otherwise not be used outside
+  // of this class.
   static void prepareSweep(sj::GeometryStore& store,
                            std::array<sj::SweepEventList, 2>& events,
-                           sj::GeometryCache& cache, size_t numThreads);
+                           sj::GeometryCache& cache, size_t numThreads,
+                           size_t maxSortMemory = sj::DEFAULT_SORT_MEM_S);
 
   // Check the bounding box (only if available from a `GeoVocabulary`) of a
   // given vocabulary entry against `prefilterLatLngBox`. Returns `true` if

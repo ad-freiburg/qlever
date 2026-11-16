@@ -308,13 +308,14 @@ inline void runParsingAndSweeper(
           {prepared.idTableRight_, prepared.rightJoinCol_, std::nullopt}, store,
           eventsRight.addCb(storeId), 1, prefilterBox);
 
-  LibspatialjoinAlgorithm::prepareSweep(store, events, cache, 1);
-
   // Check counters
   size_t numSkipped = numGeomDroppedLeft + numGeomDroppedRight;
-
   size_t numEl = eventsLeft.numObjects() + eventsRight.numObjects();
-  if (numGeomAddedLeft && numGeomAddedRight) {
+
+  // Prepare and run the sweep if both sides have a valid geometry (as in
+  // `LibspatialjoinAlgorithm::run`).
+  if (eventsLeft.numObjects() > 0 && eventsRight.numObjects() > 0) {
+    LibspatialjoinAlgorithm::prepareSweep(store, events, cache, 1);
     sj::Sweeper sweeper(sweeperCfg, &cache);
     sweeper.sweep(&eventsLeft, &eventsRight);
   }
