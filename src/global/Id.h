@@ -15,12 +15,18 @@
 // this header, not the implementation header. The CMake variable
 // `USE_SPLIT_LAYOUT` (not an `option()` yet, see `CMakeLists.txt`) chooses
 // between the legacy `ValueId` and the `SplitLayoutId`.
+//
+// `BYTES_PER_ID_COLUMN_ENTRY` is the size of an `IdTable` column entry (memory
+// and disk), smaller than the padded `sizeof(Id)` with the split layout.
 #ifdef QLEVER_USE_SPLIT_LAYOUT
 #include "engine/idTable/splitLayout/SplitLayoutId.h"
 using Id = columnBasedIdTable::splitLayout::SplitLayoutId;
+inline constexpr size_t BYTES_PER_ID_COLUMN_ENTRY =
+    sizeof(Id::DatatypeType) + sizeof(Id::PayloadType);
 #else
 #include "global/FoldedValueId.h"
 using Id = foldedValueId::ValueId;
+inline constexpr size_t BYTES_PER_ID_COLUMN_ENTRY = sizeof(Id);
 #endif
 using ValueId = Id;
 using Score = float;
@@ -36,17 +42,6 @@ static_assert(std::is_same_v<IdBitRepresentation, Id::T>);
 // lost by adding a user-provided copy constructor, copy assignment operator,
 // or destructor to `ValueId`.
 static_assert(std::is_trivially_copyable_v<Id>);
-
-// The number of bytes of one entry of an `IdTable` column, both in memory and
-// in the packed byte representation on disk (index and spill files). Use it for
-// the size of column entries, and `sizeof(Id)` only for the size of standalone
-// `Id` objects.
-//
-// NOTE: The constant depends on the layout of `Id`, so it lives next to the
-// definition of `Id` and has to change together with it. With a split layout
-// (separate payload and datatype columns), a column entry is smaller than a
-// standalone `Id`, which is padded.
-inline constexpr size_t BYTES_PER_ID_COLUMN_ENTRY = sizeof(Id);
 
 // TODO<joka921> Make the following ID and index types strong.
 using ColumnIndex = uint64_t;
