@@ -866,10 +866,11 @@ TEST(CompressedRelationReader, getBlocksForJoinWithColumn) {
   // skips the entries smaller than the next block then has many entries to
   // search, and the result must be the same as for the short columns above.
   auto longColumn = [](const std::vector<int64_t>& excluded) {
-    std::vector<Id> column;
+    IdColumn column;
     for (int64_t i = 0; i < 100; ++i) {
       if (!ad_utility::contains(excluded, i)) {
-        column.insert(column.end(), {V(i), V(i)});
+        column.push_back(V(i));
+        column.push_back(V(i));
       }
     }
     return column;
