@@ -178,15 +178,18 @@ TEST(SparqlParser, GraphTerm) {
   expectGraphTerm("()", m::Iri(nil));
 }
 
-// _____________________________________________________________________________
+// Test that the grammar accepts the triple-term syntax `<<( s p o )>>` of
+// SPARQL 1.2, including nested triple terms in the subject and the object.
+// The parser is invoked without the `SparqlQleverVisitor`, which does not
+// translate triple terms yet.
 TEST(SparqlParser, RecursiveTripleTermGrammar) {
-  // Parse without invoking `SparqlQleverVisitor`: grammar support is
-  // independent of the currently unsupported translation to a `ParsedQuery`.
   auto check = [](const std::string& input) {
     SCOPED_TRACE(input);
     sparqlParserHelpers::ParserAndVisitorBase<int> p{input};
     auto* term = p.parser_.tripleTerm();
     EXPECT_EQ(p.parser_.getNumberOfSyntaxErrors(), 0);
+    // The whole input must be consumed. (`antlr4::Token::EOF` cannot be
+    // named here, `EOF` is a macro.)
     EXPECT_EQ(p.parser_.getCurrentToken()->getType(),
               std::numeric_limits<size_t>::max());
     return term != nullptr;
@@ -224,7 +227,7 @@ TEST(SparqlParser, RecursiveTripleTermGrammar) {
   }
 }
 
-// _____________________________________________________________________________
+// Test that malformed triple terms are syntax errors.
 TEST(SparqlParser, InvalidTripleTermGrammar) {
   for (const std::string input :
        {"<<(?s <p>)>>", "<<(?s <p> ?o ?extra)>>", "<<(?s <p> ?o)>> extra",
@@ -240,7 +243,8 @@ TEST(SparqlParser, InvalidTripleTermGrammar) {
   }
 }
 
-// _____________________________________________________________________________
+// Test that a syntactically valid triple term in a `WHERE` pattern or in a
+// `CONSTRUCT` template is rejected with a `NotSupportedException`.
 TEST(SparqlParser, TripleTermTranslationNotSupported) {
   for (const std::string input :
        {"<<(?subject <predicate> <object>)>>", "<<( <s> a ?o )>>",
