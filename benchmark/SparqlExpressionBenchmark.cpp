@@ -280,19 +280,18 @@ void classifyRepeatedly(const Left& left, const Right& right,
   }
 }
 
-IdTable makeVectorWithDoubleAt(ConstIdColumnRef input, size_t mismatchIndex,
-                               EvaluationContext* context) {
+IdColumn makeVectorWithDoubleAt(ConstIdColumnRef input, size_t mismatchIndex) {
   AD_CORRECTNESS_CHECK(mismatchIndex < input.size());
 
-  IdTable result{1, context->_allocator};
+  IdColumn result;
   result.reserve(input.size());
 
   for (size_t i = 0; i < input.size(); ++i) {
     if (i == mismatchIndex) {
       result.push_back(
-          {Id::makeFromDouble(static_cast<double>(input[i].getInt()))});
+          Id::makeFromDouble(static_cast<double>(input[i].getInt())));
     } else {
-      result.push_back({input[i]});
+      result.push_back(input[i]);
     }
   }
 
@@ -307,32 +306,32 @@ using DatatypePattern = std::vector<std::pair<Datatype, size_t>>;
 // Build a vector from `input` whose datatypes follow `pattern`. Integers keep
 // the input value, doubles get the same value converted, booleans alternate,
 // and vocabulary ids are the row index.
-IdTable makeMixedVector(ConstIdColumnRef input, const DatatypePattern& pattern,
-                        EvaluationContext* context) {
+IdColumn makeMixedVector(ConstIdColumnRef input,
+                         const DatatypePattern& pattern) {
   std::vector<Datatype> datatypes;
   for (const auto& [datatype, count] : pattern) {
     datatypes.insert(datatypes.end(), count, datatype);
   }
   AD_CORRECTNESS_CHECK(!datatypes.empty());
 
-  IdTable result{1, context->_allocator};
+  IdColumn result;
   result.reserve(input.size());
 
   for (size_t i = 0; i < input.size(); ++i) {
     switch (datatypes[i % datatypes.size()]) {
       case Datatype::Int:
-        result.push_back({input[i]});
+        result.push_back(input[i]);
         break;
       case Datatype::Double:
         result.push_back(
-            {Id::makeFromDouble(static_cast<double>(input[i].getInt()))});
+            Id::makeFromDouble(static_cast<double>(input[i].getInt())));
         break;
       case Datatype::Bool:
-        result.push_back({Id::makeFromBool(i % 2 == 0)});
+        result.push_back(Id::makeFromBool(i % 2 == 0));
         break;
       case Datatype::VocabIndex:
-        result.push_back({Id::makeFromVocabIndex(
-            VocabIndex::make(static_cast<uint64_t>(i)))});
+        result.push_back(
+            Id::makeFromVocabIndex(VocabIndex::make(static_cast<uint64_t>(i))));
         break;
       default:
         AD_FAIL();
@@ -342,12 +341,12 @@ IdTable makeMixedVector(ConstIdColumnRef input, const DatatypePattern& pattern,
   return result;
 }
 
-IdTable makeDoubleVector(ConstIdColumnRef input, EvaluationContext* context) {
-  IdTable result{1, context->_allocator};
+IdColumn makeDoubleVector(ConstIdColumnRef input) {
+  IdColumn result;
   result.reserve(input.size());
 
   for (const auto& id : input) {
-    result.push_back({Id::makeFromDouble(static_cast<double>(id.getInt()))});
+    result.push_back(Id::makeFromDouble(static_cast<double>(id.getInt())));
   }
 
   return result;
@@ -556,18 +555,15 @@ class SparqlExpressionBenchmark : public BenchmarkInterface {
     mixedTernaryContext.context._inputTable =
         mixedTernaryContext.table.asStaticView<0>();
 
-    auto mixedTernaryStorage =
-        makeVectorWithDoubleAt(leftIds, numRows / 2, &benchmarkContext.context);
+    auto mixedTernaryStorage = makeVectorWithDoubleAt(leftIds, numRows / 2);
 
-    auto doubleLeftStorage =
-        makeDoubleVector(leftIds, &benchmarkContext.context);
-    auto doubleRightStorage =
-        makeDoubleVector(rightIds, &benchmarkContext.context);
+    auto doubleLeftStorage = makeDoubleVector(leftIds);
+    auto doubleRightStorage = makeDoubleVector(rightIds);
 
-    ConstIdColumnRef doubleLeft = doubleLeftStorage.getColumn(0);
-    ConstIdColumnRef doubleRight = doubleRightStorage.getColumn(0);
+    ConstIdColumnRef doubleLeft = doubleLeftStorage;
+    ConstIdColumnRef doubleRight = doubleRightStorage;
 
-    ConstIdColumnRef mixedTernary = mixedTernaryStorage.getColumn(0);
+    ConstIdColumnRef mixedTernary = mixedTernaryStorage;
 
     const ValueId constantTwo = Id::makeFromInt(2);
     const ValueId constantTwoDouble = Id::makeFromDouble(2.0);
@@ -576,22 +572,19 @@ class SparqlExpressionBenchmark : public BenchmarkInterface {
     // operand is `Other` (not homogeneous) plus the given majority type.
     struct MixedCase {
       std::string name_;
-      IdTable storage_;
+      IdColumn storage_;
       NumericType expectedMajority_;
     };
     using enum Datatype;
     auto mixedCase = [&](std::string name, const DatatypePattern& pattern,
                          NumericType expectedMajority) {
-      return MixedCase{
-          std::move(name),
-          makeMixedVector(leftIds, pattern, &benchmarkContext.context),
-          expectedMajority};
+      return MixedCase{std::move(name), makeMixedVector(leftIds, pattern),
+                       expectedMajority};
     };
     std::vector<MixedCase> mixedCases;
-    mixedCases.push_back(MixedCase{
-        "mismatch at 50000",
-        makeVectorWithDoubleAt(leftIds, numRows / 2, &benchmarkContext.context),
-        NumericType::Int});
+    mixedCases.push_back(MixedCase{"mismatch at 50000",
+                                   makeVectorWithDoubleAt(leftIds, numRows / 2),
+                                   NumericType::Int});
     mixedCases.push_back(mixedCase("99.9% integer", {{Double, 1}, {Int, 999}},
                                    NumericType::Int));
     mixedCases.push_back(
@@ -613,6 +606,10 @@ class SparqlExpressionBenchmark : public BenchmarkInterface {
     mixedCases.push_back(mixedCase(
         "30% integer, 25% double, 25% bool, 20% vocab index",
         {{Int, 6}, {Double, 5}, {Bool, 5}, {VocabIndex, 4}}, NumericType::Int));
+    auto columnOf = [](const IdColumn& storage) {
+      return ConstIdColumnRef{storage};
+    };
+
     auto legacyVectorVector = makeLegacyVectorVectorExpression();
     auto newVectorVector = makeNewVectorVectorExpression();
     auto legacyVectorConstant = makeLegacyVectorConstantExpression();
@@ -664,7 +661,7 @@ class SparqlExpressionBenchmark : public BenchmarkInterface {
     };
 
     for (const auto& mixed : mixedCases) {
-      warmUpMixedCase(mixed.storage_.getColumn(0), rightIds);
+      warmUpMixedCase(columnOf(mixed.storage_), rightIds);
     }
 
     BenchmarkResults results{};
@@ -783,7 +780,7 @@ class SparqlExpressionBenchmark : public BenchmarkInterface {
     // (speculative or generic, depending on the majority type), and the
     // classification alone.
     for (const auto& mixed : mixedCases) {
-      const auto left = mixed.storage_.getColumn(0);
+      const auto left = columnOf(mixed.storage_);
       const std::string suffix = absl::StrCat(mixed.name_, ", 100k rows x 50");
       results.addMeasurement(
           absl::StrCat("Generic mixed add: ", suffix), [&]() {
