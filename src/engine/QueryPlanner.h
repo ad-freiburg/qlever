@@ -363,6 +363,33 @@ class QueryPlanner {
   virtual FiltersAndOptionalSubstitutes seedFilterSubstitutes(
       const std::vector<SparqlFilter>& filters);
 
+  // Break a triangle of `SpatialJoin` substitutes by cloning the operand that
+  // two of them share. For example, for `geof:sfContains(?fg, ?rg)`,
+  // `geof:sfContains(?fg, ?tg)` and `geof:distance(?rg, ?tg) <= 250`, the
+  // triples that bind `?fg` (its connected component in `tg`) are planned once
+  // more with fresh variables and added to `initialPlans` as a single node, the
+  // substitute of the second filter uses the clone of `?fg`, and a filter is
+  // added that checks that each variable equals its clone. Then all three
+  // filters can be substituted by a `SpatialJoin`.
+  //
+  // NOTE 1: Without the clone, the operand is part of both children of the
+  // third `SpatialJoin`, which is impossible. Only two of the filters can then
+  // be substituted, and the third one is evaluated as a regular filter, which
+  // is not implemented for geometric relations like `geof:sfContains`.
+  //
+  // NOTE 2: The clone is correct because the result of a set of triples has no
+  // duplicate rows, so each row is only equal to its own clone. The clone has
+  // the same cache key as the original, so it is computed only once.
+  //
+  // TODO<ullingerc> This is a draft: only the first triangle is cloned, the
+  // clone is added regardless of its size estimate, and the check uses `=`
+  // instead of `sameTerm` (which QLever does not have yet), so two different
+  // terms with the same numeric value would count as equal.
+  void cloneSharedSpatialJoinOperand(
+      const TripleGraph& tg, SubtreePlanVec& initialPlans,
+      std::vector<SparqlFilter>& filters,
+      FiltersAndOptionalSubstitutes& filtersAndOptSubstitutes);
+
   // Wrap `filters` as `FiltersAndOptionalSubstitutes` without computing any
   // substitutes. This is sufficient for the filter modes that never apply
   // substitutes and avoids constructing throwaway substitute plans (which

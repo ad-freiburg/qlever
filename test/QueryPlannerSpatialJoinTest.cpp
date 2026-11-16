@@ -1669,8 +1669,9 @@ TEST(QueryPlanner, SpatialJoinDistanceVariableFromBindResult) {
 // the spatial condition, because the `SpatialJoin` would not check that the
 // values of such a variable are equal.
 TEST(QueryPlanner, SpatialJoinChildrenShareNoVariable) {
-  // A region `<f1>` that contains 50 points `<r...> <p> ...` and 50 points `<t...>
-  // <q> ...`, of which only `<t0>` is close to the `<r...>`. A second region
+  // A region `<f1>` that contains 50 points `<r...> <p> ...` and 50 points
+  // `<t...> <q> ...`, of which only `<t0>` is close to the `<r...>`. A second
+  // region
   // `<f2>` contains `<t0>` and the `<r...>` as well. Further points `<u...> <q>
   // ...` in no region make it cheap to join `?f <contains> ?t` and `?t <q> ?tg`
   // before the `SpatialJoin`.
@@ -1716,6 +1717,57 @@ TEST(QueryPlanner, SpatialJoinChildrenShareNoVariable) {
       qec);
   EXPECT_TRUE(containsSpatialJoin(*qet, containsSpatialJoin));
   EXPECT_EQ(qet->getResult()->idTableView().numRows(), 50);
+}
+
+// Test that a triangle of spatial filters (two geometries in a region and close
+// to each other) is computed with three `SpatialJoin`s, by cloning the triples
+// of the region (without the clone, one of the geometric relations would have
+// to be evaluated as a regular filter, which is not implemented).
+TEST(QueryPlanner, SpatialJoinTriangleClonesSharedOperand) {
+  // A region `<f1>` that contains `<r1>`, `<t1>` and `<t2>`, of which only
+  // `<r1>` and `<t1>` are close, and a region `<f2>` that contains `<t3>`.
+  std::string kg;
+  auto add = [&kg](std::string_view subject, std::string_view predicate,
+                   std::string_view wkt) {
+    absl::StrAppend(&kg, subject, " ", predicate, " \"", wkt, "\"^^<",
+                    GEO_WKT_LITERAL, "> .\n");
+  };
+  add("<f1>", "<g>", "POLYGON((7 47, 9 47, 9 49, 7 49, 7 47))");
+  add("<f2>", "<g>", "POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))");
+  add("<r1>", "<p>", "POINT(7.835 48.012)");
+  add("<t1>", "<q>", "POINT(7.84 48.0)");
+  add("<t2>", "<q>", "POINT(7.9 48.5)");
+  add("<t3>", "<q>", "POINT(0.5 0.5)");
+  auto qec = ad_utility::testing::getQec(kg);
+
+  // Return the number of `SpatialJoin`s in `qet`.
+  auto countSpatialJoins = [](const QueryExecutionTree& qet,
+                              const auto& self) -> size_t {
+    const auto& operation = *qet.getRootOperation();
+    size_t count = dynamic_cast<const SpatialJoin*>(&operation) != nullptr;
+    for (const auto* child : operation.getChildren()) {
+      count += self(*child, self);
+    }
+    return count;
+  };
+
+  // All three filters are substituted, and `<r1>` and `<t1>` in `<f1>` are the
+  // only result.
+  auto qet = h::parseAndPlan(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT ?f ?r ?t WHERE { ?f <g> ?fg . ?r <p> ?rg . ?t <q> ?tg . "
+      "FILTER geof:sfContains(?fg, ?rg) FILTER geof:sfContains(?fg, ?tg) "
+      "FILTER(geof:distance(?rg, ?tg) <= 5) }",
+      qec);
+  EXPECT_EQ(countSpatialJoins(*qet, countSpatialJoins), 3);
+  const auto& result = qet->getResult()->idTableView();
+  ASSERT_EQ(result.numRows(), 1);
+  auto id = [qec](std::string_view iri) {
+    return ad_utility::testing::makeGetId(qec->getIndex())(std::string{iri});
+  };
+  EXPECT_EQ(result(0, qet->getVariableColumn(Variable{"?f"})), id("<f1>"));
+  EXPECT_EQ(result(0, qet->getVariableColumn(Variable{"?r"})), id("<r1>"));
+  EXPECT_EQ(result(0, qet->getVariableColumn(Variable{"?t"})), id("<t1>"));
 }
 
 // _____________________________________________________________________________

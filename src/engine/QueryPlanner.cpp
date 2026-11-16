@@ -1859,6 +1859,192 @@ QueryPlanner::FiltersAndOptionalSubstitutes QueryPlanner::seedFilterSubstitutes(
 }
 
 // _____________________________________________________________________________
+void QueryPlanner::cloneSharedSpatialJoinOperand(
+    const TripleGraph& tg, SubtreePlanVec& initialPlans,
+    std::vector<SparqlFilter>& filters,
+    FiltersAndOptionalSubstitutes& filtersAndOptSubstitutes) {
+  // Return the two operands of the `SpatialJoin` that substitutes the filter
+  // with index `i`, if it has no child yet (that is, both are variables).
+  auto getOperands = [&filtersAndOptSubstitutes](
+                         size_t i) -> std::optional<std::array<Variable, 2>> {
+    const auto& substitute = filtersAndOptSubstitutes.at(i).substitute_;
+    if (!substitute.has_value()) {
+      return std::nullopt;
+    }
+    auto spatialJoin = std::dynamic_pointer_cast<const SpatialJoin>(
+        substitute.value()._qet->getRootOperation());
+    if (spatialJoin == nullptr || !spatialJoin->getChildren().empty()) {
+      return std::nullopt;
+    }
+    const auto& config = spatialJoin->getConfig();
+    return std::array{config.left_, config.right_};
+  };
+  auto otherOperand = [](const std::array<Variable, 2>& operands,
+                         const Variable& operand) -> const Variable& {
+    return operands[0] == operand ? operands[1] : operands[0];
+  };
+
+  // Find a triangle: two substitutes `i` and `j` with a shared operand and the
+  // other operands `a` and `b`, and a third substitute with the operands `a`
+  // and `b`. The shared operand will be cloned for `j`.
+  struct Triangle {
+    size_t j_;
+    Variable shared_;
+    Variable a_;
+    Variable b_;
+  };
+  std::optional<Triangle> triangle;
+  size_t numFilters = filtersAndOptSubstitutes.size();
+  for (size_t i = 0; i < numFilters && !triangle.has_value(); ++i) {
+    auto operandsI = getOperands(i);
+    for (size_t j = 0;
+         j < numFilters && operandsI.has_value() && !triangle.has_value();
+         ++j) {
+      auto operandsJ = getOperands(j);
+      if (i == j || !operandsJ.has_value()) {
+        continue;
+      }
+      for (const auto& shared : operandsI.value()) {
+        if (!ad_utility::contains(operandsJ.value(), shared)) {
+          continue;
+        }
+        const auto& a = otherOperand(operandsI.value(), shared);
+        const auto& b = otherOperand(operandsJ.value(), shared);
+        for (size_t k = 0; k < numFilters && a != b; ++k) {
+          auto operandsK = getOperands(k);
+          if (k != i && k != j && operandsK.has_value() &&
+              ad_utility::contains(operandsK.value(), a) &&
+              ad_utility::contains(operandsK.value(), b)) {
+            triangle = Triangle{j, shared, a, b};
+            break;
+          }
+        }
+      }
+    }
+  }
+  if (!triangle.has_value() || filters.size() >= 64 ||
+      activeGraphVariable_.has_value()) {
+    return;
+  }
+
+  // Collect the triples that bind the shared operand (its connected component
+  // in `tg`). Give up if they also bind `a` or `b` (then there is no triangle
+  // to break) or if one of them is not a simple triple.
+  const auto& [j, shared, a, b] = triangle.value();
+  std::vector<size_t> component;
+  std::vector<bool> visited(tg._nodeMap.size(), false);
+  for (size_t id = 0; id < tg._nodeMap.size(); ++id) {
+    if (tg._nodeMap.at(id)->_variables.contains(shared)) {
+      component.push_back(id);
+      visited.at(id) = true;
+    }
+  }
+  if (component.empty()) {
+    return;
+  }
+  for (size_t next = 0; next < component.size(); ++next) {
+    const auto& node = *tg._nodeMap.at(component.at(next));
+    const auto* path = std::get_if<PropertyPath>(&node.triple_.p_);
+    if (node._variables.contains(a) || node._variables.contains(b) ||
+        node.cvar_.has_value() ||
+        !node.triple_.additionalScanColumns_.empty() ||
+        (path != nullptr && !path->isIri())) {
+      return;
+    }
+    for (size_t neighbor : tg._adjLists.at(component.at(next))) {
+      if (!visited.at(neighbor)) {
+        visited.at(neighbor) = true;
+        component.push_back(neighbor);
+      }
+    }
+  }
+
+  // The node id of the clone is the next one after all ids of `initialPlans`.
+  uint64_t usedNodes = 0;
+  for (const auto& plan : initialPlans) {
+    usedNodes |= plan._idsOfIncludedNodes;
+  }
+  auto cloneNodeId = static_cast<size_t>(absl::bit_width(usedNodes));
+  if (cloneNodeId >= 64) {
+    return;
+  }
+
+  // Copy the triples with a fresh variable for each variable (in the order of
+  // their first occurrence).
+  std::vector<std::pair<Variable, Variable>> clonedVariables;
+  auto cloneOf = [this, &clonedVariables](const Variable& variable) {
+    auto it = ql::ranges::find(clonedVariables, variable,
+                               &std::pair<Variable, Variable>::first);
+    if (it == clonedVariables.end()) {
+      clonedVariables.emplace_back(variable, generateUniqueVarName());
+      return clonedVariables.back().second;
+    }
+    return it->second;
+  };
+  auto cloneTerm = [&cloneOf](const TripleComponent& term) {
+    return term.isVariable() ? TripleComponent{cloneOf(term.getVariable())}
+                             : term;
+  };
+  parsedQuery::BasicGraphPattern triples;
+  for (size_t id : component) {
+    const auto& triple = tg._nodeMap.at(id)->triple_;
+    SparqlTriple clonedTriple{cloneTerm(triple.s_), triple.p_,
+                              cloneTerm(triple.o_)};
+    if (auto predicate = triple.getPredicateVariable()) {
+      clonedTriple.p_ = cloneOf(predicate.get());
+    }
+    triples._triples.push_back(std::move(clonedTriple));
+  }
+
+  // Plan the copied triples on their own and add the cheapest plan as a single
+  // node.
+  QueryPlanner planner{_qec, cancellationHandle_};
+  planner._internalVarCount = _internalVarCount;
+  planner.activeDatasetClauses_ = activeDatasetClauses_;
+  ParsedQuery::GraphPattern pattern;
+  pattern._graphPatterns.emplace_back(std::move(triples));
+  auto plans = planner.optimize(&pattern);
+  _internalVarCount = planner._internalVarCount;
+  SubtreePlan clone =
+      std::move(plans.at(planner.findCheapestExecutionTree(plans)));
+  clone._idsOfIncludedNodes = uint64_t{1} << cloneNodeId;
+  clone._idsOfIncludedFilters = 0;
+  clone.idsOfIncludedTextLimits_ = 0;
+  initialPlans.push_back(std::move(clone));
+
+  // Let the substitute of filter `j` use the clone of the shared operand.
+  auto& substitute = filtersAndOptSubstitutes.at(j).substitute_.value();
+  auto config = std::dynamic_pointer_cast<const SpatialJoin>(
+                    substitute._qet->getRootOperation())
+                    ->getConfig();
+  (config.left_ == shared ? config.left_ : config.right_) = cloneOf(shared);
+  auto newSubstitute = makeSubtreePlan(_qec->makeShared<SpatialJoin>(
+      _qec, std::move(config), std::nullopt, std::nullopt, true));
+  newSubstitute._idsOfIncludedFilters = substitute._idsOfIncludedFilters;
+  newSubstitute.containsFilterSubstitute_ = true;
+  substitute = std::move(newSubstitute);
+
+  // Add a filter that checks that each variable equals its clone.
+  using namespace sparqlExpression;
+  SparqlExpression::Ptr check;
+  std::vector<std::string> descriptors;
+  for (const auto& [variable, cloned] : clonedVariables) {
+    SparqlExpression::Ptr equal =
+        std::make_unique<EqualExpression>(std::array<SparqlExpression::Ptr, 2>{
+            std::make_unique<VariableExpression>(variable),
+            std::make_unique<VariableExpression>(cloned)});
+    descriptors.push_back(absl::StrCat(variable.name(), " = ", cloned.name()));
+    check = check == nullptr
+                ? std::move(equal)
+                : makeAndExpression(std::move(check), std::move(equal));
+  }
+  SparqlFilter filter{SparqlExpressionPimpl{
+      std::move(check), absl::StrJoin(descriptors, " && ")}};
+  filters.push_back(filter);
+  filtersAndOptSubstitutes.push_back({std::move(filter), std::nullopt});
+}
+
+// _____________________________________________________________________________
 QueryPlanner::FiltersAndOptionalSubstitutes
 QueryPlanner::wrapFiltersWithoutSubstitutes(
     const std::vector<SparqlFilter>& filters) const {
@@ -1885,6 +2071,8 @@ SubtreePlanMatrix QueryPlanner::fillDpTab(const QueryPlanner::TripleGraph& tg,
   if (filters.size() > 64) {
     AD_THROW("At most 64 filters allowed at the moment.");
   }
+  cloneSharedSpatialJoinOperand(tg, initialPlans, filters,
+                                filtersAndOptSubstitutes);
 
   auto componentIndices = QueryGraph::computeConnectedComponents(
       initialPlans, filtersAndOptSubstitutes);
@@ -2966,10 +3154,12 @@ void QueryPlanner::QueryGraph::setupGraph(
                   ._qet->getRootOperation()
                   ->getExternallyVisibleVariableColumns();
 
-          for (auto var : filter.expression_.containedVariables()) {
-            if (varToNode.contains(*var)) {
-              varsToBeConnected.push_back(var);
-              AD_CORRECTNESS_CHECK(substituteVariables.contains(*var));
+          // NOTE: These are the variables of the filter, except if the
+          // substitute uses the clone of a variable (see
+          // `cloneSharedSpatialJoinOperand`).
+          for (const auto& var : substituteVariables | ql::views::keys) {
+            if (varToNode.contains(var)) {
+              varsToBeConnected.push_back(&var);
             }
           }
 
