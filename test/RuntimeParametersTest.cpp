@@ -198,6 +198,8 @@ TEST(RuntimeParameters, allParametersAreRegistered) {
   check(params.disableCaching_);
   check(params.logLevel_);
   check(params.constructDeduplication_);
+  check(params.binaryServiceEnabled_);
+  check(params.serviceMaxBinaryBatchSize_);
   EXPECT_EQ(totalSize,
             static_cast<size_t>(reinterpret_cast<char*>(&params.runtimeMap_) -
                                 reinterpret_cast<char*>(&params)));

@@ -110,8 +110,7 @@ static_assert(isStrictlyAscending(datatypesOfSourceFormat));
 
 // Exactly one datatype was added, so no datatype of the source format was
 // removed or duplicated above.
-static_assert(datatypesOfSourceFormat.size() + 1 ==
-              static_cast<size_t>(Datatype::MaxValue) + 1);
+static_assert(datatypesOfSourceFormat.size() + 1 == qlever::enumSize<Datatype>);
 
 // The version of the on-disk format of the materialized views (see
 // `MATERIALIZED_VIEWS_VERSION`) that the views of an index in the source format

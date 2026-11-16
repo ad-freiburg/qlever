@@ -2131,7 +2131,11 @@ TEST(SpatialJoin, LibspatialjoinMultiGeometryWithFarMember) {
       "<multi> <asWKTRight> \"MULTIPOLYGON(((0.2 0.2,0.4 0.2,0.4 0.4,0.2 "
       "0.4,0.2 0.2)),((5 5,6 5,6 6,5 6,5 5)))\"^^<",
       GEO_WKT_LITERAL, "> .\n");
-  auto qec = buildQec(kg);
+  // An index without a `GeoVocabulary` (`buildQec` would choose a random
+  // vocabulary type, which may have one).
+  ad_utility::testing::TestIndexConfig indexConfig{kg};
+  indexConfig.vocabularyType = ad_utility::VocabularyType::OnDiskCompressed;
+  auto qec = ad_utility::testing::getQec(std::move(indexConfig));
   ASSERT_FALSE(qec->getIndex().getVocab().isGeoInfoAvailable());
 
   // Return the pairs of subjects in the result of a join of the given type.
