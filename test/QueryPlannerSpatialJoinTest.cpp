@@ -1665,6 +1665,59 @@ TEST(QueryPlanner, SpatialJoinDistanceVariableFromBindResult) {
   }
 }
 
+// Test that the children of a `SpatialJoin` share no variable other than via
+// the spatial condition, because the `SpatialJoin` would not check that the
+// values of such a variable are equal.
+TEST(QueryPlanner, SpatialJoinChildrenShareNoVariable) {
+  // A region `<f1>` that contains 50 points `<r...> <p> ...` and 50 points `<t...>
+  // <q> ...`, of which only `<t0>` is close to the `<r...>`. A second region
+  // `<f2>` contains `<t0>` and the `<r...>` as well. Further points `<u...> <q>
+  // ...` in no region make it cheap to join `?f <contains> ?t` and `?t <q> ?tg`
+  // before the `SpatialJoin`.
+  std::string kg = "<f1> <name> \"x\" . <f2> <name> \"y\" . ";
+  auto addPoint = [&kg](std::string_view region, std::string_view subject,
+                        std::string_view predicate, std::string_view point) {
+    if (!region.empty()) {
+      absl::StrAppend(&kg, region, " <contains> ", subject, " .\n");
+    }
+    absl::StrAppend(&kg, subject, " ", predicate, " \"POINT(", point, ")\"^^<",
+                    GEO_WKT_LITERAL, "> .\n");
+  };
+  for (size_t i = 0; i < 50; ++i) {
+    addPoint("<f1>", absl::StrCat("<r", i, ">"), "<p>", "7.835 48.012");
+    absl::StrAppend(&kg, "<f2> <contains> <r", i, "> .\n");
+    addPoint("<f1>", absl::StrCat("<t", i, ">"), "<q>",
+             i == 0 ? "7.84 48.0" : "9.0 50.0");
+  }
+  absl::StrAppend(&kg, "<f2> <contains> <t0> .\n");
+  for (size_t i = 0; i < 200; ++i) {
+    addPoint("", absl::StrCat("<u", i, ">"), "<q>", "8.0 40.0");
+  }
+  auto qec = ad_utility::testing::getQec(kg);
+
+  // Return true iff `qet` contains a `SpatialJoin`.
+  auto containsSpatialJoin = [](const QueryExecutionTree& qet,
+                                const auto& self) -> bool {
+    const auto& operation = *qet.getRootOperation();
+    return dynamic_cast<const SpatialJoin*>(&operation) != nullptr ||
+           ql::ranges::any_of(operation.getChildren(),
+                              [&self](const QueryExecutionTree* child) {
+                                return self(*child, self);
+                              });
+  };
+
+  // The distance is computed by a `SpatialJoin`, and each `<r...>` is paired
+  // with `<t0>` once (not once more for `<f2>`).
+  auto qet = h::parseAndPlan(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT ?f ?r ?t WHERE { ?f <name> \"x\" . ?f <contains> ?r . "
+      "?f <contains> ?t . ?r <p> ?rg . ?t <q> ?tg . "
+      "FILTER(geof:distance(?rg, ?tg) <= 10) }",
+      qec);
+  EXPECT_TRUE(containsSpatialJoin(*qet, containsSpatialJoin));
+  EXPECT_EQ(qet->getResult()->idTableView().numRows(), 50);
+}
+
 // _____________________________________________________________________________
 TEST(QueryPlanner, FilterIsNotRewritten) {
   auto scan = h::IndexScanFromStrings;
