@@ -22,12 +22,17 @@ class TensorData {
   DType dtype_;
 
  public:
+  TensorData() : tensorData_({}), shape_({0}), dtype_(DType::FLOAT) {}
   // Construct a `TensorData` given a `TensorData` object.
   explicit TensorData(std::vector<float> tensorData, std::vector<size_t> shape,
                       DType dtype)
       : tensorData_{std::move(tensorData)},
         shape_{std::move(shape)},
         dtype_{dtype} {}
+  explicit TensorData(std::vector<float> tensorData)
+      : tensorData_{std::move(tensorData)},
+        shape_{std::vector({tensorData.size()})},
+        dtype_{DType::FLOAT} {}
 
   // Convert to a string (without quotes) that represents the stored data, and a
   // pointer to the IRI of the corresponding datatype (currently always
@@ -39,8 +44,6 @@ class TensorData {
   size_t size() const { return tensorData_.size(); }
   const auto& shape() const { return shape_; }
   DType dtype() const { return dtype_; }
-  static bool isBroadCastable(const TensorData& tensor1,
-                              const TensorData& tensor2);
   static std::optional<TensorData> fromLiteral(
       const std::string_view& literalString);
   static TensorData parseFromString(const std::string_view& dataString);
@@ -65,6 +68,9 @@ class TensorData {
   static TensorData subtract(const TensorData& tensor1,
                              const TensorData& tensor2);
 
+  static TensorData scale(const TensorData& tensor1, const float& scale);
+  static TensorData zeros_like(const TensorData& tensor);
+
   std::vector<uint8_t> serialize() const;
   static TensorData deserialize(const std::vector<uint8_t>& buffer);
 
@@ -83,7 +89,7 @@ class TensorData {
 };
 
 inline std::optional<TensorData> operator+(const std::optional<TensorData>& lhs,
-                                      const TensorData& rhs) {
+                                           const TensorData& rhs) {
   if (lhs) {
     const auto sum = TensorData::add(lhs.value(), rhs);
     return std::make_optional<TensorData>(sum);
@@ -91,7 +97,7 @@ inline std::optional<TensorData> operator+(const std::optional<TensorData>& lhs,
   return std::nullopt;
 }
 inline std::optional<TensorData> operator-(const std::optional<TensorData>& lhs,
-                                      const TensorData& rhs) {
+                                           const TensorData& rhs) {
   if (lhs) {
     const auto sum = TensorData::subtract(lhs.value(), rhs);
     return std::make_optional<TensorData>(sum);
@@ -99,7 +105,7 @@ inline std::optional<TensorData> operator-(const std::optional<TensorData>& lhs,
   return std::nullopt;
 }
 inline std::optional<TensorData> operator*(const std::optional<TensorData>& lhs,
-                                      const TensorData& rhs) {
+                                           const TensorData& rhs) {
   if (lhs) {
     const auto sum = TensorData::multiply(lhs.value(), rhs);
     return std::make_optional<TensorData>(sum);
@@ -107,13 +113,47 @@ inline std::optional<TensorData> operator*(const std::optional<TensorData>& lhs,
   return std::nullopt;
 }
 inline std::optional<TensorData> operator/(const std::optional<TensorData>& lhs,
-                                      const TensorData& rhs) {
+                                           const TensorData& rhs) {
   if (lhs) {
     const auto sum = TensorData::divide(lhs.value(), rhs);
     return std::make_optional<TensorData>(sum);
   }
   return std::nullopt;
 }
+
+static bool isBroadCastable(const TensorData& tensor1,
+                            const TensorData& tensor2) {
+  // For simplicity, we only support broadcasting for tensors with the same
+  // shape
+  if (tensor1.shape().size() != tensor2.shape().size()) {
+    return false;
+  }
+  for (size_t i = 0; i < tensor1.shape().size(); i++) {
+    if (tensor1.shape()[i] != tensor2.shape()[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+template <typename Operator>
+static TensorData binaryTensorMap(const TensorData& tensor1,
+                                  const TensorData& tensor2, Operator func) {
+  if (!isBroadCastable(tensor1, tensor2)) {
+    throw std::runtime_error{"Tensors are not broadcastable for addition"};
+  }
+  std::vector<float> result(tensor1.tensorData().size());
+  std::transform(tensor1.tensorData().begin(), tensor1.tensorData().end(),
+                 tensor2.tensorData().begin(), result.begin(), func);
+  return TensorData(std::move(result), tensor1.shape(), tensor1.dtype());
+}
+template <typename Operator>
+static TensorData unaryTensorMap(const TensorData& tensor1, Operator func) {
+  std::vector<float> result(tensor1.tensorData().size());
+  std::transform(tensor1.tensorData().begin(), tensor1.tensorData().end(),
+                 result.begin(), func);
+  return TensorData(std::move(result), tensor1.shape(), tensor1.dtype());
+}
+
 }  // namespace ad_utility
 
 #endif  //  QLEVER_TENSOR_DATA_H

@@ -275,6 +275,11 @@ ExpressionPtr Visitor::processIriFunctionCall(
       {"tensor", &makeTensorFromStringExpression},
       {"norm2", &makeTensorNormExpression},
   };
+  static const UnaryFuncTable tensorAggFuncs{
+      {"sum", &makeTensorSumExpr},
+      {"avg", &makeTensorAvgExpr},
+      {"var", &makeTensorVarExpr},
+  };
   static const BinaryFuncTable tensorBinaryFuncs{
       {"add", &makeTensorAddExpression},
       {"subtract", &makeTensorSubtractExpression},
@@ -287,6 +292,11 @@ ExpressionPtr Visitor::processIriFunctionCall(
       return createUnary(tensorUnaryFuncs.at(functionName));
     } else if (ad_utility::contains(tensorBinaryFuncs, functionName)) {
       return createBinary(tensorBinaryFuncs.at(functionName));
+    }
+  }
+  if (checkPrefix(TENSOR_AGGREGATE_PREFIX)) {
+    if (ad_utility::contains(tensorAggFuncs, functionName)) {
+      return createUnary(tensorAggFuncs.at(functionName));
     }
   }
 

@@ -275,49 +275,38 @@ float TensorData::dot(const TensorData& tensor1, const TensorData& tensor2) {
   return sum;
 #endif
 }
-template<typename Operator>
-TensorData binaryFunction(const TensorData& tensor1,
-                          const TensorData& tensor2, Operator func) {
-  if (!TensorData::isBroadCastable(tensor1, tensor2)) {
-    throw std::runtime_error{"Tensors are not broadcastable for addition"};
-  }
-  std::vector<float> result(tensor1.tensorData().size());
-  std::transform(tensor1.tensorData().begin(), tensor1.tensorData().end(),
-                 tensor2.tensorData().begin(), result.begin(), func);
-  return TensorData(std::move(result), tensor1.shape(), tensor1.dtype());
-}
 
 TensorData TensorData::add(const TensorData& tensor1,
                            const TensorData& tensor2) {
-  return binaryFunction(tensor1, tensor2, [](float a, float b) { return a + b; });
+  return binaryTensorMap(tensor1, tensor2,
+                         [](float a, float b) { return a + b; });
 }
 
 TensorData TensorData::subtract(const TensorData& tensor1,
-                           const TensorData& tensor2) {
-  return binaryFunction(tensor1, tensor2, [](float a, float b) { return a - b; });
+                                const TensorData& tensor2) {
+  return binaryTensorMap(tensor1, tensor2,
+                         [](float a, float b) { return a - b; });
 }
 TensorData TensorData::multiply(const TensorData& tensor1,
-                           const TensorData& tensor2) {
-  return binaryFunction(tensor1, tensor2, [](float a, float b) { return a * b; });
+                                const TensorData& tensor2) {
+  return binaryTensorMap(tensor1, tensor2,
+                         [](float a, float b) { return a * b; });
 }
 TensorData TensorData::divide(const TensorData& tensor1,
-                           const TensorData& tensor2) {
-  return binaryFunction(tensor1, tensor2, [](float a, float b) { return a / b; });
+                              const TensorData& tensor2) {
+  return binaryTensorMap(tensor1, tensor2,
+                         [](float a, float b) { return a / b; });
 }
-
-bool TensorData::isBroadCastable(const TensorData& tensor1,
-                                 const TensorData& tensor2) {
-  // For simplicity, we only support broadcasting for tensors with the same
-  // shape
-  if (tensor1.shape().size() != tensor2.shape().size()) {
-    return false;
+TensorData TensorData::scale(const TensorData& tensor1, const float& scale) {
+  return unaryTensorMap(tensor1, [&scale](float elem) { return elem * scale; });
+}
+TensorData TensorData::zeros_like(const TensorData& tensor) {
+  auto empty_vec = std::vector<float>();
+  empty_vec.reserve(tensor.tensorData_.size());
+  for (size_t i = 0; i < tensor.tensorData_.size(); i++) {
+    empty_vec[0] = 0;
   }
-  for (size_t i = 0; i < tensor1.shape().size(); i++) {
-    if (tensor1.shape()[i] != tensor2.shape()[i]) {
-      return false;
-    }
-  }
-  return true;
+  return TensorData(empty_vec);
 }
 
 // ____________________________________________________________________________

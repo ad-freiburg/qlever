@@ -96,14 +96,34 @@ class TensorQueryTest : public T {
     removeTestIndex(testIndexBase_);
     ad_utility::setGlobalLoggingStream(&std::cout);
   }
-
+  std::unique_ptr<qlever::Qlever> qlvFresh(
+      VocabularyType vocabType =
+          VocabularyType(VocabularyType::Enum::OnDiskCompressed),
+      std::optional<std::string> ttl = std::nullopt, std::optional<std::string> baseName = std::nullopt) {
+    if (!ttl) {
+      ttl = getDummyTurtle();
+    }
+    if (!baseName) {
+      baseName = testIndexBase_;
+    }
+    // ad_utility::setGlobalLoggingStream(&log_);
+    ad_utility::setGlobalLoggingStream(&std::cout);
+    makeTestIndex(testIndexBase_, ttl.value(), vocabType);
+    qlever::EngineConfig config;
+    config.baseName_ = testIndexBase_;
+    return std::make_unique<qlever::Qlever>(config);
+  }
   // ___________________________________________________________________________
   qlever::Qlever& qlv(VocabularyType vocabType = VocabularyType(
-                          VocabularyType::Enum::OnDiskCompressed)) {
+                          VocabularyType::Enum::OnDiskCompressed),
+                      std::optional<std::string> ttl = std::nullopt) {
+    if (!ttl) {
+      ttl = getDummyTurtle();
+    }
     if (qlv_ == nullptr) {
       // ad_utility::setGlobalLoggingStream(&log_);
       ad_utility::setGlobalLoggingStream(&std::cout);
-      makeTestIndex(testIndexBase_, getDummyTurtle(), vocabType);
+      makeTestIndex(testIndexBase_, ttl.value(), vocabType);
       qlever::EngineConfig config;
       config.baseName_ = testIndexBase_;
       qlv_ = std::make_shared<qlever::Qlever>(config);

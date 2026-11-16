@@ -25,6 +25,9 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
+#include "engine/tensor/aggregate/TensorAggregate.h"
+#include "engine/tensor/aggregate/TensorVar.h"
+#include "engine/tensor/aggregate/TensorAggregate.h"
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "util/AllocatorTestHelpers.h"
@@ -1946,6 +1949,10 @@ TEST(SparqlExpression, isAggregateAndIsDistinct) {
   // For `SAMPLE` the distinctness makes no difference, so we always return `not
   // distinct`.
   EXPECT_THAT(SampleExpression(true, varX()), match(false));
+
+  EXPECT_THAT(TensorSumExpression(false, varX()), match(false));
+  EXPECT_THAT(TensorAvgExpression(false, varX()), match(false));
+  EXPECT_THAT(TensorVarExpression(false, varX()), match(false));
 
   EXPECT_THAT(*makeCountStarExpression(true), match(true, false));
   EXPECT_THAT(*makeCountStarExpression(false), match(false, false));

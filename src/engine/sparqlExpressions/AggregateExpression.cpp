@@ -9,6 +9,8 @@
 
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
+#include "engine/tensor/aggregate/TensorAggregate.h"
+#include "engine/tensor/aggregate/TensorVar.h"
 
 namespace sparqlExpression::detail {
 
@@ -195,4 +197,6 @@ INSTANTIATE_AGG_EXP(AddForSum, NumericValueGetter);
 INSTANTIATE_AGG_EXP(Count, IsValidValueGetter);
 INSTANTIATE_AGG_EXP(MinLambdaForAllTypes, ActualValueGetter);
 INSTANTIATE_AGG_EXP(MaxLambdaForAllTypes, ActualValueGetter);
+
+
 }  // namespace sparqlExpression::detail

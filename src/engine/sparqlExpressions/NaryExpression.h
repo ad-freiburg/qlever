@@ -176,6 +176,10 @@ SparqlExpression::Ptr makeTensorFromStringExpression(SparqlExpression::Ptr child
 // SparqlExpression::Ptr makeTensorFromListExpression(SparqlExpression::Ptr child);
 // SparqlExpression::Ptr makeTensorFromRdfTermExpression(SparqlExpression::Ptr child);
 
+SparqlExpression::Ptr makeTensorMultiplyExpression(SparqlExpression::Ptr child1,
+                                              SparqlExpression::Ptr child2);
+SparqlExpression::Ptr makeTensorDivideExpression(SparqlExpression::Ptr child1,
+                                              SparqlExpression::Ptr child2);
 SparqlExpression::Ptr makeTensorAddExpression(SparqlExpression::Ptr child1,
                                               SparqlExpression::Ptr child2);
 SparqlExpression::Ptr makeTensorSubtractExpression(SparqlExpression::Ptr child1,
@@ -186,6 +190,11 @@ SparqlExpression::Ptr makeTensorEuclideanDistanceExpression(
     SparqlExpression::Ptr child1, SparqlExpression::Ptr child2);
 SparqlExpression::Ptr makeTensorCosineSimilarityExpression(SparqlExpression::Ptr child1, SparqlExpression::Ptr child2);
 SparqlExpression::Ptr makeTensorNormExpression(SparqlExpression::Ptr child);
+
+SparqlExpression::Ptr makeTensorSumExpr(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeTensorAvgExpr(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeTensorVarExpr(SparqlExpression::Ptr child);
+
 
 
 

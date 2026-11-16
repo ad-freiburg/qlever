@@ -172,10 +172,10 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
 
     std::string name = entry.path().filename().string();
 
-    if (ql::starts_with(name, indexBasename + VOCAB_SUFFIX) ||
+    if (ql::starts_with(name, indexBasename + std::string(VOCAB_SUFFIX)) ||
         ql::starts_with(name, indexBasename + ".index") ||
         ql::starts_with(name, indexBasename + ".internal.index") ||
-        ql::starts_with(name, indexBasename + CONFIGURATION_FILE)) {
+        ql::starts_with(name, indexBasename + std::string(CONFIGURATION_FILE))) {
       ad_utility::deleteFile(entry.path());
     }
   }

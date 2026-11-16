@@ -9,6 +9,8 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
+#include "engine/tensor/aggregate/TensorAggregate.h"
+#include "engine/tensor/aggregate/TensorVar.h"
 #include "global/Constants.h"
 using TensorData = ad_utility::TensorData;
 namespace sparqlExpression {
@@ -59,12 +61,21 @@ NARY_EXPRESSION(
     FV<BinaryTensorFunctionImpl<&TensorData::subtract>, TensorValueGetter>);
 
 NARY_EXPRESSION(
+    TensorMultiplyExpression, 2,
+    FV<BinaryTensorFunctionImpl<&TensorData::multiply>, TensorValueGetter>);
+
+NARY_EXPRESSION(
+    TensorDivideExpression, 2,
+    FV<BinaryTensorFunctionImpl<&TensorData::divide>, TensorValueGetter>);
+
+NARY_EXPRESSION(
     TensorDotProductExpression, 2,
     FV<NumericIdWrapper<BinaryFloatTensorFunctionImpl<&TensorData::dot>, true>,
        TensorValueGetter>);
 NARY_EXPRESSION(
     TensorEuclideanDistanceExpression, 2,
-    FV<NumericIdWrapper<BinaryFloatTensorFunctionImpl<&TensorData::euclideanDistance>, true>,
+    FV<NumericIdWrapper<
+           BinaryFloatTensorFunctionImpl<&TensorData::euclideanDistance>, true>,
        TensorValueGetter>);
 NARY_EXPRESSION(
     TensorCosineSimilarityExpression, 2,
@@ -108,13 +119,21 @@ Expr makeTensorSubtractExpression(Expr child1, Expr child2) {
   return std::make_unique<TensorSubtractExpression>(std::move(child1),
                                                     std::move(child2));
 }
+Expr makeTensorMultiplyExpression(Expr child1, Expr child2) {
+  return std::make_unique<TensorMultiplyExpression>(std::move(child1),
+                                                    std::move(child2));
+}
+Expr makeTensorDivideExpression(Expr child1, Expr child2) {
+  return std::make_unique<TensorDivideExpression>(std::move(child1),
+                                                  std::move(child2));
+}
 Expr makeTensorDotProductExpression(Expr child1, Expr child2) {
   return std::make_unique<TensorDotProductExpression>(std::move(child1),
                                                       std::move(child2));
 }
 Expr makeTensorEuclideanDistanceExpression(Expr child1, Expr child2) {
   return std::make_unique<TensorEuclideanDistanceExpression>(std::move(child1),
-                                                            std::move(child2));
+                                                             std::move(child2));
 }
 Expr makeTensorCosineSimilarityExpression(Expr child1, Expr child2) {
   return std::make_unique<TensorCosineSimilarityExpression>(std::move(child1),
@@ -122,5 +141,14 @@ Expr makeTensorCosineSimilarityExpression(Expr child1, Expr child2) {
 }
 Expr makeTensorNormExpression(Expr child) {
   return std::make_unique<TensorNormExpression>(std::move(child));
+}
+Expr makeTensorVarExpr(Expr child) {
+  return std::make_unique<TensorVarExpression>(false, std::move(child));
+}
+Expr makeTensorSumExpr(Expr child) {
+  return std::make_unique<TensorSumExpression>(false, std::move(child));
+}
+Expr makeTensorAvgExpr(Expr child) {
+  return std::make_unique<TensorAvgExpression>(false, std::move(child));
 }
 }  // namespace sparqlExpression
