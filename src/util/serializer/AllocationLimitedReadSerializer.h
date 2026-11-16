@@ -27,8 +27,9 @@ namespace ad_utility::serialization {
 // network response. The check happens before the memory is allocated.
 //
 // NOTE: Only the allocations of the `serialize` functions that call
-// `checkAllocation` (currently those of `std::vector`, `std::string`, and
-// `ad_utility::HashMap`) are counted.
+// `checkAllocation` (currently those of `std::vector`, `std::string`,
+// `ad_utility::HashMap`, and the resized arrays of `ParallelArrays`) are
+// counted.
 CPP_template(typename UnderlyingSerializer)(
     requires ReadSerializer<UnderlyingSerializer>)
 class AllocationLimitedReadSerializer : public NoCopyNoMove {

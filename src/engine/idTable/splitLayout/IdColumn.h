@@ -19,6 +19,8 @@
 #include "engine/idTable/splitLayout/IdRef.h"
 #include "global/Id.h"
 #include "util/Exception.h"
+#include "util/serializer/SerializeParallelArrays.h"
+#include "util/serializer/Serializer.h"
 
 namespace columnBasedIdTable::splitLayout {
 
@@ -137,10 +139,31 @@ class BasicIdColumnView {
   rawDatatypes() const {
     return {datatypes_, size_};
   }
+
+  // Serialization of a column: its payloads and its datatypes as
+  // `ParallelArrays`. Like for `ql::span`, reading needs a view that already
+  // has the right size.
+  AD_SERIALIZE_FRIEND_FUNCTION(BasicIdColumnView) {
+    serializer | ad_utility::serialization::ParallelArrays{arg.rawPayloads(),
+                                                           arg.rawDatatypes()};
+  }
 };
 
 using IdColumnRef = BasicIdColumnView<false>;
 using ConstIdColumnRef = BasicIdColumnView<true>;
+
+// Read a column that was written by the serialization of `BasicIdColumnView`
+// without copying it. The returned view points into the buffer of the
+// `serializer`, which has to outlive it. Counterpart of
+// `zeroCopyDeserializeToSpan` in `SerializeVector.h`.
+CPP_template(typename S)(
+    requires ad_utility::serialization::ZeroCopyReadSerializer<S>)
+ConstIdColumnRef zeroCopyDeserializeIdColumn(S& serializer) {
+  auto [payloads, datatypes] =
+      ad_utility::serialization::zeroCopyDeserializeParallelArrays<
+          Id::PayloadType, Id::DatatypeType>(serializer);
+  return {payloads.data(), datatypes.data(), payloads.size()};
+}
 
 }  // namespace columnBasedIdTable::splitLayout
 

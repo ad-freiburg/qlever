@@ -150,6 +150,9 @@ CPP_template(typename Range, typename Serializer)(
 void serializeIds(Serializer& serializer, Range&& range) {
   if constexpr (ql::ranges::contiguous_range<std::decay_t<Range>>) {
     serializer << ql::span{range};
+  } else if constexpr (std::is_convertible_v<const std::decay_t<Range>&,
+                                             ConstIdColumnRef>) {
+    serializer << ConstIdColumnRef{range};
   } else {
     ad_utility::serialization::VectorIncrementalSerializer<Id, Serializer>
         vectorSerializer{std::move(serializer)};
@@ -161,9 +164,11 @@ void serializeIds(Serializer& serializer, Range&& range) {
   }
 }
 
-// TODO<joka921> Comments.
-inline void remapLocalVocab(IdColumnRef ids,
-                            const absl::flat_hash_map<Id::T, Id>& mapping) {
+// Apply the `mapping` to all the `Id`s of the local vocab in the `ids`, in
+// place. The `ids` are a `std::vector<Id>` or a column of an `IdTable`.
+CPP_template(typename Range)(requires ql::ranges::range<Range>)
+void remapLocalVocab(Range&& ids,
+                     const absl::flat_hash_map<Id::T, Id>& mapping) {
   for (IdRef id : ids) {
     if (id.getDatatype() == Datatype::LocalVocabIndex) {
       id = mapping.at(id.getBits());

@@ -10,6 +10,7 @@
 #include <type_traits>
 #include <vector>
 
+#include "backports/algorithm.h"
 #include "backports/span.h"
 #include "util/ContainersWithAllocator.h"
 #include "util/NoCopyNoMove.h"
@@ -19,6 +20,40 @@
 #include "util/serializer/Serializer.h"
 
 namespace ad_utility::serialization {
+namespace detail {
+// Serialize the elements of the contiguous `range` (for example a
+// `std::vector`, a `std::string` or a `ql::span`) without its size: their bytes
+// for a trivially serializable value type, else one element after the other.
+template <typename S, typename Range>
+void serializeElements(S& serializer, Range& range) {
+  using V = ql::ranges::range_value_t<Range>;
+  if constexpr (TriviallySerializable<V>) {
+    using CharPtr = std::conditional_t<ReadSerializer<S>, char*, const char*>;
+    alignSerializerForType<V>(serializer);
+    serializer.serializeBytes(
+        reinterpret_cast<CharPtr>(ql::ranges::data(range)),
+        ql::ranges::size(range) * sizeof(V));
+  } else {
+    for (auto&& element : range) {
+      serializer | element;
+    }
+  }
+}
+
+// Read the `size` elements of type `V` that `serializeElements` wrote and
+// discard them.
+template <typename V, typename S>
+void discardElements(S& serializer, size_t size) {
+  if constexpr (TriviallySerializable<V>) {
+    alignSerializerForType<V>(serializer);
+  }
+  [[maybe_unused]] V discarded;
+  for ([[maybe_unused]] auto i : ad_utility::integerRange(size)) {
+    serializer | discarded;
+  }
+}
+}  // namespace detail
+
 AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
     (ad_utility::similarToInstantiation<T, std::vector> ||
      ad_utility::similarToInstantiation<T, qlm::vector> ||
@@ -31,16 +66,7 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
     checkAllocation(serializer, size, sizeof(V));
     arg.resize(size);
   }
-  if constexpr (TriviallySerializable<V>) {
-    using CharPtr = std::conditional_t<ReadSerializer<S>, char*, const char*>;
-    ad_utility::serialization::alignSerializerForType<V>(serializer);
-    serializer.serializeBytes(reinterpret_cast<CharPtr>(arg.data()),
-                              arg.size() * sizeof(V));
-  } else {
-    for (size_t i = 0; i < size; ++i) {
-      serializer | arg[i];
-    }
-  }
+  detail::serializeElements(serializer, arg);
 }
 
 // Serialization for `ql::span`. When writing to a `span` from a serializer, the
@@ -60,10 +86,7 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT((ad_utility::SimilarToSpan<T>)) {
     if (arg.size() != size) {
       // The size does not match, we consume the complete `span` into the void
       // and then throw an exception.
-      [[maybe_unused]] V dummyForSerializationOnSizeError;
-      for ([[maybe_unused]] auto i : ad_utility::integerRange(size)) {
-        serializer | dummyForSerializationOnSizeError;
-      }
+      detail::discardElements<V>(serializer, size);
       throw std::runtime_error{
           "To serialize into a span, the span must be properly sized in "
           "advance. Note: "
@@ -72,17 +95,27 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT((ad_utility::SimilarToSpan<T>)) {
           "and can no longer be retrieved."};
     }
   }
-  if constexpr (TriviallySerializable<V>) {
-    using CharPtr = std::conditional_t<ReadSerializer<S>, char*, const char*>;
-    ad_utility::serialization::alignSerializerForType<V>(serializer);
-    serializer.serializeBytes(reinterpret_cast<CharPtr>(arg.data()),
-                              arg.size() * sizeof(V));
-  } else {
-    for (auto& el : arg) {
-      serializer | el;
-    }
-  }
+  detail::serializeElements(serializer, arg);
 }
+
+namespace detail {
+// The `size` trivially copyable values of type `T` that follow in the
+// `serializer`, without copying them (see `zeroCopyDeserializeToSpan`).
+CPP_template(typename T, typename S)(requires ZeroCopyReadSerializer<S> &&
+                                           TriviallySerializable<T>)
+ql::span<const T> zeroCopyDeserializeElements(S& serializer, size_t size) {
+  alignSerializerForType<T>(serializer);
+  auto bytes = serializer.getSpanToBytes(size * sizeof(T));
+  AD_CORRECTNESS_CHECK(bytes.size() == size * sizeof(T));
+  AD_CORRECTNESS_CHECK(
+      reinterpret_cast<std::uintptr_t>(bytes.data()) % alignof(T) == 0);
+  // TODO<C++23> Technically this is undefined behavior for types other than
+  // `char` without calling `start_lifetime_as_array` or memcopying the data,
+  // But no compiler implements this as of now, and it has been working in
+  // practice forever.
+  return ql::span<const T>{reinterpret_cast<const T*>(bytes.data()), size};
+}
+}  // namespace detail
 
 // Read a span of trivially copyable values from the serializer without copying
 // them. The pointer of the span will point into the serializers internal
@@ -94,16 +127,7 @@ CPP_template(typename T, typename S)(requires ZeroCopyReadSerializer<S> &&
 ql::span<const T> zeroCopyDeserializeToSpan(S& serializer) {
   std::size_t size;
   serializer >> size;
-  alignSerializerForType<T>(serializer);
-  auto bytes = serializer.getSpanToBytes(size * sizeof(T));
-  AD_CORRECTNESS_CHECK(bytes.size() == size * sizeof(T));
-  AD_CORRECTNESS_CHECK(
-      reinterpret_cast<std::uintptr_t>(bytes.data()) % alignof(T) == 0);
-  // TODO<C++23> Technically this is undefined behavior for types other than
-  // `char` without calling `start_lifetime_as_array` or memcopying the data,
-  // But no compiler implements this as of now, and it has been working in
-  // practice forever.
-  return ql::span<const T>{reinterpret_cast<const T*>(bytes.data()), size};
+  return detail::zeroCopyDeserializeElements<T>(serializer, size);
 }
 
 /// Incrementally serialize a std::vector to disk without materializing it.

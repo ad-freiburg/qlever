@@ -4,8 +4,13 @@
 
 #include <gmock/gmock.h>
 
+#include <utility>
+
+#include "./util/AllocatorTestHelpers.h"
+#include "./util/IdTableHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "backports/filesystem.h"
+#include "engine/idTable/IdTable.h"
 #include "util/GTestHelpers.h"
 #include "util/IndexTestHelpers.h"
 #include "util/LocalVocabEntryTestHelpers.h"
@@ -318,5 +323,108 @@ TEST(TripleSerializer, rethrowsOnInvalidFileAccess) {
             HasSubstr("cannot be opened for reading"),
             HasSubstr("(Permission denied)")),
       std::runtime_error);
+}
+
+// Return an `IdTable` with two columns and three rows, one of whose entries is
+// an `Id` of a word that is added to the `localVocab`. This `Id` is also stored
+// in `localVocabId`.
+IdTable tableWithLocalVocabId(LocalVocab& localVocab, Id& localVocabId) {
+  auto* qec = ad_utility::testing::getQec();
+  localVocabId =
+      Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
+          LocalVocabEntry::literalWithoutQuotes("abc",
+                                                qec->getLocalVocabContext())));
+  IdTable table{2, ad_utility::testing::makeAllocator()};
+  table.push_back({I(1), localVocabId});
+  table.push_back({Id::makeFromBool(true), Id::makeUndefined()});
+  table.push_back({V(5), I(-3)});
+  return table;
+}
+
+// Test that `serializeIds` writes the columns of an `IdTable` in the format of
+// the column itself, which the zero-copy path of the named result cache reads,
+// and that `deserializeIds` reads them back into the columns of another
+// `IdTable` and applies the `mapping` to the `Id`s of the local vocab. The
+// latter is the path with a copy of the named result cache.
+TEST(TripleSerializer, columnsOfAnIdTableRoundTrip) {
+  LocalVocab localVocab;
+  Id localVocabId;
+  const IdTable table = tableWithLocalVocabId(localVocab, localVocabId);
+
+  ad_utility::serialization::ByteBufferWriteSerializer writer;
+  ad_utility::serialization::ByteBufferWriteSerializer direct;
+  for (const auto& column : table.getColumns()) {
+    ad_utility::detail::serializeIds(writer, column);
+    direct << ConstIdColumnRef{column};
+  }
+  EXPECT_EQ(writer.data(), direct.data());
+
+  ad_utility::serialization::ByteBufferReadSerializer reader{
+      std::move(writer).data()};
+  const Id mappedId = I(99);
+  const absl::flat_hash_map<Id::T, Id> mapping{
+      {localVocabId.getBits(), mappedId}};
+  IdTable result{table.numColumns(), ad_utility::testing::makeAllocator()};
+  result.resize(table.numRows());
+  for (auto&& column : result.getColumns()) {
+    ad_utility::detail::deserializeIds(reader, mapping, column);
+  }
+
+  IdTable expected = table.clone();
+  expected(0, 1) = mappedId;
+  EXPECT_THAT(result, matchesIdTable(expected));
+}
+
+// Test that `remapLocalVocab` replaces exactly the `Id`s of the local vocab by
+// the `Id` that the `mapping` gives for their bits, in place, for a
+// `std::vector<Id>` and for a column of an `IdTable`. All other `Id`s stay as
+// they are, even if the `mapping` has an entry for their bits, and a local
+// vocab `Id` without an entry in the `mapping` is an error.
+TEST(TripleSerializer, remapLocalVocab) {
+  auto* qec = ad_utility::testing::getQec();
+  LocalVocab localVocab;
+  auto LV = [&localVocab, qec](std::string_view value) {
+    return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
+        LocalVocabEntry::literalWithoutQuotes(value,
+                                              qec->getLocalVocabContext())));
+  };
+  const Id abc = LV("abc");
+  const Id def = LV("def");
+  const Id notInMapping = LV("ghi");
+  const absl::flat_hash_map<Id::T, Id> mapping{
+      {abc.getBits(), I(100)}, {def.getBits(), V(200)}, {I(3).getBits(), I(4)}};
+
+  const std::vector<Id> input{
+      abc, I(3), def, V(7), Id::makeUndefined(), abc, Id::makeFromBool(true)};
+  const std::vector<Id> expected{I(100),
+                                 I(3),
+                                 V(200),
+                                 V(7),
+                                 Id::makeUndefined(),
+                                 I(100),
+                                 Id::makeFromBool(true)};
+
+  // A `std::vector<Id>`, including the empty one.
+  std::vector<Id> vector = input;
+  ad_utility::detail::remapLocalVocab(vector, mapping);
+  EXPECT_EQ(vector, expected);
+  std::vector<Id> empty;
+  ad_utility::detail::remapLocalVocab(empty, mapping);
+  EXPECT_TRUE(empty.empty());
+
+  // A column of an `IdTable`. The other column stays as it is.
+  IdTable table{2, ad_utility::testing::makeAllocator()};
+  for (const Id id : input) {
+    table.push_back({id, abc});
+  }
+  ad_utility::detail::remapLocalVocab(table.getColumn(0), mapping);
+  for (size_t i = 0; i < input.size(); ++i) {
+    EXPECT_EQ(static_cast<Id>(table(i, 0)), expected.at(i)) << i;
+    EXPECT_EQ(static_cast<Id>(table(i, 1)), abc) << i;
+  }
+
+  // A local vocab `Id` without an entry in the `mapping`.
+  std::vector<Id> withUnmapped{notInMapping};
+  EXPECT_ANY_THROW(ad_utility::detail::remapLocalVocab(withUnmapped, mapping));
 }
 }  // namespace
