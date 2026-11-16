@@ -1719,55 +1719,112 @@ TEST(QueryPlanner, SpatialJoinChildrenShareNoVariable) {
   EXPECT_EQ(qet->getResult()->idTableView().numRows(), 50);
 }
 
-// Test that a triangle of spatial filters (two geometries in a region and close
-// to each other) is computed with three `SpatialJoin`s, by cloning the triples
-// of the region (without the clone, one of the geometric relations would have
-// to be evaluated as a regular filter, which is not implemented).
-TEST(QueryPlanner, SpatialJoinTriangleClonesSharedOperand) {
-  // A region `<f1>` that contains `<r1>`, `<t1>` and `<t2>`, of which only
-  // `<r1>` and `<t1>` are close, and a region `<f2>` that contains `<t3>`.
+// Test that a cycle of spatial filters is computed with a `SpatialJoin` for
+// each filter, by copying the triples of its smallest unit (without the copy,
+// one of the geometric relations would have to be evaluated as a regular
+// filter, which is not implemented), and that a unit that several spatial
+// filters use without a cycle is not copied.
+TEST(QueryPlanner, SpatialJoinCycleCopiesOperand) {
+  // A small region `<f1>` that contains `<r1>`, `<t1>` and `<x1>`, and a region
+  // `<f2>` that contains `<t3>` and `<x2>`. `<t2>` is just outside of `<f1>`.
+  // The points `<r1>`, `<t1>`, `<t2>` and `<x1>` are within 5 km of each
+  // other, `<t3>` and `<x2>` are far away from them.
   std::string kg;
   auto add = [&kg](std::string_view subject, std::string_view predicate,
                    std::string_view wkt) {
     absl::StrAppend(&kg, subject, " ", predicate, " \"", wkt, "\"^^<",
                     GEO_WKT_LITERAL, "> .\n");
   };
-  add("<f1>", "<g>", "POLYGON((7 47, 9 47, 9 49, 7 49, 7 47))");
+  add("<f1>", "<g>",
+      "POLYGON((7.8 47.9, 7.85 47.9, 7.85 48.1, 7.8 48.1, 7.8 47.9))");
   add("<f2>", "<g>", "POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))");
   add("<r1>", "<p>", "POINT(7.835 48.012)");
   add("<t1>", "<q>", "POINT(7.84 48.0)");
-  add("<t2>", "<q>", "POINT(7.9 48.5)");
+  add("<t2>", "<q>", "POINT(7.86 48.0)");
   add("<t3>", "<q>", "POINT(0.5 0.5)");
+  add("<x1>", "<s>", "POINT(7.845 48.0)");
+  add("<x2>", "<s>", "POINT(0.6 0.5)");
   auto qec = ad_utility::testing::getQec(kg);
+  auto id = ad_utility::testing::makeGetId(qec->getIndex());
 
-  // Return the number of `SpatialJoin`s in `qet`.
-  auto countSpatialJoins = [](const QueryExecutionTree& qet,
-                              const auto& self) -> size_t {
+  // Plan the query with the triples and filters in `body`.
+  auto plan = [qec](std::string_view body) {
+    return h::parseAndPlan(
+        absl::StrCat(
+            "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+            "SELECT * WHERE { ?f <g> ?fg . ?r <p> ?rg . ",
+            body, " }"),
+        qec);
+  };
+  // Return the number of operations in `qet` for which `isMatch` is true.
+  auto count = [](const QueryExecutionTree& qet, const auto& isMatch,
+                  const auto& self) -> size_t {
     const auto& operation = *qet.getRootOperation();
-    size_t count = dynamic_cast<const SpatialJoin*>(&operation) != nullptr;
+    size_t result = isMatch(operation);
     for (const auto* child : operation.getChildren()) {
-      count += self(*child, self);
+      result += self(*child, isMatch, self);
     }
-    return count;
+    return result;
   };
+  auto countSpatialJoins = [&count](const QueryExecutionTree& qet) {
+    auto isMatch = [](const Operation& operation) {
+      return dynamic_cast<const SpatialJoin*>(&operation) != nullptr;
+    };
+    return count(qet, isMatch, count);
+  };
+  auto countBinds = [&count](const QueryExecutionTree& qet) {
+    auto isMatch = [](const Operation& operation) {
+      return dynamic_cast<const Bind*>(&operation) != nullptr;
+    };
+    return count(qet, isMatch, count);
+  };
+  // Return the rows of the result of `qet` for the given `variables`.
+  auto rows = [](const std::shared_ptr<QueryExecutionTree>& qet,
+                 const std::vector<std::string>& variables) {
+    const auto& table = qet->getResult()->idTableView();
+    std::vector<std::vector<Id>> result(table.numRows());
+    for (const auto& variable : variables) {
+      auto column = qet->getVariableColumn(Variable{variable});
+      for (size_t row = 0; row < table.numRows(); ++row) {
+        result.at(row).push_back(table(row, column));
+      }
+    }
+    return result;
+  };
+  using ::testing::UnorderedElementsAreArray;
 
-  // All three filters are substituted, and `<r1>` and `<t1>` in `<f1>` are the
-  // only result.
-  auto qet = h::parseAndPlan(
-      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
-      "SELECT ?f ?r ?t WHERE { ?f <g> ?fg . ?r <p> ?rg . ?t <q> ?tg . "
-      "FILTER geof:sfContains(?fg, ?rg) FILTER geof:sfContains(?fg, ?tg) "
-      "FILTER(geof:distance(?rg, ?tg) <= 5) }",
-      qec);
-  EXPECT_EQ(countSpatialJoins(*qet, countSpatialJoins), 3);
-  const auto& result = qet->getResult()->idTableView();
-  ASSERT_EQ(result.numRows(), 1);
-  auto id = [qec](std::string_view iri) {
-    return ad_utility::testing::makeGetId(qec->getIndex())(std::string{iri});
-  };
-  EXPECT_EQ(result(0, qet->getVariableColumn(Variable{"?f"})), id("<f1>"));
-  EXPECT_EQ(result(0, qet->getVariableColumn(Variable{"?r"})), id("<r1>"));
-  EXPECT_EQ(result(0, qet->getVariableColumn(Variable{"?t"})), id("<t1>"));
+  // A triangle: `<r1>` and `<t1>` in `<f1>` are the only result (`<t2>` is not
+  // in `<f1>`).
+  auto triangle = plan(
+      "?t <q> ?tg . FILTER geof:sfContains(?fg, ?rg) "
+      "FILTER geof:sfContains(?fg, ?tg) FILTER(geof:distance(?rg, ?tg) <= 5)");
+  EXPECT_EQ(countSpatialJoins(*triangle), 3);
+  EXPECT_THAT(rows(triangle, {"?f", "?r", "?t"}),
+              UnorderedElementsAreArray(std::vector<std::vector<Id>>{
+                  {id("<f1>"), id("<r1>"), id("<t1>")}}));
+
+  // A cycle of four filters: `<r1>` and `<x1>` in `<f1>`, both close to `<t1>`
+  // and to `<t2>`.
+  auto square = plan(
+      "?t <q> ?tg . ?x <s> ?xg . FILTER geof:sfContains(?fg, ?rg) "
+      "FILTER geof:sfContains(?fg, ?xg) FILTER(geof:distance(?rg, ?tg) <= 5) "
+      "FILTER(geof:distance(?tg, ?xg) <= 5)");
+  EXPECT_EQ(countSpatialJoins(*square), 4);
+  EXPECT_THAT(rows(square, {"?f", "?r", "?t", "?x"}),
+              UnorderedElementsAreArray(std::vector<std::vector<Id>>{
+                  {id("<f1>"), id("<r1>"), id("<t1>"), id("<x1>")},
+                  {id("<f1>"), id("<r1>"), id("<t2>"), id("<x1>")}}));
+
+  // Two filters with the same region but without a cycle: no copy (which would
+  // add a `BIND` for each of its variables).
+  auto chain = plan(
+      "?t <q> ?tg . FILTER geof:sfContains(?fg, ?rg) "
+      "FILTER geof:sfContains(?fg, ?tg)");
+  EXPECT_EQ(countSpatialJoins(*chain), 2);
+  EXPECT_EQ(countBinds(*chain), 0);
+  EXPECT_THAT(rows(chain, {"?f", "?r", "?t"}),
+              UnorderedElementsAreArray(std::vector<std::vector<Id>>{
+                  {id("<f1>"), id("<r1>"), id("<t1>")}}));
 }
 
 // _____________________________________________________________________________

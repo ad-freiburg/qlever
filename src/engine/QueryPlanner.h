@@ -363,29 +363,33 @@ class QueryPlanner {
   virtual FiltersAndOptionalSubstitutes seedFilterSubstitutes(
       const std::vector<SparqlFilter>& filters);
 
-  // Break a triangle of `SpatialJoin` substitutes by cloning the operand that
-  // two of them share. For example, for `geof:sfContains(?fg, ?rg)`,
-  // `geof:sfContains(?fg, ?tg)` and `geof:distance(?rg, ?tg) <= 250`, the
-  // triples that bind `?fg` (its connected component in `tg`) are planned once
-  // more with fresh variables and added to `initialPlans` as a single node, the
-  // substitute of the second filter uses the clone of `?fg`, and a filter is
-  // added that checks that each variable equals its clone. Then all three
-  // filters can be substituted by a `SpatialJoin`.
+  // Break the cycles of `SpatialJoin` substitutes by copying operands. For
+  // example, for `geof:sfContains(?fg, ?rg)`, `geof:sfContains(?fg, ?tg)` and
+  // `geof:distance(?rg, ?tg) <= 250`, the triples that bind `?fg` are planned
+  // once more, the variables of this copy are renamed (with a `BIND` each and
+  // by hiding the originals, like the `SELECT` clause of a subquery), and the
+  // copy is added to `initialPlans` as a single node. The substitute of one of
+  // the filters then uses the copy of `?fg`, and a filter is added that checks
+  // that each variable equals its copy.
   //
-  // NOTE 1: Without the clone, the operand is part of both children of the
-  // third `SpatialJoin`, which is impossible. Only two of the filters can then
-  // be substituted, and the third one is evaluated as a regular filter, which
-  // is not implemented for geometric relations like `geof:sfContains`.
+  // NOTE 1: A `SpatialJoin` joins two subtrees that share no variable, so the
+  // substitutes that become a `SpatialJoin` connect the units (the connected
+  // components of `initialPlans` without the substitutes) like a tree. All
+  // other substitutes would have to be evaluated as a regular filter, which is
+  // not implemented for geometric relations like `geof:sfContains`. Therefore,
+  // the substitutes are added to a union-find of the units, and each one that
+  // closes a cycle uses a copy of its smaller unit (the substitutes with the
+  // largest units come first). A unit that several substitutes use without a
+  // cycle (e.g. for only the first two filters above) is not copied.
   //
-  // NOTE 2: The clone is correct because the result of a set of triples has no
-  // duplicate rows, so each row is only equal to its own clone. The clone has
-  // the same cache key as the original, so it is computed only once.
+  // NOTE 2: Only units of simple triples are copied. Their result has no
+  // duplicate rows, so each row is only equal to its own copy.
   //
-  // TODO<ullingerc> This is a draft: only the first triangle is cloned, the
-  // clone is added regardless of its size estimate, and the check uses `=`
-  // instead of `sameTerm` (which QLever does not have yet), so two different
-  // terms with the same numeric value would count as equal.
-  void cloneSharedSpatialJoinOperand(
+  // TODO<ullingerc> This is a draft: copies are added regardless of their size
+  // estimate, and the check uses `=` instead of `sameTerm` (which QLever does
+  // not have yet), so two different terms with the same numeric value would
+  // count as equal.
+  void cloneSpatialJoinOperandsOnCycles(
       const TripleGraph& tg, SubtreePlanVec& initialPlans,
       std::vector<SparqlFilter>& filters,
       FiltersAndOptionalSubstitutes& filtersAndOptSubstitutes);
