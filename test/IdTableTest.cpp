@@ -268,7 +268,7 @@ void runTestForDifferentTypes(T testCase, std::string testCaseName) {
     }
     allocators.emplace_back(makeAllocator());
   }
-  std::vector splitAllocators{allocators};
+  auto splitAllocators = allocators;
   testCase(ti<IdTable>, V, std::move(allocators));
   testCase(ti<SplitColumnIdTable>, V, std::move(splitAllocators));
   testCase(ti<BufferedTable>, V, std::move(buffers));

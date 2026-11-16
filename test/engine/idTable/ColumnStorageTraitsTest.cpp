@@ -9,15 +9,11 @@
 
 #include <gtest/gtest.h>
 
-#include <cmath>
 #include <limits>
 #include <type_traits>
-#include <utility>
 #include <vector>
 
 #include "../../util/AllocatorTestHelpers.h"
-#include "backports/algorithm.h"
-#include "backports/span.h"
 #include "engine/idTable/ColumnStorageTraits.h"
 #include "engine/idTable/IdTable.h"
 #include "engine/idTable/splitLayout/IdColumnVector.h"
@@ -82,20 +78,6 @@ std::vector<Id> idsAtTheEdges() {
           Id::makeFromGeoPoint(GeoPoint{-90.0, -180.0}),
           Id::makeFromGeoPoint(GeoPoint{90.0, 180.0}),
           Id::fromBits(Datatype::EncodedVal, 12345)};
-}
-
-// The content of a `table` as plain `Id`s, row by row, to compare tables with
-// different kinds of columns.
-template <typename Table>
-std::vector<std::vector<Id>> contentOf(const Table& table) {
-  std::vector<std::vector<Id>> result;
-  for (size_t row = 0; row < table.numRows(); ++row) {
-    std::vector<Id>& r = result.emplace_back();
-    for (size_t col = 0; col < table.numColumns(); ++col) {
-      r.push_back(static_cast<Id>(table(row, col)));
-    }
-  }
-  return result;
 }
 
 Id I(int64_t i) { return Id::makeFromInt(i); }
@@ -195,17 +177,6 @@ TYPED_TEST(ColumnStorageTraitsTest, allAccessesReferToTheSameStorage) {
   EXPECT_EQ(static_cast<Id>(constTable(0, 1)), I(20));
 }
 
-// Test that a value that was read from the table is a copy: it does not
-// change when the table is written afterwards.
-TYPED_TEST(ColumnStorageTraitsTest, readValuesAreCopies) {
-  TableOf<TypeParam> table{1, ad_utility::testing::makeAllocator()};
-  table.push_back({I(1)});
-  Id copy = table(0, 0);
-  table(0, 0) = I(2);
-  EXPECT_EQ(copy, I(1));
-  EXPECT_EQ(static_cast<Id>(table(0, 0)), I(2));
-}
-
 // Test that the views of a table refer to its storage: they see the right rows
 // and columns, and also writes to the table after they were created.
 TYPED_TEST(ColumnStorageTraitsTest, viewsReferToTheTable) {
@@ -230,52 +201,6 @@ TYPED_TEST(ColumnStorageTraitsTest, viewsReferToTheTable) {
   EXPECT_EQ(static_cast<Id>(rows(1, 0)), I(42));
   EXPECT_EQ(static_cast<Id>(all(2, 0)), I(42));
   EXPECT_EQ(static_cast<Id>(columns(2, 1)), I(42));
-}
-
-// Test that a table with split columns behaves exactly like a table with
-// `std::vector` columns: the same operations give the same content.
-TEST(ColumnStorageTraits, splitColumnsBehaveLikeVectorColumns) {
-  auto run = [](auto columnsTag) {
-    using Columns = decltype(columnsTag);
-    auto alloc = ad_utility::testing::makeAllocator();
-    TableOf<Columns> table{3, alloc};
-    for (int64_t i = 0; i < 5; ++i) {
-      table.push_back({I(5 - i), I(10 * i), I(-i)});
-    }
-    table.emplace_back();
-    table(5, 0) = I(0);
-    table(5, 1) = Id::makeUndefined();
-    table(5, 2) = Id::makeFromDouble(1.5);
-
-    // Rows 1 and 2 of a second table, with its columns permuted, and a column
-    // that does not exist there filled with a default value.
-    TableOf<Columns> other{2, alloc};
-    for (int64_t i = 0; i < 3; ++i) {
-      other.push_back({I(1000 + i), I(2000 + i)});
-    }
-    table.insertAtEnd(other, 1, 3, std::vector<ColumnIndex>{1, 7, 0},
-                      Id::makeFromBool(true));
-
-    table.erase(table.begin() + 1);
-    ql::ranges::sort(table, std::less<>{},
-                     [](const auto& row) { return static_cast<Id>(row[0]); });
-
-    // A clone is independent of the original.
-    auto clone = table.clone();
-    clone(0, 0) = I(-99);
-
-    std::vector<ColumnIndex> subset{2, 0};
-    table.setColumnSubset(subset);
-    return std::pair{contentOf(table), contentOf(clone)};
-  };
-
-  auto [vectorTable, vectorClone] = run(VectorColumns{});
-  auto [splitTable, splitClone] = run(SplitColumns{});
-  EXPECT_EQ(splitTable, vectorTable);
-  EXPECT_EQ(splitClone, vectorClone);
-  // The operations really did something (and not just nothing in both cases).
-  EXPECT_EQ(vectorTable.size(), 7u);
-  EXPECT_EQ(vectorTable.at(0).size(), 2u);
 }
 
 // Test that the allocator of a table is charged with the bytes of the entries

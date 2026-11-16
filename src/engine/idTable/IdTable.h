@@ -1090,8 +1090,8 @@ static_assert(!qlever::isProxy<IdTableView<3>>);
 // view, and an owning column) and for the references to a single element (a
 // mutable and a const one). They follow from the column storage
 // `detail::IdVector`, so they are `ql::span<Id>`, `ql::span<const Id>`, `Id&`
-// and `const Id&`. `IdColumn` is a list of `Id`s that is not part of an
-// `IdTable`, so it is a `std::vector<Id>`.
+// and `const Id&`. `IdColumn` is an owning column with the default allocator
+// that is not part of an `IdTable`, a `std::vector<Id>`.
 using IdColumn = std::vector<Id>;
 
 namespace detail {
