@@ -63,6 +63,15 @@ void WKTParser::done() {
 }
 
 // _____________________________________________________________________________
+void WKTParser::throwIfWorkerFailed() {
+  // A worker thread sets `_cancelled` after storing its exception (the
+  // destructor also sets it, but cannot run concurrently with this function).
+  if (_cancelled) {
+    done();
+  }
+}
+
+// _____________________________________________________________________________
 size_t WKTParser::getPrefilterCounter() {
   return ::ranges::accumulate(_numSkipped, 0);
 }
@@ -120,9 +129,10 @@ void WKTParser::processQueue(size_t t) {
   size_t parseCounter = 0;
   while ((batch = _jobs.get()).size()) {
     // An exception on this worker thread (for example, if `_store` cannot
-    // write its file) is thrown by `done()` on the main thread instead of
-    // terminating the program. The remaining batches are still taken from the
-    // queue (so that `addValueIdToQueue` never blocks), but skipped.
+    // open its file) is thrown by `done()` on the main thread instead of
+    // terminating the program (`throwIfWorkerFailed` throws it earlier). The
+    // remaining batches are still taken from the queue (so that
+    // `addValueIdToQueue` never blocks), but skipped.
     try {
       sj::WriteBatch w;
       for (auto& job : batch) {
@@ -198,7 +208,9 @@ void WKTParser::processQueue(size_t t) {
         }
       }
 
-      _store->addBatch(w, t, _metaCb);
+      if (!_cancelled) {
+        _store->addBatch(w, t, _metaCb);
+      }
     } catch (...) {
       if (!_exceptions[t]) {
         _exceptions[t] = std::current_exception();
