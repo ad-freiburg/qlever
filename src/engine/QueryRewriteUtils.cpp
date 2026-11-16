@@ -160,6 +160,12 @@ void rewriteFiltersWithFacts(std::vector<SparqlFilter>& filters,
   for (auto& filter : filters) {
     // Recognize the `DistanceBound` of each conjunct of `filter`. Keep a
     // FILTER without any as it is.
+    //
+    // NOTE: Keeping such a FILTER unsplit is for efficiency, not for
+    // correctness. Splitting every FILTER would also be correct (a FILTER
+    // holds iff all its conjuncts hold), but each conjunct would then become
+    // its own `Filter` operation and its own filter in the query planning,
+    // without any rewrite.
     auto conjuncts = filterFacts::canonicalize(filter.expression_, defs);
     auto bounds = ::ranges::to<std::vector>(
         conjuncts | ql::views::transform(&filterFacts::recognizeDistanceBound));
