@@ -16,7 +16,6 @@
 
 #include <absl/strings/str_cat.h>
 
-#include <charconv>
 #include <ctre-unicode.hpp>
 
 #include "engine/sparqlExpressions/NaryExpression.h"
@@ -69,6 +68,7 @@ constexpr ctll::fixed_string rewriteTokenRegex = "[^\\\\]+|\\\\\\\\|\\\\[0-9]+";
 std::optional<std::string> adaptRewriteToPattern(std::string_view rewrite,
                                                  const RE2& pattern) {
   const int numGroups = pattern.NumberOfCapturingGroups();
+  const int maxGroup = std::max(numGroups, 9);
   std::string result;
   result.reserve(rewrite.size());
   size_t numConsumed = 0;
@@ -79,20 +79,18 @@ std::optional<std::string> adaptRewriteToPattern(std::string_view rewrite,
       result.append(token);
       continue;
     }
+    // Take digits into `group` as long as the number is at most `maxGroup`
+    // (see NOTE 1 above). The first digit is always taken.
     std::string_view digits = token.substr(1);
-    // Drop the last digit while the number is too large. A single digit is
-    // never too large, and also never out of range for `from_chars`.
-    const int maxGroup = std::max(numGroups, 9);
     int group = 0;
-    // Parse the first `numDigits` digits into `group`.
-    auto isTooLarge = [&digits, &group, maxGroup](size_t numDigits) {
-      auto [ptr, ec] =
-          std::from_chars(digits.data(), digits.data() + numDigits, group);
-      return ec != std::errc{} || group > maxGroup;
-    };
-    size_t numDigits = digits.size();
-    while (isTooLarge(numDigits)) {
-      --numDigits;
+    size_t numDigits = 0;
+    for (char digit : digits) {
+      int next = group * 10 + (digit - '0');
+      if (next > maxGroup) {
+        break;
+      }
+      group = next;
+      ++numDigits;
     }
     if (group <= numGroups) {
       if (group > 9) {
