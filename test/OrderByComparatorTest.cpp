@@ -108,7 +108,7 @@ TEST(OrderByComparator, getTermKind) {
             TermKind::Literal);
 
   // An `Id` with an invalid datatype.
-  static_assert(static_cast<int>(Datatype::MaxValue) < 15);
+  static_assert(qlever::enumSize<Datatype> <= 15);
   EXPECT_ANY_THROW(kind(Id::fromBits(Id::DatatypeType{15}, 0)));
 }
 

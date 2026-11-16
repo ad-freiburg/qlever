@@ -187,8 +187,9 @@ struct TestIndexConfig {
       contentsOfWordsFileAndDocsfile, parserBufferSize, scoringMetric,
       bAndKParam, indexType, vocabularyType,
       encodedPrefixesWithoutAngleBrackets, encodedIriPatterns,
-      addHasWordTriples, hasWordRestrictPredicates, secondaryVocabWords,
-      numThreads, parseInParallel, additionalSettings, geoPointEncoding)
+      addHasWordTriples, hasWordNormalization, hasWordRestrictPredicates,
+      secondaryVocabWords, numThreads, parseInParallel, additionalSettings,
+      geoPointEncoding)
 };
 
 // Create a test index at the given `indexBasename` and with the given `config`.

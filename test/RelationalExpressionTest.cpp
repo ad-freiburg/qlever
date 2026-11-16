@@ -112,11 +112,8 @@ auto liftToValueId = [](const auto& t) {
 template <typename T>
 VectorWithMemoryLimit<ValueId> makeValueIdVector(
     const VectorWithMemoryLimit<T>& vec) {
-  VectorWithMemoryLimit<ValueId> result{makeAllocator()};
-  for (const auto& d : vec) {
-    result.push_back(liftToValueId(d));
-  }
-  return result;
+  return vec | ql::views::transform(liftToValueId) |
+         ::ranges::to<VectorWithMemoryLimit>(makeAllocator());
 }
 
 auto expectTrue = [](const ExpressionResult& result,
@@ -1181,6 +1178,29 @@ TEST(RelationalExpression, getLanguageFilterExpression) {
     NotEqualExpression nee{{std::move(sle), std::move(le)}};
     EXPECT_EQ(nee.getLanguageFilterExpression(), std::nullopt);
   }
+  // A literal with a language tag or a datatype (which `LANG(?x)` never equals)
+  for (std::string_view langtagOrDatatype : {"@de", "^^<x>"}) {
+    auto sle = std::make_unique<StringLiteralExpression>(
+        tripleComponentLiteral("\"en\"", langtagOrDatatype));
+    auto le = makeLangExpression(
+        std::make_unique<VariableExpression>(Variable{"?x"}));
+    EqualExpression ee{{std::move(le), std::move(sle)}};
+    EXPECT_EQ(ee.getLanguageFilterExpression(), std::nullopt)
+        << langtagOrDatatype;
+  }
+  // A literal with the datatype `xsd:string` is the same term as a plain
+  // literal and gives a language filter.
+  {
+    auto sle = std::make_unique<StringLiteralExpression>(tripleComponentLiteral(
+        "\"en\"", "^^<http://www.w3.org/2001/XMLSchema#string>"));
+    auto le = makeLangExpression(
+        std::make_unique<VariableExpression>(Variable{"?x"}));
+    EqualExpression ee{{std::move(le), std::move(sle)}};
+    EXPECT_THAT(ee.getLanguageFilterExpression(),
+                Optional(AllOf(AD_FIELD(LFD, variable_, Eq(Variable{"?x"})),
+                               AD_FIELD(LFD, languages_,
+                                        UnorderedElementsAre(Eq("en"))))));
+  }
   // No String Literal
   {
     auto ve = std::make_unique<VariableExpression>(Variable{"?y"});
@@ -1263,6 +1283,17 @@ TEST(InExpression, getLanguageFilterExpression) {
         Optional(AllOf(AD_FIELD(LFD, variable_, Eq(Variable{"?x"})),
                        AD_FIELD(LFD, languages_,
                                 UnorderedElementsAre(Eq("en"), Eq("mul"))))));
+  }
+  // Some values have a language tag
+  {
+    auto le = makeLangExpression(
+        std::make_unique<VariableExpression>(Variable{"?x"}));
+    children.push_back(std::make_unique<StringLiteralExpression>(
+        tripleComponentLiteral("\"en\"")));
+    children.push_back(std::make_unique<StringLiteralExpression>(
+        tripleComponentLiteral("\"de\"", "@en")));
+    InExpression ie{std::move(le), std::move(children)};
+    EXPECT_EQ(ie.getLanguageFilterExpression(), std::nullopt);
   }
   // Some values are not literals
   {

@@ -1,4 +1,5 @@
 addLinkAndDiscoverTest(ChunkWriterTest index)
+addLinkAndDiscoverTest(ChunkwisePermutationWriterTest index)
 addLinkAndDiscoverTest(BoundaryConsolidatorTest index)
 addLinkAndDiscoverTest(ConcurrentCallbackDispatcherTest index)
 addLinkAndDiscoverTest(StatisticsTest index)

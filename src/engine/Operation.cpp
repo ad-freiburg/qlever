@@ -671,12 +671,10 @@ void Operation::createRuntimeInfoFromEstimates(
     _runtimeInfo->addDetail("offset", offset);
   }
 
-  std::vector<float> multiplicityEstimates;
-  multiplicityEstimates.reserve(numCols);
-  for (size_t i = 0; i < numCols; ++i) {
-    multiplicityEstimates.push_back(getMultiplicity(i));
-  }
-  _runtimeInfo->multiplicityEstimates_ = multiplicityEstimates;
+  _runtimeInfo->multiplicityEstimates_ =
+      ad_utility::integerRange(numCols) |
+      ql::views::transform([this](size_t i) { return getMultiplicity(i); }) |
+      ::ranges::to_vector;
 
   // Add the warnings that were added before the runtime information was
   // (re)created, e.g. during the query planning.
@@ -974,6 +972,11 @@ Operation::pushDownBindToChild(
     size_t childIndex) const {
   auto& child = children.at(childIndex);
   AD_CORRECTNESS_CHECK(child != nullptr);
+
+  // Refuse a `BIND` of a constant (see the header).
+  if (bind._expression.getConstantValue().has_value()) {
+    return std::nullopt;
+  }
 
   // Return true iff any of the `children` (except the one at `excludedIndex`,
   // if given) contains `var`. Compare by position, not by identity: the same

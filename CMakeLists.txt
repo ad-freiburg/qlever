@@ -317,7 +317,7 @@ FetchContent_Declare(
         GIT_REPOSITORY https://github.com/joka921/range-v3
         # This branch removes some differences in the interface between `range-v3` and `std::ranges` s.t.
         # the former can be used as an (almost) drop-in replacement for the latter.
-        GIT_TAG 4122bfa82917bd644a47318aa3abc1a989a59416 # branch fork-for-qlever
+        GIT_TAG aee9ae4edf86f9795697d51e07b184c4129a1777 # branch fork-for-qlever
         SYSTEM
         EXCLUDE_FROM_ALL
 )
@@ -933,6 +933,23 @@ endif ()
 option(COVERAGE_FRIENDLY_CHECKS "Evaluate the conditions of `AD_CORRECTNESS_CHECK` in a way that is friendlier to coverage measurements" OFF)
 if (COVERAGE_FRIENDLY_CHECKS)
     add_compile_definitions(QLEVER_COVERAGE_FRIENDLY_CHECKS)
+endif ()
+
+# Use the `SplitLayoutId` (a full 64-bit payload and a datatype byte) instead of
+# the legacy `ValueId` as `Id`, see `src/global/Id.h`.
+# TODO<pas-kes> Make this an `option()` once the split layout is usable.
+if (USE_SPLIT_LAYOUT)
+    message(WARNING "USE_SPLIT_LAYOUT is experimental and not usable yet")
+    add_compile_definitions(QLEVER_USE_SPLIT_LAYOUT)
+    # `LocalVocabEntry` caches its position in the vocabulary in atomics of the
+    # bit representation of an `Id`, which has 16 bytes in the split layout.
+    # On Linux (for example with GCC), atomics of 16 bytes are calls into
+    # `libatomic`. Apple Clang inlines them, so no library is needed there.
+    # This is only needed until these atomics are replaced (see the TODO at
+    # `LocalVocabEntry::lowerBoundInVocab_`).
+    if (NOT APPLE)
+        link_libraries(atomic)
+    endif ()
 endif ()
 
 ##################################################
