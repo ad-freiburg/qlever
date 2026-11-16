@@ -31,7 +31,8 @@ class TensorData {
         dtype_{dtype} {}
   explicit TensorData(std::vector<float> tensorData)
       : tensorData_{std::move(tensorData)},
-        shape_{std::vector({tensorData.size()})},
+        // Note: `tensorData` has already been moved from at this point.
+        shape_{std::vector({tensorData_.size()})},
         dtype_{DType::FLOAT} {}
 
   // Convert to a string (without quotes) that represents the stored data, and a

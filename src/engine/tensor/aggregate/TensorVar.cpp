@@ -38,15 +38,8 @@ ExpressionResult TensorDeviationExpression::evaluate(
       return;
     }
     // Calculate squared deviation and save for result
-    OptTensor avg =
-        std::reduce(childResults.begin(), childResults.end(),
-                    std::make_optional(TensorData::zeros_like(sum.value())),
-                    [](auto t1, auto t2) {
-                      if (t1.has_value() && t2.has_value()) {
-                        return t1.value() + t2.value();
-                      }
-                      throw std::runtime_error("Failed to sum tensors");
-                    });
+    OptTensor avg = TensorData::scale(
+        sum.value(), 1.f / static_cast<float>(childResults.size()));
     for (size_t i = 0; i < childResults.size(); i++) {
       auto diff = childResults[i].value() - avg.value();
       auto pow = diff * diff;
@@ -73,7 +66,7 @@ ExpressionResult TensorDeviationExpression::evaluate(
     return exprResult;
   };
 
-  auto childRes = child_->evaluate(context);
+  auto childRes = children()[0]->evaluate(context);
   return std::visit(impl, std::move(childRes));
 };
 

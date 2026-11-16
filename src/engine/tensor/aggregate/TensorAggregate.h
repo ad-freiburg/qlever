@@ -25,9 +25,7 @@ class TensorAggregateExpression
       bool distinct, Ptr&& child,
       AggregateOperation aggregateOp = AggregateOperation{})
       : AggregateExpression<AggregateOperation, FinalOperation>(
-            distinct,
-            std::make_unique<TensorAggregateExpression>(std::move(child)),
-            aggregateOp) {}
+            distinct, std::move(child), aggregateOp) {}
   ValueId resultForEmptyGroup() const override { return Id::makeUndefined(); }
 };
 // template <typename AggregateOperation, typename FinalOperation = Identity>
@@ -38,18 +36,17 @@ template <typename Function, typename ValueGetter>
 using T_AGG_EXP = TensorAggregateExpression<
     Operation<2, FunctionAndValueGetters<Function, ValueGetter>>>;
 
+// The intermediate aggregation result is an `OptTensor` (the type returned by
+// the `TensorValueGetter`), so the operation has to return one as well.
 template <typename Op>
 struct TensorExpressionForAggregate {
   template <typename... Args>
-  TensorData operator()(const Args&... args) const {
-    auto visitor = []<typename... T0>(const T0&... t) -> TensorData {
-      return (Op{}(t...));
-    };
-    return std::visit(visitor, args...);
+  OptTensor operator()(const Args&... args) const {
+    return Op{}(args...);
   }
 };
 struct TensorAddOperation {
-  TensorData operator()(const OptTensor& t1, const OptTensor& t2) const {
+  OptTensor operator()(const OptTensor& t1, const OptTensor& t2) const {
     if (t1.has_value() && t2.has_value()) {
       return t1.value() + t2.value();
     }
@@ -78,7 +75,11 @@ class TensorSumExpression
 
 // Aggregate expression for dta:avg.
 struct TensorAvgFinalOperation {
-  TensorData operator()(const OptTensor aggregation, size_t numElements) const {
+  OptTensor operator()(const OptTensor& aggregation,
+                       size_t numElements) const {
+    if (!aggregation.has_value()) {
+      return std::nullopt;
+    }
     return TensorScaleOperation()(aggregation, 1.f / numElements);
   }
 };
