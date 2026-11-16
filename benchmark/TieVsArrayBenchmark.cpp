@@ -8,15 +8,12 @@
 // which can be found in the `LICENSE` file at the root of the QLever project.
 
 // Compare the lexicographic comparison of a row of an `IdTable` with a triple
-// of `Id`s (as in `LocatedTriples.cpp`) when the entries are put into a
-// `std::tie` (references), into an `ad_utility::tie` (as in
-// `LocatedTriples.cpp`), and into a `std::array<Id, 3>` (copies). `std::tie`
-// cannot bind to the proxy objects that a column storage may return instead of
-// `Id&`. `ad_utility::tie` keeps references for lvalues (so it is the same type
-// as `std::tie` here) and stores proxies by value.
-// NOTE: The `std::tie` variant only compiles if the element access of the
-// `IdTable` returns references, so this benchmark only works for the legacy
-// layout.
+// of `Id`s (as in `LocatedTriples.cpp`) when the entries of the row are put
+// into an `ad_utility::tie` (as in `LocatedTriples.cpp`, no copy) and into a
+// `std::array<Id, 3>` (copies). `ad_utility::tie` keeps references for lvalues
+// and stores proxies by value, so it ties `Id&` for the legacy layout and the
+// proxies of the split layout. A `std::tie` cannot bind to these proxies, and
+// for the legacy layout it is the same type as `ad_utility::tie`.
 
 #include <array>
 #include <string>
@@ -70,19 +67,6 @@ enum class Comparison { Less, Equal };
 // The functions are not inlined, such that both variants are compiled in the
 // same way as the functions in `LocatedTriples.cpp`.
 template <Comparison comparison>
-AD_NO_INLINE size_t countWithTie(const Data& data) {
-  size_t count = 0;
-  for (size_t i = 0; i < numRows; ++i) {
-    auto row = data.table[i];
-    const auto& triple = data.triples[i];
-    auto lhs = std::tie(triple[0], triple[1], triple[2]);
-    auto rhs = std::tie(row[0], row[1], row[2]);
-    count += comparison == Comparison::Less ? lhs < rhs : lhs == rhs;
-  }
-  return count;
-}
-
-template <Comparison comparison>
 AD_NO_INLINE size_t countWithAdUtilityTie(const Data& data) {
   size_t count = 0;
   for (size_t i = 0; i < numRows; ++i) {
@@ -117,32 +101,28 @@ class TieVsArrayBenchmark : public BenchmarkInterface {
     const auto data = makeData();
 
     // To ensure the first run is not influenced by cold caches.
-    AD_LOG_INFO << "Warm up " << countWithTie<Comparison::Less>(data)
+    AD_LOG_INFO << "Warm up " << countWithAdUtilityTie<Comparison::Less>(data)
                 << std::endl;
 
     auto& lessGroup = results.addGroup("triple < row");
-    lessGroup.addMeasurement("std::tie (references)", [&data] {
-      AD_LOG_INFO << "Less " << countWithTie<Comparison::Less>(data)
-                  << std::endl;
-    });
-    lessGroup.addMeasurement("ad_utility::tie (references)", [&data] {
-      AD_LOG_INFO << "Less " << countWithAdUtilityTie<Comparison::Less>(data)
-                  << std::endl;
-    });
+    lessGroup.addMeasurement(
+        "ad_utility::tie (references or proxies)", [&data] {
+          AD_LOG_INFO << "Less "
+                      << countWithAdUtilityTie<Comparison::Less>(data)
+                      << std::endl;
+        });
     lessGroup.addMeasurement("std::array<Id, 3> (copies)", [&data] {
       AD_LOG_INFO << "Less " << countWithArray<Comparison::Less>(data)
                   << std::endl;
     });
 
     auto& equalGroup = results.addGroup("triple == row");
-    equalGroup.addMeasurement("std::tie (references)", [&data] {
-      AD_LOG_INFO << "Equal " << countWithTie<Comparison::Equal>(data)
-                  << std::endl;
-    });
-    equalGroup.addMeasurement("ad_utility::tie (references)", [&data] {
-      AD_LOG_INFO << "Equal " << countWithAdUtilityTie<Comparison::Equal>(data)
-                  << std::endl;
-    });
+    equalGroup.addMeasurement(
+        "ad_utility::tie (references or proxies)", [&data] {
+          AD_LOG_INFO << "Equal "
+                      << countWithAdUtilityTie<Comparison::Equal>(data)
+                      << std::endl;
+        });
     equalGroup.addMeasurement("std::array<Id, 3> (copies)", [&data] {
       AD_LOG_INFO << "Equal " << countWithArray<Comparison::Equal>(data)
                   << std::endl;
@@ -153,7 +133,8 @@ class TieVsArrayBenchmark : public BenchmarkInterface {
 }  // namespace
 
 std::string TieVsArrayBenchmark::name() const {
-  return "Benchmarks for the comparison of rows via std::tie and std::array";
+  return "Benchmarks for the comparison of rows via ad_utility::tie and "
+         "std::array";
 }
 
 AD_REGISTER_BENCHMARK(TieVsArrayBenchmark);

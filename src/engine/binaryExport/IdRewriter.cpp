@@ -34,7 +34,7 @@ void IdRewriter::rewriteBatch(IdTable& table, size_t firstRow,
   TransmittedStringRewriter stringRewriter{std::move(transmittedStrings),
                                            qec_->getIndex(), localVocab_};
   for (auto column : table.getColumns()) {
-    for (Id& id : column.subspan(firstRow)) {
+    for (IdRef id : column.subspan(firstRow)) {
       id = rewrite(id, stringRewriter);
     }
   }
