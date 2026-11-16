@@ -273,7 +273,8 @@ TEST_F(BinaryExportRoundTrip, allDatatypes) {
   auto* qec = testContext.qec;
   const auto& index = qec->getIndex();
 
-  // One `Id` per datatype that the export has to handle.
+  // One `Id` per datatype that the export has to handle. A `TripleTermIndex`
+  // is not among them, the export rejects it (see the end of this test).
   Id blankNode = Id::makeFromBlankNodeIndex(BlankNodeIndex::make(42));
   std::vector<Id> ids{
       Id::makeUndefined(),
@@ -289,8 +290,8 @@ TEST_F(BinaryExportRoundTrip, allDatatypes) {
       Id::makeFromWordVocabIndex(WordVocabIndex::make(0)),
       blankNode,
       testContext.encodedIriId()};
-  // Make sure that every datatype is covered.
-  ASSERT_EQ(ids.size(), qlever::enumSize<Datatype>);
+  // Make sure that every other datatype is covered.
+  ASSERT_EQ(ids.size() + 1, qlever::enumSize<Datatype>);
   for (size_t i = 0; i < ids.size(); ++i) {
     ASSERT_EQ(static_cast<size_t>(ids[i].getDatatype()), i);
   }
@@ -343,6 +344,15 @@ TEST_F(BinaryExportRoundTrip, allDatatypes) {
       }
     }
   }
+
+  // A triple term cannot be exported yet.
+  auto tripleTerm = Id::makeFromTripleTermIndex(TripleTermIndex::make(17));
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      exportBytes(makeQet(qec, makeIdTableFromVector({{tripleTerm}}), {"?x"}),
+                  {"?x"}),
+      ::testing::StrEq(
+          "Binary export of triple-term references is not yet supported"),
+      std::runtime_error);
 }
 
 // Test that the columns are matched by the names of the variables, that
