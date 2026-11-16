@@ -424,7 +424,7 @@ CPP_template_out_def(auto iriToValue, auto undefined)(
 decltype(undefined)
     EnumValueGetter<CPP_sfinae_args(iriToValue, undefined)>::operator()(
         ValueId id, const EvaluationContext * context) const {
-  // Use cache to remember fully parsed units for reoccurring ValueIds
+  // Use the cache to remember the values of reoccurring `ValueId`s.
   return cache_.getOrCompute(
       id, [&context](const ValueId& value) -> decltype(undefined) {
         // Get string content of ValueId
@@ -464,7 +464,7 @@ decltype(undefined)
   return undefined;
 }
 
-// Explicit instantiations
+// Explicit instantiations of the two `EnumValueGetter`s, see the header.
 namespace sparqlExpression::detail {
 template struct EnumValueGetter<&ad_utility::detail::iriToUnitOfMeasurement,
                                 UnitOfMeasurement::UNKNOWN>;

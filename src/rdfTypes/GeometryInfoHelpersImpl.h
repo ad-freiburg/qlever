@@ -365,7 +365,8 @@ inline constexpr auto CRS_TYPE_IRI = []() {
       std::nullopt,  // Invalid CRS
       crs84, wgs84, webMerc};
 }();
-// Check that `CRS_TYPE_IRI` array order corresponds to `CRSType` enum order.
+
+// Check that the order of `CRS_TYPE_IRI` is the order of the `CRSType` enum.
 static_assert(
     !CRS_TYPE_IRI[static_cast<size_t>(CRSType::UNSUPPORTED)].has_value());
 static_assert(CRS_TYPE_IRI[static_cast<size_t>(CRSType::CRS84)] ==
