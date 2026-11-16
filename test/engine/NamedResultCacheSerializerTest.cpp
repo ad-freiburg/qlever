@@ -556,8 +556,7 @@ TEST_F(NamedResultCacheSerializerTest, WriteValueWithReplacedColumns) {
   // The replaced columns have the same shape as the table of the `value`, but
   // different `Id`s. The sort order is shortened, because the replacement
   // invalidates the sortedness of the second column.
-  std::vector<std::vector<Id>> replacedColumns{{V(1), V(2), V(3)},
-                                               {V(4), V(5), V(6)}};
+  std::vector<IdColumn> replacedColumns{{V(1), V(2), V(3)}, {V(4), V(5), V(6)}};
   std::vector<ColumnIndex> shortenedSortOrder{0};
 
   ByteBufferWriteSerializer writer;
@@ -581,13 +580,13 @@ TEST_F(NamedResultCacheSerializerTest, WriteValueWithReplacedColumns) {
 
   // The number of the columns and the number of rows in each column have to
   // agree with the table of the `value`.
-  std::vector<std::vector<Id>> tooFewColumns{{V(1), V(2), V(3)}};
+  std::vector<IdColumn> tooFewColumns{{V(1), V(2), V(3)}};
   AD_EXPECT_THROW_WITH_MESSAGE(
       namedResultCacheSerializer::writeValue(
           writer, value, tooFewColumns, shortenedSortOrder, false,
           namedResultCacheSerializer::formatVersion),
       ::testing::HasSubstr("resultView.numColumns()"));
-  std::vector<std::vector<Id>> tooFewRows{{V(1), V(2)}, {V(4), V(5)}};
+  std::vector<IdColumn> tooFewRows{{V(1), V(2)}, {V(4), V(5)}};
   AD_EXPECT_THROW_WITH_MESSAGE(
       namedResultCacheSerializer::writeValue(
           writer, value, tooFewRows, shortenedSortOrder, false,
