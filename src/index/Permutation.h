@@ -22,6 +22,7 @@
 #include "index/KeyOrder.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "util/CancellationHandle.h"
+#include "util/EnumSize.h"
 #include "util/Executor.h"
 #include "util/File.h"
 #include "util/HashSet.h"
@@ -43,6 +44,7 @@ class Permutation {
   using KeyOrder = qlever::KeyOrder;
   /// Identifiers for the six possible permutations.
   enum struct Enum { PSO, POS, SPO, SOP, OPS, OSP };
+  QLEVER_NESTED_ENUM_SIZE(Enum, 6);
   // Unfortunately there is a bug in GCC that doesn't allow use to simply use
   // `using enum`.
   static constexpr auto PSO = Enum::PSO;
