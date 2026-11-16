@@ -22,4 +22,5 @@ template class AggregateExpression<TensorAvgOperation, TensorAvgFinalOperation>;
 // dta:var
 template class AggregateExpression<TensorAvgOperation, TensorVarFinalOperation>;
 
+
 }  // namespace sparqlExpression::detail

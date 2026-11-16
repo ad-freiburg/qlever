@@ -28,14 +28,4 @@ INSTANTIATE_AGG_EXP(AddForSum, NumericValueGetter);
 INSTANTIATE_AGG_EXP(Count, IsValidValueGetter);
 INSTANTIATE_AGG_EXP(MinLambdaForAllTypes, ActualValueGetter);
 INSTANTIATE_AGG_EXP(MaxLambdaForAllTypes, ActualValueGetter);
-
-// Explicit instantiations for the tensor aggregate expressions (dta:sum,
-// dta:avg, dta:var). These are needed because the member functions of
-// `AggregateExpression` are only defined in `AggregateExpressionImpl.h`.
-template class AggregateExpression<TensorAvgOperation, Identity>;
-template class AggregateExpression<TensorAvgOperation, TensorAvgFinalOperation>;
-template class AggregateExpression<TensorAvgOperation,
-                                   sparqlExpression::TensorVarFinalOperation>;
-
-
 }  // namespace sparqlExpression::detail

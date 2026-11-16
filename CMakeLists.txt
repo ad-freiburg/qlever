@@ -120,6 +120,15 @@ endif ()
 ###############################################################################
 include(FetchContent)
 
+# CMAKE_POLICY_VERSION_MINIMUM (set in the Dockerfile) clamps the effective
+# policy version of vendored dependencies with an old cmake_minimum_required
+# (e.g. RapidJSON) below 3.13, so CMP0077 defaults to OLD for them and
+# option() ignores our `set(RAPIDJSON_BUILD_TESTS OFF)` below. Force NEW so
+# option() honors pre-set variables regardless of a dependency's own minimum
+# CMake version, preventing RapidJSON from pulling in its vendored googletest
+# and clashing with the googletest target fetched below.
+set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
+
 MESSAGE(STATUS "Using CMake version ${CMAKE_VERSION}")
 MESSAGE(STATUS "PATH: $ENV{PATH}")
 

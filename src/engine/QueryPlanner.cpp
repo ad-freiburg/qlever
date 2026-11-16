@@ -67,8 +67,8 @@
 #include "parser/TensorIndexQuery.h"
 #include "rdfTypes/Variable.h"
 #include "engine/tensor/TensorIndex.h"
-#include "engine/tensor/TextIndexScanForEntity.h"
-#include "engine/tensor/TextIndexScanForWord.h"
+#include "engine/TextIndexScanForEntity.h"
+#include "engine/TextIndexScanForWord.h"
 #include "util/Exception.h"
 
 namespace p = parsedQuery;
