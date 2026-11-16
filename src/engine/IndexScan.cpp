@@ -229,6 +229,24 @@ qlm::vector<ColumnIndex> IndexScan::variableAndGraphColumns() const {
 qlm::vector<ColumnIndex> IndexScan::resultSortedOn() const {
   auto result = variableAndGraphColumns();
 
+  // The full result of a scan of a view that is sorted by all its columns is
+  // also sorted by the additional columns that directly follow the fourth
+  // column of the view (which `variableAndGraphColumns` treats as the graph
+  // column).
+  //
+  // NOTE: The additional columns are strictly increasing, so they directly
+  // follow the fourth column iff `additionalColumns_[i]` is
+  // `ADDITIONAL_COLUMN_GRAPH_ID + i`.
+  auto view = permutation().materializedView();
+  if (view != nullptr && view->isSortedOnAllColumns()) {
+    for (size_t i = 1;
+         i < additionalColumns_.size() &&
+         additionalColumns_.at(i) == ADDITIONAL_COLUMN_GRAPH_ID + i;
+         ++i) {
+      result.push_back(numVariables_ + i);
+    }
+  }
+
   if (varsToKeep_.has_value()) {
     auto permutation = getSubsetForStrippedColumns();
     for (auto it = result.begin(); it != result.end(); ++it) {
