@@ -10,6 +10,8 @@
 #include <util/geo/Geo.h>
 #include <util/log/Log.h>
 
+#include <exception>
+
 #include "global/Id.h"
 #include "index/Index.h"
 
@@ -53,6 +55,10 @@ class WKTParser : public sj::WKTParserBase<SpatialJoinParseJob> {
   // without `done()`, for example because the query was cancelled.
   ~WKTParser();
 
+  // Like `done()` of the base class (wait for all worker threads to finish),
+  // but also rethrow the first exception of a worker thread, if any.
+  void done();
+
   // Enqueue a new row from the input table (given the `ValueId` of the
   // geometry: `GeoPoint` or `VocabIndex` or `LocalVocabIndex` and the
   // `rowIndex` in the input table). If available as part of the `IdTable`,
@@ -79,6 +85,9 @@ class WKTParser : public sj::WKTParserBase<SpatialJoinParseJob> {
   // that were skipped by prefilter or actually parsed for each of the threads.
   std::vector<size_t> _numSkipped;
   std::vector<size_t> _numParsed;
+
+  // The first exception of each worker thread, rethrown by `done()`.
+  std::vector<std::exception_ptr> _exceptions;
 
   // Configure prefiltering geometries by bounding box.
   bool _usePrefiltering;

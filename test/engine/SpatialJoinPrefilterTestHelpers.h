@@ -1,6 +1,6 @@
 // Copyright 2025 - 2026 The QLever Authors, in particular:
 //
-// 2025 - 2026 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
+// 2025 - 2026 Christoph Ullinger <ullingec@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
@@ -285,8 +285,9 @@ inline void runParsingAndSweeper(
   sj::GeometryStore store(sweeperCfg, ".", sweeperPath, false);
   sj::GeometryCache cache(sweeperCfg);
   const uint8_t storeId = cache.addStore(&store);
-  sj::SweepEventList eventsLeft(sweeperCfg, ".", sweeperPath);
-  sj::SweepEventList eventsRight(sweeperCfg, ".", sweeperPath);
+  std::array events{sj::SweepEventList{sweeperCfg, ".", sweeperPath},
+                    sj::SweepEventList{sweeperCfg, ".", sweeperPath}};
+  auto& [eventsLeft, eventsRight] = events;
 
   // Run first parsing step (left side)
   auto [aggBoundingBoxLeft, numGeomAddedLeft, numGeomDroppedLeft,
@@ -307,11 +308,7 @@ inline void runParsingAndSweeper(
           {prepared.idTableRight_, prepared.rightJoinCol_, std::nullopt}, store,
           eventsRight.addCb(storeId), 1, prefilterBox);
 
-  store.flush();
-  eventsLeft.finalize(1);
-  eventsRight.finalize(1);
-  eventsLeft.duplicatesToReferences(cache);
-  eventsRight.duplicatesToReferences(cache);
+  LibspatialjoinAlgorithm::prepareSweep(store, events, cache, 1);
 
   // Check counters
   size_t numSkipped = numGeomDroppedLeft + numGeomDroppedRight;

@@ -1,6 +1,6 @@
 // Copyright 2025 - 2026 The QLever Authors, in particular:
 //
-// 2025 - 2026 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
+// 2025 - 2026 Christoph Ullinger <ullingec@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
@@ -121,11 +121,11 @@ TEST(SpatialJoinTest, BoundingBoxPrefilterIntersectsCoversAndNonIntersects) {
                          WITHIN_DIST);
 }
 
+// Test the prefilter with a large bounding box on the left side, which
+// contains half of the geometries on the right side.
 TEST(SpatialJoinTest, BoundingBoxPrefilterLargeContainsNotContains) {
-  // Case 3: Large bounding box which contains half of the geometries
-  // Left: Approximate boundary of Germany
-  // Right: All other test geometries (3x in Freiburg, 1x in London, Paris and
-  // New York)
+  // Left: Approximate boundary of Germany. Right: All other test geometries
+  // (3x in Freiburg, 1x in London, Paris and New York).
   auto kg = buildLibSJTestDataset(true, false, false);
   auto qec = buildQec(kg, true);
 

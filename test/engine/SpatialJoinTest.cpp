@@ -1,7 +1,7 @@
 //  Copyright 2024 - 2025, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
 //  Author: @Jonathan24680
-//  Author: Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
+//  Author: Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
 #include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
