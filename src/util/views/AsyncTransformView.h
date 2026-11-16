@@ -62,8 +62,10 @@ namespace ad_utility {
 // right away, so this range quickly uses as many threads as it has elements
 // in flight (but at most `maxNumRunners`). On a busy `executor`, the queued
 // runner waits behind the tasks of other users, so this range stays on few
-// threads. A runner ends after it has run for `maxRunnerDuration` and requeues
-// the remaining elements at the end of the `executor`'s queue (unless another
+// threads.
+//
+// A runner ends after it has run for `maxRunnerDuration` and requeues the
+// remaining elements at the end of the `executor`'s queue (unless another
 // runner of this range is already queued), so that a range with many elements
 // can't keep a thread to itself while other users of the `executor` wait.
 //
