@@ -1,7 +1,7 @@
 // Copyright 2024 - 2026 The QLever Authors, in particular:
 //
 // 2024 - 2025 Jonathan Zeller github@Jonathan24680, UFR
-// 2024 - 2026 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
+// 2024 - 2026 Christoph Ullinger <ullingec@cs.uni-freiburg.de>, UFR
 // 2025        Patrick Brosi <brosi@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
@@ -12,9 +12,12 @@
 #ifndef QLEVER_SRC_ENGINE_LIBSPATIALJOINALGORITHM_H
 #define QLEVER_SRC_ENGINE_LIBSPATIALJOINALGORITHM_H
 
+#include <spatialjoin/GeometryCache.h>
 #include <spatialjoin/GeometryStore.h>
+#include <spatialjoin/SweepEventList.h>
 #include <util/geo/Geo.h>
 
+#include <array>
 #include <string>
 
 #include "engine/SpatialJoinParser.h"
@@ -107,6 +110,14 @@ class LibspatialjoinAlgorithm : public SpatialJoinAlgorithmBase {
   // otherwise not be used outside of this class.
   static sj::SpatialJoinCfg sweeperConfig(
       size_t threads, ad_utility::MemorySize totalAllowedMemory = 8_GB);
+
+  // Flush `store`, sort the two `events` lists and replace the duplicate
+  // geometries in them by references, as needed after parsing and before the
+  // sweep. This function is only `public` for testing purposes and should
+  // otherwise not be used outside of this class.
+  static void prepareSweep(sj::GeometryStore& store,
+                           std::array<sj::SweepEventList, 2>& events,
+                           sj::GeometryCache& cache, size_t numThreads);
 
   // Check the bounding box (only if available from a `GeoVocabulary`) of a
   // given vocabulary entry against `prefilterLatLngBox`. Returns `true` if

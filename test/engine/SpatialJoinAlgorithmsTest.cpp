@@ -2116,6 +2116,56 @@ TEST(SpatialJoin, LibspatialJoinDistanceToDuplicateOfMultiGeometryMember) {
                            Pair("<poly> <single>", DoubleNear(757.0, 0.5))));
 }
 
+// Test that a `libspatialjoin` join on an index without a `GeoVocabulary`
+// considers all members of a multi-geometry, also a member that is far away
+// from all geometries of the other side (which decides `contains`).
+TEST(SpatialJoin, LibspatialjoinMultiGeometryWithFarMember) {
+  using ::testing::UnorderedElementsAre;
+
+  // On the left side a square. On the right side (the larger one) a point
+  // inside the square and a multipolygon with one member inside the square and
+  // one far away from it.
+  std::string kg = absl::StrCat(
+      "<square> <asWKTLeft> ", makeAreaLiteral("0 0,1 0,1 1,0 1,0 0"), " .\n",
+      "<point> <asWKTRight> ", makePointLiteral("0.5", "0.5"), " .\n",
+      "<multi> <asWKTRight> \"MULTIPOLYGON(((0.2 0.2,0.4 0.2,0.4 0.4,0.2 "
+      "0.4,0.2 0.2)),((5 5,6 5,6 6,5 6,5 5)))\"^^<",
+      GEO_WKT_LITERAL, "> .\n");
+  auto qec = buildQec(kg);
+  ASSERT_FALSE(qec->getIndex().getVocab().isGeoInfoAvailable());
+
+  // Return the pairs of subjects in the result of a join of the given type.
+  auto run = [&](SpatialJoinType type) {
+    SpatialJoinConfiguration config{LibSpatialJoinConfig{type},
+                                    Variable{"?obj1"}, Variable{"?obj2"}};
+    config.algo_ = SpatialJoinAlgorithm::LIBSPATIALJOIN;
+    auto tree = ad_utility::makeExecutionTree<SpatialJoin>(
+        qec, std::move(config),
+        buildIndexScan(qec, {"?s1", "<asWKTLeft>", "?obj1"}),
+        buildIndexScan(qec, {"?s2", "<asWKTRight>", "?obj2"}));
+    auto result = tree->getResult();
+    auto toString = [&](Id id) {
+      return ql::exportIds::idToStringAndType(qec->getIndex(), id, {})
+          .value()
+          .first;
+    };
+    auto col1 = tree->getVariableColumn(Variable{"?s1"});
+    auto col2 = tree->getVariableColumn(Variable{"?s2"});
+    std::vector<std::string> pairs;
+    for (const auto& row : result->idTableView()) {
+      pairs.push_back(
+          absl::StrCat(toString(row[col1]), " ", toString(row[col2])));
+    }
+    return pairs;
+  };
+
+  // The square intersects both geometries, but only contains the point.
+  EXPECT_THAT(run(SpatialJoinType::INTERSECTS),
+              UnorderedElementsAre("<square> <point>", "<square> <multi>"));
+  EXPECT_THAT(run(SpatialJoinType::CONTAINS),
+              UnorderedElementsAre("<square> <point>"));
+}
+
 // _____________________________________________________________________________
 TEST(SpatialJoin, LibspatialJoinWithAbsoluteOnDiskBase) {
   std::string kg;
