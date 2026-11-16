@@ -302,9 +302,9 @@ TensorData TensorData::scale(const TensorData& tensor1, const float& scale) {
 }
 TensorData TensorData::zeros_like(const TensorData& tensor) {
   auto empty_vec = std::vector<float>();
-  empty_vec.reserve(tensor.tensorData_.size());
+  empty_vec.resize(tensor.tensorData_.size());
   for (size_t i = 0; i < tensor.tensorData_.size(); i++) {
-    empty_vec[0] = 0;
+    empty_vec[i] = 0;
   }
   return TensorData(empty_vec);
 }
