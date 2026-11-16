@@ -331,13 +331,16 @@ struct LiteralFromIdGetter : Mixin<LiteralFromIdGetter> {
 
 // Similar to `LiteralFromIdGetter`, but converts the replacement string of
 // `fn:replace` into the rewrite string that re2 expects. So '$1 \\ \$' becomes
-// '\1 \\ $'. A reference keeps all the digits that follow the `$`, so the
-// result is not yet a valid rewrite string if these are more than one. Which
-// of them belong to the group number depends on the pattern (see
-// `adaptRewriteToPattern` in `ReplaceExpression.cpp`). Return `std::nullopt`
-// if the replacement string is invalid, that is if it contains a `$` that is
-// neither escaped nor followed by a digit, or a `\` that is not part of `\\`
-// or `\$` (error `FORX0004` in the XPath standard).
+// '\1 \\ $'. Return `std::nullopt` if the replacement string is invalid (error
+// `FORX0004` in the XPath standard).
+//
+// NOTE 1: A replacement string is invalid if it contains a `$` that is neither
+// escaped nor followed by a digit, or a `\` that is not part of `\\` or `\$`.
+//
+// NOTE 2: A reference keeps all the digits that follow the `$`, so the result
+// is not yet a valid rewrite string if these are more than one. Which of them
+// belong to the group number depends on the pattern (see
+// `adaptRewriteToPattern` in `ReplaceExpression.cpp`).
 struct ReplacementStringGetter : Mixin<ReplacementStringGetter> {
   using Value = std::optional<std::string>;
   using Mixin<ReplacementStringGetter>::operator();

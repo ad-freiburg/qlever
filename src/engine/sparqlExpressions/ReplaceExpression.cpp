@@ -55,13 +55,17 @@ using MergeRegexPatternAndFlagsExpression =
 constexpr ctll::fixed_string rewriteTokenRegex = "[^\\\\]+|\\\\\\\\|\\\\[0-9]+";
 
 // Turn the output of `ReplacementStringGetter` into a valid re2 rewrite string
-// for `pattern`. In XPath, a reference `$N` takes as many of the following
-// digits as possible, as long as the number still names an existing group or
-// is at most 9. The remaining digits are literal text. For example, if
-// `pattern` has 10 groups, `$10` is group 10, but `$11` is group 1 followed by
-// a literal `1`. A reference to a group that does not exist is replaced by the
-// empty string (re2 would refuse to rewrite at all). Return `std::nullopt` for
-// a reference to group 10 or higher, which re2 does not support.
+// for `pattern`, following the XPath rules for the group references. Return
+// `std::nullopt` for a reference to group 10 or higher, which re2 does not
+// support.
+//
+// NOTE 1: In XPath, a reference `$N` takes as many of the following digits as
+// possible, as long as the number still names an existing group or is at most
+// 9. The remaining digits are literal text. For example, if `pattern` has 10
+// groups, `$10` is group 10, but `$11` is group 1 followed by a literal `1`.
+//
+// NOTE 2: A reference to a group that does not exist is replaced by the empty
+// string (re2 would refuse to rewrite at all).
 std::optional<std::string> adaptRewriteToPattern(std::string_view rewrite,
                                                  const RE2& pattern) {
   const int numGroups = pattern.NumberOfCapturingGroups();
