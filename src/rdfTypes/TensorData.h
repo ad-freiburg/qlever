@@ -40,7 +40,7 @@ class TensorData {
   // `tensor:DataTensor`).
   std::pair<std::string, std::string> toString() const;
   LiteralOrIri toLiteral() const;
-  const std::vector<float> tensorData() const { return tensorData_; }
+  const std::vector<float>& tensorData() const { return tensorData_; }
   float operator[](size_t idx) const { return tensorData_[idx]; }
   size_t size() const { return tensorData_.size(); }
   const auto& shape() const { return shape_; }
