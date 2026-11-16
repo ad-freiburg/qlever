@@ -329,10 +329,9 @@ bool IsValidValueGetter::operator()(
 IntDoubleStr ToNumericValueGetter::operator()(
     ValueId id, [[maybe_unused]] const EvaluationContext* context) const {
   switch (id.getDatatype()) {
+    // A triple term cannot be cast to a numeric or boolean literal, the
+    // `monostate` becomes an undefined expression result.
     case Datatype::TripleTermIndex:
-      // Triple terms cannot be cast to numeric or boolean literals. The
-      // constructor maps `monostate` to an undefined expression result.
-      return std::monostate{};
     case Datatype::Undefined:
       return std::monostate{};
     case Datatype::Int:

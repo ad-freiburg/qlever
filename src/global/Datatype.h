@@ -44,7 +44,12 @@ enum struct Datatype {
   WordVocabIndex,
   BlankNodeIndex,
   EncodedVal,
-  // The Index of an RDF 1.2 triple term.
+  // The index of an RDF 1.2 triple term.
+  //
+  // TODO<Prashanth0703> Before triple terms are stored, decide how a
+  // query-local triple term is represented (a marker bit in the payload rather
+  // than another datatype), for both `Id` layouts, including its ownership
+  // and its equality with a stored triple term.
   TripleTermIndex
 };
 QLEVER_ENUM_SIZE(Datatype, 14);

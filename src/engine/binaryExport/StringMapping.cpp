@@ -34,11 +34,9 @@ std::vector<std::string> StringMapping::takeStrings() {
 Id StringMapping::remapId(Id id) {
   using enum Datatype;
   if (id.getDatatype() == Datatype::TripleTermIndex) {
-    // TODO<Prashanth0703> Support binary export of triple terms with a suitable
-    // format version and structural term transport. The version compatibility
-    // checks in `BinaryFormat.cpp` rely on this rejection. Before supporting
-    // this datatype, reassess the binary export version and its format checks
-    // there.
+    // TODO<Prashanth0703> Support the binary export of triple terms with a
+    // suitable format version and structural term transport. The version
+    // checks in `BinaryFormat.cpp` rely on this rejection, see the note there.
     throw std::runtime_error(
         "Binary export of triple-term references is not yet supported");
   }

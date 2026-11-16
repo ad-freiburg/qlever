@@ -29,7 +29,6 @@
 #include "backports/three_way_comparison.h"
 #include "global/Datatype.h"
 #include "global/IndexTypes.h"
-#include "global/TripleTermIndex.h"
 #include "index/IdBitRepresentation.h"
 #include "rdfTypes/GeoPoint.h"
 #include "util/Algorithm.h"
@@ -264,10 +263,6 @@ class IdBase {
   // `global/IndexTypes.h`). These types can represent values in the range
   // [0, `maxIndex`]. When `index` is outside of this range, an
   // `IndexTooLargeException` is thrown.
-  static constexpr Derived makeFromTripleTermIndex(TripleTermIndex index) {
-    return makeFromIndex(index.get(), Datatype::TripleTermIndex);
-  }
-
   static constexpr Derived makeFromVocabIndex(VocabIndex index) {
     return makeFromIndex(index.get(), Datatype::VocabIndex);
   }
@@ -306,13 +301,13 @@ class IdBase {
     return makeFromIndex(index.get(), Datatype::SecondaryVocabIndex);
   }
 
+  static constexpr Derived makeFromTripleTermIndex(TripleTermIndex index) {
+    return makeFromIndex(index.get(), Datatype::TripleTermIndex);
+  }
+
   // Obtain the unsigned index that this `Id` encodes. If `getDatatype()` is not
   // the index type that the respective getter below is named after, then the
   // result is unspecified.
-  [[nodiscard]] constexpr TripleTermIndex getTripleTermIndex() const noexcept {
-    return TripleTermIndex::make(derived().getPayloadBits());
-  }
-
   [[nodiscard]] constexpr VocabIndex getVocabIndex() const noexcept {
     return VocabIndex::make(derived().getPayloadBits());
   }
@@ -342,6 +337,10 @@ class IdBase {
   [[nodiscard]] constexpr SecondaryVocabIndex getSecondaryVocabIndex()
       const noexcept {
     return SecondaryVocabIndex::make(derived().getPayloadBits());
+  }
+
+  [[nodiscard]] constexpr TripleTermIndex getTripleTermIndex() const noexcept {
+    return TripleTermIndex::make(derived().getPayloadBits());
   }
 
   // Store or load a `Date` object.

@@ -391,9 +391,9 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForId(
     case Datatype::Date:
     case Datatype::GeoPoint:
     case Datatype::BlankNodeIndex:
-    // As long as we don't have local vocab triple term indices, the equality on
-    // `TripleTermIndex` works on bits. For `<>`  we currently also use the bit
-    // order.
+    // A `TripleTermIndex` is compared by its bits, which is correct for the
+    // equality as long as there are no query-local triple terms. The order
+    // comparisons also use the bit order for now.
     // TODO<Prashanth0703> Determine the correct semantic ordering of triple
     // terms.
     case Datatype::TripleTermIndex:

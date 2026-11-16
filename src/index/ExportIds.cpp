@@ -82,7 +82,7 @@ std::optional<Literal> idToLiteral(const IndexImpl& index, Id id,
   auto datatype = id.getDatatype();
 
   switch (datatype) {
-    case Datatype::TripleTermIndex:
+    case TripleTermIndex:
       return std::nullopt;
     case WordVocabIndex:
       return getLiteralOrNullopt(getLiteralOrIriFromWordVocabIndex(index, id));
@@ -159,7 +159,7 @@ std::optional<LiteralOrIri> idToLiteralOrIri(const IndexImpl& index, Id id,
                                              bool skipEncodedValues) {
   using enum Datatype;
   switch (id.getDatatype()) {
-    case Datatype::TripleTermIndex:
+    case TripleTermIndex:
       return std::nullopt;
     case WordVocabIndex:
       return getLiteralOrIriFromWordVocabIndex(index, id);
