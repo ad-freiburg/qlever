@@ -1131,8 +1131,8 @@ TEST(QueryPlanner, PathSearchSingleTarget) {
   auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
 
-  std::vector<Id> sources{getId("<x>")};
-  std::vector<Id> targets{getId("<z>")};
+  IdColumn sources{getId("<x>")};
+  IdColumn targets{getId("<z>")};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
                                  targets,
@@ -1163,8 +1163,8 @@ TEST(QueryPlanner, PathSearchMultipleTargets) {
   auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
 
-  std::vector<Id> sources{getId("<x>")};
-  std::vector<Id> targets{getId("<y>"), getId("<z>")};
+  IdColumn sources{getId("<x>")};
+  IdColumn targets{getId("<y>"), getId("<z>")};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
                                  targets,
@@ -1197,8 +1197,8 @@ TEST(QueryPlanner, PathSearchMultipleSourcesAndTargets) {
       ad_utility::testing::getQec("<x1> <p> <y>. <x2> <p> <y>. <y> <p> <z>");
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
 
-  std::vector<Id> sources{getId("<x1>"), getId("<x2>")};
-  std::vector<Id> targets{getId("<y>"), getId("<z>")};
+  IdColumn sources{getId("<x1>"), getId("<x2>")};
+  IdColumn targets{getId("<y>"), getId("<z>")};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
                                  targets,
@@ -1232,8 +1232,8 @@ TEST(QueryPlanner, PathSearchMultipleSourcesAndTargetsCartesian) {
       ad_utility::testing::getQec("<x1> <p> <y>. <x2> <p> <y>. <y> <p> <z>");
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
 
-  std::vector<Id> sources{getId("<x1>"), getId("<x2>")};
-  std::vector<Id> targets{getId("<y>"), getId("<z>")};
+  IdColumn sources{getId("<x1>"), getId("<x2>")};
+  IdColumn targets{getId("<y>"), getId("<z>")};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
                                  targets,
@@ -1268,8 +1268,8 @@ TEST(QueryPlanner, PathSearchMultipleSourcesAndTargetsNonCartesian) {
       ad_utility::testing::getQec("<x1> <p> <y>. <x2> <p> <y>. <y> <p> <z>");
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
 
-  std::vector<Id> sources{getId("<x1>"), getId("<x2>")};
-  std::vector<Id> targets{getId("<y>"), getId("<z>")};
+  IdColumn sources{getId("<x1>"), getId("<x2>")};
+  IdColumn targets{getId("<y>"), getId("<z>")};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
                                  targets,
@@ -1306,8 +1306,8 @@ TEST(QueryPlanner, numPathsPerTarget) {
       ad_utility::testing::getQec("<x1> <p> <y>. <x2> <p> <y>. <y> <p> <z>");
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
 
-  std::vector<Id> sources{getId("<x1>"), getId("<x2>")};
-  std::vector<Id> targets{getId("<y>"), getId("<z>")};
+  IdColumn sources{getId("<x1>"), getId("<x2>")};
+  IdColumn targets{getId("<y>"), getId("<z>")};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
                                  targets,
@@ -1345,8 +1345,8 @@ TEST(QueryPlanner, maxDepth) {
       ad_utility::testing::getQec("<x1> <p> <y>. <x2> <p> <y>. <y> <p> <z>");
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
 
-  std::vector<Id> sources{getId("<x1>"), getId("<x2>")};
-  std::vector<Id> targets{getId("<y>"), getId("<z>")};
+  IdColumn sources{getId("<x1>"), getId("<x2>")};
+  IdColumn targets{getId("<y>"), getId("<z>")};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
                                  targets,
@@ -1391,8 +1391,8 @@ TEST(QueryPlanner, PathSearchWithEdgeProperties) {
       "<x> <p1> <m1>. <m1> <p2> <y>. <y> <p1> <m2>. <m2> <p2> <z>");
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
 
-  std::vector<Id> sources{getId("<x>")};
-  std::vector<Id> targets{getId("<z>")};
+  IdColumn sources{getId("<x>")};
+  IdColumn targets{getId("<z>")};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
                                  targets,
@@ -1435,8 +1435,8 @@ TEST(QueryPlanner, PathSearchWithMultipleEdgePropertiesAndTargets) {
       "<m2> <p2> <z>");
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
 
-  std::vector<Id> sources{getId("<x>")};
-  std::vector<Id> targets{getId("<z>"), getId("<y>")};
+  IdColumn sources{getId("<x>")};
+  IdColumn targets{getId("<z>"), getId("<y>")};
   PathSearchConfiguration config{
       PathSearchAlgorithm::ALL_PATHS,
       sources,
@@ -1479,8 +1479,8 @@ TEST(QueryPlanner, PathSearchJoinOnEdgeProperty) {
       "<x> <p1> <m1>. <m1> <p2> <y>. <y> <p1> <m2>. <m2> <p2> <z>");
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
 
-  std::vector<Id> sources{getId("<x>")};
-  std::vector<Id> targets{getId("<z>")};
+  IdColumn sources{getId("<x>")};
+  IdColumn targets{getId("<z>")};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
                                  targets,
@@ -1520,7 +1520,7 @@ TEST(QueryPlanner, PathSearchSourceBound) {
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
 
   Variable sources{"?source"};
-  std::vector<Id> targets{getId("<z>")};
+  IdColumn targets{getId("<z>")};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
                                  targets,
@@ -1554,7 +1554,7 @@ TEST(QueryPlanner, PathSearchTargetBound) {
   auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
 
-  std::vector<Id> sources{getId("<x>")};
+  IdColumn sources{getId("<x>")};
   Variable targets{"?target"};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
