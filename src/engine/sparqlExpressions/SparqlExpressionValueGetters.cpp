@@ -226,11 +226,11 @@ std::optional<std::string> ReplacementStringGetter::operator()(
 }
 
 // Each token of a replacement string is either literal text, an escaped `\` or
-// `$`, or a reference to a group. Regex pattern at namespace scope for C++17
-// compatibility.
+// `$`, or a reference to a group (with all the digits that follow the `$`).
+// Regex pattern at namespace scope for C++17 compatibility.
 namespace {
 constexpr ctll::fixed_string replacementTokenRegex =
-    "[^\\\\$]+|\\\\[\\\\$]|\\$[0-9]";
+    "[^\\\\$]+|\\\\[\\\\$]|\\$[0-9]+";
 }  // namespace
 
 // ____________________________________________________________________________
@@ -249,7 +249,7 @@ std::optional<std::string> ReplacementStringGetter::convertToReplacementString(
     } else if (token.front() == '$') {
       // Re2 uses `\N` instead of `$N` to refer to a group.
       result.push_back('\\');
-      result.push_back(token[1]);
+      result.append(token.substr(1));
     } else {
       // Literal text, or `\\`, which is a literal backslash in re2 too.
       result.append(token);

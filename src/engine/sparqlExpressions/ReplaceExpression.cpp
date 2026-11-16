@@ -14,6 +14,8 @@
 // to reduce the memory needed for compiling and statically analyzing a single
 // translation unit.
 
+#include <absl/strings/str_cat.h>
+
 #include <charconv>
 #include <ctre-unicode.hpp>
 
@@ -47,32 +49,56 @@ struct MergeFlagsIntoRegex {
 using MergeRegexPatternAndFlagsExpression =
     StringExpressionImpl<2, MergeFlagsIntoRegex, LiteralFromIdGetter>;
 
-// Each token of a re2 rewrite string is either literal text, an escaped `\`, or
-// a reference to a group. Regex pattern at namespace scope for C++17
-// compatibility.
-constexpr ctll::fixed_string rewriteTokenRegex = "[^\\\\]+|\\\\\\\\|\\\\[0-9]";
+// Each token of the output of `ReplacementStringGetter` is either literal
+// text, an escaped `\`, or a reference to a group (with all the digits that
+// follow the `\`). Regex pattern at namespace scope for C++17 compatibility.
+constexpr ctll::fixed_string rewriteTokenRegex = "[^\\\\]+|\\\\\\\\|\\\\[0-9]+";
 
-// Remove all references to groups that do not exist in `pattern` from the re2
-// rewrite string `rewrite`. In XPath, these are replaced by the empty string,
-// whereas re2 refuses to rewrite at all.
-std::string removeReferencesToMissingGroups(std::string_view rewrite,
-                                            const RE2& pattern) {
+// Turn the output of `ReplacementStringGetter` into a valid re2 rewrite string
+// for `pattern`. In XPath, a reference `$N` takes as many of the following
+// digits as possible, as long as the number still names an existing group or
+// is at most 9. The remaining digits are literal text. For example, if
+// `pattern` has 10 groups, `$10` is group 10, but `$11` is group 1 followed by
+// a literal `1`. A reference to a group that does not exist is replaced by the
+// empty string (re2 would refuse to rewrite at all). Return `std::nullopt` for
+// a reference to group 10 or higher, which re2 does not support.
+std::optional<std::string> adaptRewriteToPattern(std::string_view rewrite,
+                                                 const RE2& pattern) {
+  const int numGroups = pattern.NumberOfCapturingGroups();
   std::string result;
   result.reserve(rewrite.size());
   size_t numConsumed = 0;
   for (auto match : ctre::tokenize<rewriteTokenRegex>(rewrite)) {
     std::string_view token = match.to_view();
     numConsumed += token.size();
-    int group = 0;
-    bool isReference =
-        token.front() == '\\' &&
-        std::from_chars(token.data() + 1, token.data() + token.size(), group)
-                .ec == std::errc{};
-    if (!isReference || group <= pattern.NumberOfCapturingGroups()) {
+    if (token == "\\\\" || token.front() != '\\') {
       result.append(token);
+      continue;
     }
+    std::string_view digits = token.substr(1);
+    // Drop the last digit while the number is too large. A single digit is
+    // never too large, and also never out of range for `from_chars`.
+    const int maxGroup = std::max(numGroups, 9);
+    int group = 0;
+    // Parse the first `numDigits` digits into `group`.
+    auto isTooLarge = [&digits, &group, maxGroup](size_t numDigits) {
+      auto [ptr, ec] =
+          std::from_chars(digits.data(), digits.data() + numDigits, group);
+      return ec != std::errc{} || group > maxGroup;
+    };
+    size_t numDigits = digits.size();
+    while (isTooLarge(numDigits)) {
+      --numDigits;
+    }
+    if (group <= numGroups) {
+      if (group > 9) {
+        return std::nullopt;
+      }
+      absl::StrAppend(&result, "\\", group);
+    }
+    result.append(digits.substr(numDigits));
   }
-  // `ReplacementStringGetter` only produces valid rewrite strings.
+  // `ReplacementStringGetter` only produces strings that can be tokenized.
   AD_CORRECTNESS_CHECK(numConsumed == rewrite.size());
   return result;
 }
@@ -91,8 +117,11 @@ struct ReplaceImpl {
     if (!pat.ok()) {
       return Id::makeUndefined();
     }
-    RE2::GlobalReplace(
-        &in, pat, removeReferencesToMissingGroups(replacement.value(), pat));
+    auto rewrite = adaptRewriteToPattern(replacement.value(), pat);
+    if (!rewrite.has_value()) {
+      return Id::makeUndefined();
+    }
+    RE2::GlobalReplace(&in, pat, rewrite.value());
     s.value().replaceContent(in);
     return LiteralOrIri(std::move(s.value()));
   }

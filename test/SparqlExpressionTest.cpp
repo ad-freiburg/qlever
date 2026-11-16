@@ -2676,7 +2676,17 @@ TEST(SparqlExpression, ReplaceExpression) {
   checkReplaceAbc("b", "[$0]", lit("a[b]c"));
   checkReplaceAbc("b", "[$2]", lit("a[]c"));
   checkReplaceAbc("(a)(b)", "$3$2$1$9", lit("bac"));
+  // A reference takes as many digits as possible, as long as the number still
+  // names an existing group or is at most 9. The rest are literal digits.
   checkReplaceAbc("(b)", "$10", lit("ab0c"));
+  checkReplaceAbc("(b)", "[$20]", lit("a[0]c"));
+  checkReplaceAbc("(b)", "[$01]", lit("a[b]c"));
+  checkReplaceAbc("b", "[$01]", lit("a[]c"));
+  checkReplaceAbc("b", "[$00]", lit("a[b]c"));
+  checkReplaceAbc("(a)(b)(c)()()()()()()()", "$11", lit("a1"));
+  // re2 does not support references to group 10 or higher.
+  checkReplaceAbc("(a)(b)(c)()()()()()()()", "$10", U);
+  checkReplaceAbc("(a)(b)(c)()()()()()()()", "$010", U);
   // A group that exists but did not participate in the match is empty.
   checkReplaceAbc("(x)?b", "[$1]", lit("a[]c"));
   checkReplaceAbc("(a)|(b)", "[$1|$2]", lit("[a|][|b]c"));
