@@ -24,6 +24,9 @@
 #include "util/TypeTraits.h"
 #include "util/UnitOfMeasurement.h"
 
+/// Several classes that can be used as the `ValueGetter` template
+/// argument in the SparqlExpression templates in `SparqlExpression.h`
+
 namespace sparqlExpression::detail {
 
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;

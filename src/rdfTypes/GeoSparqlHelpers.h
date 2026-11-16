@@ -91,6 +91,7 @@ const auto wktLiteralIri =
 // Calculate geographic distance between geometries in meters using `pb_util`.
 std::optional<double> wktDistLibSpatialJoinImpl(const GeoPointOrWkt& a,
                                                 const GeoPointOrWkt& b);
+
 }  // namespace detail
 
 // Return the longitude coordinate from a WKT point.
