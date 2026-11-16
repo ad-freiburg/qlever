@@ -21,9 +21,7 @@
 #include "util/memorySize/MemorySize.h"
 
 // The options and the types of the interface of the chunkwise permutation
-// writer, which writes a pair of permutations directly from the chunks of a
-// parallel merge (see `index/chunkwisePermutationWriter/ChunkWriter.h`). The
-// writer itself will follow in a separate change.
+// writer, see `index/chunkwisePermutationWriter/ChunkwisePermutationWriter.h`.
 namespace chunkwisePermutationWriter {
 
 using WriterAndCallback = CompressedRelationWriter::WriterAndCallback;

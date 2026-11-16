@@ -16,6 +16,7 @@
 #include "engine/StripColumns.h"
 #include "engine/Values.h"
 #include "engine/ValuesForTesting.h"
+#include "engine/binaryExport/BinaryExport.h"
 #include "global/Constants.h"
 #include "global/IndexTypes.h"
 #include "global/RuntimeParameters.h"
@@ -41,6 +42,14 @@ using ad_utility::testing::iriLocalVocabEntry;
 // `getResultFunction` needed by the `Service` operation.
 class ServiceTest : public ::testing::Test {
  protected:
+  // Disable the binary service export for these tests, as the test mocks
+  // expect a plain JSON accept header.
+  decltype(setRuntimeParameterForTest<
+           &RuntimeParameters::binaryServiceEnabled_>(
+      false)) disableBinaryService_ =
+      setRuntimeParameterForTest<&RuntimeParameters::binaryServiceEnabled_>(
+          false);
+
   // Query execution context (with small test index) and allocator for testing,
   // see `IndexTestHelpers.h`. Note that `getQec` returns a pointer to a static
   // `QueryExecutionContext`, so no need to ever delete `testQec`.
@@ -190,14 +199,14 @@ TEST_F(ServiceTest, computeResult) {
         [&](const std::string& result,
             boost::beast::http::status status = boost::beast::http::status::ok,
             std::string contentType = "application/sparql-results+json",
-            bool silent = false,
+            bool silent = false, bool requestLaziness = false,
             ad_utility::source_location loc =
                 AD_CURRENT_SOURCE_LOC()) -> Result {
       Service s{
           testQec, silent ? parsedServiceClauseSilent : parsedServiceClause,
           getResultFunctionFactory(expectedUrl, expectedSparqlQuery, result,
                                    status, contentType, nullptr, loc)};
-      return s.computeResultOnlyForTesting();
+      return s.computeResultOnlyForTesting(requestLaziness);
     };
 
     // Compute the Result lazily for the given Service and check that the
@@ -260,6 +269,15 @@ TEST_F(ServiceTest, computeResult) {
               runComputeResult(result, status, contentType, false),
               ::testing::HasSubstr(errorMsg));
           EXPECT_NO_THROW(runComputeResult(result, status, contentType, true));
+
+          // With `SILENT`, a lazily requested result is computed eagerly, so
+          // that the error is silenced, too, and yields the neutral element.
+          auto silentLazyResult =
+              runComputeResult(result, status, contentType, true, true);
+          ASSERT_TRUE(silentLazyResult.isFullyMaterialized());
+          EXPECT_EQ(silentLazyResult.idTableView(),
+                    makeIdTableFromVector(
+                        {{Id::makeUndefined(), Id::makeUndefined()}}));
 
           // In the syntax test mode, all services (so also the failing ones)
           // return the neutral result.
@@ -485,6 +503,28 @@ TEST_F(ServiceTest, computeResult) {
     AD_EXPECT_THROW_WITH_MESSAGE(
         checkLazyResult(service8b, {}),
         ::testing::HasSubstr("Parser failed with error"));
+
+    // Check 8c: A truncated result must lead to an error, and not silently to
+    // only the rows before the truncation. This is how QLever truncates its
+    // result when the computation fails while the result is being sent (for
+    // example, because of a timeout).
+    const std::string completeResult = genJsonResult(
+        {"x", "y"}, {{"bla", "bli"}, {"blu", "bla"}, {"bli", "blu"}});
+    const std::string truncatedResult = absl::StrCat(
+        completeResult.substr(0, completeResult.rfind("blu")),
+        "\n !!!!>># An error has occurred while exporting the query result. "
+        "The error message was:\nOperation timed out.");
+    Service service8c{testQec, parsedServiceClause,
+                      getResultFunctionFactory(expectedUrl, expectedSparqlQuery,
+                                               truncatedResult)};
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        service8c.computeResultOnlyForTesting(),
+        ::testing::AllOf(::testing::HasSubstr("Parser failed with error"),
+                         ::testing::HasSubstr("ended before it was complete"),
+                         ::testing::HasSubstr("Operation timed out.'")));
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        checkLazyResult(service8c, {{"bla", "bli"}, {"blu", "bla"}}),
+        ::testing::HasSubstr("ended before it was complete"));
   }
 }
 
@@ -1347,6 +1387,64 @@ TEST_F(ServiceTest, redirectsIntegration) {
                         boost::beast::http::status::ok, matchers)};
     EXPECT_NO_THROW(service.computeResultOnlyForTesting());
   }
+}
+
+// Test that a `Service` requests QLever's binary format if the runtime
+// parameter `binary-service-enabled` is set, and that it correctly reads a
+// result in that format.
+TEST_F(ServiceTest, binaryFormat) {
+  auto enableBinaryService =
+      setRuntimeParameterForTest<&RuntimeParameters::binaryServiceEnabled_>(
+          true);
+  const auto& binaryMediaType =
+      ad_utility::toString(ad_utility::MediaType::binaryQleverExport);
+
+  // The result of the remote endpoint, which has the columns in a different
+  // order than the `Service`.
+  auto remoteResult = [this]() {
+    QueryExecutionTree qet{
+        testQec,
+        std::make_shared<ValuesForTesting>(
+            testQec, makeIdTableFromVector({{1, 2}, {3, 4}}, &Id::makeFromInt),
+            std::vector<std::optional<Variable>>{Variable{"?y"},
+                                                 Variable{"?x"}})};
+    parsedQuery::SelectClause selectClause;
+    selectClause.setSelected(std::vector{Variable{"?y"}, Variable{"?x"}});
+    std::string bytes;
+    for (std::string_view chunk : qlever::binary_export::exportAsQLeverBinary(
+             qet, selectClause, {},
+             std::make_shared<ad_utility::CancellationHandle<>>())) {
+      bytes.append(chunk);
+    }
+    return bytes;
+  }();
+
+  parsedQuery::Service parsedServiceClause{
+      {Variable{"?x"}, Variable{"?y"}},
+      TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
+      "",
+      "{ }",
+      false};
+  httpClientTestHelpers::RequestMatchers matchers{
+      .accept_ = testing::Eq(absl::StrCat(
+          binaryMediaType, ",application/sparql-results+json;q=0.9"))};
+  Service service{testQec, parsedServiceClause,
+                  httpClientTestHelpers::getResultFunctionFactory(
+                      remoteResult, binaryMediaType,
+                      boost::beast::http::status::ok, matchers)};
+  auto result = service.computeResultOnlyForTesting();
+  EXPECT_EQ(result.idTableView(),
+            makeIdTableFromVector({{2, 1}, {4, 3}}, &Id::makeFromInt));
+
+  // A different media type is not accepted.
+  Service serviceWithWrongType{
+      testQec, parsedServiceClause,
+      httpClientTestHelpers::getResultFunctionFactory(
+          remoteResult, absl::StrCat(binaryMediaType, "x"),
+          boost::beast::http::status::ok, matchers)};
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      serviceWithWrongType.computeResultOnlyForTesting(),
+      ::testing::HasSubstr("QLever requires the endpoint of a SERVICE"));
 }
 
 // Test that the unconsumed lazy result of a `Service` sibling, which is
