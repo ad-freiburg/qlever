@@ -230,18 +230,6 @@ void PathSearch::bindSourceAndTargetSide(
   targetCol_ = targetCol;
 }
 
-namespace {
-// Call `callback` with the `Id`s of the `sides` (see `SearchSideView`).
-template <typename Callback, typename... Sides>
-decltype(auto) visitIds(const Callback& callback, const Sides&... sides) {
-  if constexpr ((std::is_same_v<Sides, ConstIdColumnRef> && ...)) {
-    return callback(sides...);
-  } else {
-    return std::visit(callback, sides...);
-  }
-}
-}  // namespace
-
 // _____________________________________________________________________________
 Result PathSearch::computeResult([[maybe_unused]] bool requestLaziness) {
   std::shared_ptr<const Result> subRes = subtree_->getResult();
@@ -273,16 +261,12 @@ Result PathSearch::computeResult([[maybe_unused]] bool requestLaziness) {
 
     PathsLimited paths{allocator()};
     IdColumn allSources;
-    if (visitIds([](auto ids) { return ids.empty(); }, sources)) {
+    if (sources.empty()) {
       allSources = binSearch.getSources();
       sources = allSources;
     }
-    paths = visitIds(
-        [&](auto sourceIds, auto targetIds) {
-          return allPaths(sourceIds, targetIds, binSearch, config_.cartesian_,
-                          config_.numPathsPerTarget_, config_.maxDepth_);
-        },
-        sources, targets);
+    paths = allPaths(sources, targets, binSearch, config_.cartesian_,
+                     config_.numPathsPerTarget_, config_.maxDepth_);
 
     timer.stop();
     auto searchTime = timer.msecs();
@@ -313,10 +297,10 @@ VariableToColumnMap PathSearch::computeVariableToColumnMap() const {
 }
 
 // _____________________________________________________________________________
-std::pair<PathSearch::SearchSideView, PathSearch::SearchSideView>
-PathSearch::handleSearchSides() const {
-  SearchSideView sourceIds;
-  SearchSideView targetIds;
+std::pair<ConstIdColumnRef, ConstIdColumnRef> PathSearch::handleSearchSides()
+    const {
+  ConstIdColumnRef sourceIds;
+  ConstIdColumnRef targetIds;
 
   if (sourceAndTargetTree_.has_value()) {
     auto resultTable = sourceAndTargetTree_.value()->getResult();
@@ -417,8 +401,8 @@ PathsLimited PathSearch::findPaths(const Id& source,
 }
 
 // _____________________________________________________________________________
-template <typename Sources, typename Targets>
-PathsLimited PathSearch::allPaths(Sources sources, Targets targets,
+PathsLimited PathSearch::allPaths(ConstIdColumnRef sources,
+                                  ConstIdColumnRef targets,
                                   const BinSearchWrapper& binSearch,
                                   bool cartesian,
                                   std::optional<uint64_t> numPathsPerTarget,
