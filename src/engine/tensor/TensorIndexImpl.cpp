@@ -13,12 +13,12 @@
 #include <unordered_set>
 #include <variant>
 
+#include "TensorIndex.h"
+#include "TensorIndexCachedIndex.h"
 #include "backports/type_traits.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/NamedResultCache.h"
-#include "engine/TensorIndex.h"
-#include "engine/TensorIndexCachedIndex.h"
-#include "engine/TensorIndexConfig.h"
+#include "engine/tensor/TensorIndexConfig.h"
 #include "engine/VariableToColumnMap.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Constants.h"

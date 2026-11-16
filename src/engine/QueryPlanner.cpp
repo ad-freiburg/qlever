@@ -47,9 +47,6 @@
 #include "engine/Service.h"
 #include "engine/Sort.h"
 #include "engine/SpatialJoin.h"
-#include "engine/TensorIndex.h"
-#include "engine/TextIndexScanForEntity.h"
-#include "engine/TextIndexScanForWord.h"
 #include "engine/TextLimit.h"
 #include "engine/TransitivePathBase.h"
 #include "engine/Union.h"
@@ -69,6 +66,9 @@
 #include "parser/SparqlParserHelpers.h"
 #include "parser/TensorIndexQuery.h"
 #include "rdfTypes/Variable.h"
+#include "engine/tensor/TensorIndex.h"
+#include "engine/tensor/TextIndexScanForEntity.h"
+#include "engine/tensor/TextIndexScanForWord.h"
 #include "util/Exception.h"
 
 namespace p = parsedQuery;

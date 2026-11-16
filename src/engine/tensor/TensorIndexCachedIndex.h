@@ -13,7 +13,7 @@
 #include <memory>
 #include <variant>
 
-#include "TensorIndexConfig.h"
+#include "../TensorIndexConfig.h"
 #include "engine/idTable/IdTable.h"
 #include "global/ValueId.h"
 #include "index/Index.h"

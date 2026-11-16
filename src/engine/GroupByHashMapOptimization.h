@@ -12,6 +12,7 @@
 #include "engine/sparqlExpressions/GroupConcatHelper.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
+#include "engine/tensor/aggregate/TensorAggregate.h"
 
 // _____________________________________________________________________________
 // For `AVG`, add value to sum if it is numeric, otherwise

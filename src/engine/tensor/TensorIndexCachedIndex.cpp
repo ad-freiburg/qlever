@@ -2,7 +2,7 @@
 // Institute for Visual Computing, Department of Information Engineering
 // Authors: Benedikt Kantz <benedikt.kantz@tugraz.at>
 
-#include "engine/TensorIndexCachedIndex.h"
+#include "engine/tensor/TensorIndexCachedIndex.h"
 
 #include <faiss/IndexFlat.h>
 #include <faiss/IndexHNSW.h>
@@ -10,8 +10,8 @@
 
 #include <variant>
 
+#include "TensorIndex.h"
 #include "engine/ExportQueryExecutionTrees.h"
-#include "engine/TensorIndex.h"
 #include "global/Constants.h"
 #include "util/Serializer/FileSerializer.h"
 

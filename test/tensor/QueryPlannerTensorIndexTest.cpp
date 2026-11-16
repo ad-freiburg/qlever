@@ -7,11 +7,11 @@
 #include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 
+#include "engine/tensor/TensorIndex.h"
 #include "../QueryPlannerTestHelpers.h"
 #include "../printers/PayloadVariablePrinters.h"
 #include "../util/TripleComponentTestHelpers.h"
-#include "engine/TensorIndex.h"
-#include "engine/TensorIndexConfig.h"
+#include "engine/tensor/TensorIndexConfig.h"
 #include "parser/MagicServiceQuery.h"
 #include "parser/PayloadVariables.h"
 

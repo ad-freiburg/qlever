@@ -11,6 +11,7 @@
 #include <thread>
 #include <variant>
 
+#include "engine/tensor/TensorIndex.h"
 #include "../tensor/TensorTestHelpers.h"
 #include "../util/GTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
@@ -20,9 +21,8 @@
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/IndexScan.h"
 #include "engine/QueryExecutionTree.h"
-#include "engine/TensorIndex.h"
-#include "engine/TensorIndexConfig.h"
-#include "engine/TensorIndexCachedIndex.h"
+#include "engine/tensor/TensorIndexCachedIndex.h"
+#include "engine/tensor/TensorIndexConfig.h"
 #include "index/vocabulary/VocabularyType.h"
 #include "libqlever/Qlever.h"
 #include "rdfTypes/Variable.h"

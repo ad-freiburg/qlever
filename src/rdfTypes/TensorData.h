@@ -10,7 +10,7 @@
 #include "util/Date.h"
 
 namespace ad_utility {
-using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
+using LiteralOrIri = triple_component::LiteralOrIri;
 class TensorData {
  public:
   enum struct DType { FLOAT = 0, DOUBLE, BOOL, INT };
@@ -57,15 +57,63 @@ class TensorData {
 
   static float dot(const TensorData& tensor1, const TensorData& tensor2);
   static TensorData add(const TensorData& tensor1, const TensorData& tensor2);
+
+  static TensorData multiply(const TensorData& tensor1,
+                             const TensorData& tensor2);
+  static TensorData divide(const TensorData& tensor1,
+                           const TensorData& tensor2);
   static TensorData subtract(const TensorData& tensor1,
                              const TensorData& tensor2);
 
   std::vector<uint8_t> serialize() const;
   static TensorData deserialize(const std::vector<uint8_t>& buffer);
+
+  TensorData operator+(const TensorData& other) const {
+    return add(*this, other);
+  }
+  TensorData operator-(const TensorData& other) const {
+    return subtract(*this, other);
+  }
+  TensorData operator*(const TensorData& other) const {
+    return multiply(*this, other);
+  }
+  TensorData operator/(const TensorData& other) const {
+    return divide(*this, other);
+  }
 };
+
+inline std::optional<TensorData> operator+(const std::optional<TensorData>& lhs,
+                                      const TensorData& rhs) {
+  if (lhs) {
+    const auto sum = TensorData::add(lhs.value(), rhs);
+    return std::make_optional<TensorData>(sum);
+  }
+  return std::nullopt;
+}
+inline std::optional<TensorData> operator-(const std::optional<TensorData>& lhs,
+                                      const TensorData& rhs) {
+  if (lhs) {
+    const auto sum = TensorData::subtract(lhs.value(), rhs);
+    return std::make_optional<TensorData>(sum);
+  }
+  return std::nullopt;
+}
+inline std::optional<TensorData> operator*(const std::optional<TensorData>& lhs,
+                                      const TensorData& rhs) {
+  if (lhs) {
+    const auto sum = TensorData::multiply(lhs.value(), rhs);
+    return std::make_optional<TensorData>(sum);
+  }
+  return std::nullopt;
+}
+inline std::optional<TensorData> operator/(const std::optional<TensorData>& lhs,
+                                      const TensorData& rhs) {
+  if (lhs) {
+    const auto sum = TensorData::divide(lhs.value(), rhs);
+    return std::make_optional<TensorData>(sum);
+  }
+  return std::nullopt;
+}
 }  // namespace ad_utility
-#ifdef QLEVER_CPP_17
-static_assert(std::is_default_constructible_v<DateYearOrDuration>);
-#endif
 
 #endif  //  QLEVER_TENSOR_DATA_H

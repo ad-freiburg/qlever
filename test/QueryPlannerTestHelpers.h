@@ -11,6 +11,8 @@
 #include <optional>
 #include <variant>
 
+#include "../src/engine/tensor/TensorIndex.h"
+#include "../src/engine/tensor/TextIndexScanForEntity.h"
 #include "./util/GTestHelpers.h"
 #include "backports/StartsWithAndEndsWith.h"
 #include "engine/Bind.h"
@@ -35,8 +37,6 @@
 #include "engine/QueryPlanner.h"
 #include "engine/Sort.h"
 #include "engine/SpatialJoin.h"
-#include "engine/TensorIndex.h"
-#include "engine/TextIndexScanForEntity.h"
 #include "engine/TextIndexScanForWord.h"
 #include "engine/TextLimit.h"
 #include "engine/TransitivePathBase.h"

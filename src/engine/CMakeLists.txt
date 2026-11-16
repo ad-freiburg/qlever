@@ -11,8 +11,9 @@ add_library(engine
         TransitivePathHashMap.cpp TransitivePathBinSearch.cpp Service.cpp
         Values.cpp Bind.cpp Minus.cpp RuntimeInformation.cpp CheckUsePatternTrick.cpp
         VariableToColumnMap.cpp ExportQueryExecutionTrees.cpp
-        CartesianProductJoin.cpp TextIndexScanForWord.cpp TextIndexScanForEntity.cpp
-        TextLimit.cpp LazyGroupBy.cpp GroupByHashMapOptimization.cpp SpatialJoin.cpp TensorIndex.cpp TensorIndexCachedIndex.cpp TensorIndexImpl.cpp
+        tensor/aggregate/TensorAggregate.cpp
+        CartesianProductJoin.cpp tensor/TextIndexScanForWord.cpp tensor/TextIndexScanForEntity.cpp
+        TextLimit.cpp LazyGroupBy.cpp GroupByHashMapOptimization.cpp SpatialJoin.cpp tensor/TensorIndex.cpp tensor/TensorIndexCachedIndex.cpp tensor/TensorIndexImpl.cpp
         CountConnectedSubgraphs.cpp SpatialJoinAlgorithms.cpp PathSearch.cpp ExecuteUpdate.cpp
         Describe.cpp GraphStoreProtocol.cpp SpatialJoinParser.cpp SpatialJoinCachedIndex.cpp
         QueryExecutionContext.cpp ExistsJoin.cpp SparqlProtocol.cpp ParsedRequestBuilder.cpp

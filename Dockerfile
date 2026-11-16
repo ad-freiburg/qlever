@@ -43,7 +43,7 @@ RUN --mount=type=cache,target=/qlever/build \
   if [ "$RUN_TESTS" = "true" ]; then \
   cmake --build . -j && ctest --rerun-failed --output-on-failure; \
   else \
-  cmake --build . -j --target qlever-index qlever-server && echo "Skipping tests"; \
+  cmake --build . -j 4 --target qlever-index qlever-server && echo "Skipping tests"; \
   fi \
   && mkdir -p /qlever/bin && \
   cp qlever-* /qlever/bin/ && \

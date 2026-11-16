@@ -260,7 +260,14 @@ class GroupByImpl : public Operation {
     MAX,
     SUM,
     GROUP_CONCAT,
-    SAMPLE
+    SAMPLE,
+    // TENSOR Operations
+    TENSOR_SUM,
+    TENSOR_AVG,
+    TENSOR_VAR,
+    TENSOR_STD,
+    TENSOR_MIN,
+    TENSOR_MAX,
   };
 
   // `GROUP_CONCAT` requires additional data.

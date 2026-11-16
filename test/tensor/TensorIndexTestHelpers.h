@@ -5,13 +5,13 @@
 
 #include <cstdlib>
 
+#include "engine/tensor/TensorIndex.h"
 #include "../util/IndexTestHelpers.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/QueryExecutionTree.h"
-#include "engine/TensorIndex.h"
-#include "engine/TensorIndexCachedIndex.h"
+#include "engine/tensor/TensorIndexCachedIndex.h"
 #include "index/vocabulary/VocabularyType.h"
 #include "rdfTypes/Variable.h"
 #include "util/GeoSparqlHelpers.h"

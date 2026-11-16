@@ -9,8 +9,8 @@
 #include <optional>
 #include <variant>
 
+#include "TensorIndexConfig.h"
 #include "engine/Operation.h"
-#include "engine/TensorIndexConfig.h"
 #include "global/Id.h"
 #include "rdfTypes/TensorData.h"
 #include "rdfTypes/Variable.h"

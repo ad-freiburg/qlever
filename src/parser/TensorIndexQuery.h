@@ -5,7 +5,7 @@
 #ifndef QLEVER_SRC_PARSER_TENSORINDEXQUERY_H
 #define QLEVER_SRC_PARSER_TENSORINDEXQUERY_H
 
-#include "engine/TensorIndexConfig.h"
+#include "../engine/tensor/TensorIndexConfig.h"
 #include "parser/MagicServiceQuery.h"
 #include "parser/PayloadVariables.h"
 

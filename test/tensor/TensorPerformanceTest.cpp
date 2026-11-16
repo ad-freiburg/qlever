@@ -4,9 +4,9 @@
 #include <gmock/gmock.h>
 #include <unicode/uchar.h>
 
+#include "engine/tensor/TensorIndex.h"
 #include "../util/GTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
-#include "engine/TensorIndex.h"
 #include "global/RuntimeParameters.h"
 #include "rdfTypes/TensorData.h"
 namespace {

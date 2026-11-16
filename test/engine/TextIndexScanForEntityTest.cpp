@@ -4,13 +4,13 @@
 
 #include <gtest/gtest.h>
 
+#include "engine/tensor/TextIndexScanForEntity.h"
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
 #include "./TextIndexScanTestHelpers.h"
 #include "engine/IndexScan.h"
-#include "engine/TextIndexScanForEntity.h"
 #include "parser/ParsedQuery.h"
 
 using namespace ad_utility::testing;

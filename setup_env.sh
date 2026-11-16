@@ -1,7 +1,8 @@
 conda create -y -n qlever
+conda init bash
 conda activate qlever
 
-conda install -y -c conda-forge python=3.8
+conda install -y -c conda-forge python pip
 conda install -y -c conda-forge cmake
 conda install -y -c conda-forge gcc=13 # 13 is twice as fast as 14?? source (?) https://www.reddit.com/r/cpp/comments/1cfzydb/gcc_14_twice_as_slow_as_gcc_13/
 conda install -y -c conda-forge gdb
