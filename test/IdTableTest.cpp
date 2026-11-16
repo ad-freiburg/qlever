@@ -14,6 +14,7 @@
 
 #include "./util/AllocatorTestHelpers.h"
 #include "./util/GTestHelpers.h"
+#include "./util/IdTableHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
@@ -1268,19 +1269,19 @@ TEST(IdTable, moveOrCloneOnView) {
   // `moveOrClone()` on a view (lvalue) returns a deep-owned clone, not a view.
   IdTable cloned = view.moveOrClone();
   EXPECT_EQ(cloned, table);
-  EXPECT_NE(&cloned(0, 0), &table(0, 0));
+  EXPECT_NE(memoryOf(cloned.getColumn(0)), memoryOf(table.getColumn(0)));
 
   // `moveOrClone()` on a view rvalue also returns a deep-owned clone, since
   // views cannot transfer ownership.
   IdTable cloned2 = std::move(view).moveOrClone();
   EXPECT_EQ(cloned2, table);
-  EXPECT_NE(&cloned2(0, 0), &table(0, 0));
+  EXPECT_NE(memoryOf(cloned2.getColumn(0)), memoryOf(table.getColumn(0)));
 }
 
 // ____________________________________________________________________________
 TEST(IdTable, fromColumns) {
-  std::vector<Id> col0{V(1), V(2), V(3)};
-  std::vector<Id> col1{V(4), V(5), V(6)};
+  IdColumn col0{V(1), V(2), V(3)};
+  IdColumn col1{V(4), V(5), V(6)};
   auto allocator = makeAllocator();
 
   IdTableView<0>::ViewSpans columns{col0, col1};
@@ -1291,11 +1292,11 @@ TEST(IdTable, fromColumns) {
   for (size_t i = 0; i < 3; ++i) {
     EXPECT_EQ(view(i, 0), col0[i]);
     EXPECT_EQ(view(i, 1), col1[i]);
-    // The view must not copy the data: its elements are the very same
-    // objects as those in `col0`/`col1`.
-    EXPECT_EQ(&view(i, 0), &col0[i]);
-    EXPECT_EQ(&view(i, 1), &col1[i]);
   }
+  // The view must not copy the data: its columns are the very same memory as
+  // `col0`/`col1`.
+  EXPECT_EQ(memoryOf(view.getColumn(0)), memoryOf(col0));
+  EXPECT_EQ(memoryOf(view.getColumn(1)), memoryOf(col1));
 
   // The `columns` and the passed in `numColumns` must be consistent.
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -1320,9 +1321,9 @@ TEST(IdTable, fromColumns) {
   for (size_t i = 0; i < 3; ++i) {
     EXPECT_EQ(staticView(i, 0), col0[i]);
     EXPECT_EQ(staticView(i, 1), col1[i]);
-    EXPECT_EQ(&staticView(i, 0), &col0[i]);
-    EXPECT_EQ(&staticView(i, 1), &col1[i]);
   }
+  EXPECT_EQ(memoryOf(staticView.getColumn(0)), memoryOf(col0));
+  EXPECT_EQ(memoryOf(staticView.getColumn(1)), memoryOf(col1));
 }
 
 // ____________________________________________________________________________
