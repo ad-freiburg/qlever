@@ -1,4 +1,5 @@
 add_subdirectory(sparqlExpressions)
+add_subdirectory(filterFacts)
 add_library(engine
         QueryExecutionTree.cpp Result.cpp
         OrderByOnSortedNumericInput.cpp NumericRun.cpp
