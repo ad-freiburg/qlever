@@ -39,9 +39,9 @@ namespace filterFacts {
 struct Definitions {
   // The values of a variable from the `VALUES` clauses of the group without
   // `UNDEF` in the column of the variable (the values in all of them), or the
-  // value of a `BIND` of a
-  // constant (see `SparqlExpressionPimpl::getConstantValue`). Every result row
-  // of the group binds the variable to one of these values.
+  // value of a `BIND` of a constant (see
+  // `SparqlExpressionPimpl::getConstantValue`). Every result row of the group
+  // binds the variable to one of these values.
   ad_utility::HashMap<Variable, std::vector<TripleComponent>> constants_;
   // The expressions of the other `BIND(e AS ?v)` clauses of the group that are
   // equivalent to their target `?v`: `e` is deterministic, its variables are

@@ -93,8 +93,8 @@ void addValues(const parsedQuery::Values& values, Definitions& defs,
 // Add the definition of `bind` to `defs`. The target of a constant other than
 // `UNDEF` is always bound to it, like a `VALUES` clause with a single row. The
 // target of any other expression is not always bound (the expression may be
-// undefined), its expression is only added if a FILTER may substitute it for
-// the target.
+// undefined), so its expression is only added if a FILTER may substitute it
+// for the target.
 void addBind(const parsedQuery::Bind& bind, Definitions& defs,
              ad_utility::HashSet<Variable>& alwaysBound) {
   auto constant = bind._expression.getConstantValue();
