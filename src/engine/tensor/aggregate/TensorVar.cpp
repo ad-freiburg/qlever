@@ -18,7 +18,6 @@ ExpressionResult TensorDeviationExpression::evaluate(
     // expression
     VectorWithMemoryLimit<OptTensor> childResults{context->_allocator};
 
-    // Collect values as doubles
     for (auto& inp : generator) {
       const OptTensor& tensor =
           detail::TensorValueGetter{}(std::move(inp), context);

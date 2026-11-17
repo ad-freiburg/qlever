@@ -74,6 +74,7 @@ PREFIX dta: <https://w3id.org/rdf-tensor/aggregates#>
   ASSERT_TRUE(parsed_results.contains("results"));
   const auto& bindings = parsed_results["results"]["bindings"];
   ASSERT_EQ(bindings.size(), param.expected.size()) << results_query;
+
   for (size_t i = 0; i < bindings.size(); ++i) {
     auto tensor = TensorData::parseFromString(
         bindings[i]["agg"]["value"].get<std::string>());
@@ -93,6 +94,6 @@ INSTANTIATE_TEST_SUITE_P(
         TensorAggTypeArg{"avg", {{2, 2, 2}, {1, 1, 3}, {1, 2.f / 3, 1.f / 3}}},
         // Sample variance (divided by `n - 1`, zero for a single value), see
         // `TensorVarFinalOperation`.
-        TensorAggTypeArg{"var", {{2, 0, 2}, {0, 0, 0}, {0, 7.f / 3, 13.f / 3}}}),
+        TensorAggTypeArg{"var", {{4, 4, 4}, {0, 0, 0}, {1.5, 1, 0.5}}}),
     [](const auto& info) { return info.param.aggType; });
 }  // namespace

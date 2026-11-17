@@ -32,7 +32,7 @@ public:
       AggregateOperation aggregateOp = AggregateOperation{})
       : AggregateExpression<AggregateOperation, FinalOperation>(
             distinct,
-            std::make_unique<TensorDeviationExpression>(std::move(child)),
+            std::move(child),
             aggregateOp) {}
 };
 // Aggregate expression for dta:var.

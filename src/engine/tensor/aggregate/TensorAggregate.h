@@ -47,10 +47,17 @@ struct TensorExpressionForAggregate {
 };
 struct TensorAddOperation {
   OptTensor operator()(const OptTensor& t1, const OptTensor& t2) const {
+
     if (t1.has_value() && t2.has_value()) {
       return t1.value() + t2.value();
     }
-    throw std::runtime_error{"Not tensor data for aggregation!"};
+    if (t1.has_value()) {
+      return t1.value();
+    }
+    if (t2.has_value()) {
+      return t2.value();
+    }
+    throw std::runtime_error{"Not tensor data for aggregation (add)!"};
   }
 };
 struct TensorScaleOperation {
@@ -58,7 +65,7 @@ struct TensorScaleOperation {
     if (t.has_value()) {
       return TensorData::scale(t.value(), scale);
     }
-    throw std::runtime_error{"Not tensor data for aggregation!"};
+    throw std::runtime_error{"Not tensor data for aggregation (scaling)!"};
   }
 };
 
