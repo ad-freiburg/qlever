@@ -424,7 +424,7 @@ TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
 
 // Test that the right variable of a spatial search may be declared outside the
 // `SERVICE`, unless the search is a nearest neighbors search.
-TEST(QueryPlanner, SpatialJoinServiceMaxDistOutside) {
+TEST(QueryPlanner, SpatialJoinServiceRightVarOutside) {
   auto scan = h::IndexScanFromStrings;
   using V = Variable;
   auto S2 = SpatialJoinAlgorithm::S2_GEOMETRY;
