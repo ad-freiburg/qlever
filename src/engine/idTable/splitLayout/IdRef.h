@@ -324,10 +324,11 @@ class BasicIdRef
 
   // Refer to an existing `Id`, like `Id&` does. Range algorithms need this to
   // accept a function that takes an `IdRef` (see
-  // `std::indirectly_unary_invocable`). The restricted reference has no such
-  // constructor, because then its common reference with `Id` would be
-  // ambiguous. Without `USE_SPLIT_LAYOUT`, an `IdRef` refers to a `ValueId`, so
-  // the constructor only exists with it.
+  // `std::indirectly_unary_invocable`). Without `USE_SPLIT_LAYOUT`, an `IdRef`
+  // refers to a `ValueId`, so the constructor only exists with it.
+  //
+  // NOTE: The restricted reference has no such constructor, because then its
+  // common reference with `Id` would be ambiguous (see `IdRefTest.cpp`).
   CPP_template(typename = void)(
       requires std::is_same_v<Id, SplitLayoutId>)
   QL_EXPLICIT(false)

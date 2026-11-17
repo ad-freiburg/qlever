@@ -261,11 +261,10 @@ TEST(IdRefTest, conversionFromSplitLayoutId) {
   static_assert(!std::is_constructible_v<ConstIdRef, SplitLayoutId&&>);
   static_assert(!std::is_constructible_v<ConstIdRef, const SplitLayoutId&&>);
 
-  // This is the requirement of `std::indirectly_unary_invocable` that needs the
-  // conversion: a range algorithm like `ql::ranges::for_each` only accepts a
-  // function with an `IdRef` parameter if it can also be called with an lvalue
-  // of the value type of the range, which is the `SplitLayoutId` with
-  // `USE_SPLIT_LAYOUT`.
+  // A range algorithm like `ql::ranges::for_each` accepts a function with an
+  // `IdRef` parameter only if it can also be called with an lvalue of the value
+  // type of the range (`std::indirectly_unary_invocable`), which is the
+  // `SplitLayoutId` with `USE_SPLIT_LAYOUT`.
   auto setToTrue = [](IdRef id) { id = Id::makeFromBool(true); };
   static_assert(ql::concepts::invocable<decltype(setToTrue)&, SplitLayoutId&> ==
                 idIsSplitLayoutId);
