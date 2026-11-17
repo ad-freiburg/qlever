@@ -909,21 +909,11 @@ std::function<void(const IdTableStatic<0>&)> toSequentialBlockCallback(
 template <typename Callback>
 chunkwisePermutationWriter::ConcurrentBlockCallback toConcurrentBlockCallback(
     Callback callback) {
-  using chunkwisePermutationWriter::DoneCallback;
-  using chunkwisePermutationWriter::SharedBlock;
   if constexpr (ad_utility::isInstantiation<Callback, PushToNextSorter>) {
     return callback.sorter_.makeAsyncPushBlockCallback();
   } else {
-    return [callback = std::move(callback)](SharedBlock block,
-                                            DoneCallback done) mutable {
-      std::exception_ptr exception;
-      try {
-        callback(*block);
-      } catch (...) {
-        exception = std::current_exception();
-      }
-      std::move(done)(std::move(exception));
-    };
+    return chunkwisePermutationWriter::toConcurrentBlockCallback(
+        std::move(callback));
   }
 }
 
