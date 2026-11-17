@@ -35,8 +35,8 @@ namespace {
 //
 // NOTE: For example, a variable that is only bound after the `BIND` is unbound
 // at the `BIND` (so `?v` is unbound), but bound at the FILTER.
-bool isEquivalentToTarget(const SparqlExpression& expression,
-                          const ad_utility::HashSet<Variable>& alwaysBound) {
+bool canSubstituteForTarget(const SparqlExpression& expression,
+                            const ad_utility::HashSet<Variable>& alwaysBound) {
   std::vector<const SparqlExpression*> exists;
   expression.getExistsExpressions(exists);
   return expression.isDeterministic() && exists.empty() &&
@@ -44,6 +44,63 @@ bool isEquivalentToTarget(const SparqlExpression& expression,
                             [&alwaysBound](const Variable* variable) {
                               return alwaysBound.contains(*variable);
                             });
+}
+
+// Remove the expressions of the `BIND`s from `defs` whose target `operation`
+// may bind again, that is, any variable that `operation` contains (where the
+// expression is undefined, the target is then bound freely, so a FILTER may
+// no longer substitute the expression for it).
+//
+// NOTE: A later `BIND` cannot bind the target again (the target of a `BIND`
+// must not be in scope before it), so its expression may use the target.
+void removeRedefinedTargets(const parsedQuery::GraphPatternOperation& operation,
+                            Definitions& defs) {
+  if (std::holds_alternative<parsedQuery::Bind>(operation)) {
+    return;
+  }
+  parsedQuery::VariableCounter variables;
+  variables(operation);
+  absl::erase_if(defs.expressions_, [&variables](const auto& definition) {
+    return variables.counts().contains(definition.first);
+  });
+}
+
+// Add the values of each variable of `values` without `UNDEF` in its column to
+// `defs`, and the variable to `alwaysBound`.
+//
+// NOTE: If several `VALUES` clauses bind the same variable, each of them
+// contains all its values, so the first one is kept.
+void addValues(const parsedQuery::Values& values, Definitions& defs,
+               ad_utility::HashSet<Variable>& alwaysBound) {
+  const auto& [variables, rows] = values._inlineValues;
+  for (size_t i = 0; i < variables.size(); ++i) {
+    auto column =
+        ad_utility::transform(rows, [i](const auto& row) { return row.at(i); });
+    if (ql::ranges::any_of(column, &TripleComponent::isUndef)) {
+      continue;
+    }
+    alwaysBound.insert(variables[i]);
+    defs.constants_.emplace(variables[i], std::move(column));
+  }
+}
+
+// Add the definition of `bind` to `defs`. The target of a constant other than
+// `UNDEF` is always bound to it, like a `VALUES` clause with a single row. The
+// target of any other expression is not always bound (the expression may be
+// undefined), its expression is only added if a FILTER may substitute it for
+// the target.
+void addBind(const parsedQuery::Bind& bind, Definitions& defs,
+             ad_utility::HashSet<Variable>& alwaysBound) {
+  auto constant = bind._expression.getConstantValue();
+  if (constant.has_value() &&
+      !(constant->isId() && constant->getId().isUndefined())) {
+    alwaysBound.insert(bind._target);
+    defs.constants_.emplace(bind._target,
+                            std::vector{std::move(constant).value()});
+  } else if (const auto* expression = bind._expression.getPimpl();
+             canSubstituteForTarget(*expression, alwaysBound)) {
+    defs.expressions_.emplace(bind._target, expression);
+  }
 }
 
 }  // namespace
@@ -57,56 +114,15 @@ Definitions collectDefinitions(
   // conservative).
   ad_utility::HashSet<Variable> alwaysBound;
   for (const auto& operation : group) {
-    // Remove the `BIND`s whose target `operation` may bind again, that is, any
-    // variable that `operation` contains (where the expression is undefined,
-    // the target is then bound freely, so it is not equivalent to the
-    // expression).
-    //
-    // NOTE: A later `BIND` cannot bind the target again (the target of a
-    // `BIND` must not be in scope before it), so its expression may use the
-    // target.
-    if (!std::holds_alternative<parsedQuery::Bind>(operation)) {
-      parsedQuery::VariableCounter variables;
-      variables(operation);
-      absl::erase_if(defs.expressions_, [&variables](const auto& definition) {
-        return variables.counts().contains(definition.first);
-      });
-    }
-
-    // Add the definitions of `operation`.
+    removeRedefinedTargets(operation, defs);
     if (const auto* bgp =
             std::get_if<parsedQuery::BasicGraphPattern>(&operation)) {
       bgp->collectAllContainedVariables(alwaysBound);
     } else if (const auto* values =
                    std::get_if<parsedQuery::Values>(&operation)) {
-      const auto& [variables, rows] = values->_inlineValues;
-      for (size_t i = 0; i < variables.size(); ++i) {
-        std::vector<TripleComponent> column;
-        for (const auto& row : rows) {
-          column.push_back(row.at(i));
-        }
-        if (ql::ranges::any_of(column, &TripleComponent::isUndef)) {
-          continue;
-        }
-        alwaysBound.insert(variables[i]);
-        // If several `VALUES` clauses bind the same variable, each of them
-        // contains all its values.
-        defs.constants_.emplace(variables[i], std::move(column));
-      }
+      addValues(*values, defs, alwaysBound);
     } else if (const auto* bind = std::get_if<parsedQuery::Bind>(&operation)) {
-      // The target of a constant other than `UNDEF` is always bound to it,
-      // like a `VALUES` clause with a single row. The target of any other
-      // expression is not always bound (the expression may be undefined).
-      auto constant = bind->_expression.getConstantValue();
-      if (constant.has_value() &&
-          !(constant->isId() && constant->getId().isUndefined())) {
-        alwaysBound.insert(bind->_target);
-        defs.constants_.emplace(bind->_target,
-                                std::vector{std::move(constant).value()});
-      } else if (const auto* expression = bind->_expression.getPimpl();
-                 isEquivalentToTarget(*expression, alwaysBound)) {
-        defs.expressions_.emplace(bind->_target, expression);
-      }
+      addBind(*bind, defs, alwaysBound);
     }
   }
   return defs;
