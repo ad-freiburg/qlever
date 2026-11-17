@@ -727,9 +727,13 @@ TransitivePathBase::makeTreeWithStrippedColumns(
       &requestedVariables);
   if (lhs_.isVariable()) {
     varsRequiredFromSubtree.add(lhs_.value_.getVariable());
+    varsRequiredFromSubtree.add(
+        subtree_->getVariableAndInfoByColumnIndex(lhs_.subCol_).first);
   }
   if (rhs_.isVariable()) {
     varsRequiredFromSubtree.add(rhs_.value_.getVariable());
+    varsRequiredFromSubtree.add(
+        subtree_->getVariableAndInfoByColumnIndex(rhs_.subCol_).first);
   }
   if (graphVariable_) {
     varsRequiredFromSubtree.add(*graphVariable_);
@@ -737,33 +741,35 @@ TransitivePathBase::makeTreeWithStrippedColumns(
 
   // Strip the subtree and the trees of the transitive path sides if available
   // and update all column indices.
+  auto strippedSubtree = varsRequiredFromSubtree.stripSubtree(subtree_);
+  auto getSubCol = [&](const TransitivePathSide& pathSide) {
+    auto subtreeVar = subtree_->getVariableAndInfoByColumnIndex(pathSide.subCol_).first;
+    return strippedSubtree->getVariableColumn(subtreeVar);
+  };
   auto updateTransitivePathSide =
-      [&](const TransitivePathSide& pathSide,
-          const std::shared_ptr<QueryExecutionTree> strippedSubtree) {
-        auto& tree = pathSide.treeAndCol_.value().first;
+      [&](const TransitivePathSide& pathSide) {
+        const auto& tree = pathSide.treeAndCol_.value().first;
         auto newTree = varsRequiredFromSubtree.stripSubtree(tree);
         size_t newJoinCol = (newTree->getVariableColumns())
                                 .at(pathSide.value_.getVariable())
                                 .columnIndex_;
         return TransitivePathSide{
-            std::make_pair(std::move(newTree), newJoinCol),
-            (strippedSubtree->getVariableColumns())
-                .at(pathSide.value_.getVariable())
-                .columnIndex_,
+            std::make_pair(std::move(newTree), newJoinCol), getSubCol(pathSide),
             pathSide.value_, pathSide.outputCol_};
       };
-  auto strippedSubtree = varsRequiredFromSubtree.stripSubtree(subtree_);
   TransitivePathSide strippedLhsSide;
   if (lhs_.isBoundVariable()) {
-    strippedLhsSide = updateTransitivePathSide(lhs_, strippedSubtree);
+    strippedLhsSide = updateTransitivePathSide(lhs_);
   } else {
     strippedLhsSide = lhs_;
+    strippedLhsSide.subCol_ = getSubCol(lhs_);
   }
   TransitivePathSide strippedRhsSide;
   if (rhs_.isBoundVariable()) {
-    strippedRhsSide = updateTransitivePathSide(rhs_, strippedSubtree);
+    strippedRhsSide = updateTransitivePathSide(rhs_);
   } else {
     strippedRhsSide = rhs_;
+    strippedRhsSide.subCol_ = getSubCol(rhs_);
   }
 
   // The new `TransitivePathBase` also exports evaluated variables that the
