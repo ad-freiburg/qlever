@@ -9,12 +9,14 @@
 
 #include "engine/raster/RasterFile.h"
 
+#include <absl/strings/str_cat.h>
 #include <gdal_priv.h>
+#include <ogr_spatialref.h>
 
 #include <array>
 #include <stdexcept>
 
-#include "absl/strings/str_cat.h"
+#include "util/Exception.h"
 
 namespace qlever::raster {
 
@@ -35,8 +37,11 @@ void registerGdalDrivers() {
 struct RasterFile::Impl {
   GDALDatasetUniquePtr dataset_;
   // Pixel position to coordinates in the CRS of the file, and vice versa
-  std::array<double, 6> pixelToRaster_;
-  std::array<double, 6> rasterToPixel_;
+  std::array<double, 6> pixelToRaster_{};
+  std::array<double, 6> rasterToPixel_{};
+  // CRS84 to the CRS of the file, and vice versa
+  std::unique_ptr<OGRCoordinateTransformation> crs84ToRaster_;
+  std::unique_ptr<OGRCoordinateTransformation> rasterToCrs84_;
 
   explicit Impl(const std::string& path);
 };
@@ -58,6 +63,27 @@ RasterFile::Impl::Impl(const std::string& path) {
       !GDALInvGeoTransform(pixelToRaster_.data(), rasterToPixel_.data())) {
     throw std::runtime_error(
         absl::StrCat("Raster file \"", path, "\" has no valid geotransform"));
+  }
+
+  const OGRSpatialReference* fileCrs = dataset_->GetSpatialRef();
+  if (fileCrs == nullptr) {
+    throw std::runtime_error(
+        absl::StrCat("Raster file \"", path, "\" has no CRS"));
+  }
+  OGRSpatialReference rasterCrs{*fileCrs};
+  OGRSpatialReference crs84;
+  AD_CORRECTNESS_CHECK(crs84.importFromEPSG(4326) == OGRERR_NONE);
+  // Longitude (or easting) first, as in WKT. Otherwise, GDAL follows the axis
+  // order of the CRS definition, which is latitude first for EPSG:4326.
+  rasterCrs.SetAxisMappingStrategy(OAMS_TRADITIONAL_GIS_ORDER);
+  crs84.SetAxisMappingStrategy(OAMS_TRADITIONAL_GIS_ORDER);
+  // The transformations keep their own copies of both CRSs.
+  crs84ToRaster_.reset(OGRCreateCoordinateTransformation(&crs84, &rasterCrs));
+  rasterToCrs84_.reset(OGRCreateCoordinateTransformation(&rasterCrs, &crs84));
+  if (!crs84ToRaster_ || !rasterToCrs84_) {
+    throw std::runtime_error(absl::StrCat(
+        "Could not transform between CRS84 and the CRS of raster file \"", path,
+        "\": ", CPLGetLastErrorMsg()));
   }
 }
 
