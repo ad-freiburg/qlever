@@ -26,10 +26,13 @@ using valueIdComparators::Comparison;
 
 namespace {
 
-// Return true iff the target of `BIND(expression AS ?v)` is equivalent to
+// Return true if the target of `BIND(expression AS ?v)` is equivalent to
 // `expression`, given the variables that are always bound before the `BIND`.
-bool isSubstitutable(const SparqlExpression& expression,
-                     const ad_utility::HashSet<Variable>& alwaysBound) {
+//
+// NOTE: The check is conservative, so `false` does not mean that they are not
+// equivalent.
+bool isEquivalentToTarget(const SparqlExpression& expression,
+                          const ad_utility::HashSet<Variable>& alwaysBound) {
   std::vector<const SparqlExpression*> exists;
   expression.getExistsExpressions(exists);
   return expression.isDeterministic() && exists.empty() &&
@@ -97,7 +100,7 @@ Definitions collectDefinitions(
         defs.constants_.emplace(bind->_target,
                                 std::vector{std::move(constant).value()});
       } else if (const auto* expression = bind->_expression.getPimpl();
-                 isSubstitutable(*expression, alwaysBound)) {
+                 isEquivalentToTarget(*expression, alwaysBound)) {
         defs.expressions_.emplace(bind->_target, expression);
       }
     }
