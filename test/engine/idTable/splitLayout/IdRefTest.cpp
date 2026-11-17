@@ -294,7 +294,7 @@ TEST(IdRefTest, referenceToAnId) {
       Id id = original;
       Id neighbour = Id::makeFromInt(-1);
       RefToId ref = id;
-      const ConstRefToId constRef = std::as_const(id);
+      ConstRefToId constRef = std::as_const(id);
       EXPECT_EQ(getBitsCompat(ref), getBitsCompat(original));
       EXPECT_EQ(getBitsCompat(constRef), getBitsCompat(original));
 
