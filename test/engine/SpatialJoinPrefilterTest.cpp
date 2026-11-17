@@ -367,4 +367,20 @@ INSTANTIATE_TEST_SUITE_P(SpatialJoinPrefilterGeoByBoundingBoxTest,
                          ::testing::Values(PrefilterTestMode::GEO_VOCAB,
                                            PrefilterTestMode::PRECOMPUTED));
 
+// Test that the size limit of the geometry cache is never 0, which means
+// "unlimited" in `libspatialjoin`.
+TEST(SpatialJoinTest, GeometryCacheLimitIsNeverUnlimited) {
+  using ad_utility::MemorySize;
+
+  // Half of the memory, divided between 7 caches with 2 buckets each.
+  EXPECT_EQ(LibspatialjoinAlgorithm::sweeperConfig(2, MemorySize::bytes(2800))
+                .geomCacheMaxSize,
+            100);
+
+  // Too little memory for 1 byte per bucket still gives a limit of 1 byte.
+  EXPECT_EQ(LibspatialjoinAlgorithm::sweeperConfig(2, MemorySize::bytes(27))
+                .geomCacheMaxSize,
+            1);
+}
+
 }  // namespace
