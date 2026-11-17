@@ -525,23 +525,19 @@ TEST(Minus, repeatingMatchesDontProduceDuplicates) {
 }
 
 // _____________________________________________________________________________
-// Regression test for a bug in the block-wise zipper join, which fetches at
-// most three further blocks for the current join value at once: if the rows
-// of the right input with this value end in the third of these blocks and
-// another block follows, the matching left rows were additionally treated as
-// rows without a match and kept.
+// Same blocks as `OptionalJoin.lazyOptionalJoinMatchesEndInThirdFetchedBlock`.
+// The left row has a match, so it must be removed.
 TEST(Minus, matchesEndInThirdFetchedBlockOfTheRightInput) {
   std::vector<IdTable> expected;
-  expected.push_back(makeIdTableFromVector({{0, 10}}));
 
   std::vector<IdTable> leftTables;
-  leftTables.push_back(makeIdTableFromVector({{0, 10}, {1, 11}, {3, 13}}));
+  leftTables.push_back(makeIdTableFromVector({{1, 11}}));
   std::vector<IdTable> rightTables;
-  rightTables.push_back(makeIdTableFromVector({{1, 21}, {1, 22}}));
-  rightTables.push_back(makeIdTableFromVector({{1, 23}, {1, 24}}));
-  rightTables.push_back(makeIdTableFromVector({{1, 25}, {1, 26}}));
-  rightTables.push_back(makeIdTableFromVector({{1, 27}, {2, 28}}));
-  rightTables.push_back(makeIdTableFromVector({{3, 29}, {3, 30}}));
+  rightTables.push_back(makeIdTableFromVector({{1, 21}}));
+  rightTables.push_back(makeIdTableFromVector({{1, 22}}));
+  rightTables.push_back(makeIdTableFromVector({{1, 23}}));
+  rightTables.push_back(makeIdTableFromVector({{1, 24}, {2, 25}}));
+  rightTables.push_back(makeIdTableFromVector({{3, 26}}));
 
   testMinus(std::move(leftTables), std::move(rightTables), std::move(expected));
 }

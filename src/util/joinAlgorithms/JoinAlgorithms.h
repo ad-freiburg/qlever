@@ -1333,6 +1333,8 @@ struct BlockZipperJoinImplCRTP {
     auto equalToCurrentElRight =
         getEqualToCurrentEl(currentBlocksRight, currentEl);
 
+    // Fetch the next blocks of `side` with elements equal to `currentEl` into
+    // `target`. Return `false` if there are no more such elements.
     auto getNextBlocks = [this, &currentEl, &blockStatus](BlocksC& target,
                                                           SideC& side) {
       // Explicit this to avoid false positive warning in clang.
@@ -1342,24 +1344,25 @@ struct BlockZipperJoinImplCRTP {
         AD_CORRECTNESS_CHECK(allBlocksWereFilled);
       }
       target = getEqualToCurrentEl(side.currentBlocks_, currentEl);
-      // If there are no more elements equal to `currentEl` on this side, the
-      // loop below has to stop. Otherwise `addAll` would be called with empty
-      // subranges for this side, and for an OPTIONAL join or a MINUS the
-      // (already matched) rows of the other side would wrongly be added as
-      // rows without a match.
-      if (ql::ranges::all_of(target, [](const auto& block) {
-            return ql::ranges::empty(block.subrange());
-          })) {
-        target.clear();
-      }
       if (allBlocksWereFilled) {
         blockStatus = BlockStatus::allFilled;
       }
+      return !ql::ranges::all_of(target, [](const auto& block) {
+        return ql::ranges::empty(block.subrange());
+      });
     };
 
     // We are only guaranteed to have all relevant blocks from one side, so we
     // also need to pass through the remaining blocks from the other side.
-    while (!equalToCurrentElLeft.empty() && !equalToCurrentElRight.empty()) {
+    //
+    // NOTE: The first iteration must always run: if one side has no elements
+    // equal to `currentEl`, `addAll` adds the left rows as rows without a
+    // match. Later iterations stop as soon as the refetched side has no more
+    // such elements, otherwise matched left rows would be added again.
+    AD_CORRECTNESS_CHECK(!equalToCurrentElLeft.empty() &&
+                         !equalToCurrentElRight.empty());
+    bool sideHasMoreElementsEqualToCurrentEl = true;
+    while (sideHasMoreElementsEqualToCurrentEl) {
       joinWithUndefBlocks(blockStatus, equalToCurrentElLeft,
                           equalToCurrentElRight);
       addAll<DoOptionalJoinOrMinus>(equalToCurrentElLeft,
@@ -1370,11 +1373,13 @@ struct BlockZipperJoinImplCRTP {
           removeEqualToCurrentEl(currentBlocksRight, currentEl);
           return;
         case BlockStatus::rightMissing:
-          getNextBlocks(equalToCurrentElRight, rightSide_);
-          continue;
+          sideHasMoreElementsEqualToCurrentEl =
+              getNextBlocks(equalToCurrentElRight, rightSide_);
+          break;
         case BlockStatus::leftMissing:
-          getNextBlocks(equalToCurrentElLeft, leftSide_);
-          continue;
+          sideHasMoreElementsEqualToCurrentEl =
+              getNextBlocks(equalToCurrentElLeft, leftSide_);
+          break;
         default:
           AD_FAIL();
       }

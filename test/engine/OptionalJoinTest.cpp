@@ -636,32 +636,25 @@ TEST(OptionalJoin, lazyOptionalJoin) {
 }
 
 // _____________________________________________________________________________
-// Regression test for a bug in the block-wise zipper join, which fetches at
-// most three further blocks for the current join value at once: if the rows
-// of the right input with this value end in the third of these blocks and
-// another block follows, the matching left rows were additionally added as
-// rows without a match.
+// Regression test for the block-wise zipper join. The right blocks are
+// [1] [1] [1] [1, 2] [3]. The join reads the first block and then
+// `FETCH_BLOCKS` (3) more blocks starting with 1, so the rows with 1 end in
+// the last fetched block without the join knowing it. Fetching again finds no
+// more rows with 1, and the left row must not be added again with UNDEF.
+// Without the block [3], all blocks are read at once.
 TEST(OptionalJoin, lazyOptionalJoinMatchesEndInThirdFetchedBlock) {
   std::vector<IdTable> expected;
-  expected.push_back(makeIdTableFromVector({{0, 10, U},
-                                            {1, 11, 21},
-                                            {1, 11, 22},
-                                            {1, 11, 23},
-                                            {1, 11, 24},
-                                            {1, 11, 25},
-                                            {1, 11, 26},
-                                            {1, 11, 27},
-                                            {3, 13, 29},
-                                            {3, 13, 30}}));
+  expected.push_back(makeIdTableFromVector(
+      {{1, 11, 21}, {1, 11, 22}, {1, 11, 23}, {1, 11, 24}}));
 
   std::vector<IdTable> leftTables;
-  leftTables.push_back(makeIdTableFromVector({{0, 10}, {1, 11}, {3, 13}}));
+  leftTables.push_back(makeIdTableFromVector({{1, 11}}));
   std::vector<IdTable> rightTables;
-  rightTables.push_back(makeIdTableFromVector({{1, 21}, {1, 22}}));
-  rightTables.push_back(makeIdTableFromVector({{1, 23}, {1, 24}}));
-  rightTables.push_back(makeIdTableFromVector({{1, 25}, {1, 26}}));
-  rightTables.push_back(makeIdTableFromVector({{1, 27}, {2, 28}}));
-  rightTables.push_back(makeIdTableFromVector({{3, 29}, {3, 30}}));
+  rightTables.push_back(makeIdTableFromVector({{1, 21}}));
+  rightTables.push_back(makeIdTableFromVector({{1, 22}}));
+  rightTables.push_back(makeIdTableFromVector({{1, 23}}));
+  rightTables.push_back(makeIdTableFromVector({{1, 24}, {2, 25}}));
+  rightTables.push_back(makeIdTableFromVector({{3, 26}}));
 
   testLazyOptionalJoin(std::move(leftTables), std::move(rightTables),
                        std::move(expected));
