@@ -115,6 +115,11 @@ class JoinColumnMapping {
   }
 };
 
+// Return a view of the `table` that maps each row to a `std::array<Id,
+// numCols>` with the values of its first `numCols` columns. The array holds
+// copies of the `Id`s and not the references (or proxies) of the columns,
+// because the lazy join stores the projected element beyond the lifetime of
+// its block (see `ProjectedEl` in `JoinAlgorithms.h`).
 struct GetColsFromTable {
   template <size_t numCols, typename Table>
   decltype(auto) operator()(Table& table) {
