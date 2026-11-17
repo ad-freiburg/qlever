@@ -162,6 +162,14 @@ TEST(FilterFactsCanonicalizer, CollectDefinitions) {
   EXPECT_THAT(defs.constants_,
               UnorderedElementsAre(Key(V{"?r"}), Key(V{"?c"})));
 
+  // A variable of several `VALUES` clauses has the values in all of them.
+  auto values = ad_utility::testing::parseQuery(
+      "SELECT * { VALUES ?r { 1 2 3 } VALUES ?r { 3 4 2 } }");
+  EXPECT_THAT(
+      collectDefinitions(values._rootGraphPattern._graphPatterns).constants_,
+      UnorderedElementsAre(::testing::Pair(
+          V{"?r"}, ElementsAre(TripleComponent{2}, TripleComponent{3}))));
+
   // A `BIND` of `UNDEF` (here of an unknown function in the syntax test mode)
   // is not a constant, because a later triple binds its target freely.
   auto cleanup =
