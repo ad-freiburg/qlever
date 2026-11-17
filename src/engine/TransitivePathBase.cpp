@@ -743,20 +743,20 @@ TransitivePathBase::makeTreeWithStrippedColumns(
   // and update all column indices.
   auto strippedSubtree = varsRequiredFromSubtree.stripSubtree(subtree_);
   auto getSubCol = [&](const TransitivePathSide& pathSide) {
-    auto subtreeVar = subtree_->getVariableAndInfoByColumnIndex(pathSide.subCol_).first;
+    auto subtreeVar =
+        subtree_->getVariableAndInfoByColumnIndex(pathSide.subCol_).first;
     return strippedSubtree->getVariableColumn(subtreeVar);
   };
-  auto updateTransitivePathSide =
-      [&](const TransitivePathSide& pathSide) {
-        const auto& tree = pathSide.treeAndCol_.value().first;
-        auto newTree = varsRequiredFromSubtree.stripSubtree(tree);
-        size_t newJoinCol = (newTree->getVariableColumns())
-                                .at(pathSide.value_.getVariable())
-                                .columnIndex_;
-        return TransitivePathSide{
-            std::make_pair(std::move(newTree), newJoinCol), getSubCol(pathSide),
-            pathSide.value_, pathSide.outputCol_};
-      };
+  auto updateTransitivePathSide = [&](const TransitivePathSide& pathSide) {
+    const auto& tree = pathSide.treeAndCol_.value().first;
+    auto newTree = varsRequiredFromSubtree.stripSubtree(tree);
+    size_t newJoinCol = (newTree->getVariableColumns())
+                            .at(pathSide.value_.getVariable())
+                            .columnIndex_;
+    return TransitivePathSide{std::make_pair(std::move(newTree), newJoinCol),
+                              getSubCol(pathSide), pathSide.value_,
+                              pathSide.outputCol_};
+  };
   TransitivePathSide strippedLhsSide;
   if (lhs_.isBoundVariable()) {
     strippedLhsSide = updateTransitivePathSide(lhs_);
@@ -778,4 +778,41 @@ TransitivePathBase::makeTreeWithStrippedColumns(
   return createWithStrippedColumns(requestedVariables, strippedSubtree,
                                    std::move(strippedLhsSide),
                                    std::move(strippedRhsSide));
+}
+
+// _____________________________________________________________________________
+void TransitivePathBase::addPayloadColumns(
+    const std::shared_ptr<QueryExecutionTree>& startTree,
+    ColumnIndex joinColumn) {
+  for (auto [variable, columnIndexWithType] : startTree->getVariableColumns()) {
+    ColumnIndex columnIndex = columnIndexWithType.columnIndex_;
+
+    if (columnIndex == joinColumn || variable == graphVariable_) {
+      continue;
+    }
+
+    columnIndexWithType.columnIndex_ += columnIndex > joinColumn ? 1 : 2;
+
+    if (graphVariable_.has_value()) {
+      auto graphColumn = startTree->getVariableColumnOrNullopt(*graphVariable_);
+
+      if (columnIndex >
+          graphColumn.value_or(std::numeric_limits<size_t>::max())) {
+        columnIndexWithType.columnIndex_ -= 1;
+      }
+    }
+
+    AD_CORRECTNESS_CHECK(!variableColumns_.contains(variable));
+    variableColumns_[variable] = columnIndexWithType;
+  }
+
+  resultWidth_ +=
+      startTree->getResultWidth() - numJoinColumnsWith(startTree, joinColumn);
+
+  if (graphVariable_.has_value()) {
+    auto& graphIndex = variableColumns_[*graphVariable_].columnIndex_;
+    if (graphIndex == 2) {
+      graphIndex = resultWidth_ - 1;
+    }
+  }
 }

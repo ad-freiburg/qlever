@@ -196,6 +196,9 @@ class TransitivePathBase : public Operation {
  protected:
   std::string getCacheKeyImpl() const override;
 
+  void addPayloadColumns(const std::shared_ptr<QueryExecutionTree>& startTree,
+    ColumnIndex joinColumn);
+
   /**
    * @brief Decide on which transitive path side the hull computation should
    * start and where it should end. The start and target side are chosen by
