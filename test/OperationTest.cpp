@@ -1332,11 +1332,16 @@ TEST(Operation, cacheKeysRespectMemoryLimit) {
   EXPECT_EQ(tree.getCacheKey().get_allocator(), allocator);
   EXPECT_EQ(op->getCacheKey().get_allocator(), allocator);
 
-  // Use up all the memory that is left.
+  // Use up all the memory that is left. The cache key of `ValuesForTesting` is
+  // built with a `qlm::ostringstream`, which on libc++ only reports a
+  // `std::ios_base::failure` (see the comment of `qlm::ostringstream`).
+#ifdef _LIBCPP_VERSION
+  using ExpectedException = std::ios_base::failure;
+#else
+  using ExpectedException = ad_utility::detail::AllocationExceedsLimitException;
+#endif
   std::vector<Id, ad_utility::AllocatorWithLimit<Id>> blocker(
       allocator.amountMemoryLeft().getBytes() / sizeof(Id), allocator);
-  EXPECT_THROW(op->getCacheKey(),
-               ad_utility::detail::AllocationExceedsLimitException);
-  EXPECT_THROW((QueryExecutionTree{qec, op}),
-               ad_utility::detail::AllocationExceedsLimitException);
+  EXPECT_THROW(op->getCacheKey(), ExpectedException);
+  EXPECT_THROW((QueryExecutionTree{qec, op}), ExpectedException);
 }
