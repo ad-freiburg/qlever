@@ -379,21 +379,10 @@ Result LibspatialjoinAlgorithm::run() {
 
     // Filtering by bounding box *after* parsing is only necessary if
     // precomputed bounding boxes for filtering *before* parsing are not
-    // available. It only gives the correct result for the join types below, or
-    // if the smaller side has no valid geometry (then its box is empty and the
-    // filter drops all geometries of the larger side).
-    //
-    // NOTE: The filter box of `store` drops each member of a multi-geometry
-    // that does not intersect it, and the remaining members are joined as if
-    // they were the whole geometry. A dropped member is disjoint from all
-    // geometries of the smaller side, which does not change `INTERSECTS`,
-    // `TOUCHES` and `WITHIN_DIST`, but for example `CONTAINS`.
-    bool filterBoxIsCorrect = joinTypeVal == SpatialJoinType::INTERSECTS ||
-                              joinTypeVal == SpatialJoinType::TOUCHES ||
-                              joinTypeVal == SpatialJoinType::WITHIN_DIST;
+    // available, or if the smaller side has no valid geometry (then its box is
+    // empty and the filter drops all geometries of the larger side).
     if (numValidGeomsSmall == 0 ||
-        (!qec_->getIndex().getVocab().isGeoInfoAvailable() &&
-         filterBoxIsCorrect)) {
+        !qec_->getIndex().getVocab().isGeoInfoAvailable()) {
       store.setFilterBox(boxSmall);
     }
 
