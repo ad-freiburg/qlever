@@ -118,28 +118,6 @@ const SparqlExpression& resolve(const SparqlExpression& expression,
   return expression;
 }
 
-// Return the value of `expression` if it is a number (an `Int` or `Double`
-// `Id`, e.g. `500` or `0.5`) or a variable with a single number in `defs`, and
-// `std::nullopt` otherwise (e.g. for the string "500").
-std::optional<double> getNumber(const SparqlExpression& expression,
-                                const Definitions& defs) {
-  const auto& resolved = resolve(expression, defs);
-
-  // A variable with a single number from a `VALUES` clause or a `BIND` (whose
-  // constant is an `Id`).
-  if (auto variable = resolved.getVariableOrNullopt()) {
-    auto it = defs.constants_.find(variable.value());
-    if (it == defs.constants_.end() || it->second.size() != 1) {
-      return std::nullopt;
-    }
-    return it->second.front().getNumber();
-  }
-
-  // A number.
-  auto constant = resolved.getConstantValue();
-  return constant.has_value() ? constant->getNumber() : std::nullopt;
-}
-
 // Return the single value of `variable` from `defs` (from `VALUES` or a `BIND`
 // of a constant), and `std::nullopt` if it has none or several.
 std::optional<TripleComponent> getConstant(const Variable& variable,
@@ -149,6 +127,18 @@ std::optional<TripleComponent> getConstant(const Variable& variable,
     return std::nullopt;
   }
   return it->second.front();
+}
+
+// Return the value of `expression` if it is a number (an `Int` or `Double`
+// `Id`, e.g. `500` or `0.5`) or a variable with a single number in `defs`, and
+// `std::nullopt` otherwise (e.g. for the string "500").
+std::optional<double> getNumber(const SparqlExpression& expression,
+                                const Definitions& defs) {
+  const auto& resolved = resolve(expression, defs);
+  auto variable = resolved.getVariableOrNullopt();
+  auto constant = variable.has_value() ? getConstant(variable.value(), defs)
+                                       : resolved.getConstantValue();
+  return constant.has_value() ? constant->getNumber() : std::nullopt;
 }
 
 // Return the canonical form of a single conjunct: `distance < number` and
