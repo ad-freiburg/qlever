@@ -27,7 +27,8 @@ enum class KeepPreviousIndexDirsEnum {
   MostRecentOnly,
   OriginalAndMostRecent
 };
-}
+QLEVER_ENUM_SIZE(KeepPreviousIndexDirsEnum, 5);
+}  // namespace detail
 
 // Policy for which `previous.*` index directories to keep after a successful
 // index rebuild, configured via the `--rebuild-keep-previous-index-dirs`
@@ -49,7 +50,8 @@ class KeepPreviousIndexDirs
  public:
   using Enum = detail::KeepPreviousIndexDirsEnum;
 
-  static constexpr std::array<std::pair<Enum, std::string_view>, 5>
+  static constexpr std::array<std::pair<Enum, std::string_view>,
+                              qlever::enumSize<Enum>>
       descriptions_{
           {{Enum::All, "all"},
            {Enum::None, "none"},

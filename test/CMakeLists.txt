@@ -272,6 +272,15 @@ addLinkAndDiscoverTestNoLibs(StringPairHashMapTest)
 
 addLinkAndDiscoverTest(HashSetTest)
 
+addLinkAndDiscoverTest(HashContainersWithAllocatorTest)
+# Emscripten's clang crashes on this file at -O2/-O3 (in `Instruction::clone`
+# in a loop pass on `testExceptionSafety`). The precompiled header is compiled
+# with -O3 and hence cannot be used.
+if (EMSCRIPTEN)
+    set_source_files_properties(HashContainersWithAllocatorTest.cpp PROPERTIES
+            COMPILE_OPTIONS "-O1" SKIP_PRECOMPILE_HEADERS ON)
+endif ()
+
 addLinkAndDiscoverTest(GroupByTest engine)
 
 addLinkAndDiscoverTest(VocabularyGeneratorTest index)
@@ -643,6 +652,8 @@ addLinkAndDiscoverTest(GeoCellGridTest vocabulary)
 
 addLinkAndDiscoverTest(QueryRewriteUtilTest engine)
 
+addLinkAndDiscoverTest(FilterFactsTest filterFacts sparqlParser)
+
 addLinkAndDiscoverTest(HttpErrorTest engine)
 
 addLinkAndDiscoverTest(TimeTracerTest)
@@ -684,6 +695,8 @@ addLinkAndDiscoverTest(ConstructBatchEvaluatorTest engine)
 addLinkAndDiscoverTest(ExportIdsTest engine sparqlParser)
 
 addLinkAndDiscoverTestNoLibs(EnumWithStringsTest Boost::program_options)
+
+addLinkAndDiscoverTestNoLibs(EnumSizeTest)
 
 addLinkAndDiscoverTest(ConstructTripleGeneratorTest engine)
 

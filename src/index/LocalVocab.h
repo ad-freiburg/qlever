@@ -8,16 +8,6 @@
 
 #include <absl/hash/hash.h>
 
-#include <boost/version.hpp>
-#if BOOST_VERSION >= 108100
-#include <boost/unordered/unordered_flat_set.hpp>
-#endif
-#if BOOST_VERSION >= 108200
-#include <boost/unordered/unordered_node_set.hpp>
-#endif
-#if BOOST_VERSION < 108200
-#include <boost/unordered_set.hpp>
-#endif
 #include <atomic>
 #include <cstddef>
 #include <cstdlib>
@@ -32,10 +22,12 @@
 #include "backports/memory.h"
 #include "backports/memory_resource.h"
 #include "backports/span.h"
+#include "backports/unordered.h"
 #include "global/Id.h"
 #include "index/LocalVocabEntry.h"
 #include "util/AllocatorMemoryResource.h"
 #include "util/BlankNodeManager.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/Exception.h"
 #include "util/NoCopyNoMove.h"
 
@@ -86,20 +78,13 @@ class LocalVocab {
     // and the arena returns its memory to `upstream_`.
     ql::pmr::monotonic_buffer_resource arena_{&upstream_};
 
-    // Both set types never move their elements, and leave the set unchanged
-    // when the insertion of an element throws (in particular, when the memory
-    // limit of the allocator is exceeded). `boost::unordered_node_set` is
-    // faster, but only available since Boost 1.82.
-#if BOOST_VERSION >= 108200
-    template <typename... Ts>
-    using NodeSet = boost::unordered_node_set<Ts...>;
-#else
-    template <typename... Ts>
-    using NodeSet = boost::unordered_set<Ts...>;
-#endif
-    using Words = NodeSet<LocalVocabEntryView, absl::Hash<LocalVocabEntryView>,
-                          std::equal_to<LocalVocabEntryView>,
-                          ql::pmr::polymorphic_allocator<LocalVocabEntryView>>;
+    // A node set never moves its elements, and leaves itself unchanged when
+    // the insertion of an element throws (in particular, when the memory limit
+    // of the allocator is exceeded), see `backports/unordered.h`.
+    using Words = ql::NodeHashSetTemplate<
+        LocalVocabEntryView, absl::Hash<LocalVocabEntryView>,
+        std::equal_to<LocalVocabEntryView>,
+        ql::pmr::polymorphic_allocator<LocalVocabEntryView>>;
     Words words_{Words::allocator_type{&arena_}};
 
    public:
@@ -133,19 +118,9 @@ class LocalVocab {
 
   // A set that leaves itself unchanged when the insertion of an element throws
   // (in particular, when the memory limit of its allocator is exceeded), unlike
-  // the hash sets of `absl`. `boost::unordered_flat_set` is faster, but only
-  // available since Boost 1.81.
-#if BOOST_VERSION >= 108100
-  template <typename... Ts>
-  using FlatSet = boost::unordered_flat_set<Ts...>;
-#else
-  template <typename... Ts>
-  using FlatSet = boost::unordered_set<Ts...>;
-#endif
+  // the hash sets of `absl`, see `util/ContainersWithAllocator.h`.
   using SetPtr = std::shared_ptr<const Set>;
-  using OtherWordSets =
-      FlatSet<SetPtr, absl::Hash<SetPtr>, std::equal_to<SetPtr>,
-              ad_utility::AllocatorWithLimit<SetPtr>>;
+  using OtherWordSets = qlm::flat_hash_set<SetPtr>;
 
   using LocalBlankNodeManager =
       ad_utility::BlankNodeManager::LocalBlankNodeManager;
@@ -159,17 +134,7 @@ class LocalVocab {
   std::shared_ptr<Set> primaryWordSet_ = std::make_shared<Set>(allocator_);
 
   // The other sets of `LocalVocabEntry`s, which are static.
-  //
-  // NOTE: The set is stored behind a pointer, because the move assignment of a
-  // `boost::unordered_set` (see `FlatSet`) is not `noexcept` if its allocator
-  // is not always equal, which would make the move assignment of a
-  // `LocalVocab` (and of the classes that contain one, like `ParsedQuery`) not
-  // `noexcept` either. Only the (small and empty) set object itself is not
-  // allocated with `allocator_`, such that creating a `LocalVocab` never
-  // throws because of the memory limit.
-  std::unique_ptr<OtherWordSets> otherWordSets_ =
-      std::make_unique<OtherWordSets>(
-          OtherWordSets::allocator_type{allocator_});
+  OtherWordSets otherWordSets_{OtherWordSets::allocator_type{allocator_}};
 
   // The number of words (so that we can compute `size()` in constant time).
   size_t size_ = 0;
@@ -242,7 +207,7 @@ class LocalVocab {
   size_t size() const {
     if constexpr (ad_utility::areExpensiveChecksEnabled) {
       auto size = primaryWordSet().size();
-      for (const auto& previous : *otherWordSets_) {
+      for (const auto& previous : otherWordSets_) {
         size += previous->size();
       }
       AD_CORRECTNESS_CHECK(size == size_);
@@ -254,7 +219,7 @@ class LocalVocab {
   bool empty() const { return size() == 0; }
 
   // The number of set stores (primary set and other sets).
-  size_t numSets() const { return 1 + otherWordSets_->size(); }
+  size_t numSets() const { return 1 + otherWordSets_.size(); }
 
   // Get the `LocalVocabEntry` corresponding to the given `LocalVocabIndex`.
   //
@@ -273,7 +238,7 @@ class LocalVocab {
       if (set == primaryWordSet_) {
         return;
       }
-      bool added = otherWordSets_->insert(set).second;
+      bool added = otherWordSets_.insert(set).second;
       size_ += static_cast<size_t>(added) * set->size();
     };
     // Note: Even though the `otherWordsSet_`is a hash set that filters out
@@ -284,7 +249,7 @@ class LocalVocab {
          vocabs | filter(std::not_fn(&LocalVocab::empty))) {
       // Mark vocab as copied
       vocab.copied_->store(true);
-      ql::ranges::for_each(*vocab.otherWordSets_, addWordSet);
+      ql::ranges::for_each(vocab.otherWordSets_, addWordSet);
       addWordSet(vocab.primaryWordSet_);
     }
 
@@ -323,7 +288,7 @@ class LocalVocab {
   std::vector<LocalVocabEntry> getAllWordsForTesting() const;
 
   const Set& primaryWordSet() const { return *primaryWordSet_; }
-  const auto& otherSets() const { return *otherWordSets_; }
+  const auto& otherSets() const { return otherWordSets_; }
 
   // This function returns the required data structure to restore the
   // `LocalBlankNodeManager`, e.g. when UPDATEs or cached queries are serialized
