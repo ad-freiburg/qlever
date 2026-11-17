@@ -47,6 +47,9 @@ constexpr std::string_view turtle =
 
 constexpr std::string_view geoms = "?a <p> ?ga . ?b <p> ?gb . ";
 constexpr std::string_view dist = "geof:distance(?ga, ?gb, unit:M)";
+// The geometry of `<a1>` as a fixed value.
+constexpr std::string_view point =
+    "\"POINT(7.8 48.0)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 
 // `SELECT * { <body> }` with the prefixes from above.
 std::string query(std::string_view body) {
@@ -133,6 +136,28 @@ TEST(QueryPlannerFilterFacts, BindOfDistance) {
           std::nullopt, scan("?a", "<p>", "?ga"), scan("?b", "<p>", "?gb")));
 }
 
+// Test that a FILTER on the target of a `BIND` of the distance to a fixed
+// geometry becomes a `SpatialJoin` with this geometry in a `VALUES` child. The
+// `BIND` stays above the `SpatialJoin`, which only provides the distance
+// between two variables as a column.
+TEST(QueryPlannerFilterFacts, BindOfDistanceToFixedGeometry) {
+  auto scan = h::IndexScanFromStrings;
+  V fixed{absl::StrCat(QLEVER_INTERNAL_VARIABLE_QUERY_PLANNER_PREFIX, 0)};
+  auto values = h::ValuesClause(absl::StrCat(
+      "VALUES (", fixed.name(),
+      ") { (G:", GeoPoint{48.0, 7.8}.toStringRepresentation(), ") }"));
+  auto bind = absl::StrCat("geof:distance(?ga, ", point, ")");
+  h::expect(
+      query(absl::StrCat("?a <p> ?ga . BIND(", bind,
+                         " AS ?d) FILTER(?d <= 0.5)")),
+      h::Bind(h::spatialJoinFilterSubstitute(
+                  500, -1, V{"?ga"}, fixed, std::nullopt,
+                  PayloadVariables::all(), SpatialJoinAlgorithm::LIBSPATIALJOIN,
+                  SpatialJoinType::WITHIN_DIST, std::nullopt,
+                  scan("?a", "<p>", "?ga"), values),
+              bind, V{"?d"}));
+}
+
 // Test that definitions which are not equivalent to their variable in the
 // whole group are not used.
 TEST(QueryPlannerFilterFacts, NoRewrite) {
@@ -215,6 +240,10 @@ TEST(QueryPlannerFilterFacts, ResultsAreEqual) {
       {absl::StrCat("{ SELECT ?a ?b { ", geoms, "BIND(", dist,
                     " AS ?d) FILTER($) } }"),
        "?d <= 500", 8},
+      // The points within 500 m of the fixed point `<a1>`: `<a1>` and `<a2>`.
+      {absl::StrCat("?a <p> ?ga . BIND(geof:distance(?ga, ", point,
+                    ") AS ?d) FILTER($)"),
+       "?d <= 0.5", 2},
       // The conjunct `?a != ?b` stays, and removes the four pairs of a point
       // with itself.
       {absl::StrCat(geoms, "VALUES ?r { 500 } FILTER($)"),
