@@ -20,7 +20,6 @@ WKTParser::WKTParser(sj::GeometryStore* store, sj::PreparedGeomMetaCb metaCb,
                                              numThreads),
       _numSkipped(numThreads),
       _numParsed(numThreads),
-      _exceptions(numThreads),
       _usePrefiltering(usePrefiltering),
       _prefilterLatLngBox(prefilterLatLngBox),
       _index(index) {
@@ -45,16 +44,6 @@ WKTParser::~WKTParser() {
         }
       },
       "Stopping the worker threads in the destructor of `WKTParser`");
-}
-
-// _____________________________________________________________________________
-void WKTParser::done() {
-  sj::WKTParserBase<SpatialJoinParseJob>::done();
-  for (const auto& exception : _exceptions) {
-    if (exception) {
-      std::rethrow_exception(exception);
-    }
-  }
 }
 
 // _____________________________________________________________________________
@@ -83,8 +72,8 @@ void WKTParser::processQueue(size_t t) {
   size_t parseCounter = 0;
   while ((batch = _jobs.get()).size()) {
     // An exception on this worker thread (for example, if `_store` cannot
-    // open its file) is thrown by `done()` on the main thread instead of
-    // terminating the program (`throwIfWorkerFailed` throws it earlier). The
+    // open or write its file) is thrown by `done()` on the main thread instead
+    // of terminating the program (`throwIfWorkerFailed` throws it earlier). The
     // remaining batches are still taken from the queue (so that
     // `addValueIdToQueue` never blocks), but skipped.
     try {
@@ -149,8 +138,11 @@ void WKTParser::processQueue(size_t t) {
         _store->addBatch(w, t, _metaCb);
       }
     } catch (...) {
-      if (!_exceptions[t]) {
-        _exceptions[t] = std::current_exception();
+      {
+        std::lock_guard lock{_workerExceptionMtx};
+        if (!_workerException) {
+          _workerException = std::current_exception();
+        }
       }
       _cancelled = true;
     }
