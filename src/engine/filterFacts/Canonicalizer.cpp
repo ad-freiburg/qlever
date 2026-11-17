@@ -26,11 +26,15 @@ using valueIdComparators::Comparison;
 
 namespace {
 
-// Return true if the target of `BIND(expression AS ?v)` is equivalent to
-// `expression`, given the variables that are always bound before the `BIND`.
+// For `BIND(expression AS ?v)`, return true if a FILTER of the group that
+// contains `?v` may substitute `expression` for `?v`. This holds if
+// `expression` is deterministic, contains no `EXISTS`, and only contains
+// variables from `alwaysBound` (the variables that are bound in every row
+// before the `BIND`). Then `expression` has the same value at the FILTER as
+// at the `BIND` in every row.
 //
-// NOTE: The check is conservative, so `false` does not mean that they are not
-// equivalent.
+// NOTE: For example, a variable that is only bound after the `BIND` is unbound
+// at the `BIND` (so `?v` is unbound), but bound at the FILTER.
 bool isEquivalentToTarget(const SparqlExpression& expression,
                           const ad_utility::HashSet<Variable>& alwaysBound) {
   std::vector<const SparqlExpression*> exists;
