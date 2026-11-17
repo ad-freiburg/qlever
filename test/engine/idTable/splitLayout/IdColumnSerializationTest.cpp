@@ -53,8 +53,8 @@ void expectColumnIsRead(const std::vector<Id>& ids, Bytes bytes,
 }
 }  // namespace
 
-// Test that a column is written as its size, then the payloads of all its
-// `Id`s, then their datatypes.
+// Test that a column is written as the payloads of all its `Id`s and then their
+// datatypes, each preceded by the size of the column.
 TEST(IdColumnSerialization, format) {
   const auto ids = sampleIds();
   const IdColumnVector column{ids.begin(), ids.end(), testAllocator()};
@@ -67,6 +67,7 @@ TEST(IdColumnSerialization, format) {
   expected.serializeBytes(
       reinterpret_cast<const char*>(view.rawPayloads().data()),
       view.rawPayloads().size_bytes());
+  expected << view.size();
   expected.serializeBytes(
       reinterpret_cast<const char*>(view.rawDatatypes().data()),
       view.rawDatatypes().size_bytes());

@@ -234,7 +234,8 @@ namespace namedResultCacheSerializer {
 // Write `value` to the `serializer`, in exactly the format that the read
 // branch of the serialization of a `NamedResultCache::Value` below reads.
 //
-// The `columns` (one column of an `IdTable` per column of the result) and
+// The `columns` (one per column of the result, each convertible to a
+// `ConstIdColumnRef`, for example the columns of an `IdTable`) and
 // the `resultSortedOn` are passed separately, so that a caller can write a
 // *rewritten* version of the `value`: a caller may for example replace the
 // `Id`s that refer to local vocab entries by `Id`s of the main or of a
@@ -261,8 +262,8 @@ void writeValue(Serializer& serializer, const NamedResultCache::Value& value,
         serializer, value.localVocab_);
   }
 
-  // Serialize the `IdTable` (uses the `serializeIds` helper which handles
-  // `LocalVocab` IDs).
+  // Serialize the `IdTable`, each column as a `ConstIdColumnRef`, which is the
+  // format that the read branch below expects.
   const auto& resultView = ExplicitIdTableOperation::viewOf(value.result_);
   serializer << resultView.numRows();
   serializer << resultView.numColumns();
@@ -297,7 +298,7 @@ void writeValue(Serializer& serializer, const NamedResultCache::Value& value,
         "also occur if SPARQL UPDATE operations have been performed on the "
         "index before creating the named cached result.");
     AD_CORRECTNESS_CHECK(ql::ranges::size(col) == resultView.numRows());
-    ad_utility::detail::serializeIds(serializer, col);
+    serializer << ConstIdColumnRef{col};
   }
 
   // Serialize the `VariableToColumnMap` deterministically, see

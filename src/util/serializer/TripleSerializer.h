@@ -150,9 +150,6 @@ CPP_template(typename Range, typename Serializer)(
 void serializeIds(Serializer& serializer, Range&& range) {
   if constexpr (ql::ranges::contiguous_range<std::decay_t<Range>>) {
     serializer << ql::span{range};
-  } else if constexpr (std::is_convertible_v<const std::decay_t<Range>&,
-                                             ConstIdColumnRef>) {
-    serializer << ConstIdColumnRef{range};
   } else {
     ad_utility::serialization::VectorIncrementalSerializer<Id, Serializer>
         vectorSerializer{std::move(serializer)};
