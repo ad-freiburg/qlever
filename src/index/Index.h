@@ -12,12 +12,14 @@
 
 #include "backports/three_way_comparison.h"
 #include "global/Id.h"
+#include "index/GraphNameManager.h"
 #include "index/InputFileSpecification.h"
 #include "index/Permutation.h"
-#include "index/StringSortComparator.h"
 #include "index/TextScanMode.h"
 #include "index/TextScoringEnum.h"
-#include "index/Vocabulary.h"
+#include "index/vocabulary/EncodedIriManager.h"
+#include "index/vocabulary/StringSortComparator.h"
+#include "index/vocabulary/Vocabulary.h"
 #include "parser/TripleComponent.h"
 #include "util/CancellationHandle.h"
 #include "util/json.h"
@@ -26,7 +28,9 @@
 class IdTable;
 class TextBlockMetaData;
 class IndexImpl;
+class LocalVocabContext;
 struct LocatedTriplesState;
+struct SortConfig;
 class DeltaTriplesManager;
 
 class Index {
@@ -51,7 +55,10 @@ class Index {
     static NumNormalAndInternal fromNormal(size_t normal) {
       return {normal, 0};
     }
-    NLOHMANN_DEFINE_TYPE_INTRUSIVE(NumNormalAndInternal, normal, internal);
+    // Note: The expansion of `NLOHMANN_DEFINE_TYPE_INTRUSIVE` ends in complete
+    // `friend` function definitions, so a trailing `;` would be an extra one,
+    // which is ill-formed (and rejected with `-pedantic-errors`).
+    NLOHMANN_DEFINE_TYPE_INTRUSIVE(NumNormalAndInternal, normal, internal)
   };
 
   // Store all information about possible search results from the text index in
@@ -89,9 +96,12 @@ class Index {
   const IndexImpl& getPimpl() const { return *pimpl_; }
 
   // Create an index from a file. Will write vocabulary and on-disk index data.
+  // `numThreads` is the number of threads used during the index build; it must
+  // be at least 1.
   // NOTE: The index can not directly be used after this call, but has to be
   // setup by `createFromOnDiskIndex` after this call.
-  void createFromFiles(const std::vector<InputFileSpecification>& files);
+  void createFromFiles(const std::vector<InputFileSpecification>& files,
+                       size_t numThreads);
 
   // Create an index object from an on-disk index that has previously been
   // constructed using the `createFromFile` method which is typically called via
@@ -118,16 +128,13 @@ class Index {
   DeltaTriplesManager& deltaTriplesManager();
   const DeltaTriplesManager& deltaTriplesManager() const;
 
+  // Get a reference to the GraphNameManager of this Index.
+  GraphNameManager& graphNameManager();
+  const GraphNameManager& graphNameManager() const;
+
   // --------------------------------------------------------------------------
   // RDF RETRIEVAL
   // --------------------------------------------------------------------------
-  [[nodiscard]] size_t getCardinality(
-      const TripleComponent& comp, Permutation::Enum permutation,
-      const LocatedTriplesState& locatedTriplesState) const;
-  [[nodiscard]] size_t getCardinality(
-      Id id, Permutation::Enum permutation,
-      const LocatedTriplesState& locatedTriplesState) const;
-
   // TODO<joka921> Once we have an overview over the folding this logic should
   // probably not be in the index class.
   RdfsVocabulary::AccessReturnType indexToString(VocabIndex id) const;
@@ -162,13 +169,16 @@ class Index {
   [[nodiscard]] size_t getSizeOfTextBlocksSum(const std::string& word,
                                               TextScanMode textScanMode) const;
 
+  // See the corresponding functions in `IndexImpl.h`.
   IdTable getWordPostingsForTerm(
       const std::string& term,
-      const ad_utility::AllocatorWithLimit<Id>& allocator) const;
+      const ad_utility::AllocatorWithLimit<Id>& allocator,
+      const SortConfig& sortConfig) const;
 
   IdTable getEntityMentionsForWord(
       const std::string& term,
-      const ad_utility::AllocatorWithLimit<Id>& allocator) const;
+      const ad_utility::AllocatorWithLimit<Id>& allocator,
+      const SortConfig& sortConfig) const;
 
   size_t getIndexOfBestSuitedElTerm(
       const std::vector<std::string>& terms) const;
@@ -185,6 +195,8 @@ class Index {
 
   bool& loadAllPermutations();
 
+  bool& addHasWordTriples();
+
   bool& doNotLoadPermutations();
 
   void setKeepTempFiles(bool keepTempFiles);
@@ -195,7 +207,8 @@ class Index {
   ad_utility::MemorySize& parserBufferSize();
   const ad_utility::MemorySize& parserBufferSize() const;
 
-  ad_utility::MemorySize& blocksizePermutationsPerColumn();
+  size_t& rowsPerBlock();
+  const size_t& rowsPerBlock() const;
 
   void setOnDiskBase(const std::string& onDiskBase);
 
@@ -230,13 +243,6 @@ class Index {
   // ___________________________________________________________________________
   std::vector<float> getMultiplicities(const Permutation& permutation) const;
 
-  // Similar to the previous overload of `scan`, but only get the exact size of
-  // the scan result.
-  size_t getResultSizeOfScan(
-      const ScanSpecification& scanSpecification,
-      const Permutation::Enum& permutation,
-      const LocatedTriplesState& locatedTriplesState) const;
-
   // Get access to the implementation. This should be used rarely as it
   // requires including the rather expensive `IndexImpl.h` header
   IndexImpl& getImpl() { return *pimpl_; }
@@ -244,6 +250,12 @@ class Index {
 
   // Allow implicit conversions to `const IndexImpl&`.
   operator const IndexImpl&() const { return getImpl(); }
+
+  // Return this index as the context of the `LocalVocabEntry`s that belong to
+  // it. Defined out of line, such that the callers only need the forward
+  // declaration of `LocalVocabContext` above and not the complete type (which
+  // would require the rather expensive `IndexImpl.h`).
+  const LocalVocabContext& getLocalVocabContext() const;
 };
 
 #endif  // QLEVER_SRC_INDEX_INDEX_H

@@ -7,6 +7,7 @@
 
 #include <absl/container/flat_hash_map.h>
 
+#include "util/Synchronized.h"
 #include "util/http/beast.h"
 #include "util/http/websocket/QueryId.h"
 #include "util/http/websocket/QueryToSocketDistributor.h"
@@ -38,13 +39,14 @@ class QueryHub {
   using MapType = ad_utility::Synchronized<
       absl::flat_hash_map<QueryId, WeakReferenceHolder>>;
 
-  net::io_context& ioContext_;
+  net::any_io_executor ioExecutor_;
   /// Guard to block destruction of the underlying io_context, to allow
   /// to gracefully destroy objects that might depend on the io_context.
   std::shared_ptr<MapType> socketDistributors_{std::make_shared<MapType>()};
 
  public:
-  explicit QueryHub(net::io_context& ioContext) : ioContext_{ioContext} {}
+  explicit QueryHub(net::any_io_executor ioExecutor)
+      : ioExecutor_{std::move(ioExecutor)} {}
 
   /// Create a new `QueryToSocketDistributor` or return a pre-existing one for
   /// the provided query id if there already is one. This can only ever be

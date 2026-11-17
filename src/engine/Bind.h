@@ -8,6 +8,7 @@
 #include "engine/Operation.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/ParsedQuery.h"
+#include "util/ContainersWithAllocator.h"
 
 // BIND operation.
 class Bind : public Operation {
@@ -29,27 +30,42 @@ class Bind : public Operation {
   const parsedQuery::Bind& bind() const { return _bind; }
   [[nodiscard]] std::string getDescriptor() const override;
   [[nodiscard]] size_t getResultWidth() const override;
-  std::vector<QueryExecutionTree*> getChildren() override;
-  size_t getCostEstimate() override;
-  bool supportsLimitOffset() const override;
-  void onLimitOffsetChanged(
-      const LimitOffsetClause& limitOffset) const override;
 
  private:
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override;
+
+ public:
+  size_t getCostEstimate() override;
+  LimitOffsetHandling handlesLimitOffset() const override;
+  void onLimitOffsetChanged(const LimitOffsetClause& limitOffset,
+                            bool childrenAreExclusivelyOwned) override;
+
+  // `BIND` needs to be able to push down other `BIND`s if the query contains
+  // multiple `BIND`s of which only some can be rewritten.
+  std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
+      const parsedQuery::Bind& bind) const override;
+  std::unique_ptr<Operation> cloneWithNewChildren(
+      qlm::vector<std::shared_ptr<QueryExecutionTree>> children) const override;
+
+ private:
+  [[nodiscard]] bool isDeterministicImpl() const override;
   std::unique_ptr<Operation> cloneImpl() const override;
   uint64_t getSizeEstimateBeforeLimit() override;
 
  public:
   float getMultiplicity(size_t col) override;
   bool knownEmptyResult() override;
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithStrippedColumns(
+      const std::set<Variable>& requestedVariables) const override;
 
  protected:
-  [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override;
+  [[nodiscard]] qlm::vector<ColumnIndex> resultSortedOn() const override;
 
  private:
   Result computeResult(bool requestLaziness) override;
 
-  static IdTable cloneSubView(const IdTable& idTable,
+  static IdTable cloneSubView(const IdTableView<0>& idTable,
                               const std::pair<size_t, size_t>& subrange);
 
   // Implementation for the binding of arbitrary expressions.

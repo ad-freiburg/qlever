@@ -9,6 +9,7 @@
 #include <gtest/gtest.h>
 
 #include <array>
+#include <string>
 #include <vector>
 
 #include "./util/AllocatorTestHelpers.h"
@@ -16,14 +17,25 @@
 #include "./util/IdTestHelpers.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
-#include "util/BufferedVector.h"
+#include "util/CompilerWarnings.h"
 #include "util/TypeIdentity.h"
 
 using namespace ad_utility::testing;
 using ad_utility::use_type_identity::ti;
 namespace {
 auto V = ad_utility::testing::VocabId;
-}
+
+// A storage type that only differs from a plain `std::vector` in that it has an
+// additional constructor that takes (and ignores) the arguments that the old
+// disk-based `BufferedVector` used to need (a threshold and a filename). It is
+// used to test that the `IdTable` works with a column storage type that is not
+// exactly `std::vector`, and that needs constructor arguments.
+template <typename T>
+struct VectorWithExtraConstructor : public std::vector<T> {
+  using std::vector<T>::vector;
+  VectorWithExtraConstructor(size_t, std::string) {}
+};
+}  // namespace
 
 // This unit tests is part of the documentation of the `IdTable` class. It
 // demonstrates the correct usage of the proxy references that
@@ -219,7 +231,7 @@ TEST(IdTable, rowIterators) {
 // template:
 // - The default `IdTable` (stores `Id`s in a `vector<Id, AllocatorWithLimit>`.
 // - An `IdTable` that stores plain `int`s in a plain `std::vector`.
-// - An `IdTable` that stores `Id`s in a `BufferedVector`.
+// - An `IdTable` that stores `Id`s in a `VectorWithExtraConstructor`.
 // Arguments:
 // `NumIdTables` - The number of distinct `IdTable` objects that are used inside
 //                 the test case
@@ -228,14 +240,14 @@ TEST(IdTable, rowIterators) {
 // function that converts a `size_t` to the `value_type` of the `IdTable`, and
 // the second one (if present) is a `std::vector` with `NumIdTables` entries
 // that represent the additional arguments that are needed to instantiate an
-// `IdTable` (e.g. an allocator or a `BufferedVector`).
+// `IdTable` (e.g. an allocator or a `VectorWithExtraConstructor`).
 template <size_t NumIdTables, typename T>
 void runTestForDifferentTypes(T testCase, std::string testCaseName) {
-  using Buffer = ad_utility::BufferedVector<Id>;
+  using Buffer = VectorWithExtraConstructor<Id>;
   using BufferedTable = columnBasedIdTable::IdTable<Id, 0, Buffer>;
   using IntTable = columnBasedIdTable::IdTable<int, 0>;
-  // Prepare the vectors of `allocators` and distinct `BufferedVector`s needed
-  // for the respective `IdTable` types.
+  // Prepare the vectors of `allocators` and distinct
+  // `VectorWithExtraConstructor`s needed for the respective `IdTable` types.
   std::vector<std::decay_t<decltype(makeAllocator())>> allocators;
   std::vector<std::vector<Buffer>> buffers;
   for (size_t i = 0; i < NumIdTables; ++i) {
@@ -256,11 +268,13 @@ void runTestForDifferentTypes(T testCase, std::string testCaseName) {
 // This helper function has to be used inside the `testCase` lambdas for the
 // `runTestForDifferentTypes` function above whenever a copy of an `IdTable` has
 // to be made. It is necessary because for some `IdTable` instantiations
-// (for example when the data is stored in a `BufferedVector`) the `clone`
-// member function needs additional arguments. Currently, the only additional
-// argument is the filename for the copy for `IdTables` that store their data in
-// a `BufferedVector`. For an example usage see the test cases below.
-auto clone(const auto& table, auto... args) {
+// (for example when the data is stored in a `VectorWithExtraConstructor`) the
+// `clone` member function needs additional arguments. Currently, the only
+// additional argument is the filename for the copy for `IdTables` that store
+// their data in a `VectorWithExtraConstructor`. For an example usage see the
+// test cases below.
+template <typename Table, typename... Args>
+auto clone(const Table& table, Args... args) {
   if constexpr (requires { table.clone(); }) {
     return table.clone();
   } else {
@@ -332,7 +346,15 @@ TEST(IdTable, at) {
     constexpr size_t NUM_COLS = 4;
 
     Table t1{NUM_COLS, std::move(additionalArgs.at(0))...};
+    // GCC 12 emits a spurious `-Wstringop-overflow` for the `__builtin_memmove`
+    // in libstdc++'s bitwise-relocate path of `std::vector` growth when the
+    // column storage is instantiated with `ValueId`: it derives a bogus
+    // `[2^63, 2^64)` size range for the (unreachable) copy and treats it as an
+    // overflow. This only surfaces here in the test, so we suppress it locally
+    // instead of in `IdTable::resize` itself.
+    DISABLE_STRINGOP_OVERFLOW_WARNINGS
     t1.resize(1);
+    GCC_REENABLE_WARNINGS
     t1.at(0, 0) = make(42);
     ASSERT_EQ(t1.at(0, 0), make(42));
     ASSERT_EQ(std::as_const(t1).at(0, 0), make(42));
@@ -836,28 +858,18 @@ TEST(IdTableTest, statusAfterMove) {
               (std::array{V(4), V(16), V(23)}));
   }
   {
-    using Buffer = ad_utility::BufferedVector<Id>;
+    // The same behavior also holds for an `IdTable` with a custom column
+    // storage type that needs constructor arguments.
+    using Buffer = VectorWithExtraConstructor<Id>;
     Buffer buffer(0, "IdTableTest.statusAfterMove.dat");
     using BufferedTable = columnBasedIdTable::IdTable<Id, 1, Buffer>;
     BufferedTable table{1, std::array{std::move(buffer)}};
     table.push_back(std::array{V(19)});
     auto t2 = std::move(table);
-    // The `table` has been moved from and is invalid, because we don't have a
-    // file anymore where we could write the contents. This means that all
-    // operations that would have to change the size of the IdTable throw until
-    // we have reinstated the column vector by explicitly assigning a newly
-    // constructed table. The exceptions that are thrown are from the
-    // `BufferedVector` class which throws when it is being accessed after being
-    // moved from. In other words, the `IdTable` class needs no special code to
-    // handle the case of the columns being stored in a `BufferedVector`.
-    AD_EXPECT_THROW_WITH_MESSAGE(
-        table.push_back(std::array{V(4)}),
-        ::testing::ContainsRegex("Tried to access a DiskBasedArray"));
-    AD_EXPECT_THROW_WITH_MESSAGE(
-        table.resize(42),
-        ::testing::ContainsRegex("Tried to access a DiskBasedArray"));
-    table = BufferedTable{
-        1, std::array{Buffer{0, "IdTableTest.statusAfterMove2.dat"}}};
+    // The moved-from `table` is valid and still has the same number of columns,
+    // but they are now empty.
+    ASSERT_EQ(1, table.numColumns());
+    ASSERT_EQ(0, table.numRows());
     ASSERT_NO_THROW(table.push_back(std::array{V(4)}));
     ASSERT_NO_THROW(table.resize(42));
     ASSERT_EQ(table.size(), 42u);
@@ -1152,28 +1164,43 @@ TEST(IdTable, cornerCases) {
   }
 }
 
+namespace {
+// Match an allocator with the memory limit from which exactly `numIds`
+// entries of an `Id` column are allocated.
+MATCHER_P2(hasAllocatedIds, numIds, limit,
+           (negation ? "has not " : "has ") + std::to_string(numIds) +
+               " Ids allocated") {
+  const auto memoryLeft = arg.amountMemoryLeft();
+  *result_listener << "which has " << memoryLeft.getBytes() << " bytes left";
+  return memoryLeft == limit - ad_utility::MemorySize::bytes(
+                                   numIds * BYTES_PER_ID_COLUMN_ENTRY);
+}
+}  // namespace
+
 TEST(IdTable, shrinkToFit) {
   // Note: The behavior of the following test case depends on the implementation
   // of `std::vector::reserve` and `std::vector::push_back`. It might be
   // necessary to change them if one of our used standard libraries has a
   // different behavior, but this is unlikely due to ABI stability goals between
   // library versions.
-  auto memory = ad_utility::makeAllocationMemoryLeftThreadsafeObject(1_kB);
-  IdTable table{2, ad_utility::AllocatorWithLimit<Id>{memory}};
   using namespace ad_utility::memory_literals;
-  ASSERT_EQ(memory.ptr().get()->wlock()->amountMemoryLeft(), 1_kB);
+  const auto limit = 1_kB;
+  auto allocator = qlever::makeAllocatorWithLimit<Id>(limit);
+  IdTable table{2, allocator};
+  ASSERT_THAT(allocator, hasAllocatedIds(0, limit));
+  // Reserving 20 rows allocates 20 rows of 2 columns, and two `emplace_back`s
+  // do not change that.
   table.reserve(20);
   ASSERT_TRUE(table.empty());
-  // 20 rows * 2 columns * 8 bytes per ID were allocated.
-  ASSERT_EQ(memory.ptr().get()->wlock()->amountMemoryLeft(), 680_B);
+  ASSERT_THAT(allocator, hasAllocatedIds(20 * 2, limit));
   table.emplace_back();
   table.emplace_back();
   ASSERT_EQ(table.numRows(), 2u);
-  ASSERT_EQ(memory.ptr().get()->wlock()->amountMemoryLeft(), 680_B);
+  ASSERT_THAT(allocator, hasAllocatedIds(20 * 2, limit));
+  // `shrinkToFit` releases all but the 2 rows of 2 columns.
   table.shrinkToFit();
   ASSERT_EQ(table.numRows(), 2u);
-  // Now only 2 rows * 2 columns * 8 bytes were allocated.
-  ASSERT_EQ(memory.ptr().get()->wlock()->amountMemoryLeft(), 968_B);
+  ASSERT_THAT(allocator, hasAllocatedIds(2 * 2, limit));
 }
 
 TEST(IdTable, staticAsserts) {
@@ -1231,10 +1258,374 @@ TEST(IdTable, moveOrClone) {
   EXPECT_TRUE(table.empty());
 }
 
+// ______________________________________________________________________________
+TEST(IdTable, moveOrCloneOnView) {
+  IdTable table{1, ad_utility::makeUnlimitedAllocator<Id>()};
+  table.push_back({V(1)});
+  table.push_back({V(2)});
+
+  IdTableView<0> view = table.asStaticView<0>();
+  // `moveOrClone()` on a view (lvalue) returns a deep-owned clone, not a view.
+  IdTable cloned = view.moveOrClone();
+  EXPECT_EQ(cloned, table);
+  EXPECT_NE(&cloned(0, 0), &table(0, 0));
+
+  // `moveOrClone()` on a view rvalue also returns a deep-owned clone, since
+  // views cannot transfer ownership.
+  IdTable cloned2 = std::move(view).moveOrClone();
+  EXPECT_EQ(cloned2, table);
+  EXPECT_NE(&cloned2(0, 0), &table(0, 0));
+}
+
+// ____________________________________________________________________________
+TEST(IdTable, fromColumns) {
+  std::vector<Id> col0{V(1), V(2), V(3)};
+  std::vector<Id> col1{V(4), V(5), V(6)};
+  auto allocator = makeAllocator();
+
+  IdTableView<0>::ViewSpans columns{col0, col1};
+  auto view = IdTableView<0>::fromColumns(columns, 2, 3, allocator);
+
+  ASSERT_EQ(view.numColumns(), 2u);
+  ASSERT_EQ(view.numRows(), 3u);
+  for (size_t i = 0; i < 3; ++i) {
+    EXPECT_EQ(view(i, 0), col0[i]);
+    EXPECT_EQ(view(i, 1), col1[i]);
+    // The view must not copy the data: its elements are the very same
+    // objects as those in `col0`/`col1`.
+    EXPECT_EQ(&view(i, 0), &col0[i]);
+    EXPECT_EQ(&view(i, 1), &col1[i]);
+  }
+
+  // The `columns` and the passed in `numColumns` must be consistent.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      IdTableView<0>::fromColumns(columns, 3, 3, allocator),
+      ::testing::HasSubstr("Assertion"));
+
+  // Each of the `columns` must have exactly `numRows` elements.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      IdTableView<0>::fromColumns(columns, 2, 2, allocator),
+      ::testing::HasSubstr("Assertion"));
+
+  // A statically-sized `IdTableView<N>` requires `numColumns == N`.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      IdTableView<2>::fromColumns(columns, 3, 3, allocator),
+      ::testing::HasSubstr("Assertion"));
+
+  // Constructing a static `IdTableView<2>` with the correct `numColumns`
+  // works and yields the same contents as the dynamic view above.
+  auto staticView = IdTableView<2>::fromColumns(columns, 2, 3, allocator);
+  ASSERT_EQ(staticView.numColumns(), 2u);
+  ASSERT_EQ(staticView.numRows(), 3u);
+  for (size_t i = 0; i < 3; ++i) {
+    EXPECT_EQ(staticView(i, 0), col0[i]);
+    EXPECT_EQ(staticView(i, 1), col1[i]);
+    EXPECT_EQ(&staticView(i, 0), &col0[i]);
+    EXPECT_EQ(&staticView(i, 1), &col1[i]);
+  }
+}
+
+// ____________________________________________________________________________
+// Typed test fixture for `subView`, covering both owned `IdTable` and
+// `IdTableView<0>`.
+template <typename T>
+class IdTableSubViewTest : public testing::Test {};
+using SubViewTestTypes = testing::Types<IdTable, IdTableView<0>>;
+TYPED_TEST_SUITE(IdTableSubViewTest, SubViewTestTypes);
+
+TYPED_TEST(IdTableSubViewTest, subView) {
+  auto alloc = ad_utility::makeUnlimitedAllocator<Id>();
+  IdTable table{2, alloc};
+  for (int i = 0; i < 5; ++i) {
+    table.push_back({V(i * 10), V(i * 10 + 1)});
+  }
+
+  // Shared test body: run all `subView` assertions on `target`, which is
+  // either the owned `table` itself or a view of it.
+  auto runTests = [&](auto& target) {
+    // Full range: `subView(0, numRows)` must equal the original table.
+    auto fullView = target.subView(0, 5);
+    EXPECT_EQ(fullView.numRows(), 5u);
+    EXPECT_EQ(fullView.numColumns(), 2u);
+    EXPECT_EQ(fullView, table);
+
+    // Empty sub-view: `subView(0, 0)` must have zero rows.
+    auto emptyView = target.subView(0, 0);
+    EXPECT_EQ(emptyView.numRows(), 0u);
+    EXPECT_EQ(emptyView.numColumns(), 2u);
+
+    // Suffix: rows [2, 5).
+    auto suffixView = target.subView(2, 3);
+    EXPECT_EQ(suffixView.numRows(), 3u);
+    EXPECT_EQ(suffixView(0, 0), V(20));
+    EXPECT_EQ(suffixView(0, 1), V(21));
+    EXPECT_EQ(suffixView(2, 0), V(40));
+
+    // Interior slice: rows [1, 3).
+    auto sliceView = target.subView(1, 2);
+    EXPECT_EQ(sliceView.numRows(), 2u);
+    EXPECT_EQ(sliceView(0, 0), V(10));
+    EXPECT_EQ(sliceView(1, 0), V(20));
+
+    // `subView` is non-owning: data pointers point into the original table.
+    EXPECT_EQ(&sliceView(0, 0), &table(1, 0));
+    EXPECT_EQ(&sliceView(1, 0), &table(2, 0));
+
+    // Out-of-range access must trigger a contract check.
+    EXPECT_ANY_THROW(target.subView(3, 3));  // offset + size > numRows.
+    EXPECT_ANY_THROW(target.subView(6, 0));  // offset > numRows.
+  };
+
+  if constexpr (std::is_same_v<TypeParam, IdTableView<0>>) {
+    auto view = table.asStaticView<0>();
+    runTests(view);
+  } else {
+    runTests(table);
+  }
+}
+
+namespace {
+// A proxy object for an `Id`, like the element access of a column storage that
+// does not store plain `Id`s would return it.
+struct Proxy {
+  Id id_;
+  // Count the conversions to `Id`, so that a test can check that an operation
+  // really went through the proxy.
+  static inline size_t numConversions = 0;
+  operator Id() const {
+    ++numConversions;
+    return id_;
+  }
+};
+
+// The minimal interface of a table that the `RowReference` class needs, with an
+// element access that returns a `Proxy` by value (and not an `Id&`).
+struct TableReturningProxies {
+  // Both are required by `RowReference`
+  // (`Table::single_value_type` and `Table::numStaticColumns`).
+  using single_value_type = Id;
+  static constexpr int numStaticColumns = 2;
+  std::array<Id, 2> row_{V(3), V(4)};
+
+  size_t numColumns() const { return 2; }
+  Proxy operator()(size_t, size_t column) const { return Proxy{row_[column]}; }
+};
+}  // namespace
+
+// Test that `operator[]` of the `RowReference` (which uses
+// `operatorBracketImpl`) returns exactly what the element access of the table
+// returns: an `IdRef` for the `IdTable`, and the proxy for a table that returns
+// proxies by value.
+TEST(IdTable, rowReferenceOperatorBracket) {
+  // The `IdTable` returns references.
+  IdTable idTable{2, makeAllocator()};
+  idTable.push_back({V(1), V(2)});
+  IdTable::row_reference row = idTable[0];
+  static_assert(std::is_same_v<decltype(row[0]), IdRef>);
+  row[1] = V(20);
+  EXPECT_EQ(idTable(0, 1), V(20));
+
+  // A table that returns proxies.
+  using ConstRow = columnBasedIdTable::RowReference<TableReturningProxies,
+                                                    ad_utility::IsConst::True>;
+  using MutableRow =
+      columnBasedIdTable::RowReference<TableReturningProxies,
+                                       ad_utility::IsConst::False>;
+  TableReturningProxies table;
+  const ConstRow constRow{&table, 0};
+  static_assert(std::is_same_v<decltype(constRow[0]), Proxy>);
+  EXPECT_EQ(constRow[0].id_, V(3));
+  EXPECT_EQ(constRow[1].id_, V(4));
+
+  // The same for a non-const row reference.
+  MutableRow mutableRow{&table, 0};
+  static_assert(std::is_same_v<decltype(mutableRow[0]), Proxy>);
+  EXPECT_EQ(mutableRow[1].id_, V(4));
+
+  // Iterating over a row uses the same element access.
+  std::vector<Id> ids;
+  for (const auto& proxy : constRow) {
+    ids.push_back(proxy.id_);
+  }
+  EXPECT_THAT(ids, ::testing::ElementsAre(V(3), V(4)));
+}
+
+// Test that a `RowReference` whose element access returns proxies can be
+// materialized as a `Row` or `std::array` and compared to a `Row`. The
+// elements are `Proxy`s inside `RowReference`, and only the conversion
+// `Proxy` -> `Id` makes them `Id`s again, which is what `numConversions`
+// counts.
+TEST(IdTable, rowReferenceConversionAndComparisonWithProxies) {
+  using ConstRow = columnBasedIdTable::RowReference<TableReturningProxies,
+                                                    ad_utility::IsConst::True>;
+  TableReturningProxies table;
+  const ConstRow constRow{&table, 0};
+
+  // Test that the elements that the conversions and the comparison read (via
+  // `operator[]` of a temporary row reference and via the iterators) are
+  // proxies.
+  static_assert(std::is_same_v<decltype(std::move(constRow)[0]), Proxy>);
+  static_assert(std::is_same_v<decltype(*constRow.begin()), Proxy>);
+
+  // Test the conversion to a `Row`: each of the two proxies is converted.
+  Proxy::numConversions = 0;
+  columnBasedIdTable::Row<Id, 2> row = constRow;
+  EXPECT_EQ(Proxy::numConversions, 2u);
+  EXPECT_EQ(row[0], V(3));
+  EXPECT_EQ(row[1], V(4));
+
+  // Test the conversion to a `std::array`.
+  Proxy::numConversions = 0;
+  const auto array = static_cast<std::array<Id, 2>>(constRow);
+  EXPECT_EQ(Proxy::numConversions, 2u);
+  EXPECT_THAT(array, ::testing::ElementsAre(V(3), V(4)));
+
+  // Test the comparison with a `Row`: the proxies are converted to compare
+  // them to the `Id`s of the `Row`.
+  Proxy::numConversions = 0;
+  EXPECT_TRUE(constRow == row);
+  EXPECT_GT(Proxy::numConversions, 0u);
+  row[1] = V(5);
+  EXPECT_TRUE(constRow != row);
+}
+
+namespace {
+// Like in the split layout, the mutable and the const element access return
+// different proxy types, and there is no conversion from the mutable to the
+// const one.
+struct MutableProxy {
+  Id* id_;
+};
+struct ConstProxy {
+  const Id* id_;
+};
+struct TableWithMutableAndConstProxies {
+  using single_value_type = Id;
+  static constexpr int numStaticColumns = 2;
+  std::array<Id, 2> row_{V(3), V(4)};
+
+  size_t numColumns() const { return 2; }
+  MutableProxy operator()(size_t, size_t column) {
+    return MutableProxy{&row_[column]};
+  }
+  ConstProxy operator()(size_t, size_t column) const {
+    return ConstProxy{&row_[column]};
+  }
+};
+}  // namespace
+
+// Test that `reference` and `const_reference` of the `RowReference` are the
+// types that the non-const and the const element access of the table return,
+// and that `operator[]` only gives const access, also if the table has a
+// mutable element access.
+TEST(IdTable, rowReferenceReferenceTypedefs) {
+  using Row = IdTable::row_reference;
+  static_assert(std::is_same_v<Row::reference, IdRef>);
+  static_assert(std::is_same_v<Row::const_reference, ConstIdRef>);
+
+  // A const row reference only has const access, so both typedefs are const.
+  using ConstRow = IdTable::const_row_reference;
+  static_assert(std::is_same_v<ConstRow::reference, ConstIdRef>);
+  static_assert(std::is_same_v<ConstRow::const_reference, ConstIdRef>);
+
+  IdTable idTable{2, makeAllocator()};
+  idTable.push_back({V(1), V(2)});
+  Row row = idTable[0];
+  const Row& constRow = row;
+  static_assert(std::is_same_v<decltype(row[0]), IdRef>);
+  static_assert(std::is_same_v<decltype(constRow[0]), ConstIdRef>);
+  EXPECT_EQ(constRow[1], V(2));
+
+  // A view has no mutable element access, so both typedefs are const.
+  using ViewRow = IdTableView<0>::const_row_reference;
+  static_assert(std::is_same_v<ViewRow::reference, ConstIdRef>);
+  static_assert(std::is_same_v<ViewRow::const_reference, ConstIdRef>);
+
+  // A table that only has a const element access, which returns proxies by
+  // value (see above), has the proxy for both typedefs.
+  using ProxyRow = columnBasedIdTable::RowReference<TableReturningProxies,
+                                                    ad_utility::IsConst::False>;
+  static_assert(std::is_same_v<ProxyRow::reference, Proxy>);
+  static_assert(std::is_same_v<ProxyRow::const_reference, Proxy>);
+
+  // The base class of the `RowReference` only allows mutable access for
+  // rvalues, all other values (also a const rvalue) get const access.
+  using Restricted = Row::Base;
+  static_assert(
+      std::is_same_v<decltype(std::declval<Restricted&&>()[0]), IdRef>);
+  static_assert(
+      std::is_same_v<decltype(std::declval<Restricted&>()[0]), ConstIdRef>);
+  static_assert(std::is_same_v<decltype(std::declval<const Restricted&>()[0]),
+                               ConstIdRef>);
+  static_assert(std::is_same_v<decltype(std::declval<const Restricted&&>()[0]),
+                               ConstIdRef>);
+  Restricted restricted{&idTable, 0};
+  std::move(restricted)[1] = V(7);
+  EXPECT_EQ(restricted[1], V(7));
+}
+
+// Test that a const `RowReference` uses the const element access of the table,
+// also if the mutable one returns a type that cannot be converted to the result
+// of the const one.
+TEST(IdTable, rowReferenceWithMutableAndConstProxies) {
+  using Row = columnBasedIdTable::RowReference<TableWithMutableAndConstProxies,
+                                               ad_utility::IsConst::False>;
+  static_assert(std::is_same_v<Row::reference, MutableProxy>);
+  static_assert(std::is_same_v<Row::const_reference, ConstProxy>);
+
+  TableWithMutableAndConstProxies table;
+  Row row{&table, 0};
+  const Row& constRow = row;
+  static_assert(std::is_same_v<decltype(row[0]), MutableProxy>);
+  static_assert(std::is_same_v<decltype(constRow[0]), ConstProxy>);
+
+  *row[0].id_ = V(5);
+  EXPECT_EQ(*constRow[0].id_, V(5));
+  EXPECT_EQ(*constRow[1].id_, V(4));
+}
+
+// Test that `clone` and `moveOrClone` copy the table in chunks of the given
+// size, call the `chunkOperation` once per chunk and column, and propagate its
+// exceptions.
+TEST(IdTable, cloneWithChunkOperation) {
+  IdTable table{2, makeAllocator()};
+  for (size_t i = 0; i < 10; ++i) {
+    table.push_back({V(i), V(100 + i)});
+  }
+  size_t numCalls = 0;
+  auto countCalls = [&numCalls]() { ++numCalls; };
+
+  // 10 rows in chunks of 3 rows are 4 chunks per column.
+  IdTable clone = table.clone(countCalls, 3);
+  EXPECT_EQ(clone, table);
+  EXPECT_EQ(numCalls, 8);
+
+  // The same for a view, which results in an owning table.
+  numCalls = 0;
+  IdTable cloneOfView = table.asStaticView<0>().clone(countCalls, 100);
+  EXPECT_EQ(cloneOfView, table);
+  EXPECT_EQ(numCalls, 2);
+
+  // `moveOrClone` only calls the `chunkOperation` if it actually clones.
+  numCalls = 0;
+  EXPECT_EQ(table.moveOrClone(countCalls, 3), table);
+  EXPECT_EQ(numCalls, 8);
+  numCalls = 0;
+  EXPECT_EQ(table.asStaticView<0>().moveOrClone(countCalls, 3), table);
+  EXPECT_EQ(numCalls, 8);
+  numCalls = 0;
+  IdTable moved = std::move(clone).moveOrClone(countCalls, 3);
+  EXPECT_EQ(moved, table);
+  EXPECT_EQ(numCalls, 0);
+
+  // Exceptions from the `chunkOperation` are propagated.
+  auto throwException = []() { throw std::runtime_error{"cancelled"}; };
+  EXPECT_THROW(table.clone(throwException), std::runtime_error);
+}
+
 // Check that we can completely instantiate `IdTable`s with a different value
 // type and a different underlying storage.
 
 template class columnBasedIdTable::IdTable<char, 0>;
-static_assert(!std::is_copy_constructible_v<ad_utility::BufferedVector<char>>);
 template class columnBasedIdTable::IdTable<char, 0,
-                                           ad_utility::BufferedVector<char>>;
+                                           VectorWithExtraConstructor<char>>;

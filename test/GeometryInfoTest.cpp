@@ -1,7 +1,14 @@
-//  Copyright 2025, University of Freiburg,
-//  Chair of Algorithms and Data Structures.
-//  Author: Christoph Ullinger <ullingec@cs.uni-freiburg.de>
+// Copyright 2025 - 2026 The QLever Authors, in particular:
+//
+// 2025 - 2026 Christoph Ullinger <ullingec@cs.uni-freiburg.de>, UFR
+// 2026 Yannik Schnell github@yarox-1, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
+#include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
 #include <gmock/gmock.h>
 #include <util/geo/Geo.h>
@@ -26,9 +33,18 @@ using namespace geoInfoTestHelpers;
 // Example WKT literals for all supported geometry types
 constexpr std::string_view litPoint =
     "\"POINT(3 4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+constexpr std::string_view litPointWGS84 =
+    "\"<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(4 "
+    "3)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+constexpr std::string_view litPointWebMerc =
+    "\"<http://www.opengis.net/def/crs/EPSG/0/3857> POINT(333958.4723798207 "
+    "445640.10965602624)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 const DPoint expectedPoint{3, 4};
 constexpr std::string_view litLineString =
     "\"LINESTRING(2 2,4 4)\""
+    "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+constexpr std::string_view emptyLitLineString =
+    "\"LINESTRING()\""
     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 const DLine expectedLine{{2, 2}, {4, 4}};
 constexpr std::string_view litPolygon =
@@ -68,13 +84,31 @@ constexpr std::string_view litInvalidBrackets =
 constexpr std::string_view litInvalidNumCoords =
     "\"LINESTRING(1)\""
     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+constexpr std::string_view litInvalidCoord =
+    "\"LINESTRING(2 2, 4 a)\""
+    "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 constexpr std::string_view litCoordOutOfRange =
     "\"LINESTRING(2 -500, 4 4)\""
     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+constexpr std::string_view litUnsupportedCrsIri =
+    "\"<http://www.opengis.net/def/crs/EPSG/0/5070> LINESTRING(2 2,4 "
+    "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+constexpr std::string_view litInvalidCrsIri =
+    "\"<http://www.opengis.net/def/crs/EPSG/0/3485 LINESTRING(2 2,4 "
+    "4)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+
+constexpr std::string_view litLineStringEmpty =
+    "\"LINESTRING EMPTY\""
+    "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+constexpr std::string_view litPointEmpty =
+    "\"POINT EMPTY\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 
 constexpr std::string_view litShortRealWorldLine =
     "\"LINESTRING(7.8412948 47.9977308, 7.8450491 47.9946000)\""
     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+
+const DLine expectLitShortRealWorldLine{DPoint{7.8412948, 47.9977308},
+                                        DPoint{7.8450491, 47.9946000}};
 
 // University building 101 in Freiburg: ca. 1611 square-meters (osmway:33903391)
 constexpr std::string_view litSmallRealWorldPolygon1 =
@@ -181,29 +215,40 @@ const double areaRealWorldMultiPolygonHoleIntersection =
 
 const auto getAllTestLiterals = []() {
   return std::vector<std::string_view>{
-      litPoint,           litLineString,   litPolygon,   litMultiPoint,
+      litPoint,           litPointWGS84,   litPointWebMerc,
+      litLineString,      litPolygon,      litMultiPoint,
       litMultiLineString, litMultiPolygon, litCollection};
 };
 
 const auto getAllExpectedParseResults = []() {
   using enum WKTType;
-  return std::vector<ParseResult>{{POINT, expectedPoint},
-                                  {LINESTRING, expectedLine},
-                                  {POLYGON, expectedPolygon},
-                                  {MULTIPOINT, expectedMultiPoint},
-                                  {MULTILINESTRING, expectedMultiLineString},
-                                  {MULTIPOLYGON, expectedMultiPolygon},
-                                  {COLLECTION, expectedCollection}};
+  return std::vector<ParseResult>{
+      {expectedPoint, POINT, CRSType::CRS84, CRSType::CRS84},
+      {expectedPoint, POINT, CRSType::CRS84, CRSType::WGS84},
+      {expectedPoint, POINT, CRSType::CRS84, CRSType::WEB_MERCATOR},
+      {expectedLine, LINESTRING, CRSType::CRS84, CRSType::CRS84},
+      {expectedPolygon, POLYGON, CRSType::CRS84, CRSType::CRS84},
+      {expectedMultiPoint, MULTIPOINT, CRSType::CRS84, CRSType::CRS84},
+      {expectedMultiLineString, MULTILINESTRING, CRSType::CRS84,
+       CRSType::CRS84},
+      {expectedMultiPolygon, MULTIPOLYGON, CRSType::CRS84, CRSType::CRS84},
+      {expectedCollection, COLLECTION, CRSType::CRS84, CRSType::CRS84}};
 };
 
-constexpr std::array<uint32_t, 7> allTestLiteralNumGeometries{1, 1, 1, 2,
-                                                              2, 2, 3};
+constexpr std::array<uint32_t, 9> allTestLiteralNumGeometries{1, 1, 1, 1, 1,
+                                                              2, 2, 2, 3};
 
-// ____________________________________________________________________________
+// Test the constructor and the getters of `GeometryInfo` and that the value
+// types reject out-of-range values.
 TEST(GeometryInfoTest, BasicTests) {
   // Constructor and getters
-  GeometryInfo g{5,   {{1, 1}, {2, 2}},  {1.5, 1.5},
-                 {2}, MetricLength{900}, MetricArea{5}};
+  GeometryInfo g{5,
+                 {{1, 1}, {2, 2}},
+                 {1.5, 1.5},
+                 {2},
+                 SourceCrsType{util::geo::CRSType::WGS84},
+                 MetricLength{900},
+                 MetricArea{5}};
   ASSERT_EQ(g.getWktType().type(), 5);
   ASSERT_NEAR(g.getCentroid().centroid().getLat(), 1.5, 0.0001);
   ASSERT_NEAR(g.getCentroid().centroid().getLng(), 1.5, 0.0001);
@@ -215,39 +260,55 @@ TEST(GeometryInfoTest, BasicTests) {
   ASSERT_EQ(g.getNumGeometries().numGeometries(), 2);
   ASSERT_NEAR(g.getMetricLength().length(), 900, 0.0001);
   ASSERT_NEAR(g.getMetricArea().area(), 5, 0.0001);
+  EXPECT_THAT(g.getSourceCrsType(),
+              Optional(SourceCrsType{util::geo::CRSType::WGS84}));
 
   // Too large wkt type value
   AD_EXPECT_THROW_WITH_MESSAGE(
-      GeometryInfo(120, {{1, 1}, {2, 2}}, {1.5, 1.5}, {1}, MetricLength{1},
-                   MetricArea{5}),
+      GeometryInfo(120, {{1, 1}, {2, 2}}, {1.5, 1.5}, {1}, SourceCrsType{1},
+                   MetricLength{1}, MetricArea{5}),
       ::testing::HasSubstr("WKT Type out of range"));
+
+  // Too large crs type value
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      GeometryInfo(5, {{1, 1}, {2, 2}}, {1.5, 1.5}, {1}, SourceCrsType{7},
+                   MetricLength{1}, MetricArea{5}),
+      ::testing::HasSubstr("CRS Type out of range"));
+
+  // Crs type value for an invalid or unsupported CRS
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      GeometryInfo(5, {{1, 1}, {2, 2}}, {1.5, 1.5}, {1}, SourceCrsType{0},
+                   MetricLength{1}, MetricArea{5}),
+      ::testing::HasSubstr("CRS Type indicates invalid/unsupported geometry"));
 
   // Wrong bounding box point ordering
   AD_EXPECT_THROW_WITH_MESSAGE(
-      GeometryInfo(1, {{2, 2}, {1, 1}}, {1.5, 1.5}, {1}, MetricLength{1},
-                   MetricArea{0}),
+      GeometryInfo(1, {{2, 2}, {1, 1}}, {1.5, 1.5}, {1}, SourceCrsType{1},
+                   MetricLength{1}, MetricArea{0}),
       ::testing::HasSubstr("Bounding box coordinates invalid"));
 
   // Zero geometries
   AD_EXPECT_THROW_WITH_MESSAGE(
-      GeometryInfo(1, {{2, 2}, {3, 3}}, {1.5, 1.5}, {0}, MetricLength{1},
-                   MetricArea{5}),
+      GeometryInfo(1, {{2, 2}, {3, 3}}, {1.5, 1.5}, {0}, SourceCrsType{1},
+                   MetricLength{1}, MetricArea{5}),
       ::testing::HasSubstr("Number of geometries must be strictly positive"));
 
   // Negative length
   AD_EXPECT_THROW_WITH_MESSAGE(
-      GeometryInfo(5, {{1, 1}, {2, 2}}, {1.5, 1.5}, {1}, MetricLength{-900},
-                   MetricArea{5}),
+      GeometryInfo(5, {{1, 1}, {2, 2}}, {1.5, 1.5}, {1}, SourceCrsType{1},
+                   MetricLength{-900}, MetricArea{5}),
       ::testing::HasSubstr("Metric length must be positive"));
 
   // Negative area
   AD_EXPECT_THROW_WITH_MESSAGE(
-      GeometryInfo(5, {{1, 1}, {2, 2}}, {1.5, 1.5}, {1}, MetricLength{0},
-                   MetricArea{-900}),
+      GeometryInfo(5, {{1, 1}, {2, 2}}, {1.5, 1.5}, {1}, SourceCrsType{1},
+                   MetricLength{0}, MetricArea{-900}),
       ::testing::HasSubstr("Metric area must be positive"));
 }
 
-// ____________________________________________________________________________
+// Test that `fromWktLiteral` computes the expected `GeometryInfo` for a literal
+// of each geometry type and each supported CRS, and `std::nullopt` for an
+// invalid geometry type.
 TEST(GeometryInfoTest, FromWktLiteral) {
   // To avoid hard-coding lengths for unit tests unrelated to actual length
   // computation, we compute the expected values.
@@ -255,73 +316,195 @@ TEST(GeometryInfoTest, FromWktLiteral) {
   auto area = getAreaForTesting;
 
   auto g = GeometryInfo::fromWktLiteral(litPoint);
-  GeometryInfo exp{1,   {{4, 3}, {4, 3}}, {4, 3},
-                   {1}, MetricLength{0},  MetricArea{0}};
-  EXPECT_GEOMETRYINFO(g, exp);
+  GeometryInfo exp{1,
+                   {{4, 3}, {4, 3}},
+                   {4, 3},
+                   {1},
+                   SourceCrsType{util::geo::CRSType::CRS84},
+                   MetricLength{0},
+                   MetricArea{0}};
+  EXPECT_THAT(g, geoInfoMatcher(exp));
 
   auto g2 = GeometryInfo::fromWktLiteral(litLineString);
-  GeometryInfo exp2{2,   {{2, 2}, {4, 4}},   {3, 3},
-                    {1}, len(litLineString), MetricArea{0}};
-  EXPECT_GEOMETRYINFO(g2, exp2);
+  GeometryInfo exp2{2,
+                    {{2, 2}, {4, 4}},
+                    {3, 3},
+                    {1},
+                    SourceCrsType{util::geo::CRSType::CRS84},
+                    len(litLineString),
+                    MetricArea{0}};
+  EXPECT_THAT(g2, geoInfoMatcher(exp2));
 
   auto g3 = GeometryInfo::fromWktLiteral(litPolygon);
-  GeometryInfo exp3{3,   {{2, 2}, {4, 4}}, {3, 3},
-                    {1}, len(litPolygon),  area(litPolygon)};
-  EXPECT_GEOMETRYINFO(g3, exp3);
+  GeometryInfo exp3{3,
+                    {{2, 2}, {4, 4}},
+                    {3, 3},
+                    {1},
+                    SourceCrsType{util::geo::CRSType::CRS84},
+                    len(litPolygon),
+                    area(litPolygon)};
+  EXPECT_THAT(g3, geoInfoMatcher(exp3));
 
   auto g4 = GeometryInfo::fromWktLiteral(litMultiPoint);
-  GeometryInfo exp4{4,   {{2, 2}, {4, 4}}, {3, 3},
-                    {2}, MetricLength{0},  MetricArea{0}};
-  EXPECT_GEOMETRYINFO(g4, exp4);
+  GeometryInfo exp4{4,
+                    {{2, 2}, {4, 4}},
+                    {3, 3},
+                    {2},
+                    SourceCrsType{util::geo::CRSType::CRS84},
+                    MetricLength{0},
+                    MetricArea{0}};
+  EXPECT_THAT(g4, geoInfoMatcher(exp4));
 
   auto g5 = GeometryInfo::fromWktLiteral(litMultiLineString);
-  GeometryInfo exp5{5,   {{2, 2}, {8, 6}},        {4.436542, 3.718271},
-                    {2}, len(litMultiLineString), MetricArea{0}};
-  EXPECT_GEOMETRYINFO(g5, exp5);
+  GeometryInfo exp5{5,
+                    {{2, 2}, {8, 6}},
+                    {4.436542, 3.718271},
+                    {2},
+                    SourceCrsType{util::geo::CRSType::CRS84},
+                    len(litMultiLineString),
+                    MetricArea{0}};
+  EXPECT_THAT(g5, geoInfoMatcher(exp5));
 
   auto g6 = GeometryInfo::fromWktLiteral(litMultiPolygon);
-  GeometryInfo exp6{6,   {{2, 2}, {6, 8}},     {4.5, 4.5},
-                    {2}, len(litMultiPolygon), area(litMultiPolygon)};
-  EXPECT_GEOMETRYINFO(g6, exp6);
+  GeometryInfo exp6{6,
+                    {{2, 2}, {6, 8}},
+                    {4.5, 4.5},
+                    {2},
+                    SourceCrsType{util::geo::CRSType::CRS84},
+                    len(litMultiPolygon),
+                    area(litMultiPolygon)};
+  EXPECT_THAT(g6, geoInfoMatcher(exp6));
 
   auto g7 = GeometryInfo::fromWktLiteral(litCollection);
-  GeometryInfo exp7{7,   {{2, 2}, {6, 8}},   {5, 5},
-                    {3}, len(litCollection), area(litCollection)};
-  EXPECT_GEOMETRYINFO(g7, exp7);
+  GeometryInfo exp7{7,
+                    {{2, 2}, {6, 8}},
+                    {5, 5},
+                    {3},
+                    SourceCrsType{util::geo::CRSType::CRS84},
+                    len(litCollection),
+                    area(litCollection)};
+  EXPECT_THAT(g7, geoInfoMatcher(exp7));
 
   auto g8 = GeometryInfo::fromWktLiteral(litInvalidType);
-  EXPECT_GEOMETRYINFO(g8, std::nullopt);
+  EXPECT_THAT(g8, geoInfoMatcher(std::nullopt));
+
+  auto g9 = GeometryInfo::fromWktLiteral(litPointWGS84);
+  GeometryInfo exp9{1,
+                    {{4, 3}, {4, 3}},
+                    {4, 3},
+                    {1},
+                    SourceCrsType{util::geo::CRSType::WGS84},
+                    MetricLength{0},
+                    MetricArea{0}};
+  EXPECT_THAT(g9, geoInfoMatcher(exp9));
+
+  auto g10 = GeometryInfo::fromWktLiteral(litPointWebMerc);
+  GeometryInfo exp10{1,
+                     {{4, 3}, {4, 3}},
+                     {4, 3},
+                     {1},
+                     SourceCrsType{util::geo::CRSType::WEB_MERCATOR},
+                     MetricLength{0},
+                     MetricArea{0}};
+  EXPECT_THAT(g10, geoInfoMatcher(exp10));
 }
 
-// ____________________________________________________________________________
+// Test that `isValidWktStrict` accepts well-formed literals and rejects
+// malformed ones.
+TEST(GeometryInfoTest, IsValidWktStrict) {
+  // All supported geometry types.
+  for (auto lit :
+       {litPoint, litPointWGS84, litLineString, litPolygon, litMultiPoint,
+        litMultiLineString, litMultiPolygon, litCollection}) {
+    EXPECT_TRUE(GeometryInfo::isValidWktStrict(lit)) << lit;
+  }
+
+  // Syntactically valid literals without a geometry: `EMPTY`, an unsupported
+  // CRS, coordinates out of range.
+  for (auto lit : {litLineStringEmpty, litPointEmpty, litUnsupportedCrsIri,
+                   litCoordOutOfRange}) {
+    EXPECT_TRUE(GeometryInfo::isValidWktStrict(lit)) << lit;
+    EXPECT_EQ(GeometryInfo::fromWktLiteral(lit), std::nullopt) << lit;
+  }
+
+  // Malformed literals.
+  for (auto lit : {litInvalidType, litInvalidBrackets, litInvalidNumCoords,
+                   litInvalidCoord, litInvalidCrsIri}) {
+    EXPECT_FALSE(GeometryInfo::isValidWktStrict(lit)) << lit;
+  }
+
+  // Edge cases from https://github.com/ad-freiburg/util/issues/20 and
+  // https://github.com/ad-freiburg/util/pull/21: signed and exponent notation
+  // and nested collections are valid, degenerate geometries, trailing garbage,
+  // a missing closing bracket and a malformed number are not.
+  auto wkt = [](std::string_view s) {
+    return absl::StrCat(
+        "\"", s, "\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
+  };
+  for (auto s :
+       {"POINT(1e3 2)", "POINT(1.5e-3 2)", "POINT(+1 -2)",
+        "GEOMETRYCOLLECTION(GEOMETRYCOLLECTION(POINT(1 2)),POINT(3 4))"}) {
+    EXPECT_TRUE(GeometryInfo::isValidWktStrict(wkt(s))) << s;
+  }
+  for (auto s : {"POINT(1 2, 3 4)", "POINT(1 2 foo)", "LINESTRING(1 2)",
+                 "MULTILINESTRING((1 1, 2 2), (3 3))", "POINT(1.1.1)",
+                 "GEOMETRYCOLLECTION(POINT(1 1)"}) {
+    EXPECT_FALSE(GeometryInfo::isValidWktStrict(wkt(s))) << s;
+  }
+
+  // All geometry computations use the strict mode, so they don't skip the
+  // invalid coordinate (as the lenient mode would), but yield no result.
+  EXPECT_EQ(GeometryInfo::getNumGeometries(litInvalidCoord), std::nullopt);
+  EXPECT_EQ(GeometryInfo::fromWktLiteral(litInvalidCoord), std::nullopt);
+  EXPECT_EQ(GeometryInfo::getBoundingBox(litInvalidCoord), std::nullopt);
+}
+
+// Test that `fromGeoPoint` yields the `GeometryInfo` of a point.
 TEST(GeometryInfoTest, FromGeoPoint) {
   GeoPoint p{1.234, 5.678};
   auto g = GeometryInfo::fromGeoPoint(p);
-  GeometryInfo exp{1, {p, p}, Centroid{p}, {1}, MetricLength{0}, MetricArea{0}};
-  EXPECT_GEOMETRYINFO(g, exp);
+  GeometryInfo exp{1,
+                   {p, p},
+                   Centroid{p},
+                   {1},
+                   SourceCrsType{util::geo::CRSType::CRS84},
+                   MetricLength{0},
+                   MetricArea{0}};
+  EXPECT_THAT(g, geoInfoMatcher(exp));
 
   GeoPoint p2{0, 0};
   auto g2 = GeometryInfo::fromGeoPoint(p2);
-  GeometryInfo exp2{1,   {p2, p2},        Centroid{p2},
-                    {1}, MetricLength{0}, MetricArea{0}};
-  EXPECT_GEOMETRYINFO(g2, exp2);
+  GeometryInfo exp2{1,
+                    {p2, p2},
+                    Centroid{p2},
+                    {1},
+                    SourceCrsType{util::geo::CRSType::CRS84},
+                    MetricLength{0},
+                    MetricArea{0}};
+  EXPECT_THAT(g2, geoInfoMatcher(exp2));
 }
 
-// ____________________________________________________________________________
+// Test that `getRequestedInfo` on a `GeometryInfo` instance returns the values
+// of the respective getters.
 TEST(GeometryInfoTest, RequestedInfoInstance) {
   for (auto lit : getAllTestLiterals()) {
-    checkRequestedInfoForInstance(GeometryInfo::fromWktLiteral(lit));
+    auto gi = GeometryInfo::fromWktLiteral(lit);
+    ASSERT_TRUE(gi.has_value());
+    EXPECT_THAT(gi.value(), requestedInfoMatches<GeometryInfo>(gi.value()));
   }
 }
 
-// ____________________________________________________________________________
+// Test that `getRequestedInfo` on a WKT literal returns the respective parts of
+// the full `GeometryInfo` of the literal.
 TEST(GeometryInfoTest, RequestedInfoLiteral) {
   for (auto lit : getAllTestLiterals()) {
-    checkRequestedInfoForWktLiteral(lit);
+    auto gi = GeometryInfo::fromWktLiteral(lit);
+    ASSERT_TRUE(gi.has_value());
+    EXPECT_THAT(lit, requestedInfoMatches<std::string_view>(gi.value()));
   }
 }
 
-// ____________________________________________________________________________
+// Test the WKT representation of a `BoundingBox`.
 TEST(GeometryInfoTest, BoundingBoxAsWKT) {
   BoundingBox bb1{{0, 0}, {1, 1}};
   ASSERT_EQ(bb1.asWkt(), "POLYGON((0 0,1 0,1 1,0 1,0 0))");
@@ -330,8 +513,8 @@ TEST(GeometryInfoTest, BoundingBoxAsWKT) {
   auto bb3 = GeometryInfo::getBoundingBox(
       "\"LINESTRING(2 4,8 8)\""
       "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
-  ASSERT_TRUE(bb3.has_value());
-  ASSERT_EQ(bb3.value().asWkt(), "POLYGON((2 4,8 4,8 8,2 8,2 4))");
+  EXPECT_THAT(bb3, Optional(Property(&BoundingBox::asWkt,
+                                     "POLYGON((2 4,8 4,8 8,2 8,2 4))")));
 }
 
 // ____________________________________________________________________________
@@ -351,30 +534,55 @@ TEST(GeometryInfoTest, BoundingBoxGetBoundingCoordinate) {
   EXPECT_NEAR(bb2.getBoundingCoordinate<MAX_Y>(), -4, 0.0001);
 }
 
-// ____________________________________________________________________________
+// Test the IRI of each `GeometryType`.
 TEST(GeometryInfoTest, GeometryTypeAsIri) {
-  ASSERT_EQ(GeometryType{1}.asIri().value(),
-            "http://www.opengis.net/ont/sf#Point");
-  ASSERT_EQ(GeometryType{2}.asIri().value(),
-            "http://www.opengis.net/ont/sf#LineString");
-  ASSERT_EQ(GeometryType{3}.asIri().value(),
-            "http://www.opengis.net/ont/sf#Polygon");
-  ASSERT_EQ(GeometryType{4}.asIri().value(),
-            "http://www.opengis.net/ont/sf#MultiPoint");
-  ASSERT_EQ(GeometryType{5}.asIri().value(),
-            "http://www.opengis.net/ont/sf#MultiLineString");
-  ASSERT_EQ(GeometryType{6}.asIri().value(),
-            "http://www.opengis.net/ont/sf#MultiPolygon");
-  ASSERT_EQ(GeometryType{7}.asIri().value(),
-            "http://www.opengis.net/ont/sf#GeometryCollection");
-  ASSERT_FALSE(GeometryType{8}.asIri().has_value());
+  EXPECT_THAT(GeometryType{1}.asIri(),
+              Optional(Eq("http://www.opengis.net/ont/sf#Point")));
+  EXPECT_THAT(GeometryType{2}.asIri(),
+              Optional(Eq("http://www.opengis.net/ont/sf#LineString")));
+  EXPECT_THAT(GeometryType{3}.asIri(),
+              Optional(Eq("http://www.opengis.net/ont/sf#Polygon")));
+  EXPECT_THAT(GeometryType{4}.asIri(),
+              Optional(Eq("http://www.opengis.net/ont/sf#MultiPoint")));
+  EXPECT_THAT(GeometryType{5}.asIri(),
+              Optional(Eq("http://www.opengis.net/ont/sf#MultiLineString")));
+  EXPECT_THAT(GeometryType{6}.asIri(),
+              Optional(Eq("http://www.opengis.net/ont/sf#MultiPolygon")));
+  EXPECT_THAT(GeometryType{7}.asIri(),
+              Optional(Eq("http://www.opengis.net/ont/sf#GeometryCollection")));
+  EXPECT_EQ(GeometryType{8}.asIri(), std::nullopt);
+}
+
+// ____________________________________________________________________________
+TEST(GeometryInfoTest, CrsTypeAsIri) {
+  EXPECT_EQ(SourceCrsType{util::geo::CRSType::UNSUPPORTED}.asIri(),
+            std::nullopt);
+  EXPECT_EQ(SourceCrsType{util::geo::CRSType::CRS84}.asIri(),
+            "http://www.opengis.net/def/crs/OGC/1.3/CRS84");
+  EXPECT_EQ(SourceCrsType{util::geo::CRSType::WGS84}.asIri(),
+            "http://www.opengis.net/def/crs/EPSG/0/4326");
+  EXPECT_EQ(SourceCrsType{util::geo::CRSType::WEB_MERCATOR}.asIri(),
+            "http://www.opengis.net/def/crs/EPSG/0/3857");
+  EXPECT_EQ(SourceCrsType{4}.asIri(), std::nullopt);
+}
+
+// ____________________________________________________________________________
+TEST(GeometryInfoTest, GetSourceCrsTypeFromWkt) {
+  EXPECT_EQ(GeometryInfo::getSourceCrsType(litUnsupportedCrsIri), std::nullopt);
+  EXPECT_EQ(GeometryInfo::getSourceCrsType(litPoint),
+            SourceCrsType{util::geo::CRSType::CRS84});
+  EXPECT_EQ(GeometryInfo::getSourceCrsType(litPointWGS84),
+            SourceCrsType{util::geo::CRSType::WGS84});
+  EXPECT_EQ(GeometryInfo::getSourceCrsType(litPointWebMerc),
+            SourceCrsType{util::geo::CRSType::WEB_MERCATOR});
 }
 
 namespace {
 constexpr std::string_view example = "Example";
 }
 
-// ____________________________________________________________________________
+// Test the helper functions of `GeometryInfoHelpersImpl.h` (point conversion,
+// parsing, centroid, bounding box, IRIs, length and area, `getWithSourceCrs`).
 TEST(GeometryInfoTest, GeometryInfoHelpers) {
   using namespace ad_utility::detail;
   Point<double> p{50, 60};
@@ -386,43 +594,100 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
   EXPECT_NEAR(g.getLng(), p2.getX(), 0.0001);
   EXPECT_NEAR(g.getLat(), p2.getY(), 0.0001);
 
+  // Test projection to WGS84 (swapped coordinates).
+  auto p3 = geoPointToUtilPoint(g, CRSType::WGS84);
+  EXPECT_NEAR(g.getLng(), p3.getY(), 0.0001);
+  EXPECT_NEAR(g.getLat(), p3.getX(), 0.0001);
+
   EXPECT_EQ(removeDatatype(litPoint), "POINT(3 4)");
 
   auto parseRes1 = parseWkt(litPoint);
-  EXPECT_EQ(parseRes1.first, util::geo::WKTType::POINT);
-  ASSERT_TRUE(parseRes1.second.has_value());
-  auto parsed1 = parseRes1.second.value();
+  EXPECT_THAT(parseRes1, parseResultNear(ParseResult{expectedPoint, POINT,
+                                                     defaultCrs, defaultCrs}));
+  ASSERT_TRUE(parseRes1.parsedWkt_.has_value());
+  auto parsed1 = parseRes1.parsedWkt_.value();
 
   auto centroid1 = centroidAsGeoPoint(parsed1);
   Centroid centroidExp1{{4, 3}};
-  EXPECT_CENTROID_NEAR(centroid1, centroidExp1);
+  EXPECT_THAT(centroid1, centroidNear(centroidExp1));
 
   auto bb1 = boundingBoxAsGeoPoints(parsed1);
   BoundingBox bbExp1{{4, 3}, {4, 3}};
-  EXPECT_BOUNDINGBOX_NEAR(bb1, bbExp1);
+  EXPECT_THAT(bb1, boundingBoxNear(bbExp1));
 
   auto bb1Wkt =
       boundingBoxAsWkt(bb1.value().lowerLeft(), bb1.value().upperRight());
   EXPECT_EQ(bb1Wkt, "POLYGON((3 4,3 4,3 4,3 4,3 4))");
 
   EXPECT_EQ(addSfPrefix<example>(), "http://www.opengis.net/ont/sf#Example");
-  EXPECT_FALSE(wktTypeToIri(0).has_value());
-  EXPECT_FALSE(wktTypeToIri(8).has_value());
-  EXPECT_TRUE(wktTypeToIri(1).has_value());
-  EXPECT_EQ(wktTypeToIri(1).value(), "http://www.opengis.net/ont/sf#Point");
+  EXPECT_EQ(wktTypeToIri(0), std::nullopt);
+  EXPECT_EQ(wktTypeToIri(8), std::nullopt);
+  EXPECT_THAT(wktTypeToIri(1),
+              Optional(Eq("http://www.opengis.net/ont/sf#Point")));
 
   EXPECT_EQ(countChildGeometries(parsed1), 1);
 
   EXPECT_EQ(computeMetricLength(parsed1).length(), 0);
   auto parseRes2 = parseWkt(litShortRealWorldLine);
-  EXPECT_EQ(parseRes2.first, 2);
-  ASSERT_TRUE(parseRes2.second.has_value());
-  auto parsed2 = parseRes2.second.value();
+  EXPECT_THAT(parseRes2,
+              parseResultNear(ParseResult{expectLitShortRealWorldLine,
+                                          LINESTRING, defaultCrs, defaultCrs}));
+  ASSERT_TRUE(parseRes2.parsedWkt_.has_value());
+  auto parsed2 = parseRes2.parsedWkt_.value();
   EXPECT_NEAR(computeMetricLength(parsed2).length(), 446.363, 1);
   EXPECT_EQ(GeometryInfo::getMetricLength(litInvalidType), std::nullopt);
 
   EXPECT_EQ(computeMetricArea(ParsedWkt{DPoint{4, 5}}), 0);
   EXPECT_EQ(computeMetricArea(ParsedWkt{DLine{DPoint{1, 2}, DPoint{3, 4}}}), 0);
+
+  // Test literals with a CRS IRI.
+  auto parseRes3 = parseWkt(litPointWGS84);
+  EXPECT_THAT(parseRes3,
+              parseResultNear(ParseResult{expectedPoint, POINT, defaultCrs,
+                                          CRSType::WGS84}));
+
+  auto parseRes4 = parseWkt(litPointWebMerc);
+  EXPECT_THAT(parseRes4,
+              parseResultNear(ParseResult{expectedPoint, POINT, defaultCrs,
+                                          CRSType::WEB_MERCATOR}));
+
+  // Test empty geometries, which lead to a `std::runtime_error`. In
+  // particular, `POINT EMPTY` must not yield a point with sentinel
+  // coordinates.
+  for (auto lit : {emptyLitLineString, litLineStringEmpty, litPointEmpty}) {
+    EXPECT_THAT(parseWkt(lit), parseResultNear(ParseResult{
+                                   std::nullopt, WKTType::NONE,
+                                   CRSType::UNSUPPORTED, CRSType::UNSUPPORTED}))
+        << lit;
+  }
+
+  // Test `getWithSourceCrs`.
+  EXPECT_THAT(
+      getWithSourceCrs<Centroid>(centroidExp1, SourceCrsType{CRSType::CRS84}),
+      withSourceCrsNear<Centroid>(WithSourceCrs<Centroid>{
+          centroidExp1, SourceCrsType{CRSType::CRS84}}));
+  EXPECT_THAT(
+      getWithSourceCrs<BoundingBox>(bbExp1, SourceCrsType{CRSType::CRS84}),
+      withSourceCrsNear<BoundingBox>(
+          WithSourceCrs<BoundingBox>{bbExp1, SourceCrsType{CRSType::CRS84}}));
+  // No CRS type given.
+  EXPECT_FALSE(getWithSourceCrs<Centroid>(centroidExp1, std::nullopt));
+  EXPECT_FALSE(getWithSourceCrs<BoundingBox>(bbExp1, std::nullopt));
+  // No `Centroid`/`BoundingBox` given.
+  EXPECT_FALSE(
+      getWithSourceCrs<Centroid>(std::nullopt, SourceCrsType{CRSType::CRS84}));
+  EXPECT_FALSE(getWithSourceCrs<BoundingBox>(std::nullopt,
+                                             SourceCrsType{CRSType::CRS84}));
+
+  // Test `getWithSourceCrsFromWkt`.
+  EXPECT_THAT(getWithSourceCrsFromWkt<Centroid>(litPoint),
+              withSourceCrsNear<Centroid>(WithSourceCrs<Centroid>{
+                  centroidExp1, SourceCrsType{CRSType::CRS84}}));
+  EXPECT_THAT(getWithSourceCrsFromWkt<BoundingBox>(litPoint),
+              withSourceCrsNear<BoundingBox>(WithSourceCrs<BoundingBox>{
+                  bbExp1, SourceCrsType{CRSType::CRS84}}));
+  EXPECT_FALSE(getWithSourceCrsFromWkt<Centroid>(litInvalidType));
+  EXPECT_FALSE(getWithSourceCrsFromWkt<BoundingBox>(litInvalidCrsIri));
 }
 
 // ____________________________________________________________________________
@@ -435,40 +700,46 @@ TEST(GeometryInfoTest, MetricLength) {
       ::testing::HasSubstr("Metric length must be positive"));
 }
 
-// ____________________________________________________________________________
+// Test the metric area of polygons.
 TEST(GeometryInfoTest, ComputeMetricAreaPolygon) {
   using namespace ad_utility::detail;
   using Poly = Polygon<CoordType>;
 
-  testMetricArea<Poly>(litSmallRealWorldPolygon1, areaSmallRealWorldPolygon1);
-  testMetricArea<Poly>(litSmallRealWorldPolygon2, areaSmallRealWorldPolygon2);
-  testMetricArea<Poly>(litSmallRealWorldPolygonWithHole,
-                       areaSmallRealWorldPolygonWithHole);
+  EXPECT_THAT(litSmallRealWorldPolygon1,
+              metricAreaOfWktNear<Poly>(areaSmallRealWorldPolygon1));
+  EXPECT_THAT(litSmallRealWorldPolygon2,
+              metricAreaOfWktNear<Poly>(areaSmallRealWorldPolygon2));
+  EXPECT_THAT(litSmallRealWorldPolygonWithHole,
+              metricAreaOfWktNear<Poly>(areaSmallRealWorldPolygonWithHole));
 }
 
-// ____________________________________________________________________________
+// Test the metric area of multipolygons.
 TEST(GeometryInfoTest, ComputeMetricAreaMultipolygon) {
   using namespace ad_utility::detail;
   using MultiP = MultiPolygon<CoordType>;
 
-  testMetricArea<MultiP>(litRealWorldMultiPolygonFullyContained,
-                         areaRealWorldMultiPolygonFullyContained);
-  testMetricArea<MultiP>(litRealWorldMultiPolygonNonIntersecting,
-                         areaRealWorldMultiPolygonNonIntersecting);
-  testMetricArea<MultiP>(litRealWorldMultiPolygonIntersecting,
-                         areaRealWorldMultiPolygonIntersecting);
-  testMetricArea<MultiP>(litRealWorldMultiPolygonHoleIntersection,
-                         areaRealWorldMultiPolygonHoleIntersection);
+  EXPECT_THAT(
+      litRealWorldMultiPolygonFullyContained,
+      metricAreaOfWktNear<MultiP>(areaRealWorldMultiPolygonFullyContained));
+  EXPECT_THAT(
+      litRealWorldMultiPolygonNonIntersecting,
+      metricAreaOfWktNear<MultiP>(areaRealWorldMultiPolygonNonIntersecting));
+  EXPECT_THAT(
+      litRealWorldMultiPolygonIntersecting,
+      metricAreaOfWktNear<MultiP>(areaRealWorldMultiPolygonIntersecting));
+  EXPECT_THAT(
+      litRealWorldMultiPolygonHoleIntersection,
+      metricAreaOfWktNear<MultiP>(areaRealWorldMultiPolygonHoleIntersection));
 
   // Edge case: empty multipolygon
   EXPECT_EQ(computeMetricArea(MultiP{}), 0);
 
   // Edge case: multipolygon with only one member
-  testMetricArea<MultiP>(litSmallRealWorldPolygon2AsMulti,
-                         areaSmallRealWorldPolygon2);
+  EXPECT_THAT(litSmallRealWorldPolygon2AsMulti,
+              metricAreaOfWktNear<MultiP>(areaSmallRealWorldPolygon2));
 }
 
-// ____________________________________________________________________________
+// Test the metric area of geometry collections.
 TEST(GeometryInfoTest, ComputeMetricAreaCollection) {
   using namespace ad_utility::detail;
   using Coll = Collection<CoordType>;
@@ -480,33 +751,35 @@ TEST(GeometryInfoTest, ComputeMetricAreaCollection) {
       removeDatatype(litSmallRealWorldPolygon2), ")");
   const double expectedCollection1 =
       areaSmallRealWorldPolygon1 + areaSmallRealWorldPolygon2;
-  testMetricArea<Coll>(addDatatype(collection1), expectedCollection1, 2);
+  EXPECT_THAT(addDatatype(collection1),
+              metricAreaOfWktNear<Coll>(expectedCollection1, 2));
 
   // Collection with only one member (polygon)
   auto collection2 = absl::StrCat(
       "GEOMETRYCOLLECTION(", removeDatatype(litSmallRealWorldPolygon1), ")");
-  testMetricArea<Coll>(addDatatype(collection2), areaSmallRealWorldPolygon1, 1);
+  EXPECT_THAT(addDatatype(collection2),
+              metricAreaOfWktNear<Coll>(areaSmallRealWorldPolygon1, 1));
 
   // Collection with only one member (non-polygon)
   auto collection3 =
       absl::StrCat("GEOMETRYCOLLECTION(", removeDatatype(litLineString), ")");
-  testMetricArea<Coll>(addDatatype(collection3), 0, 0);
+  EXPECT_THAT(addDatatype(collection3), metricAreaOfWktNear<Coll>(0, 0));
 
   // Collection containing a multipolygon and a point to be ignored
   auto collection4 =
       absl::StrCat("GEOMETRYCOLLECTION(",
                    removeDatatype(litRealWorldMultiPolygonIntersecting),
                    ", POINT(1.0 2.0))");
-  testMetricArea<Coll>(addDatatype(collection4),
-                       areaRealWorldMultiPolygonIntersecting,
-                       numRealWorldMultiPolygonIntersecting);
+  EXPECT_THAT(addDatatype(collection4),
+              metricAreaOfWktNear<Coll>(areaRealWorldMultiPolygonIntersecting,
+                                        numRealWorldMultiPolygonIntersecting));
 
   // Collection containing a nested collection and a further point
   auto collection5 =
       absl::StrCat("GEOMETRYCOLLECTION(POINT(3 4),", collection4, ")");
-  testMetricArea<Coll>(addDatatype(collection5),
-                       areaRealWorldMultiPolygonIntersecting,
-                       numRealWorldMultiPolygonIntersecting);
+  EXPECT_THAT(addDatatype(collection5),
+              metricAreaOfWktNear<Coll>(areaRealWorldMultiPolygonIntersecting,
+                                        numRealWorldMultiPolygonIntersecting));
 
   // The same case of a nested collection but the collection is not flattened
   // during parsing
@@ -527,34 +800,38 @@ TEST(GeometryInfoTest, MetricArea) {
       MetricArea{-1}, ::testing::HasSubstr("Metric area must be positive"));
 }
 
-// ____________________________________________________________________________
+// Test that no geometry information except for the geometry type can be
+// computed for invalid literals.
 TEST(GeometryInfoTest, InvalidLiteralAdHocCompuation) {
-  checkInvalidLiteral(litInvalidType);
-  checkInvalidLiteral(litInvalidBrackets, true);
-  checkInvalidLiteral(litInvalidNumCoords, true);
+  EXPECT_THAT(litInvalidType, isInvalidWktLiteral());
+  EXPECT_THAT(litInvalidBrackets, isInvalidWktLiteral(true));
+  EXPECT_THAT(litInvalidNumCoords, isInvalidWktLiteral(true));
 }
 
-// ____________________________________________________________________________
+// Test that a literal with coordinates out of range is invalid, but its
+// geometry type and number of geometries can be computed.
 TEST(GeometryInfoTest, CoordinateOutOfRangeDoesNotThrow) {
-  checkInvalidLiteral(litCoordOutOfRange, true, true);
-  EXPECT_EQ(GeometryInfo::getWktType(litCoordOutOfRange).value(),
-            std::optional<GeometryType>{GeometryType{2}});
-  EXPECT_EQ(GeometryInfo::getRequestedInfo<GeometryType>(litCoordOutOfRange),
-            std::optional<GeometryType>{GeometryType{2}});
+  EXPECT_THAT(litCoordOutOfRange, isInvalidWktLiteral(true, true));
+  EXPECT_THAT(GeometryInfo::getWktType(litCoordOutOfRange),
+              Optional(GeometryType{2}));
+  EXPECT_THAT(GeometryInfo::getRequestedInfo<GeometryType>(litCoordOutOfRange),
+              Optional(GeometryType{2}));
   EXPECT_EQ(GeometryInfo::getRequestedInfo<NumGeometries>(litCoordOutOfRange),
             NumGeometries{1});
 }
 
-// _____________________________________________________________________________
+// Test that projecting a bounding box to web mercator and back yields the
+// original bounding box.
 TEST(GeometryInfoTest, WebMercProjection) {
   util::geo::DBox b1{{1, 2}, {3, 4}};
   auto b1WebMerc = boxToWebMerc(b1);
   auto result1 =
       ad_utility::detail::projectInt32WebMercToDoubleLatLng(b1WebMerc);
-  checkUtilBoundingBox(result1, b1);
+  EXPECT_THAT(result1, utilBoxNear(b1));
 }
 
-// _____________________________________________________________________________
+// Test the number of geometries of each test literal, computed from the
+// literal and from its `GeometryInfo`.
 TEST(GeometryInfoTest, NumGeometries) {
   const auto testLiterals = getAllTestLiterals();
   ASSERT_EQ(testLiterals.size(), allTestLiteralNumGeometries.size());
@@ -565,32 +842,30 @@ TEST(GeometryInfoTest, NumGeometries) {
 
     EXPECT_EQ(GeometryInfo::getNumGeometries(lit), expected);
 
-    auto gi = GeometryInfo::fromWktLiteral(lit);
-    ASSERT_TRUE(gi.has_value());
-    EXPECT_EQ(gi.value().getNumGeometries(), expected);
+    EXPECT_THAT(
+        GeometryInfo::fromWktLiteral(lit),
+        Optional(Property(&GeometryInfo::getNumGeometries, Eq(expected))));
   }
 }
 
-// _____________________________________________________________________________
+// Test that the `AnyGeometryMember` enum corresponds to the geometry type
+// identifiers used by `libspatialjoin`.
 TEST(GeometryInfoTest, AnyGeometryMember) {
-  // Test that the enum we define corresponds to the geometry type identifiers
-  // used by `libspatialjoin`.
   using namespace util::geo;
   using enum AnyGeometryMember;
 
-  checkAnyGeometryMemberEnum({DPoint{}}, POINT);
-  checkAnyGeometryMemberEnum({DLine{}}, LINE);
-  checkAnyGeometryMemberEnum({DPolygon{}}, POLYGON);
-  checkAnyGeometryMemberEnum({DMultiLine{}}, MULTILINE);
-  checkAnyGeometryMemberEnum({DMultiPolygon{}}, MULTIPOLYGON);
-  checkAnyGeometryMemberEnum({DMultiPoint{}}, MULTIPOINT);
-  checkAnyGeometryMemberEnum({DCollection{}}, COLLECTION);
+  EXPECT_THAT(DAnyGeometry{DPoint{}}, anyGeometryMemberIs(POINT));
+  EXPECT_THAT(DAnyGeometry{DLine{}}, anyGeometryMemberIs(LINE));
+  EXPECT_THAT(DAnyGeometry{DPolygon{}}, anyGeometryMemberIs(POLYGON));
+  EXPECT_THAT(DAnyGeometry{DMultiLine{}}, anyGeometryMemberIs(MULTILINE));
+  EXPECT_THAT(DAnyGeometry{DMultiPolygon{}}, anyGeometryMemberIs(MULTIPOLYGON));
+  EXPECT_THAT(DAnyGeometry{DMultiPoint{}}, anyGeometryMemberIs(MULTIPOINT));
+  EXPECT_THAT(DAnyGeometry{DCollection{}}, anyGeometryMemberIs(COLLECTION));
 }
 
-// _____________________________________________________________________________
+// Test `computeMetricLength` on a geometry collection that contains one
+// geometry of every supported geometry type.
 TEST(GeometryInfoTest, ComputeMetricLengthCollectionAnyGeom) {
-  // This test builds a big geometry collection containing one geometry of every
-  // supported geometry type and feeds it to `computeMetricLength`.
   using namespace ad_utility::detail;
 
   double expected = 0.0;
@@ -600,16 +875,16 @@ TEST(GeometryInfoTest, ComputeMetricLengthCollectionAnyGeom) {
     expected += getLengthForTesting(lit).length();
 
     auto parsed = parseWkt(lit);
-    ASSERT_TRUE(parsed.second.has_value());
+    ASSERT_TRUE(parsed.parsedWkt_.has_value());
     std::visit(
         [&](const auto& value) -> void {
           collection.push_back(AnyGeometry<CoordType>{value});
         },
-        parsed.second.value());
+        parsed.parsedWkt_.value());
   }
 
   MetricLength result{computeMetricLength(collection)};
-  EXPECT_METRICLENGTH_NEAR(MetricLength{expected}, result);
+  EXPECT_THAT(result, metricLengthNear(MetricLength{expected}));
 }
 
 // _____________________________________________________________________________
@@ -620,14 +895,33 @@ TEST(GeometryInfoTest, SizeOfAndAlignmentBytes) {
   static_assert(sizeof(GeometryType) == 1);
   static_assert(sizeof(MetricLength) == sizeof(double));
   static_assert(sizeof(NumGeometries) == 4);
+  static_assert(sizeof(SourceCrsType) == 2);
   static_assert(sizeof(MetricArea) == sizeof(double));
+  static_assert(sizeof(SerializationType) == 2);
 
   using EncodedGeometryTypeAndCentroid = uint64_t;
   static_assert(sizeof(GeometryInfo) ==
-                4 +  // Currently we need 4 B alignment
-                    sizeof(EncodedGeometryTypeAndCentroid) +
+                sizeof(EncodedGeometryTypeAndCentroid) +
                     sizeof(EncodedBoundingBox) + sizeof(NumGeometries) +
+                    sizeof(SourceCrsType) + sizeof(SerializationType) +
                     sizeof(MetricLength) + sizeof(MetricArea));
+}
+
+// Test that `fromSerialized` rejects a version outside the loadable range and a
+// record of the wrong size.
+TEST(GeometryInfoTest, FromSerializedInvalidInput) {
+  std::array<uint8_t, sizeof(GeometryInfo)> bytes{};
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      GeometryInfo::fromSerialized(bytes,
+                                   MIN_LOADABLE_GEOMETRY_INFO_VERSION - 1),
+      ::testing::HasSubstr("isLoadableGeometryInfoVersion"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      GeometryInfo::fromSerialized(bytes, GEOMETRY_INFO_VERSION + 1),
+      ::testing::HasSubstr("isLoadableGeometryInfoVersion"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      GeometryInfo::fromSerialized(ql::span<const uint8_t>{bytes}.first(1),
+                                   GEOMETRY_INFO_VERSION),
+      ::testing::HasSubstr("geometryInfoSize"));
 }
 
 // _____________________________________________________________________________
@@ -639,12 +933,13 @@ TEST(GeometryInfoTest, ParseGeoPointOrWktVisitor) {
 
   // Test for `GeoPoint`.
   EXPECT_THAT(parseGeoPointOrWkt(GeoPoint{1, 2}),
-              parseResultNear(ParseResult{POINT, DPoint(2, 1)}));
+              parseResultNear(
+                  ParseResult{DPoint(2, 1), POINT, defaultCrs, defaultCrs}));
 
   // Explicit test for a real-world WKT string.
-  EXPECT_THAT(
-      parseGeoPointOrWkt(std::string{litSmallRealWorldPolygon1}),
-      parseResultNear(ParseResult{POLYGON, expectedSmallRealWorldPolygon1}));
+  EXPECT_THAT(parseGeoPointOrWkt(std::string{litSmallRealWorldPolygon1}),
+              parseResultNear(ParseResult{expectedSmallRealWorldPolygon1,
+                                          POLYGON, defaultCrs, defaultCrs}));
 
   // Tests for other geometry types (WKT strings).
   auto literals = getAllTestLiterals();
@@ -666,7 +961,13 @@ TEST(GeometryInfoTest, UtilGeomToWktVisitor) {
   ASSERT_EQ(literals.size(), geometries.size());
 
   for (size_t i = 0; i < literals.size(); ++i) {
-    auto parsedWkt = geometries[i].second;
+    // TODO<yarox-1> `utilGeomToWkt` cannot reconstruct the CRS IRI yet, so
+    // skip the literals that have one.
+    if (literals[i] == litPointWGS84 || literals[i] == litPointWebMerc) {
+      continue;
+    }
+
+    auto parsedWkt = geometries[i].parsedWkt_;
     auto expected = removeDatatype(literals[i]);
     ASSERT_TRUE(parsedWkt.has_value());
 
@@ -726,7 +1027,7 @@ TEST(GeometryInfoTest, GeometryN) {
                 parsedWktNear(expectedGeom));
 
     // Test with already parsed geometry.
-    auto [type, parsed] = parseWkt(wkt);
+    auto [parsed, wktType, crsType, sourceCrs] = parseWkt(wkt);
     EXPECT_THAT(getGeometryN(parsed, n), parsedWktNear(expectedGeom));
 
     // Invalid indexes.
@@ -735,37 +1036,39 @@ TEST(GeometryInfoTest, GeometryN) {
   }
 }
 
-// Mock projection for `ProjectionVisitor` unit test below.
-struct TwiceProjection {
-  DPoint operator()(const DPoint& p) const {
-    return {2 * p.getX(), 2 * p.getY()};
-  }
-};
-
 // _____________________________________________________________________________
 TEST(GeometryInfoTest, ProjectionVisitor) {
   using namespace ad_utility::detail;
 
-  EXPECT_THAT(projectWebMerc(GeoPointOrWkt{std::string{litInvalidType}}),
-              parseResultNear(ParseResult{NONE, std::nullopt}));
+  EXPECT_THAT(
+      projectWebMerc(GeoPointOrWkt{std::string{litInvalidType}}),
+      parseResultNear(ParseResult{std::nullopt, NONE, CRSType::WEB_MERCATOR,
+                                  CRSType::UNSUPPORTED}));
   EXPECT_EQ(projectWebMerc(std::optional<ParsedWkt>{}), std::nullopt);
   EXPECT_THAT(
       projectWebMerc(GeoPointOrWkt{std::string{litSmallRealWorldPolygon1}}),
-      parseResultNear(ParseResult{
-          POLYGON, projectWebMerc(expectedSmallRealWorldPolygon1)}));
+      parseResultNear(
+          ParseResult{projectWebMerc(expectedSmallRealWorldPolygon1), POLYGON,
+                      CRSType::WEB_MERCATOR, defaultCrs}));
   EXPECT_THAT(projectWebMerc(GeoPointOrWkt{std::string{litCollection}}),
-              parseResultNear(
-                  ParseResult{COLLECTION, projectWebMerc(expectedCollection)}));
+              parseResultNear(ParseResult{projectWebMerc(expectedCollection),
+                                          COLLECTION, CRSType::WEB_MERCATOR,
+                                          defaultCrs}));
   EXPECT_THAT(projectWebMerc(expectedLine),
               utilLineNear(DLine{{222638.9816, 222684.2085},
                                  {445277.9632, 445640.1097}}));
 
-  constexpr UtilGeomProjectionVisitor<TwiceProjection> projectMock;
-  EXPECT_THAT(projectMock(DPoint{5, 5}), utilPointNear({10, 10}));
-  EXPECT_THAT(projectMock(DAnyGeometry{DPoint{5, 5}}),
-              utilAnyGeometryNear(DPoint{10, 10}));
-  EXPECT_THAT(projectMock(expectedMultiPoint),
-              utilMultiPointNear({{4, 4}, {8, 8}}));
+  EXPECT_THAT(
+      projectWebMerc(GeoPointOrWkt{std::string{litPointWGS84}}),
+      parseResultNear(ParseResult{projectWebMerc(expectedPoint), POINT,
+                                  CRSType::WEB_MERCATOR, CRSType::WGS84}));
+
+  constexpr UtilGeomProjectionVisitor projectWebMercToCRS84{
+      CRSType::WEB_MERCATOR, CRSType::CRS84};
+  EXPECT_THAT(
+      projectWebMercToCRS84(GeoPointOrWkt{std::string{litPointWebMerc}}),
+      parseResultNear(ParseResult{expectedPoint, POINT, CRSType::CRS84,
+                                  CRSType::WEB_MERCATOR}));
 }
 
 // _____________________________________________________________________________
@@ -773,42 +1076,121 @@ TEST(GeometryInfoTest, MetricDistanceVisitor) {
   using namespace ad_utility::detail;
   // Distance between points (Freiburg Central Railway Station and Freiburg
   // Cathedral).
-  EXPECT_THAT(computeMetricDistance(
-                  projectWebMerc(GeoPointOrWkt{GeoPoint{47.997731, 7.841295}}),
-                  projectWebMerc(GeoPointOrWkt{GeoPoint{47.995562, 7.852918}})),
-              Optional(DoubleNear(900, 25)));
+  EXPECT_THAT(
+      computeMetricDistance(GeoPointOrWkt{GeoPoint{47.997731, 7.841295}},
+                            GeoPointOrWkt{GeoPoint{47.995562, 7.852918}}),
+      Optional(DoubleNear(900, 25)));
+
+  // Distance between same points (in WGS84).
+  EXPECT_THAT(
+      computeMetricDistance(
+          GeoPointOrWkt{std::string{
+              "\"<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(47.997731 "
+              "7.841295)\"^^<http://www.opengis.net/ont/"
+              "geosparql#wktLiteral>"}},
+          GeoPointOrWkt{std::string{
+              "\"<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(47.995562 "
+              "7.852918)\"^^<http://www.opengis.net/ont/"
+              "geosparql#wktLiteral>"}}),
+      Optional(DoubleNear(900, 25)));
+
+  // Distance between same points (in WebMercator).
+  EXPECT_THAT(
+      computeMetricDistance(GeoPointOrWkt{std::string{
+                                "\"<http://www.opengis.net/def/crs/EPSG/0/"
+                                "3857> POINT(872888.9665598421 "
+                                "6106477.362433697)\"^^<http://www.opengis.net/"
+                                "ont/geosparql#wktLiteral>"}},
+                            GeoPointOrWkt{std::string{
+                                "\"<http://www.opengis.net/def/crs/EPSG/0/"
+                                "3857> POINT(874182.8330013324 "
+                                "6106116.541572356)\"^^<http://www.opengis.net/"
+                                "ont/geosparql#wktLiteral>"}}),
+      Optional(DoubleNear(900, 25)));
 
   // Distance between a multi-polygon (university buildings 101 and 106) and
   // Freiburg Cathedral.
-  EXPECT_THAT(computeMetricDistance(
-                  projectWebMerc(GeoPointOrWkt{
-                      std::string{litRealWorldMultiPolygonNonIntersecting}}),
-                  projectWebMerc(GeoPointOrWkt{GeoPoint{47.995562, 7.852918}})),
-              Optional(DoubleNear(2'300, 50)));
+  EXPECT_THAT(
+      computeMetricDistance(
+          GeoPointOrWkt{std::string{litRealWorldMultiPolygonNonIntersecting}},
+          GeoPointOrWkt{GeoPoint{47.995562, 7.852918}}),
+      Optional(DoubleNear(2'300, 50)));
 
   // Distance between a multi-polygon (university buildings 101 and 106) and
   // a short line in Freiburg.
   EXPECT_THAT(
       computeMetricDistance(
-          projectWebMerc(GeoPointOrWkt{
-              std::string{litRealWorldMultiPolygonNonIntersecting}}),
-          projectWebMerc(GeoPointOrWkt{std::string{litShortRealWorldLine}})),
+          GeoPointOrWkt{std::string{litRealWorldMultiPolygonNonIntersecting}},
+          GeoPointOrWkt{std::string{litShortRealWorldLine}}),
       Optional(DoubleNear(1'700, 50)));
 
   // One polygon is contained in the larger multi-polygon.
-  EXPECT_THAT(computeMetricDistance(
-                  projectWebMerc(GeoPointOrWkt{
-                      std::string{litRealWorldMultiPolygonNonIntersecting}}),
-                  projectWebMerc(
-                      GeoPointOrWkt{std::string{litSmallRealWorldPolygon1}})),
-              Optional(Eq(0.0)));
+  EXPECT_THAT(
+      computeMetricDistance(
+          GeoPointOrWkt{std::string{litRealWorldMultiPolygonNonIntersecting}},
+          GeoPointOrWkt{std::string{litSmallRealWorldPolygon1}}),
+      Optional(Eq(0.0)));
+
+  // A small square and a line that passes it at a distance of about 111 m,
+  // but whose vertices are more than 1 km away. The distance must be the same
+  // if the line is a member of a collection or of a multi-line with many
+  // members. Regression test for a bug in `pb_util`, where such lines were
+  // reduced to their vertices.
+  {
+    auto wkt = [](std::string_view content) {
+      return GeoPointOrWkt{
+          absl::StrCat("\"", content, "\"", GEO_LITERAL_SUFFIX)};
+    };
+    auto square = wkt("POLYGON((0 0,0.001 0,0.001 0.001,0 0.001,0 0))");
+    std::string line = "(-0.01 0.002,0.01 0.002)";
+    std::vector<std::string> lines(17, line);
+    for (const auto& other :
+         {wkt(absl::StrCat("LINESTRING", line)),
+          wkt(absl::StrCat("GEOMETRYCOLLECTION(LINESTRING", line, ")")),
+          wkt(absl::StrCat("MULTILINESTRING(", absl::StrJoin(lines, ","),
+                           ")"))}) {
+      EXPECT_THAT(computeMetricDistance(square, other),
+                  Optional(DoubleNear(111.32, 0.01)));
+    }
+  }
 
   // Test invalid case.
   EXPECT_EQ(computeMetricDistance(
-                projectWebMerc(GeoPointOrWkt{std::string{litInvalidType}}),
-                projectWebMerc(
-                    GeoPointOrWkt{std::string{litSmallRealWorldPolygon1}})),
+                GeoPointOrWkt{std::string{litInvalidType}},
+                GeoPointOrWkt{std::string{litSmallRealWorldPolygon1}}),
             std::nullopt);
+
+  // Test case with unsupported CRS IRI.
+  EXPECT_EQ(computeMetricDistance(
+                GeoPointOrWkt{std::string{litUnsupportedCrsIri}},
+                GeoPointOrWkt{std::string{litSmallRealWorldPolygon1}}),
+            std::nullopt);
+
+  // Test case with invalid CRS IRI.
+  EXPECT_EQ(computeMetricDistance(
+                GeoPointOrWkt{std::string{litInvalidCrsIri}},
+                GeoPointOrWkt{std::string{litSmallRealWorldPolygon1}}),
+            std::nullopt);
+}
+
+// Test `isWktLiteral` on positive and negative examples.
+TEST(GeometryInfoTest, IsWktLiteral) {
+  auto wkt = [](std::string_view content) {
+    return absl::StrCat("\"", content, "\"", GEO_LITERAL_SUFFIX);
+  };
+
+  // WKT literals. The check is purely syntactic (quotes plus the WKT datatype
+  // suffix), so invalid WKT content also counts.
+  for (const std::string& word : {wkt("POINT(1 2)"), wkt("NOTAGEOMETRY")}) {
+    EXPECT_TRUE(ad_utility::isWktLiteral(word)) << word;
+  }
+
+  // Not WKT literals: a plain literal, an IRI, a language-tagged literal.
+  for (const std::string& word :
+       {std::string{"\"foo\""}, std::string{"<http://example.org>"},
+        std::string{"\"foo\"@en"}}) {
+    EXPECT_FALSE(ad_utility::isWktLiteral(word)) << word;
+  }
 }
 
 }  // namespace

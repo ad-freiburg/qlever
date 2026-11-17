@@ -12,8 +12,8 @@ NeutralOptional::NeutralOptional(QueryExecutionContext* qec,
     : Operation{qec}, tree_{std::move(tree)} {}
 
 // _____________________________________________________________________________
-std::vector<QueryExecutionTree*> NeutralOptional::getChildren() {
-  return {tree_.get()};
+qlm::vector<QueryExecutionTree*> NeutralOptional::getChildrenImpl() const {
+  return {{tree_.get()}, allocator()};
 }
 
 // _____________________________________________________________________________
@@ -50,12 +50,14 @@ float NeutralOptional::getMultiplicity(size_t col) {
 bool NeutralOptional::knownEmptyResult() { return false; }
 
 // _____________________________________________________________________________
-bool NeutralOptional::supportsLimitOffset() const { return true; }
+LimitOffsetHandling NeutralOptional::handlesLimitOffset() const {
+  return LimitOffsetHandling::FULL;
+}
 
 // _____________________________________________________________________________
-void NeutralOptional::onLimitOffsetChanged(
-    const LimitOffsetClause& limitOffset) const {
-  tree_->applyLimit(limitOffset);
+void NeutralOptional::onLimitOffsetChanged(const LimitOffsetClause& limitOffset,
+                                           bool childrenAreExclusivelyOwned) {
+  applyLimitOffsetToChild(tree_, limitOffset, childrenAreExclusivelyOwned);
 }
 
 // _____________________________________________________________________________
@@ -65,7 +67,7 @@ std::unique_ptr<Operation> NeutralOptional::cloneImpl() const {
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> NeutralOptional::resultSortedOn() const {
+qlm::vector<ColumnIndex> NeutralOptional::resultSortedOn() const {
   return tree_->resultSortedOn();
 }
 
@@ -119,14 +121,14 @@ Result NeutralOptional::computeResult(bool requestLaziness) {
   IdTable singleRowTable{getResultWidth(), allocator()};
   singleRowTable.push_back(std::vector(getResultWidth(), Id::makeUndefined()));
   if (childResult->isFullyMaterialized()) {
-    if (childResult->idTable().empty()) {
+    if (childResult->idTableView().empty()) {
       return {singleRowCroppedByLimit() ? IdTable{getResultWidth(), allocator()}
                                         : std::move(singleRowTable),
               resultSortedOn(),
               {}};
     }
-    return {childResult->idTable().clone(), childResult->sortedBy(),
-            childResult->getSharedLocalVocab()};
+    return {childResult->cloneIdTable(cancellationChecker()),
+            childResult->sortedBy(), childResult->getSharedLocalVocab()};
   }
   if (singleRowCroppedByLimit()) {
     return {childResult->idTables(), childResult->sortedBy()};

@@ -6,8 +6,10 @@
 #ifndef QLEVER_SRC_ENGINE_OPTIONALJOIN_H
 #define QLEVER_SRC_ENGINE_OPTIONALJOIN_H
 
+#include "backports/span.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "util/ContainersWithAllocator.h"
 
 // Forward declaration
 class IndexScan;
@@ -26,10 +28,10 @@ class OptionalJoin : public Operation {
 
   Implementation implementation_ = Implementation::GeneralCase;
 
-  std::vector<std::array<ColumnIndex, 2>> _joinColumns;
+  qlm::vector<std::array<ColumnIndex, 2>> _joinColumns;
 
   std::vector<float> _multiplicities;
-  size_t _sizeEstimate;
+  size_t _sizeEstimate = 0;
   std::optional<size_t> _costEstimate;
   bool _multiplicitiesComputed = false;
 
@@ -45,12 +47,23 @@ class OptionalJoin : public Operation {
  private:
   std::string getCacheKeyImpl() const override;
 
+  void onLimitOffsetChanged(const LimitOffsetClause&,
+                            bool childrenAreExclusivelyOwned) override;
+
  public:
+  // We propagate part of the `LimitOffsetClause` to the child operation to
+  // potentially speed it up and save memory, but `OptionalJoin` does not
+  // actually apply its own `LimitOffsetClause` to itself, this still needs to
+  // be done by the `Operation` base class.
+  LimitOffsetHandling handlesLimitOffset() const override {
+    return LimitOffsetHandling::PARTIAL;
+  }
+
   std::string getDescriptor() const override;
 
   size_t getResultWidth() const override;
 
-  std::vector<ColumnIndex> resultSortedOn() const override;
+  qlm::vector<ColumnIndex> resultSortedOn() const override;
 
   bool knownEmptyResult() override { return _left->knownEmptyResult(); }
 
@@ -62,18 +75,20 @@ class OptionalJoin : public Operation {
  public:
   size_t getCostEstimate() override;
 
-  std::vector<QueryExecutionTree*> getChildren() override {
-    return {_left.get(), _right.get()};
+ private:
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return {{_left.get(), _right.get()}, allocator()};
   }
 
+ public:
   bool columnOriginatesFromGraphOrUndef(
       const Variable& variable) const override;
 
   // Joins two result tables on any number of columns, inserting the special
   // value `Id::makeUndefined()` for any entries marked as optional.
   void optionalJoin(
-      const IdTable& left, const IdTable& right,
-      const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
+      const IdTableView<0>& left, const IdTableView<0>& right,
+      ql::span<const std::array<ColumnIndex, 2>> joinColumns,
       IdTable* dynResult,
       Implementation implementation = Implementation::GeneralCase);
 
@@ -96,11 +111,18 @@ class OptionalJoin : public Operation {
                                    bool requestLaziness);
 
  private:
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
+
   std::unique_ptr<Operation> cloneImpl() const override;
 
   // Helper function for `tryIndexNestedLoopJoinIfSuitable` which makes the
-  // logic reusable.
+  // logic reusable. Note that this depends on the size estimates and hence may
+  // change when a `LIMIT` is pushed into `_left`, see `onLimitOffsetChanged`.
   bool isIndexNestedLoopJoinSuitable() const;
+
+  // The join columns of the left input, in the order in which `_left` is
+  // sorted.
+  std::vector<ColumnIndex> leftJoinColumns() const;
 
   // Nested loop join optimization than can apply when a memory intensive sort
   // can be avoided this way.
@@ -109,6 +131,11 @@ class OptionalJoin : public Operation {
   std::optional<std::shared_ptr<QueryExecutionTree>>
   makeTreeWithStrippedColumns(
       const std::set<Variable>& variables) const override;
+
+  std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
+      const parsedQuery::Bind& bind) const override;
+  std::unique_ptr<Operation> cloneWithNewChildren(
+      qlm::vector<std::shared_ptr<QueryExecutionTree>> children) const override;
 
   void computeSizeEstimateAndMultiplicities();
 
@@ -119,8 +146,8 @@ class OptionalJoin : public Operation {
   // Check which of the join columns in `left` and `right` contain UNDEF values
   // and return the appropriate `Implementation`.
   static Implementation computeImplementationFromIdTables(
-      const IdTable& left, const IdTable& right,
-      const std::vector<std::array<ColumnIndex, 2>>&);
+      const IdTableView<0>& left, const IdTableView<0>& right,
+      ql::span<const std::array<ColumnIndex, 2>>);
 };
 
 #endif  // QLEVER_SRC_ENGINE_OPTIONALJOIN_H

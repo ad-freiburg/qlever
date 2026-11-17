@@ -5,6 +5,9 @@
 #include "engine/ExecuteUpdate.h"
 
 #include "engine/ExportQueryExecutionTrees.h"
+#include "engine/UpdateMetadata.h"
+#include "index/IndexImpl.h"
+#include "index/TripleComponentConversions.h"
 
 // _____________________________________________________________________________
 UpdateMetadata ExecuteUpdate::executeUpdate(
@@ -26,16 +29,19 @@ UpdateMetadata ExecuteUpdate::executeUpdate(
   // Update 3.1.3)
   tracer.beginTrace("deleteTriples");
   if (!toDelete.idTriples_.empty()) {
-    deltaTriples.deleteTriples(cancellationHandle,
-                               std::move(toDelete.idTriples_), tracer);
+    deltaTriples.deleteTriples<DeltaTriples::Consolidate::No>(
+        cancellationHandle, std::move(toDelete.idTriples_), tracer);
   }
   tracer.endTrace("deleteTriples");
   tracer.beginTrace("insertTriples");
   if (!toInsert.idTriples_.empty()) {
-    deltaTriples.insertTriples(cancellationHandle,
-                               std::move(toInsert.idTriples_), tracer);
+    deltaTriples.insertTriples<DeltaTriples::Consolidate::No>(
+        cancellationHandle, std::move(toInsert.idTriples_), tracer);
   }
   tracer.endTrace("insertTriples");
+  tracer.beginTrace("consolidateSortedDeltaTriples");
+  deltaTriples.consolidateAll();
+  tracer.endTrace("consolidateSortedDeltaTriples");
   return metadata;
 }
 
@@ -47,9 +53,9 @@ UpdateMetadata ExecuteUpdate::executeUpdate(
 // operation). Still, it would be cleaner to avoid these copies.
 std::pair<std::vector<ExecuteUpdate::TransformedTriple>, LocalVocab>
 ExecuteUpdate::transformTriplesTemplate(
-    const EncodedIriManager& encodedIriManager, const Index::Vocab& vocab,
-    const VariableToColumnMap& variableColumns,
+    const IndexImpl& index, const VariableToColumnMap& variableColumns,
     const std::vector<SparqlTripleSimpleWithGraph>& triples) {
+  const auto& encodedIriManager = index.encodedIriManager();
   // We collect all `TripleComponent`s from `triples` in a hash set.
   ad_utility::HashSet<TripleComponent> lookupItems;
 
@@ -94,12 +100,13 @@ ExecuteUpdate::transformTriplesTemplate(
   // Sort the `TripleComponent`s.
   std::vector lookupVec(std::move_iterator(lookupItems.begin()),
                         std::move_iterator(lookupItems.end()));
-  ql::ranges::sort(
-      lookupVec, vocab.getCaseComparator(), [](const TripleComponent& tc) {
-        AD_CORRECTNESS_CHECK(tc.isLiteral() || tc.isIri());
-        return tc.isLiteral() ? tc.getLiteral().toStringRepresentation()
-                              : tc.getIri().toStringRepresentation();
-      });
+  ql::ranges::sort(lookupVec, index.getVocab().getCaseComparator(),
+                   [](const TripleComponent& tc) {
+                     AD_CORRECTNESS_CHECK(tc.isLiteral() || tc.isIri());
+                     return tc.isLiteral()
+                                ? tc.getLiteral().toStringRepresentation()
+                                : tc.getIri().toStringRepresentation();
+                   });
 
   // Local vocab for all `TripleComponent`s that are not in the existing vocab.
   //
@@ -116,8 +123,8 @@ ExecuteUpdate::transformTriplesTemplate(
   ad_utility::HashMap<TripleComponent, Id> lookupMap;
   for (auto& tc : lookupVec) {
     TripleComponent copy{tc};
-    lookupMap.emplace(std::move(tc), std::move(copy).toValueId(
-                                         vocab, localVocab, encodedIriManager));
+    lookupMap.emplace(std::move(tc),
+                      toValueId(std::move(copy), index, localVocab));
   }
 
   // Lookup the given `TripleComponent` in `lookupMap`. For a variable, return
@@ -128,7 +135,7 @@ ExecuteUpdate::transformTriplesTemplate(
       AD_CORRECTNESS_CHECK(variableColumns.contains(tc.getVariable()));
       return variableColumns.at(tc.getVariable()).columnIndex_;
     }
-    if (auto optionalId = tc.toValueIdIfNotString(&encodedIriManager)) {
+    if (auto optionalId = toValueIdIfNotString(tc, &encodedIriManager)) {
       return optionalId.value();
     }
     auto found = lookupMap.find(tc);
@@ -177,7 +184,7 @@ ExecuteUpdate::transformTriplesTemplate(
 }
 
 // _____________________________________________________________________________
-std::optional<Id> ExecuteUpdate::resolveVariable(const IdTable& idTable,
+std::optional<Id> ExecuteUpdate::resolveVariable(const IdTableView<0>& idTable,
                                                  const uint64_t& rowIdx,
                                                  IdOrVariableIndex idOrVar) {
   auto visitId = [](const Id& id) {
@@ -195,7 +202,7 @@ std::optional<Id> ExecuteUpdate::resolveVariable(const IdTable& idTable,
 // _____________________________________________________________________________
 void ExecuteUpdate::computeAndAddQuadsForResultRow(
     const std::vector<TransformedTriple>& templates,
-    std::vector<IdTriple<>>& result, const IdTable& idTable,
+    std::vector<IdTriple<>>& result, const IdTableView<0>& idTable,
     const uint64_t rowIdx) {
   for (const auto& [s, p, o, g] : templates) {
     auto subject = resolveVariable(idTable, rowIdx, s);
@@ -225,20 +232,17 @@ ExecuteUpdate::computeGraphUpdateQuads(
 
   // Start the timer once the where clause has been evaluated.
   tracer.beginTrace("computeIds");
-  const auto& vocab = index.getVocab();
-  const auto& encodedIriManager = index.encodedIriManager();
 
   auto prepareTemplateAndResultContainer =
-      [&vocab, &variableColumns, &encodedIriManager, &result](
+      [&index, &variableColumns, &result](
           const std::vector<SparqlTripleSimpleWithGraph>& tripleTemplates) {
         auto [transformedTripleTemplates, localVocab] =
-            transformTriplesTemplate(encodedIriManager, vocab, variableColumns,
-                                     tripleTemplates);
+            transformTriplesTemplate(index, variableColumns, tripleTemplates);
         std::vector<IdTriple<>> updateTriples;
         // The maximum result size is size(query result) x num template rows.
         // The actual result can be smaller if there are template rows with
         // variables for which a result row does not have a value.
-        updateTriples.reserve(result.idTable().size() *
+        updateTriples.reserve(result.idTableView().size() *
                               transformedTripleTemplates.size());
 
         return std::make_tuple(std::move(transformedTripleTemplates),
@@ -258,10 +262,12 @@ ExecuteUpdate::computeGraphUpdateQuads(
            query._limitOffset, result, resultSize)) {
     auto& idTable = pair.idTable_;
     for (const uint64_t i : range) {
-      computeAndAddQuadsForResultRow(toInsertTemplates, toInsert, idTable, i);
+      computeAndAddQuadsForResultRow(toInsertTemplates, toInsert,
+                                     idTable.asStaticView<0>(), i);
       cancellationHandle->throwIfCancelled();
 
-      computeAndAddQuadsForResultRow(toDeleteTemplates, toDelete, idTable, i);
+      computeAndAddQuadsForResultRow(toDeleteTemplates, toDelete,
+                                     idTable.asStaticView<0>(), i);
       cancellationHandle->throwIfCancelled();
     }
   }

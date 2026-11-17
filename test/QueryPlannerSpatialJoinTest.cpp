@@ -4,16 +4,20 @@
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
+#include <absl/strings/match.h>
 #include <absl/strings/str_cat.h>
+#include <absl/strings/str_replace.h>
 #include <gmock/gmock.h>
 
 #include "./printers/PayloadVariablePrinters.h"
 #include "QueryPlannerTestHelpers.h"
 #include "engine/SpatialJoin.h"
 #include "engine/SpatialJoinConfig.h"
+#include "global/Constants.h"
 #include "parser/MagicServiceQuery.h"
 #include "parser/PayloadVariables.h"
 #include "parser/SpatialQuery.h"
+#include "rdfTypes/GeoSparqlHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
 
 namespace h = queryPlannerTestHelpers;
@@ -46,19 +50,7 @@ TEST(QueryPlanner, SpatialJoinService) {
       "spatialSearch:maxDistance 1 . "
       "{ ?a <p> ?b } }}",
       h::spatialJoin(1, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, S2,
-                     std::nullopt, scan("?x", "<p>", "?y"),
-                     scan("?a", "<p>", "?b")));
-  h::expect(
-      "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
-      "SELECT * WHERE {"
-      "?x <p> ?y."
-      "SERVICE spatialSearch: {"
-      "_:config spatialSearch:left ?y ;"
-      "spatialSearch:right ?b ;"
-      "spatialSearch:maxDistance 1 . "
-      "{ ?a <p> ?b } }}",
-      h::spatialJoin(1, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, S2,
-                     std::nullopt, scan("?x", "<p>", "?y"),
+                     std::nullopt, std::nullopt, scan("?x", "<p>", "?y"),
                      scan("?a", "<p>", "?b")));
   h::expect(
       "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
@@ -71,7 +63,7 @@ TEST(QueryPlanner, SpatialJoinService) {
       "spatialSearch:maxDistance 1 . "
       "{ ?a <p> ?b } }}",
       h::spatialJoin(1, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, Basel,
-                     std::nullopt, scan("?x", "<p>", "?y"),
+                     std::nullopt, std::nullopt, scan("?x", "<p>", "?y"),
                      scan("?a", "<p>", "?b")));
   h::expect(
       "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
@@ -83,9 +75,11 @@ TEST(QueryPlanner, SpatialJoinService) {
       "spatialSearch:right ?b ;"
       "spatialSearch:maxDistance 100 . "
       "{ ?a <p> ?b } }}",
-      h::spatialJoin(100, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload,
-                     BBox, std::nullopt, scan("?x", "<p>", "?y"),
-                     scan("?a", "<p>", "?b")));
+      h::QetWithWarnings(
+          {"`<boundingBox>` is deprecated"},
+          h::spatialJoin(100, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload,
+                         BBox, std::nullopt, std::nullopt,
+                         scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b"))));
 
   h::expect(
       "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
@@ -99,8 +93,8 @@ TEST(QueryPlanner, SpatialJoinService) {
       "spatialSearch:maxDistance 100 . "
       "{ ?a <p> ?b } }}",
       h::spatialJoin(100, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, SJ,
-                     SpatialJoinType::WITHIN_DIST, scan("?x", "<p>", "?y"),
-                     scan("?a", "<p>", "?b")));
+                     SpatialJoinType::WITHIN_DIST, std::nullopt,
+                     scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
 
   h::expect(
       "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
@@ -112,8 +106,25 @@ TEST(QueryPlanner, SpatialJoinService) {
       "spatialSearch:right ?b ."
       "{ ?a <p> ?b } }}",
       h::spatialJoin(-1, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, SJ,
-                     SpatialJoinType::INTERSECTS, scan("?x", "<p>", "?y"),
-                     scan("?a", "<p>", "?b")));
+                     SpatialJoinType::INTERSECTS, std::nullopt,
+                     scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+
+  h::expect(
+      "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+      "SELECT * WHERE {"
+      "?x <p> ?y."
+      "SERVICE spatialSearch: {"
+      "_:config spatialSearch:algorithm spatialSearch:libspatialjoin ;"
+      "spatialSearch:joinType spatialSearch:de9im ;"
+      "spatialSearch:de9imFilter \"2FFF1FFF2\" ;"
+      "spatialSearch:left ?y ;"
+      "spatialSearch:right ?b ."
+      "{ ?a <p> ?b } }}",
+      h::spatialJoin(
+          -1, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, SJ,
+          SpatialJoinType::DE9IM,
+          De9imFilterString{'2', 'F', 'F', 'F', '1', 'F', 'F', 'F', '2'},
+          scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
 
   h::expect(
       "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
@@ -126,8 +137,8 @@ TEST(QueryPlanner, SpatialJoinService) {
       "spatialSearch:right ?b  . "
       "{ ?a <p> ?b } }}",
       h::spatialJoin(-1, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, SJ,
-                     SpatialJoinType::INTERSECTS, scan("?x", "<p>", "?y"),
-                     scan("?a", "<p>", "?b")));
+                     SpatialJoinType::INTERSECTS, std::nullopt,
+                     scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
 
   h::expect(
       "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
@@ -140,8 +151,8 @@ TEST(QueryPlanner, SpatialJoinService) {
       "spatialSearch:right ?b . "
       "{ ?a <p> ?b } }}",
       h::spatialJoin(-1, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, SJ,
-                     SpatialJoinType::COVERS, scan("?x", "<p>", "?y"),
-                     scan("?a", "<p>", "?b")));
+                     SpatialJoinType::COVERS, std::nullopt,
+                     scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
 
   h::expect(
       "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
@@ -154,8 +165,8 @@ TEST(QueryPlanner, SpatialJoinService) {
       "spatialSearch:right ?b . "
       "{ ?a <p> ?b } }}",
       h::spatialJoin(-1, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, SJ,
-                     SpatialJoinType::CONTAINS, scan("?x", "<p>", "?y"),
-                     scan("?a", "<p>", "?b")));
+                     SpatialJoinType::CONTAINS, std::nullopt,
+                     scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
 
   h::expect(
       "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
@@ -168,8 +179,8 @@ TEST(QueryPlanner, SpatialJoinService) {
       "spatialSearch:right ?b . "
       "{ ?a <p> ?b } }}",
       h::spatialJoin(-1, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, SJ,
-                     SpatialJoinType::TOUCHES, scan("?x", "<p>", "?y"),
-                     scan("?a", "<p>", "?b")));
+                     SpatialJoinType::TOUCHES, std::nullopt,
+                     scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
 
   h::expect(
       "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
@@ -182,8 +193,8 @@ TEST(QueryPlanner, SpatialJoinService) {
       "spatialSearch:right ?b . "
       "{ ?a <p> ?b } }}",
       h::spatialJoin(-1, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, SJ,
-                     SpatialJoinType::CROSSES, scan("?x", "<p>", "?y"),
-                     scan("?a", "<p>", "?b")));
+                     SpatialJoinType::CROSSES, std::nullopt,
+                     scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
 
   h::expect(
       "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
@@ -196,8 +207,8 @@ TEST(QueryPlanner, SpatialJoinService) {
       "spatialSearch:right ?b . "
       "{ ?a <p> ?b } }}",
       h::spatialJoin(-1, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, SJ,
-                     SpatialJoinType::OVERLAPS, scan("?x", "<p>", "?y"),
-                     scan("?a", "<p>", "?b")));
+                     SpatialJoinType::OVERLAPS, std::nullopt,
+                     scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
 
   h::expect(
       "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
@@ -210,8 +221,8 @@ TEST(QueryPlanner, SpatialJoinService) {
       "spatialSearch:right ?b . "
       "{ ?a <p> ?b } }}",
       h::spatialJoin(-1, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, SJ,
-                     SpatialJoinType::WITHIN, scan("?x", "<p>", "?y"),
-                     scan("?a", "<p>", "?b")));
+                     SpatialJoinType::WITHIN, std::nullopt,
+                     scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
 
   h::expect(
       "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
@@ -224,8 +235,8 @@ TEST(QueryPlanner, SpatialJoinService) {
       "spatialSearch:right ?b  . "
       "{ ?a <p> ?b } }}",
       h::spatialJoin(-1, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, SJ,
-                     SpatialJoinType::EQUALS, scan("?x", "<p>", "?y"),
-                     scan("?a", "<p>", "?b")));
+                     SpatialJoinType::EQUALS, std::nullopt,
+                     scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
 
   h::expect(
       "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
@@ -238,8 +249,8 @@ TEST(QueryPlanner, SpatialJoinService) {
       "spatialSearch:right ?b . "
       "{ ?a <p> ?b } }}",
       h::spatialJoin(-1, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, SJ,
-                     SpatialJoinType::WITHIN, scan("?x", "<p>", "?y"),
-                     scan("?a", "<p>", "?b")));
+                     SpatialJoinType::WITHIN, std::nullopt,
+                     scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
 
   h::expect(
       "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
@@ -251,10 +262,11 @@ TEST(QueryPlanner, SpatialJoinService) {
       "spatialSearch:right ?b ;"
       "spatialSearch:maxDistance 100 ;"
       "spatialSearch:numNearestNeighbors 2 ;"
+      "spatialSearch:distanceUnit <http://qudt.org/vocab/unit/KiloM> ;"
       "spatialSearch:bindDistance ?dist ."
       "{ ?a <p> ?b } }}",
       h::spatialJoin(100, 2, V{"?y"}, V{"?b"}, V{"?dist"}, emptyPayload, S2,
-                     std::nullopt, scan("?x", "<p>", "?y"),
+                     std::nullopt, std::nullopt, scan("?x", "<p>", "?y"),
                      scan("?a", "<p>", "?b")));
   h::expect(
       "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
@@ -267,7 +279,7 @@ TEST(QueryPlanner, SpatialJoinService) {
       "_:config spatialSearch:left ?y ."
       "{ ?a <p> ?b } }}",
       h::spatialJoin(-1, 5, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, S2,
-                     std::nullopt, scan("?x", "<p>", "?y"),
+                     std::nullopt, std::nullopt, scan("?x", "<p>", "?y"),
                      scan("?a", "<p>", "?b")));
 
   // Floating point as maximum distance
@@ -282,7 +294,7 @@ TEST(QueryPlanner, SpatialJoinService) {
       "spatialSearch:maxDistance 0.5 . "
       "{ ?a <p> ?b } }}",
       h::spatialJoin(0.5, -1, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, S2,
-                     std::nullopt, scan("?x", "<p>", "?y"),
+                     std::nullopt, std::nullopt, scan("?x", "<p>", "?y"),
                      scan("?a", "<p>", "?b")));
 }
 
@@ -303,6 +315,7 @@ TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
       "SERVICE spatialSearch: {"
       "_:config spatialSearch:algorithm spatialSearch:s2 ;"
       "spatialSearch:right ?b ;"
+      "spatialSearch:distanceUnit <http://qudt.org/vocab/unit/KiloM> ;"
       "spatialSearch:bindDistance ?dist ;"
       "spatialSearch:numNearestNeighbors 5 . "
       "_:config spatialSearch:left ?y ."
@@ -310,7 +323,8 @@ TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
       "{ ?a <p> ?b } }}",
       h::spatialJoin(-1, 5, V{"?y"}, V{"?b"}, V{"?dist"},
                      PV{std::vector<V>{V{"?a"}}}, S2, std::nullopt,
-                     scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+                     std::nullopt, scan("?x", "<p>", "?y"),
+                     scan("?a", "<p>", "?b")));
   h::expect(
       "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
       "SELECT * WHERE {"
@@ -318,6 +332,7 @@ TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
       "SERVICE spatialSearch: {"
       "_:config spatialSearch:algorithm spatialSearch:s2 ;"
       "spatialSearch:right ?b ;"
+      "spatialSearch:distanceUnit <http://qudt.org/vocab/unit/KiloM> ;"
       "spatialSearch:bindDistance ?dist ;"
       "spatialSearch:numNearestNeighbors 5 . "
       "_:config spatialSearch:left ?y ."
@@ -325,7 +340,7 @@ TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
       "{ ?a <p> ?a2 . ?a2 <p> ?b } }}",
       h::spatialJoin(
           -1, 5, V{"?y"}, V{"?b"}, V{"?dist"},
-          PV{std::vector<V>{V{"?a"}, V{"?a2"}}}, S2, std::nullopt,
+          PV{std::vector<V>{V{"?a"}, V{"?a2"}}}, S2, std::nullopt, std::nullopt,
           scan("?x", "<p>", "?y"),
           h::Join(scan("?a", "<p>", "?a2"), scan("?a2", "<p>", "?b"))));
 
@@ -338,6 +353,7 @@ TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
       "SERVICE spatialSearch: {"
       "_:config spatialSearch:algorithm spatialSearch:s2 ;"
       "spatialSearch:right ?b ;"
+      "spatialSearch:distanceUnit <http://qudt.org/vocab/unit/KiloM> ;"
       "spatialSearch:bindDistance ?dist ;"
       "spatialSearch:numNearestNeighbors 5 . "
       "_:config spatialSearch:left ?y ."
@@ -346,7 +362,7 @@ TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
       h::spatialJoin(
           -1, 5, V{"?y"}, V{"?b"}, V{"?dist"},
           PV{std::vector<V>{V{"?a"}, V{"?a"}, V{"?b"}, V{"?a2"}}}, S2,
-          std::nullopt, scan("?x", "<p>", "?y"),
+          std::nullopt, std::nullopt, scan("?x", "<p>", "?y"),
           h::Join(scan("?a", "<p>", "?a2"), scan("?a2", "<p>", "?b"))));
 
   // Selecting all payload variables using "all"
@@ -357,6 +373,7 @@ TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
       "SERVICE spatialSearch: {"
       "_:config spatialSearch:algorithm spatialSearch:s2 ;"
       "spatialSearch:right ?b ;"
+      "spatialSearch:distanceUnit <http://qudt.org/vocab/unit/KiloM> ;"
       "spatialSearch:bindDistance ?dist ;"
       "spatialSearch:numNearestNeighbors 5 . "
       "_:config spatialSearch:left ?y ."
@@ -364,7 +381,7 @@ TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
       "{ ?a <p> ?a2 . ?a2 <p> ?b } }}",
       h::spatialJoin(
           -1, 5, V{"?y"}, V{"?b"}, V{"?dist"}, PayloadVariables::all(), S2,
-          std::nullopt, scan("?x", "<p>", "?y"),
+          std::nullopt, std::nullopt, scan("?x", "<p>", "?y"),
           h::Join(scan("?a", "<p>", "?a2"), scan("?a2", "<p>", "?b"))));
   h::expect(
       "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
@@ -373,6 +390,7 @@ TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
       "SERVICE spatialSearch: {"
       "_:config spatialSearch:algorithm spatialSearch:s2 ;"
       "spatialSearch:right ?b ;"
+      "spatialSearch:distanceUnit <http://qudt.org/vocab/unit/KiloM> ;"
       "spatialSearch:bindDistance ?dist ;"
       "spatialSearch:numNearestNeighbors 5 . "
       "_:config spatialSearch:left ?y ."
@@ -380,7 +398,7 @@ TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
       "{ ?a <p> ?a2 . ?a2 <p> ?b } }}",
       h::spatialJoin(
           -1, 5, V{"?y"}, V{"?b"}, V{"?dist"}, PayloadVariables::all(), S2,
-          std::nullopt, scan("?x", "<p>", "?y"),
+          std::nullopt, std::nullopt, scan("?x", "<p>", "?y"),
           h::Join(scan("?a", "<p>", "?a2"), scan("?a2", "<p>", "?b"))));
 
   // All and explicitly named ones just select all
@@ -391,6 +409,7 @@ TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
       "SERVICE spatialSearch: {"
       "_:config spatialSearch:algorithm spatialSearch:s2 ;"
       "spatialSearch:right ?b ;"
+      "spatialSearch:distanceUnit <http://qudt.org/vocab/unit/KiloM> ;"
       "spatialSearch:bindDistance ?dist ;"
       "spatialSearch:numNearestNeighbors 5 . "
       "_:config spatialSearch:left ?y ."
@@ -399,7 +418,7 @@ TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
       "{ ?a <p> ?a2 . ?a2 <p> ?b } }}",
       h::spatialJoin(
           -1, 5, V{"?y"}, V{"?b"}, V{"?dist"}, PayloadVariables::all(), S2,
-          std::nullopt, scan("?x", "<p>", "?y"),
+          std::nullopt, std::nullopt, scan("?x", "<p>", "?y"),
           h::Join(scan("?a", "<p>", "?a2"), scan("?a2", "<p>", "?b"))));
 }
 
@@ -425,7 +444,7 @@ TEST(QueryPlanner, SpatialJoinServiceMaxDistOutside) {
       h::spatialJoin(1, -1, V{"?y"}, V{"?b"}, std::nullopt,
                      // Payload variables have the default all instead of empty
                      // in this case
-                     PayloadVariables::all(), S2, std::nullopt,
+                     PayloadVariables::all(), S2, std::nullopt, std::nullopt,
                      scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
 
   // If the user explicitly states that they want all payload variables (which
@@ -443,7 +462,7 @@ TEST(QueryPlanner, SpatialJoinServiceMaxDistOutside) {
       "spatialSearch:payload spatialSearch:all ."
       " } }",
       h::spatialJoin(1, -1, V{"?y"}, V{"?b"}, std::nullopt,
-                     PayloadVariables::all(), S2, std::nullopt,
+                     PayloadVariables::all(), S2, std::nullopt, std::nullopt,
                      scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
 
   // Nearest neighbors search requires the right child to be defined inside the
@@ -510,39 +529,41 @@ TEST(QueryPlanner, SpatialJoinMultipleServiceSharedLeft) {
       // children one way or the other depending on cost estimates. Both
       // versions are semantically correct.
       ::testing::AnyOf(
-          h::spatialJoin(
-              100, -1, V{"?y"}, V{"?b"}, std::nullopt, PV::all(), S2,
-              std::nullopt,
-              h::spatialJoin(500, -1, V{"?y"}, V{"?c"}, std::nullopt, PV::all(),
-                             S2, std::nullopt, scan("?x", "<p>", "?y"),
-                             scan("?ac", "<p2>", "?c")),
-              scan("?ab", "<p1>", "?b")),
-          h::spatialJoin(
-              500, -1, V{"?y"}, V{"?c"}, std::nullopt, PV::all(), S2,
-              std::nullopt,
-              h::spatialJoin(100, -1, V{"?y"}, V{"?b"}, std::nullopt, PV::all(),
-                             S2, std::nullopt, scan("?x", "<p>", "?y"),
-                             scan("?ab", "<p1>", "?b")),
-              scan("?ac", "<p2>", "?c"))));
+          h::spatialJoin(100, -1, V{"?y"}, V{"?b"}, std::nullopt, PV::all(), S2,
+                         std::nullopt, std::nullopt,
+                         h::spatialJoin(500, -1, V{"?y"}, V{"?c"}, std::nullopt,
+                                        PV::all(), S2, std::nullopt,
+                                        std::nullopt, scan("?x", "<p>", "?y"),
+                                        scan("?ac", "<p2>", "?c")),
+                         scan("?ab", "<p1>", "?b")),
+          h::spatialJoin(500, -1, V{"?y"}, V{"?c"}, std::nullopt, PV::all(), S2,
+                         std::nullopt, std::nullopt,
+                         h::spatialJoin(100, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                                        PV::all(), S2, std::nullopt,
+                                        std::nullopt, scan("?x", "<p>", "?y"),
+                                        scan("?ab", "<p1>", "?b")),
+                         scan("?ac", "<p2>", "?c"))));
   h::expect(
       "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
       "SELECT * WHERE {"
       "?x <p> ?y ."
       "SERVICE spatialSearch: {"
-      "  _:config spatialSearch:algorithm spatialSearch:s2 ;"
+      "  _:config1 spatialSearch:algorithm spatialSearch:s2 ;"
       "    spatialSearch:left ?y ;"
       "    spatialSearch:right ?b ;"
       "    spatialSearch:numNearestNeighbors 5 ; "
+      "    spatialSearch:distanceUnit <http://qudt.org/vocab/unit/KiloM> ;"
       "    spatialSearch:bindDistance ?db ."
       "  { ?ab <p1> ?b } "
       "}"
       "SERVICE spatialSearch: {"
-      "  _:config spatialSearch:algorithm spatialSearch:s2 ;"
+      "  _:config2 spatialSearch:algorithm spatialSearch:s2 ;"
       "    spatialSearch:left ?y ;"
       "    spatialSearch:right ?c ;"
       "    spatialSearch:numNearestNeighbors 5 ; "
       "    spatialSearch:maxDistance 500 ; "
       "    spatialSearch:payload ?ac ; "
+      "    spatialSearch:distanceUnit <http://qudt.org/vocab/unit/KiloM> ;"
       "    spatialSearch:bindDistance ?dc ."
       "  { ?ac <p2> ?c }"
       " }"
@@ -551,20 +572,22 @@ TEST(QueryPlanner, SpatialJoinMultipleServiceSharedLeft) {
       // children one way or the other depending on cost estimates. Both
       // versions are semantically correct.
       ::testing::AnyOf(
-          h::spatialJoin(
-              500, 5, V{"?y"}, V{"?c"}, V{"?dc"}, PV{std::vector<V>{V{"?ac"}}},
-              S2, std::nullopt,
-              h::spatialJoin(-1, 5, V{"?y"}, V{"?b"}, V{"?db"}, PV{}, S2,
-                             std::nullopt, scan("?x", "<p>", "?y"),
-                             scan("?ab", "<p1>", "?b")),
-              scan("?ac", "<p2>", "?c")),
-          h::spatialJoin(-1, 5, V{"?y"}, V{"?b"}, V{"?db"}, PV{}, S2,
+          h::spatialJoin(500, 5, V{"?y"}, V{"?c"}, V{"?dc"},
+                         PV{std::vector<V>{V{"?ac"}}}, S2, std::nullopt,
                          std::nullopt,
-                         h::spatialJoin(500, 5, V{"?y"}, V{"?c"}, V{"?dc"},
-                                        PV{std::vector<V>{V{"?ac"}}}, S2,
-                                        std::nullopt, scan("?x", "<p>", "?y"),
-                                        scan("?ac", "<p2>", "?c")),
-                         scan("?ab", "<p1>", "?b"))));
+                         h::spatialJoin(-1, 5, V{"?y"}, V{"?b"}, V{"?db"}, PV{},
+                                        S2, std::nullopt, std::nullopt,
+                                        scan("?x", "<p>", "?y"),
+                                        scan("?ab", "<p1>", "?b")),
+                         scan("?ac", "<p2>", "?c")),
+          h::spatialJoin(
+              -1, 5, V{"?y"}, V{"?b"}, V{"?db"}, PV{}, S2, std::nullopt,
+              std::nullopt,
+              h::spatialJoin(500, 5, V{"?y"}, V{"?c"}, V{"?dc"},
+                             PV{std::vector<V>{V{"?ac"}}}, S2, std::nullopt,
+                             std::nullopt, scan("?x", "<p>", "?y"),
+                             scan("?ac", "<p2>", "?c")),
+              scan("?ab", "<p1>", "?b"))));
 }
 
 // _____________________________________________________________________________
@@ -576,7 +599,8 @@ TEST(QueryPlanner, SpatialJoinMissingConfig) {
                 "SELECT * WHERE {"
                 "?x <p> ?y ."
                 "SERVICE spatialSearch: {"
-                "_:config spatialSearch:right ?b ;"
+                "_:config spatialSearch:algorithm spatialSearch:s2 ;"
+                "spatialSearch:right ?b ;"
                 "spatialSearch:maxDistance 5 . "
                 " { ?a <p> ?b . }"
                 "}}",
@@ -588,7 +612,8 @@ TEST(QueryPlanner, SpatialJoinMissingConfig) {
                 "SELECT * WHERE {"
                 "?x <p> ?y ."
                 "SERVICE spatialSearch: {"
-                "_:config spatialSearch:right ?b ;"
+                "_:config spatialSearch:algorithm spatialSearch:s2 ;"
+                "spatialSearch:right ?b ;"
                 "spatialSearch:numNearestNeighbors 5 . "
                 " { ?a <p> ?b . }"
                 "}}",
@@ -600,7 +625,8 @@ TEST(QueryPlanner, SpatialJoinMissingConfig) {
                 "SELECT * WHERE {"
                 "?x <p> ?y ."
                 "SERVICE spatialSearch: {"
-                "_:config spatialSearch:left ?y ;"
+                "_:config spatialSearch:algorithm spatialSearch:s2 ;"
+                "spatialSearch:left ?y ;"
                 "spatialSearch:maxDistance 5 . "
                 " { ?a <p> ?b . }"
                 "}}",
@@ -612,7 +638,8 @@ TEST(QueryPlanner, SpatialJoinMissingConfig) {
                 "SELECT * WHERE {"
                 "?x <p> ?y ."
                 "SERVICE spatialSearch: {"
-                "_:config spatialSearch:left ?y ;"
+                "_:config spatialSearch:algorithm spatialSearch:s2 ;"
+                "spatialSearch:left ?y ;"
                 "spatialSearch:numNearestNeighbors 5 . "
                 " { ?a <p> ?b . }"
                 "}}",
@@ -624,13 +651,28 @@ TEST(QueryPlanner, SpatialJoinMissingConfig) {
                 "SELECT * WHERE {"
                 "?x <p> ?y ."
                 "SERVICE spatialSearch: {"
-                "_:config spatialSearch:left ?y ;"
+                "_:config spatialSearch:algorithm spatialSearch:s2 ;"
+                "spatialSearch:left ?y ;"
                 " spatialSearch:right ?b ."
                 " { ?a <p> ?b . }"
                 "}}",
                 ::testing::_),
       ::testing::ContainsRegex("Neither `<numNearestNeighbors>` nor "
                                "`<maxDistance>` were provided"));
+  // The `<algorithm>` parameter is mandatory and must be set explicitly.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX spatialSearch: "
+                "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE spatialSearch: {"
+                "_:config spatialSearch:left ?y ;"
+                "spatialSearch:right ?b ;"
+                "spatialSearch:maxDistance 5 . "
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::ContainsRegex("Missing parameter `<algorithm>`"));
 }
 
 // _____________________________________________________________________________
@@ -703,7 +745,38 @@ TEST(QueryPlanner, SpatialJoinIncorrectConfigValues) {
                 " { ?a <p> ?b . }"
                 "}}",
                 ::testing::_),
-      ::testing::ContainsRegex("`<numNearestNeighbors>` expects an integer"));
+      ::testing::ContainsRegex(
+          "`<numNearestNeighbors>` expects a positive integer"));
+  // Zero and negative limits are rejected (zero used to crash the `s2`
+  // algorithm, which pops an empty result queue for `max_results == 0`).
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX spatialSearch: "
+                "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE spatialSearch: {"
+                "_:config spatialSearch:right ?b ;"
+                "spatialSearch:left ?y ;"
+                "spatialSearch:numNearestNeighbors 0 ."
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::ContainsRegex(
+          "`<numNearestNeighbors>` expects a positive integer"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX spatialSearch: "
+                "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE spatialSearch: {"
+                "_:config spatialSearch:right ?b ;"
+                "spatialSearch:left ?y ;"
+                "spatialSearch:numNearestNeighbors -1 ."
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::ContainsRegex(
+          "`<numNearestNeighbors>` expects a positive integer"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       h::expect("PREFIX spatialSearch: "
                 "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
@@ -882,6 +955,22 @@ TEST(QueryPlanner, SpatialJoinIncorrectConfigValues) {
           "The algorithm `<libspatialjoin>` supports the "
           "`<maxDistance>` option only if `<joinType>` is set to "
           "`<within-dist>`"));
+  // `<within-dist>` join type requires the `<maxDistance>` parameter.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX spatialSearch: "
+                "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE spatialSearch: {"
+                "_:config spatialSearch:right ?b ;"
+                "spatialSearch:left ?y ;"
+                "spatialSearch:algorithm spatialSearch:libspatialjoin ;"
+                "spatialSearch:joinType <within-dist> ."
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::HasSubstr("`<within-dist>` requires the `<maxDistance>` "
+                           "parameter"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       h::expect("PREFIX spatialSearch: "
                 "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
@@ -985,6 +1074,122 @@ TEST(QueryPlanner, SpatialJoinIncorrectConfigValues) {
           ::testing::_),
       ::testing::HasSubstr(
           "a group graph pattern for the right side may not be specified"));
+
+  // `<de9im>` join type requires the `<de9imFilter>` parameter.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX spatialSearch: "
+                "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE spatialSearch: {"
+                "_:config spatialSearch:right ?b ;"
+                "spatialSearch:left ?y ;"
+                "spatialSearch:algorithm spatialSearch:libspatialjoin ;"
+                "spatialSearch:joinType spatialSearch:de9im ."
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::HasSubstr("`<de9im>` requires the `<de9imFilter>` "
+                           "parameter"));
+
+  // `<de9imFilter>` without `<joinType>` set to `<de9im>` is an error.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX spatialSearch: "
+                "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE spatialSearch: {"
+                "_:config spatialSearch:right ?b ;"
+                "spatialSearch:left ?y ;"
+                "spatialSearch:algorithm spatialSearch:libspatialjoin ;"
+                "spatialSearch:de9imFilter \"2FFF1FFF2\" ."
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::HasSubstr(
+          "`<de9imFilter>` may only be set if `<joinType>` is set to "
+          "`<de9im>`"));
+
+  // The `<de9imFilter>` literal must be a syntactically valid pattern.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX spatialSearch: "
+                "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE spatialSearch: {"
+                "_:config spatialSearch:right ?b ;"
+                "spatialSearch:left ?y ;"
+                "spatialSearch:algorithm spatialSearch:libspatialjoin ;"
+                "spatialSearch:joinType spatialSearch:de9im ;"
+                "spatialSearch:de9imFilter \"notAValidPattern\" ."
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::HasSubstr("parameter `<de9imFilter>` expects a string "
+                           "literal with exactly 9 characters"));
+}
+
+// Test that the parameter `<distanceUnit>` of the spatial search `SERVICE` sets
+// the unit of the `SpatialJoin`, the default unit per algorithm, and the errors
+// for a unit without a distance variable and for a unit that is not a length.
+TEST(QueryPlanner, SpatialJoinServiceDistanceUnit) {
+  auto query = [](std::string_view algorithm, std::string_view config) {
+    return absl::StrCat(
+        "PREFIX spatialSearch: "
+        "<https://qlever.cs.uni-freiburg.de/spatialSearch/> "
+        "SELECT * WHERE { ?x <p> ?y . SERVICE spatialSearch: { "
+        "_:config spatialSearch:left ?y ; spatialSearch:right ?b ; "
+        "spatialSearch:maxDistance 500 ; spatialSearch:algorithm ",
+        algorithm, " ; ", config, " . { ?a <p> ?b } } }");
+  };
+  auto s2 = "spatialSearch:s2";
+  auto libspatialjoin =
+      "spatialSearch:libspatialjoin ; spatialSearch:joinType "
+      "spatialSearch:within-dist";
+  auto bind = "spatialSearch:bindDistance ?dist";
+  auto unit = [](std::string_view unitIri) {
+    return absl::StrCat("spatialSearch:distanceUnit <", unitIri, ">");
+  };
+  auto hasUnit = [](std::optional<UnitOfMeasurement> expected) {
+    return h::RootOperation<SpatialJoin>(
+        AD_PROPERTY(SpatialJoin, onlyForTestingGetConfig,
+                    AD_FIELD(SpatialJoinConfiguration, distanceUnit_,
+                             ::testing::Eq(expected))));
+  };
+  using enum UnitOfMeasurement;
+
+  // The unit is taken from the `<distanceUnit>` parameter.
+  h::expect(query(s2, absl::StrCat(bind, " ; ", unit(UNIT_MILE_IRI))),
+            hasUnit(MILES));
+  h::expect(query(libspatialjoin,
+                  absl::StrCat(bind, " ; ", unit(UNIT_KILOMETER_IRI))),
+            hasUnit(KILOMETERS));
+
+  // `libspatialjoin` defaults to meters, all other algorithms to kilometers.
+  h::expect(query(libspatialjoin, bind), hasUnit(METERS));
+  h::expect(query(s2, bind), hasUnit(KILOMETERS));
+
+  // Without a distance variable, there is no unit.
+  h::expect(query(s2, "spatialSearch:numNearestNeighbors 5"),
+            hasUnit(std::nullopt));
+
+  // A unit requires a distance variable.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect(query(s2, unit(UNIT_METER_IRI)), ::testing::_),
+      ::testing::HasSubstr("`<distanceUnit>` requires the parameter "
+                           "`<bindDistance>`"));
+
+  // The unit must be the IRI of a unit of length.
+  for (std::string_view invalidUnit :
+       {"spatialSearch:distanceUnit <http://qudt.org/vocab/unit/M2>",
+        "spatialSearch:distanceUnit <http://example.com/unit>",
+        "spatialSearch:distanceUnit \"M\""}) {
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        h::expect(query(s2, absl::StrCat(bind, " ; ", invalidUnit)),
+                  ::testing::_),
+        ::testing::HasSubstr("`<distanceUnit>` expects the IRI of a unit of "
+                             "length"));
+  }
 }
 
 // _____________________________________________________________________________
@@ -992,7 +1197,7 @@ TEST(QueryPlanner, SpatialJoinS2PointPolylineAndCachedIndex) {
   using V = Variable;
   using PV = PayloadVariables;
   auto scan = h::IndexScanFromStrings;
-  using enum SpatialJoinAlgorithm;
+  using enum SpatialJoinAlgorithm::Enum;
 
   std::string kb =
       "<s> <p> \"LINESTRING(1.5 2.5, 1.55 2.5)\""
@@ -1029,7 +1234,7 @@ TEST(QueryPlanner, SpatialJoinS2PointPolylineAndCachedIndex) {
     auto qec = ad_utility::testing::getQec(kb);
     qec->pinResultWithName() = {"dummy", std::nullopt};
     auto plan = h::parseAndPlan(pinned, qec);
-    [[maybe_unused]] auto pinResult = plan.getResult();
+    [[maybe_unused]] auto pinResult = plan->getResult();
 
     AD_EXPECT_THROW_WITH_MESSAGE(
         h::expect(testQuery, ::testing::_, qec),
@@ -1041,7 +1246,7 @@ TEST(QueryPlanner, SpatialJoinS2PointPolylineAndCachedIndex) {
     auto qec = ad_utility::testing::getQec(kb);
     qec->pinResultWithName() = {"dummy", V{"?o"}};
     auto plan = h::parseAndPlan(pinned, qec);
-    [[maybe_unused]] auto pinResult = plan.getResult();
+    [[maybe_unused]] auto pinResult = plan->getResult();
 
     h::expect(
         "PREFIX qlss: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
@@ -1055,7 +1260,8 @@ TEST(QueryPlanner, SpatialJoinS2PointPolylineAndCachedIndex) {
         "qlss:experimentalRightCacheName \"dummy\" ."
         "} }",
         h::spatialJoin(500, -1, V{"?y"}, V{"?o"}, std::nullopt, PV::all(),
-                       S2_POINT_POLYLINE, std::nullopt, scan("?x", "<p>", "?y"),
+                       S2_POINT_POLYLINE, std::nullopt, std::nullopt,
+                       scan("?x", "<p>", "?y"),
                        h::ExplicitIdTableOperation(numLineStrings)),
         qec);
 
@@ -1073,7 +1279,8 @@ TEST(QueryPlanner, SpatialJoinS2PointPolylineAndCachedIndex) {
         "qlss:payload ?s ."
         "} }",
         h::spatialJoin(500, -1, V{"?y"}, V{"?o"}, std::nullopt, PV::all(),
-                       S2_POINT_POLYLINE, std::nullopt, scan("?x", "<p>", "?y"),
+                       S2_POINT_POLYLINE, std::nullopt, std::nullopt,
+                       scan("?x", "<p>", "?y"),
                        h::ExplicitIdTableOperation(numLineStrings)),
         qec);
   }
@@ -1084,7 +1291,7 @@ TEST(QueryPlanner, SpatialJoinS2PointPolylineAndCachedIndex) {
     auto qec = ad_utility::testing::getQec(kb);
     qec->pinResultWithName() = {"dummy", V{"?o"}};
     auto plan = h::parseAndPlan(pinned, qec);
-    [[maybe_unused]] auto pinResult = plan.getResult();
+    [[maybe_unused]] auto pinResult = plan->getResult();
 
     AD_EXPECT_THROW_WITH_MESSAGE(
         h::expect(
@@ -1120,9 +1327,24 @@ TEST(QueryPlanner, SpatialJoinFromGeofDistanceFilter) {
       "?x <p> ?y ."
       "FILTER(geof:distance(?y, ?b) <= 0.5)"
       " }",
-      h::spatialJoinFilterSubstitute(
-          500, -1, V{"?y"}, V{"?b"}, std::nullopt, PayloadVariables::all(),
-          algo, type, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+      h::spatialJoinFilterSubstitute(500, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                                     PayloadVariables::all(), algo, type,
+                                     std::nullopt, scan("?x", "<p>", "?y"),
+                                     scan("?a", "<p>", "?b")));
+
+  // Comparison with `<` (the maximum distance of the `SpatialJoin` is the
+  // largest `double` below 500)
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "FILTER(geof:distance(?y, ?b) < 0.5)"
+      " }",
+      h::spatialJoinFilterSubstitute(500, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                                     PayloadVariables::all(), algo, type,
+                                     std::nullopt, scan("?x", "<p>", "?y"),
+                                     scan("?a", "<p>", "?b")));
 
   // Metric distance function
   h::expect(
@@ -1132,9 +1354,10 @@ TEST(QueryPlanner, SpatialJoinFromGeofDistanceFilter) {
       "?x <p> ?y ."
       "FILTER(geof:metricDistance(?y, ?b) <= 500)"
       " }",
-      h::spatialJoinFilterSubstitute(
-          500, -1, V{"?y"}, V{"?b"}, std::nullopt, PayloadVariables::all(),
-          algo, type, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+      h::spatialJoinFilterSubstitute(500, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                                     PayloadVariables::all(), algo, type,
+                                     std::nullopt, scan("?x", "<p>", "?y"),
+                                     scan("?a", "<p>", "?b")));
 
   // Distance function with unit
   h::expect(
@@ -1144,9 +1367,10 @@ TEST(QueryPlanner, SpatialJoinFromGeofDistanceFilter) {
       "?x <p> ?y ."
       "FILTER(geof:distance(?y, ?b, <http://qudt.org/vocab/unit/M>) <= 500)"
       " }",
-      h::spatialJoinFilterSubstitute(
-          500, -1, V{"?y"}, V{"?b"}, std::nullopt, PayloadVariables::all(),
-          algo, type, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+      h::spatialJoinFilterSubstitute(500, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                                     PayloadVariables::all(), algo, type,
+                                     std::nullopt, scan("?x", "<p>", "?y"),
+                                     scan("?a", "<p>", "?b")));
   h::expect(
       "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
       "SELECT * WHERE {"
@@ -1156,7 +1380,8 @@ TEST(QueryPlanner, SpatialJoinFromGeofDistanceFilter) {
       " }",
       h::spatialJoinFilterSubstitute(
           1609.344, -1, V{"?y"}, V{"?b"}, std::nullopt, PayloadVariables::all(),
-          algo, type, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+          algo, type, std::nullopt, scan("?x", "<p>", "?y"),
+          scan("?a", "<p>", "?b")));
   h::expect(
       "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
       "SELECT * WHERE {"
@@ -1164,9 +1389,10 @@ TEST(QueryPlanner, SpatialJoinFromGeofDistanceFilter) {
       "?x <p> ?y ."
       "FILTER(geof:distance(?y, ?b, <http://qudt.org/vocab/unit/KiloM>) <= 0.5)"
       " }",
-      h::spatialJoinFilterSubstitute(
-          500, -1, V{"?y"}, V{"?b"}, std::nullopt, PayloadVariables::all(),
-          algo, type, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+      h::spatialJoinFilterSubstitute(500, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                                     PayloadVariables::all(), algo, type,
+                                     std::nullopt, scan("?x", "<p>", "?y"),
+                                     scan("?a", "<p>", "?b")));
 
   h::expect(
       "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
@@ -1177,9 +1403,10 @@ TEST(QueryPlanner, SpatialJoinFromGeofDistanceFilter) {
       "\"http://qudt.org/vocab/unit/M\"^^<http://www.w3.org/2001/"
       "XMLSchema#anyURI>) <= 500)"
       " }",
-      h::spatialJoinFilterSubstitute(
-          500, -1, V{"?y"}, V{"?b"}, std::nullopt, PayloadVariables::all(),
-          algo, type, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+      h::spatialJoinFilterSubstitute(500, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                                     PayloadVariables::all(), algo, type,
+                                     std::nullopt, scan("?x", "<p>", "?y"),
+                                     scan("?a", "<p>", "?b")));
   h::expect(
       "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
       "SELECT * WHERE {"
@@ -1191,7 +1418,8 @@ TEST(QueryPlanner, SpatialJoinFromGeofDistanceFilter) {
       " }",
       h::spatialJoinFilterSubstitute(
           1609.344, -1, V{"?y"}, V{"?b"}, std::nullopt, PayloadVariables::all(),
-          algo, type, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+          algo, type, std::nullopt, scan("?x", "<p>", "?y"),
+          scan("?a", "<p>", "?b")));
   h::expect(
       "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
       "SELECT * WHERE {"
@@ -1201,9 +1429,10 @@ TEST(QueryPlanner, SpatialJoinFromGeofDistanceFilter) {
       "\"http://qudt.org/vocab/unit/KiloM\"^^<http://www.w3.org/2001/"
       "XMLSchema#anyURI>) <= 0.5)"
       " }",
-      h::spatialJoinFilterSubstitute(
-          500, -1, V{"?y"}, V{"?b"}, std::nullopt, PayloadVariables::all(),
-          algo, type, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+      h::spatialJoinFilterSubstitute(500, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                                     PayloadVariables::all(), algo, type,
+                                     std::nullopt, scan("?x", "<p>", "?y"),
+                                     scan("?a", "<p>", "?b")));
 
   // Two distance filters
   h::expect(
@@ -1218,19 +1447,19 @@ TEST(QueryPlanner, SpatialJoinFromGeofDistanceFilter) {
       ::testing::AnyOf(
           h::spatialJoinFilterSubstitute(
               1000, -1, V{"?y"}, V{"?n"}, std::nullopt, PayloadVariables::all(),
-              algo, type,
+              algo, type, std::nullopt,
               h::spatialJoinFilterSubstitute(
                   500, -1, V{"?y"}, V{"?b"}, std::nullopt,
-                  PayloadVariables::all(), algo, type, scan("?x", "<p>", "?y"),
-                  scan("?a", "<p>", "?b")),
+                  PayloadVariables::all(), algo, type, std::nullopt,
+                  scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")),
               scan("?m", "<p>", "?n")),
           h::spatialJoinFilterSubstitute(
               500, -1, V{"?y"}, V{"?b"}, std::nullopt, PayloadVariables::all(),
-              algo, type,
+              algo, type, std::nullopt,
               h::spatialJoinFilterSubstitute(
                   1000, -1, V{"?y"}, V{"?n"}, std::nullopt,
-                  PayloadVariables::all(), algo, type, scan("?x", "<p>", "?y"),
-                  scan("?m", "<p>", "?n")),
+                  PayloadVariables::all(), algo, type, std::nullopt,
+                  scan("?x", "<p>", "?y"), scan("?m", "<p>", "?n")),
               scan("?a", "<p>", "?b"))));
 
   // Regression test: two distance filters and unrelated bind operation
@@ -1247,40 +1476,193 @@ TEST(QueryPlanner, SpatialJoinFromGeofDistanceFilter) {
       ::testing::AnyOf(
           h::Bind(h::spatialJoinFilterSubstitute(
                       1000, -1, V{"?y"}, V{"?n"}, std::nullopt,
-                      PayloadVariables::all(), algo, type,
+                      PayloadVariables::all(), algo, type, std::nullopt,
                       h::spatialJoinFilterSubstitute(
                           500, -1, V{"?y"}, V{"?b"}, std::nullopt,
-                          PayloadVariables::all(), algo, type,
+                          PayloadVariables::all(), algo, type, std::nullopt,
                           scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")),
                       scan("?m", "<p>", "?n")),
                   "1", Variable{"?unrelated"}),
           h::spatialJoinFilterSubstitute(
               1000, -1, V{"?y"}, V{"?n"}, std::nullopt, PayloadVariables::all(),
-              algo, type,
+              algo, type, std::nullopt,
               h::Bind(h::spatialJoinFilterSubstitute(
                           500, -1, V{"?y"}, V{"?b"}, std::nullopt,
-                          PayloadVariables::all(), algo, type,
+                          PayloadVariables::all(), algo, type, std::nullopt,
                           scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")),
                       "1", Variable{"?unrelated"}),
               scan("?m", "<p>", "?n")),
           h::spatialJoinFilterSubstitute(
               500, -1, V{"?y"}, V{"?b"},
-              std::nullopt, PayloadVariables::all(), algo, type,
+              std::nullopt, PayloadVariables::all(), algo, type, std::nullopt,
               h::Bind(h::spatialJoinFilterSubstitute(
                           1000, -1, V{"?y"}, V{"?n"}, std::nullopt,
-                          PayloadVariables::all(), algo, type,
+                          PayloadVariables::all(), algo, type, std::nullopt,
                           scan("?x", "<p>", "?y"), scan("?m", "<p>", "?n")),
                       "1", Variable{"?unrelated"}),
               scan("?a", "<p>", "?b")),
           h::Bind(h::spatialJoinFilterSubstitute(
                       500, -1, V{"?y"}, V{"?b"},
                       std::nullopt, PayloadVariables::all(), algo, type,
+                      std::nullopt,
                       h::spatialJoinFilterSubstitute(
                           1000, -1, V{"?y"}, V{"?n"}, std::nullopt,
-                          PayloadVariables::all(), algo, type,
+                          PayloadVariables::all(), algo, type, std::nullopt,
                           scan("?x", "<p>", "?y"), scan("?m", "<p>", "?n")),
                       scan("?a", "<p>", "?b")),
                   "1", Variable{"?unrelated"})));
+}
+
+// Test that a `BIND` of the distance between the join variables of a
+// `SpatialJoin` that computes exact distances is replaced by the distance
+// variable of the `SpatialJoin`, with the unit of the `BIND` expression, and
+// that any other `BIND` is kept.
+TEST(QueryPlanner, SpatialJoinDistanceVariableFromBind) {
+  auto scan = h::IndexScanFromStrings;
+  using V = Variable;
+  auto query = [](std::string_view filter, std::string_view bind) {
+    return absl::StrCat(
+        "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+        "SELECT * WHERE { ?a <p> ?b . ?x <p> ?y . FILTER(",
+        filter, ") BIND(", bind, " AS ?d) }");
+  };
+  // Match the `SpatialJoin` from the `FILTER` with the given distance variable
+  // and unit of the distance column.
+  auto sj = [&](std::optional<V> distanceVariable,
+                std::optional<UnitOfMeasurement> unit = std::nullopt) {
+    return ::testing::AllOf(
+        h::spatialJoinFilterSubstitute(
+            500, -1, V{"?y"}, V{"?b"}, std::move(distanceVariable),
+            PayloadVariables::all(), SpatialJoinAlgorithm::LIBSPATIALJOIN,
+            SpatialJoinType::WITHIN_DIST, std::nullopt, scan("?x", "<p>", "?y"),
+            scan("?a", "<p>", "?b")),
+        h::RootOperation<SpatialJoin>(
+            AD_PROPERTY(SpatialJoin, onlyForTestingGetConfig,
+                        AD_FIELD(SpatialJoinConfiguration, distanceUnit_,
+                                 ::testing::Eq(unit)))));
+  };
+  std::string_view filter = "geof:distance(?y, ?b) <= 0.5";
+
+  // The `BIND` is replaced by the distance variable of the `SpatialJoin`, with
+  // the unit of the `BIND` expression, and the arguments in any order.
+  h::expect(query(filter, "geof:distance(?y, ?b)"),
+            sj(V{"?d"}, UnitOfMeasurement::KILOMETERS));
+  h::expect(query(filter, "geof:distance(?b, ?y)"),
+            sj(V{"?d"}, UnitOfMeasurement::KILOMETERS));
+  h::expect(query(filter, "geof:metricDistance(?y, ?b)"),
+            sj(V{"?d"}, UnitOfMeasurement::METERS));
+  h::expect(query("geof:metricDistance(?y, ?b) <= 500",
+                  "geof:distance(?y, ?b, <http://qudt.org/vocab/unit/MI>)"),
+            sj(V{"?d"}, UnitOfMeasurement::MILES));
+
+  // The `BIND` is not replaced if its expression is not the distance between
+  // the join variables in a known unit of length.
+  auto notReplaced = [&](std::string_view bind) {
+    h::expect(query(filter, bind), h::Bind(sj(std::nullopt), bind, V{"?d"}));
+  };
+  notReplaced("geof:distance(?y, ?a)");
+  notReplaced("geof:distance(?y, ?y)");
+  notReplaced("geof:distance(?y, ?b, ?a)");
+  notReplaced("geof:distance(?y, ?b, <http://qudt.org/vocab/unit/M2>)");
+  notReplaced("geof:distance(?y, \"POINT(1 2)\")");
+  notReplaced("STR(?y)");
+  notReplaced("geof:distance(?y, ?b) + 0");
+  notReplaced("geof:distance(\"POINT(1 2)\", ?b)");
+  notReplaced("geof:distance(?b, ?a)");
+
+  // The `BIND` is not replaced if the `SpatialJoin` does not compute the
+  // distances.
+  h::expect(
+      query("geof:sfIntersects(?y, ?b)", "geof:distance(?y, ?b)"),
+      h::Bind(
+          h::spatialJoinFilterSubstitute(
+              -1, -1, V{"?y"}, V{"?b"}, std::nullopt, PayloadVariables::all(),
+              SpatialJoinAlgorithm::LIBSPATIALJOIN, SpatialJoinType::INTERSECTS,
+              std::nullopt, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")),
+          "geof:distance(?y, ?b)", V{"?d"}));
+
+  // Only the first `BIND` is replaced, because the `SpatialJoin` then already
+  // has a distance variable.
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE { ?a <p> ?b . ?x <p> ?y . "
+      "FILTER(geof:distance(?y, ?b) <= 0.5) "
+      "BIND(geof:distance(?y, ?b) AS ?d) "
+      "BIND(geof:distance(?y, ?b) AS ?e) }",
+      h::Bind(sj(V{"?d"}, UnitOfMeasurement::KILOMETERS),
+              "geof:distance(?y, ?b)", V{"?e"}));
+
+  // The `BIND` is not replaced for algorithms other than `libspatialjoin`.
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+      "SELECT * WHERE { ?x <p> ?y . "
+      "SERVICE spatialSearch: {"
+      "_:config spatialSearch:algorithm spatialSearch:s2 ;"
+      "spatialSearch:left ?y ;"
+      "spatialSearch:right ?b ;"
+      "spatialSearch:maxDistance 100 ."
+      "{ ?a <p> ?b } } BIND(geof:distance(?y, ?b) AS ?d) }",
+      h::Bind(h::spatialJoin(
+                  100, -1, V{"?y"}, V{"?b"}, std::nullopt, PayloadVariables{},
+                  SpatialJoinAlgorithm::S2_GEOMETRY, std::nullopt, std::nullopt,
+                  scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")),
+              "geof:distance(?y, ?b)", V{"?d"}));
+}
+
+// Test that the distances bound by the `SpatialJoin` are equal to the distances
+// computed by the `BIND` expression, for all supported units.
+TEST(QueryPlanner, SpatialJoinDistanceVariableFromBindResult) {
+  std::string kg;
+  auto addPoint = [&kg](std::string_view subject, std::string_view predicate,
+                        std::string_view point) {
+    absl::StrAppend(&kg, subject, " ", predicate, " \"POINT(", point, ")\"^^<",
+                    GEO_WKT_LITERAL, "> .\n");
+  };
+  addPoint("<a1>", "<p>", "7.83505 48.01267");
+  addPoint("<a2>", "<p>", "7.85298 47.99557");
+  addPoint("<a3>", "<p>", "7.80000 48.10000");
+  addPoint("<b1>", "<q>", "7.84000 48.00000");
+  addPoint("<b2>", "<q>", "7.90000 47.98000");
+  addPoint("<b3>", "<q>", "8.40000 48.00000");
+  auto qec = ad_utility::testing::getQec(kg);
+
+  // Compute the result of the query with the given `BIND` expression, which is
+  // expected to be replaced by the distance variable of the `SpatialJoin` iff
+  // `expectReplaced` is true.
+  auto compute = [&](std::string_view bind, bool expectReplaced) {
+    qec->clearCacheUnpinnedOnly();
+    auto qet = h::parseAndPlan(
+        absl::StrCat(
+            "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+            "SELECT ?a ?b ?d WHERE { ?a <p> ?x . ?b <q> ?y . "
+            "FILTER(geof:distance(?x, ?y) <= 10) BIND(",
+            bind, " AS ?d) } ORDER BY ?a ?b"),
+        qec);
+    EXPECT_EQ(absl::StrContains(qet->getCacheKey(), "withDistanceVariable"),
+              expectReplaced);
+    return qet->getResult()->idTableView().clone();
+  };
+
+  for (std::string_view bind :
+       {"geof:distance(?x, ?y)", "geof:distance(?y, ?x)",
+        "geof:metricDistance(?x, ?y)",
+        "geof:distance(?x, ?y, <http://qudt.org/vocab/unit/MI>)"}) {
+    auto trace = generateLocationTrace(AD_CURRENT_SOURCE_LOC(), bind);
+    // Adding `0` prevents the replacement, but doesn't change the values.
+    auto expected = compute(absl::StrCat(bind, " + 0"), false);
+    auto actual = compute(bind, true);
+    // `<a3>` and `<b3>` are too far away from the others.
+    ASSERT_EQ(expected.numRows(), 4);
+    ASSERT_EQ(actual.numRows(), expected.numRows());
+    for (size_t row = 0; row < expected.numRows(); ++row) {
+      EXPECT_EQ(actual(row, 0), expected(row, 0));
+      EXPECT_EQ(actual(row, 1), expected(row, 1));
+      auto expectedDist = expected(row, 2).getDouble();
+      EXPECT_NEAR(actual(row, 2).getDouble(), expectedDist,
+                  1e-6 * expectedDist);
+    }
+  }
 }
 
 // _____________________________________________________________________________
@@ -1297,51 +1679,6 @@ TEST(QueryPlanner, FilterIsNotRewritten) {
       h::Filter("geof:distance(?y, ?b) > 0.5",
                 h::CartesianProductJoin(scan("?x", "<p>", "?y"),
                                         scan("?a", "<p>", "?b"))));
-
-  h::expect(
-      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
-      "SELECT * WHERE {"
-      "?a <p> ?b ."
-      "?x <p> ?y ."
-      "FILTER(geof:distance(\"POINT(50. "
-      "50.0)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>, ?b) <= 0.5)"
-      " }",
-      ::testing::AnyOf(
-          h::Filter(
-              "geof:distance(\"POINT(50. "
-              "50.0)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>, "
-              "?b) <= 0.5",
-              h::CartesianProductJoin(scan("?x", "<p>", "?y"),
-                                      scan("?a", "<p>", "?b"))),
-          h::CartesianProductJoin(
-              scan("?x", "<p>", "?y"),
-              h::Filter(
-                  "geof:distance(\"POINT(50. "
-                  "50.0)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>, "
-                  "?b) <= 0.5",
-                  scan("?a", "<p>", "?b")))));
-
-  h::expect(
-      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
-      "SELECT * WHERE {"
-      "?a <p> ?b ."
-      "?x <p> ?y ."
-      "FILTER(geof:distance(?b, \"POINT(50. "
-      "50.0)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>) <= 0.5)"
-      " }",
-      ::testing::AnyOf(
-          h::Filter("geof:distance(?b, \"POINT(50. "
-                    "50.0)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"
-                    ") <= 0.5",
-                    h::CartesianProductJoin(scan("?x", "<p>", "?y"),
-                                            scan("?a", "<p>", "?b"))),
-          h::CartesianProductJoin(
-              scan("?x", "<p>", "?y"),
-              h::Filter(
-                  "geof:distance(?b, \"POINT(50. "
-                  "50.0)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"
-                  ") <= 0.5",
-                  scan("?a", "<p>", "?b")))));
 
   h::expect(
       "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
@@ -1387,25 +1724,19 @@ TEST(QueryPlanner, FilterIsNotRewritten) {
                 h::CartesianProductJoin(scan("?x", "<p>", "?y"),
                                         scan("?a", "<p>", "?b"))));
 
+  // `geof:relate` requires a fixed string literal as its third argument: if
+  // it is a variable instead, the filter is not rewritten into a spatial
+  // join.
   h::expect(
       "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
       "SELECT * WHERE {"
       "?a <p> ?b ."
-      "FILTER(geof:sfContains(?b, \"POINT(50.0 50.0)\""
-      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>)) . }",
-      h::Filter("geof:sfContains(?b, \"POINT(50.0 50.0)\""
-                "^^<http://www.opengis.net/ont/geosparql#wktLiteral>)",
-                scan("?a", "<p>", "?b")));
-
-  h::expect(
-      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
-      "SELECT * WHERE {"
-      "?a <p> ?b ."
-      "FILTER(geof:sfContains(\"POINT(50.0 50.0)\""
-      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>, ?b)) . }",
-      h::Filter("geof:sfContains(\"POINT(50.0 50.0)\""
-                "^^<http://www.opengis.net/ont/geosparql#wktLiteral>, ?b)",
-                scan("?a", "<p>", "?b")));
+      "?x <p> ?y ."
+      "FILTER(geof:relate(?y, ?b, ?a))"
+      " }",
+      h::Filter("geof:relate(?y, ?b, ?a)",
+                h::CartesianProductJoin(scan("?x", "<p>", "?y"),
+                                        scan("?a", "<p>", "?b"))));
 }
 
 // _____________________________________________________________________________
@@ -1413,7 +1744,7 @@ TEST(QueryPlanner, SpatialJoinFromGeofRelationFilter) {
   auto scan = h::IndexScanFromStrings;
   using V = Variable;
   auto algo = SpatialJoinAlgorithm::LIBSPATIALJOIN;
-  using enum SpatialJoinType;
+  using enum SpatialJoinType::Enum;
 
   std::vector<std::pair<std::string, SpatialJoinType>>
       geofFunctionNameAndSJType{
@@ -1433,7 +1764,7 @@ TEST(QueryPlanner, SpatialJoinFromGeofRelationFilter) {
         funcName, "(?y, ?b))  }");
     h::expect(query, h::spatialJoinFilterSubstitute(
                          -1, -1, V{"?y"}, V{"?b"}, std::nullopt,
-                         PayloadVariables::all(), algo, sjType,
+                         PayloadVariables::all(), algo, sjType, std::nullopt,
                          scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
   }
 
@@ -1457,18 +1788,18 @@ TEST(QueryPlanner, SpatialJoinFromGeofRelationFilter) {
               ::testing::AnyOf(
                   h::spatialJoinFilterSubstitute(
                       -1, -1, V{"?y"}, V{"?n"}, std::nullopt,
-                      PayloadVariables::all(), algo, sjType2,
+                      PayloadVariables::all(), algo, sjType2, std::nullopt,
                       h::spatialJoinFilterSubstitute(
                           -1, -1, V{"?y"}, V{"?b"}, std::nullopt,
-                          PayloadVariables::all(), algo, sjType1,
+                          PayloadVariables::all(), algo, sjType1, std::nullopt,
                           scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")),
                       scan("?m", "<p>", "?n")),
                   h::spatialJoinFilterSubstitute(
                       -1, -1, V{"?y"}, V{"?b"}, std::nullopt,
-                      PayloadVariables::all(), algo, sjType1,
+                      PayloadVariables::all(), algo, sjType1, std::nullopt,
                       h::spatialJoinFilterSubstitute(
                           -1, -1, V{"?y"}, V{"?n"}, std::nullopt,
-                          PayloadVariables::all(), algo, sjType2,
+                          PayloadVariables::all(), algo, sjType2, std::nullopt,
                           scan("?x", "<p>", "?y"), scan("?m", "<p>", "?n")),
                       scan("?a", "<p>", "?b"))));
   }
@@ -1487,12 +1818,12 @@ TEST(QueryPlanner, SpatialJoinFromGeofRelationFilter) {
           h::Filter("geof:sfCovers(?n, ?b)",
                     h::spatialJoinFilterSubstitute(
                         -1, -1, V{"?n"}, V{"?b"}, std::nullopt,
-                        PayloadVariables::all(), algo, CONTAINS,
+                        PayloadVariables::all(), algo, CONTAINS, std::nullopt,
                         scan("?m", "<p>", "?n"), scan("?a", "<p>", "?b"))),
           h::Filter("geof:sfContains(?n, ?b)",
                     h::spatialJoinFilterSubstitute(
                         -1, -1, V{"?n"}, V{"?b"}, std::nullopt,
-                        PayloadVariables::all(), algo, COVERS,
+                        PayloadVariables::all(), algo, COVERS, std::nullopt,
                         scan("?m", "<p>", "?n"), scan("?a", "<p>", "?b")))));
 
   // Combination of geo relation filter and geo distance filter
@@ -1507,18 +1838,18 @@ TEST(QueryPlanner, SpatialJoinFromGeofRelationFilter) {
       ::testing::AnyOf(
           h::spatialJoinFilterSubstitute(
               1000, -1, V{"?b"}, V{"?y"}, std::nullopt, PayloadVariables::all(),
-              algo, WITHIN_DIST,
+              algo, WITHIN_DIST, std::nullopt,
               h::spatialJoinFilterSubstitute(
                   -1, -1, V{"?n"}, V{"?b"}, std::nullopt,
-                  PayloadVariables::all(), algo, CONTAINS,
+                  PayloadVariables::all(), algo, CONTAINS, std::nullopt,
                   scan("?m", "<p>", "?n"), scan("?a", "<p>", "?b")),
               scan("?x", "<p>", "?y")),
           h::spatialJoinFilterSubstitute(
               -1, -1, V{"?n"}, V{"?b"}, std::nullopt, PayloadVariables::all(),
-              algo, CONTAINS, scan("?m", "<p>", "?n"),
+              algo, CONTAINS, std::nullopt, scan("?m", "<p>", "?n"),
               h::spatialJoinFilterSubstitute(
                   1000, -1, V{"?b"}, V{"?y"}, std::nullopt,
-                  PayloadVariables::all(), algo, WITHIN_DIST,
+                  PayloadVariables::all(), algo, WITHIN_DIST, std::nullopt,
                   scan("?a", "<p>", "?b"), scan("?x", "<p>", "?y")))));
 
   // Geo relation filter with the same variable twice is not allowed
@@ -1527,6 +1858,241 @@ TEST(QueryPlanner, SpatialJoinFromGeofRelationFilter) {
                 "SELECT * WHERE {"
                 "?a <p> ?b ."
                 "FILTER geof:sfContains(?b, ?b) . }",
+                ::testing::_),
+      ::testing::HasSubstr("Variable ?b on both sides"));
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, SpatialJoinFromFilterWithFixedValue) {
+  auto scan = h::IndexScanFromStrings;
+  auto algo = SpatialJoinAlgorithm::LIBSPATIALJOIN;
+  using enum SpatialJoinType::Enum;
+  // The filter substitutes are seeded exactly once per planning (in
+  // `fillDpTab`), and the queries below contain no other construct that
+  // generates an internal variable, so the fixed side is bound to the first
+  // internal variable.
+  Var internalVar{
+      absl::StrCat(QLEVER_INTERNAL_VARIABLE_QUERY_PLANNER_PREFIX, 0)};
+
+  // Fixed values during `FILTER` rewriting are replaced by a single-row
+  // `VALUES`. Construct matchers for this.
+  auto valuesForLiteral = [&internalVar](const std::string& literal) {
+    return h::ValuesClause(
+        absl::StrCat("VALUES (", internalVar.name(), ") { (", literal, ") }"));
+  };
+  std::string point =
+      "\"POINT(1 1)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+  auto valuesPoint = valuesForLiteral(
+      absl::StrCat("G:", GeoPoint{1, 1}.toStringRepresentation()));
+  std::string line =
+      "\"LINESTRING(0 0, 1 1)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+  auto valuesLine = valuesForLiteral(line);
+
+  // `geof:sfIntersects` with a fixed geometry on the right side.
+  h::expect(absl::StrCat("PREFIX geof: "
+                         "<http://www.opengis.net/def/function/geosparql/> "
+                         "SELECT * WHERE {"
+                         "?a <p> ?b ."
+                         "FILTER(geof:sfIntersects(?b, ",
+                         point, ")) }"),
+            h::spatialJoinFilterSubstitute(
+                -1, -1, Var{"?b"}, internalVar, std::nullopt,
+                PayloadVariables::all(), algo, INTERSECTS, std::nullopt,
+                scan("?a", "<p>", "?b"), valuesPoint));
+
+  // Non-point fixed geometry.
+  h::expect(
+      absl::StrCat(
+          "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+          "SELECT * WHERE {"
+          "?a <p> ?b ."
+          "FILTER(geof:sfCrosses(?b, ",
+          line, ")) }"),
+      h::spatialJoinFilterSubstitute(
+          -1, -1, Var{"?b"}, internalVar, std::nullopt, PayloadVariables::all(),
+          algo, CROSSES, std::nullopt, scan("?a", "<p>", "?b"), valuesLine));
+
+  // `geof:metricDistance(...) <= constant` with a fixed geometry on the
+  // left side.
+  h::expect(absl::StrCat("PREFIX geof: "
+                         "<http://www.opengis.net/def/function/geosparql/> "
+                         "SELECT * WHERE {"
+                         "?a <p> ?b ."
+                         "FILTER(geof:metricDistance(",
+                         point, ", ?b) <= 500) }"),
+            h::spatialJoinFilterSubstitute(
+                500, -1, internalVar, Var{"?b"}, std::nullopt,
+                PayloadVariables::all(), algo, WITHIN_DIST, std::nullopt,
+                valuesPoint, scan("?a", "<p>", "?b")));
+
+  // Same fixed-value substitution, but with an unrelated triple `?x <p> ?y`
+  // elsewhere in the query. That triple forms its own connected component,
+  // so the two components are combined via a `CartesianProductJoin` above
+  // the substitute.
+  h::expect(absl::StrCat("PREFIX geof: "
+                         "<http://www.opengis.net/def/function/geosparql/> "
+                         "SELECT * WHERE {"
+                         "?a <p> ?b ."
+                         "?x <p> ?y ."
+                         "FILTER(geof:distance(",
+                         point, ", ?b) <= 0.5) }"),
+            h::CartesianProductJoin(
+                scan("?x", "<p>", "?y"),
+                h::spatialJoinFilterSubstitute(
+                    500, -1, internalVar, Var{"?b"}, std::nullopt,
+                    PayloadVariables::all(), algo, WITHIN_DIST, std::nullopt,
+                    valuesPoint, scan("?a", "<p>", "?b"))));
+  // Same but on the right side.
+  h::expect(absl::StrCat("PREFIX geof: "
+                         "<http://www.opengis.net/def/function/geosparql/> "
+                         "SELECT * WHERE {"
+                         "?a <p> ?b ."
+                         "?x <p> ?y ."
+                         "FILTER(geof:distance(?b, ",
+                         point, ") <= 0.5) }"),
+            h::CartesianProductJoin(
+                scan("?x", "<p>", "?y"),
+                h::spatialJoinFilterSubstitute(
+                    500, -1, Var{"?b"}, internalVar, std::nullopt,
+                    PayloadVariables::all(), algo, WITHIN_DIST, std::nullopt,
+                    scan("?a", "<p>", "?b"), valuesPoint)));
+
+  // Both sides fixed: there is nothing left to join on, so the ordinary
+  // `FILTER` remains instead of being substituted by a `SpatialJoin`.
+  h::expect(absl::StrCat("PREFIX geof: "
+                         "<http://www.opengis.net/def/function/geosparql/> "
+                         "SELECT * WHERE {"
+                         "?a <p> ?b ."
+                         "FILTER(geof:sfIntersects(",
+                         point, ", ", point, ")) }"),
+            h::Filter("sfIntersects", scan("?a", "<p>", "?b")));
+
+  // Rewriting with a fixed side under greedy query planning.
+  h::expectGreedy(
+      absl::StrCat("PREFIX geof: "
+                   "<http://www.opengis.net/def/function/geosparql/> "
+                   "SELECT * WHERE {"
+                   "?a <p> ?b ."
+                   "FILTER(geof:sfIntersects(?b, ",
+                   point, ")) }"),
+      h::spatialJoinFilterSubstitute(-1, -1, Var{"?b"}, internalVar,
+                                     std::nullopt, PayloadVariables::all(),
+                                     algo, INTERSECTS, std::nullopt,
+                                     scan("?a", "<p>", "?b"), valuesPoint));
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, FilterWithoutForcedSubstituteInSingleSeedComponent) {
+  auto scan = h::IndexScanFromStrings;
+  // A substitute without a fixed side has no child yet, so its substitution
+  // cannot be forced. In a component with a single seed, such a substitute
+  // could never be completed and must therefore not be applied at all; the
+  // ordinary `FILTER` has to remain. This is checked on a non-empty index:
+  // an incomplete `SpatialJoin` has a dummy cost estimate of 1, so on an
+  // empty index it would lose the plan selection by accident even if it were
+  // wrongly applied.
+  auto* qec = ad_utility::testing::getQec(
+      "<x1> <p> \"POINT(1 1)\"^^<http://www.opengis.net/ont/geosparql#"
+      "wktLiteral> . <x2> <p> \"POINT(2 2)\"^^<http://www.opengis.net/ont/"
+      "geosparql#wktLiteral> . <x3> <p> \"POINT(3 3)\"^^<http://"
+      "www.opengis.net/ont/geosparql#wktLiteral> .");
+
+  // The second variable of the filter is not bound anywhere in the query.
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "FILTER(geof:sfIntersects(?b, ?nowhere)) }",
+      h::Filter("geof:sfIntersects(?b, ?nowhere)", scan("?a", "<p>", "?b")),
+      qec);
+
+  // Both variables of the filter are bound by the same single triple.
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "FILTER(geof:sfIntersects(?b, ?a)) }",
+      h::Filter("geof:sfIntersects(?b, ?a)", scan("?a", "<p>", "?b")), qec);
+}
+
+// Test that an enforced filter substitute with a fixed side is applied after
+// a join that makes its other side small, and not to the seed directly.
+TEST(QueryPlanner, ForcedSubstituteAfterSelectiveJoin) {
+  auto scan = h::IndexScanFromStrings;
+  using enum SpatialJoinType::Enum;
+
+  // Many geometries `<p>` and a single entity `<x1>` with `<q> <o>`.
+  std::string kb = "<x1> <q> <o> .\n";
+  for (size_t i = 1; i <= 100; ++i) {
+    absl::StrAppend(
+        &kb, "<x", i, "> <p> \"POINT(", i, " ", i,
+        ")\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n");
+  }
+  auto* qec = ad_utility::testing::getQec(kb);
+  Var internalVar{
+      absl::StrCat(QLEVER_INTERNAL_VARIABLE_QUERY_PLANNER_PREFIX, 0)};
+  auto valuesPoint = h::ValuesClause(
+      absl::StrCat("VALUES (", internalVar.name(),
+                   ") { (G:", GeoPoint{1, 1}.toStringRepresentation(), ") }"));
+
+  std::string query =
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <q> <o> ."
+      "?a <p> ?b ."
+      "FILTER(geof:sfIntersects(?b, \"POINT(1 1)\"^^"
+      "<http://www.opengis.net/ont/geosparql#wktLiteral>)) }";
+
+  // The `SpatialJoin` with the constant point is above the join of the
+  // geometries with the single entity.
+  h::expectDynamicProgramming(
+      query,
+      h::spatialJoinFilterSubstitute(
+          -1, -1, Var{"?b"}, internalVar, std::nullopt, PayloadVariables::all(),
+          SpatialJoinAlgorithm::LIBSPATIALJOIN, INTERSECTS, std::nullopt,
+          h::Join(scan("?a", "<q>", "<o>"), scan("?a", "<p>", "?b")),
+          valuesPoint),
+      qec);
+
+  // The greedy planner still applies the `SpatialJoin` to the scan of the
+  // geometries and joins the single entity afterwards.
+  h::expectGreedy(
+      query,
+      h::Join(
+          scan("?a", "<q>", "<o>"),
+          h::Sort(h::spatialJoinFilterSubstitute(
+              -1, -1, Var{"?b"}, internalVar, std::nullopt,
+              PayloadVariables::all(), SpatialJoinAlgorithm::LIBSPATIALJOIN,
+              INTERSECTS, std::nullopt, scan("?a", "<p>", "?b"), valuesPoint))),
+      qec);
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, SpatialJoinFromGeofRelateFilter) {
+  auto scan = h::IndexScanFromStrings;
+  using V = Variable;
+  auto algo = SpatialJoinAlgorithm::LIBSPATIALJOIN;
+  using enum SpatialJoinType::Enum;
+
+  std::string query =
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "FILTER(geof:relate(?y, ?b, \"T*T***T**\"))  }";
+  h::expect(query,
+            h::spatialJoinFilterSubstitute(
+                -1, -1, V{"?y"}, V{"?b"}, std::nullopt, PayloadVariables::all(),
+                algo, DE9IM, parseDe9imFilterString("T*T***T**"),
+                scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+
+  // Geo relate filter with the same variable twice is not allowed
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+                "SELECT * WHERE {"
+                "?a <p> ?b ."
+                "FILTER geof:relate(?b, ?b, \"T*T***T**\") . }",
                 ::testing::_),
       ::testing::HasSubstr("Variable ?b on both sides"));
 }
@@ -1545,7 +2111,7 @@ TEST(QueryPlanner, SpatialJoinLegacyPredicateSupport) {
       "?x <p> ?y ."
       " }",
       h::spatialJoin(1, -1, V{"?y"}, V{"?b"}, std::nullopt,
-                     PayloadVariables::all(), S2, std::nullopt,
+                     PayloadVariables::all(), S2, std::nullopt, std::nullopt,
                      scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
   h::expect(
       "SELECT * WHERE {"
@@ -1554,7 +2120,7 @@ TEST(QueryPlanner, SpatialJoinLegacyPredicateSupport) {
       "?x <p> ?y ."
       " }",
       h::spatialJoin(5000, -1, V{"?y"}, V{"?b"}, std::nullopt,
-                     PayloadVariables::all(), S2, std::nullopt,
+                     PayloadVariables::all(), S2, std::nullopt, std::nullopt,
                      scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
 
   // Test that invalid triples throw an error
@@ -1608,7 +2174,8 @@ TEST(QueryPlanner, SpatialJoinLegacyPredicateSupport) {
           {"special predicate <nearest-neighbors:...> is deprecated"},
           h::spatialJoin(500, 2, V{"?y"}, V{"?b"}, std::nullopt,
                          PayloadVariables::all(), S2, std::nullopt,
-                         scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b"))));
+                         std::nullopt, scan("?x", "<p>", "?y"),
+                         scan("?a", "<p>", "?b"))));
   h::expect(
       "SELECT ?x ?y WHERE {"
       "?x <p> ?y."
@@ -1618,7 +2185,8 @@ TEST(QueryPlanner, SpatialJoinLegacyPredicateSupport) {
           {"special predicate <nearest-neighbors:...> is deprecated"},
           h::spatialJoin(-1, 20, V{"?y"}, V{"?b"}, std::nullopt,
                          PayloadVariables::all(), S2, std::nullopt,
-                         scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b"))));
+                         std::nullopt, scan("?x", "<p>", "?y"),
+                         scan("?a", "<p>", "?b"))));
 
   AD_EXPECT_THROW_WITH_MESSAGE(h::expect("SELECT ?x ?y WHERE {"
                                          "?x <p> ?y."
@@ -1633,6 +2201,23 @@ TEST(QueryPlanner, SpatialJoinLegacyPredicateSupport) {
                                          "?y <nearest-neighbors:0:-1> ?b }",
                                          ::testing::_),
                                ::testing::ContainsRegex("unknown triple"));
+
+  // A limit of zero matches the regex but is rejected like for the `SERVICE`
+  // syntax, also when it stems from a number too large for `size_t`.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("SELECT ?x ?y WHERE {"
+                "?x <p> ?y."
+                "?a <p> ?b."
+                "?y <nearest-neighbors:0> ?b }",
+                ::testing::_),
+      ::testing::ContainsRegex("must be a positive integer"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("SELECT ?x ?y WHERE {"
+                "?x <p> ?y."
+                "?a <p> ?b."
+                "?y <nearest-neighbors:99999999999999999999> ?b }",
+                ::testing::_),
+      ::testing::ContainsRegex("must be a positive integer"));
 
   EXPECT_ANY_THROW(
       h::expect("SELECT ?x ?y WHERE {"
@@ -1774,4 +2359,50 @@ TEST(QueryPlanner, SpatialJoinLegacyMaxDistanceParsing) {
 
   // suffix after >
   testMaxDistance("<max-distance-in-metersjklö:1000>dfgh", 1000, true);
+}
+
+// Test that an inline WKT literal that is invalid in the strict parsing mode
+// matches nothing in a spatial join and makes the other geo functions evaluate
+// to UNDEF.
+TEST(QueryPlanner, InvalidInlineWktIsUndef) {
+  auto qec = ad_utility::testing::getQec(
+      "<a> <p> \"POLYGON((0 0, 2 0, 2 2, 0 2, 0 0))\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral> .");
+  // Run `SELECT * { ?a <p> ?b <body> }` and return the result and the column of
+  // `?x` (if any).
+  auto run = [&qec](std::string_view body) {
+    auto plan = h::parseAndPlan(
+        absl::StrCat("PREFIX geof: "
+                     "<http://www.opengis.net/def/function/geosparql/> "
+                     "PREFIX geo: <http://www.opengis.net/ont/geosparql#> "
+                     "SELECT * { ?a <p> ?b ",
+                     body, " }"),
+        qec);
+    auto col = plan->getVariableColumnOrNullopt(Var{"?x"});
+    return std::pair{plan->getResult(), col};
+  };
+  std::string valid = "\"LINESTRING(1 1, 3 3)\"^^geo:wktLiteral";
+  // In lenient parsing mode, this would be the same line as `valid`.
+  std::string invalid = "\"LINESTRING(1 1, 3 3, 4 a)\"^^geo:wktLiteral";
+
+  // `FILTER` (rewritten to a `SpatialJoin` with a `VALUES` clause).
+  for (auto filter : {"FILTER geof:sfIntersects(?b, {})",
+                      "VALUES ?g { {} } FILTER geof:sfIntersects(?b, ?g)"}) {
+    auto withWkt = [&filter](const std::string& wkt) {
+      return absl::StrReplaceAll(filter, {{"{}", wkt}});
+    };
+    EXPECT_EQ(run(withWkt(valid)).first->idTableView().size(), 1);
+    EXPECT_EQ(run(withWkt(invalid)).first->idTableView().size(), 0);
+  }
+
+  // Expressions evaluate to UNDEF.
+  for (auto expr : {"geof:metricLength({})", "geof:envelope({})",
+                    "geof:distance(?b, {})"}) {
+    auto bind = absl::StrCat(
+        "BIND(", absl::StrReplaceAll(expr, {{"{}", invalid}}), " AS ?x)");
+    auto [result, col] = run(bind);
+    ASSERT_EQ(result->idTableView().size(), 1);
+    ASSERT_TRUE(col.has_value());
+    EXPECT_TRUE(result->idTableView()(0, col.value()).isUndefined()) << expr;
+  }
 }

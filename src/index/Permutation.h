@@ -1,20 +1,31 @@
-// Copyright 2018 - 2024, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2018 - 2026 The QLever Authors, in particular:
+//
+// 2018 - 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2025 - 2026 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_INDEX_PERMUTATION_H
 #define QLEVER_SRC_INDEX_PERMUTATION_H
 
 #include <array>
+#include <memory>
 #include <string>
 
+#include "engine/VariableToColumnMap.h"
 #include "global/Constants.h"
-#include "index/CompressedRelation.h"
+#include "index/CompressedRelationReader.h"
 #include "index/IndexMetaData.h"
 #include "index/KeyOrder.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "util/CancellationHandle.h"
+#include "util/EnumSize.h"
+#include "util/Executor.h"
 #include "util/File.h"
+#include "util/HashSet.h"
 #include "util/Log.h"
 
 // Forward declaration of `IdTable`
@@ -23,6 +34,8 @@ class IdTable;
 class LocatedTriplesPerBlock;
 struct LocatedTriplesState;
 class DeltaTriples;
+// Forward declaration for reference to owning `MaterializedView`.
+class MaterializedView;
 
 // Helper class to store static properties of the different permutations to
 // avoid code duplication.
@@ -31,6 +44,7 @@ class Permutation {
   using KeyOrder = qlever::KeyOrder;
   /// Identifiers for the six possible permutations.
   enum struct Enum { PSO, POS, SPO, SOP, OPS, OSP };
+  QLEVER_NESTED_ENUM_SIZE(Enum, 6);
   // Unfortunately there is a bug in GCC that doesn't allow use to simply use
   // `using enum`.
   static constexpr auto PSO = Enum::PSO;
@@ -52,16 +66,27 @@ class Permutation {
     }
   }
 
-  using MetaData = IndexMetaDataMmapView;
+  using MetaData = IndexMetaData;
   using Allocator = ad_utility::AllocatorWithLimit<Id>;
   using ColumnIndicesRef = CompressedRelationReader::ColumnIndicesRef;
   using ColumnIndices = CompressedRelationReader::ColumnIndices;
   using CancellationHandle = ad_utility::SharedCancellationHandle;
   using ScanSpecAndBlocks = CompressedRelationReader::ScanSpecAndBlocks;
 
+  // The permutation type. It is required by `IndexScan` for determining the
+  // correct semantics.
+  enum struct Type { NORMAL, INTERNAL, MATERIALIZED_VIEW };
+
   // Convert a permutation to the corresponding string, etc. `PSO` is converted
   // to "PSO".
   static std::string_view toString(Enum permutation);
+
+  // Return the paths of the files that store `permutation` for the index with
+  // the given `onDiskBase` (the permutation file and its `.meta` file). For the
+  // files of an internal permutation, pass the base name with the
+  // `QLEVER_INTERNAL_INDEX_INFIX` already appended.
+  static std::vector<ql::filesystem::path> fileNames(
+      Enum permutation, std::string_view onDiskBase);
 
   // Convert a permutation to the corresponding permutation of [0, 1, 2], etc.
   // `PSO` is converted to [1, 0, 2].
@@ -72,10 +97,17 @@ class Permutation {
   explicit Permutation(Enum permutation, Allocator allocator,
                        std::optional<std::string> readableName = std::nullopt);
 
-  // everything that has to be done when reading an index from disk
-  void loadFromDisk(const std::string& onDiskBase,
-                    bool loadInternalPermutation = false,
-                    bool useGraphPostProcessing = true);
+  // Everything that has to be done when reading an index from disk.
+  //
+  // With `logRegistration` set to `false`, the "Registered ... permutation"
+  // message is not logged. That is for callers that load several permutations
+  // and write a progress bar of their own, which such a message would
+  // interrupt.
+  void loadFromDisk(
+      const std::string& onDiskBase, bool loadInternalPermutation = false,
+      Type permutationType = Type::NORMAL,
+      ad_utility::HashSet<ColumnIndex> possiblyUndefinedColumns = {},
+      bool logRegistration = true);
 
   // Set the original metadata for the delta triples. This also sets the
   // metadata for internal permutation if present.
@@ -84,11 +116,13 @@ class Permutation {
   // For a given ID for the col0, retrieve all IDs of the col1 and col2.
   // If `col1Id` is specified, only the col2 is returned for triples that
   // additionally have the specified col1. .This is just a thin wrapper around
-  // `CompressedRelationMetaData::scan`.
+  // `CompressedRelationMetaData::scan`, which reads the blocks on the
+  // `executor`.
   IdTable scan(const ScanSpecAndBlocks& scanSpecAndBlocks,
                ColumnIndicesRef additionalColumns,
                const CancellationHandle& cancellationHandle,
                const LocatedTriplesState& locatedTriplesState,
+               qlever::Executor executor,
                const LimitOffsetClause& limitOffset = {}) const;
 
   // For a given relation, determine the `col1Id`s and their counts. This is
@@ -103,6 +137,23 @@ class Permutation {
       const CancellationHandle& cancellationHandle,
       const LocatedTriplesState& locatedTriplesState,
       const LimitOffsetClause& limitOffset) const;
+
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  // Lazily compute the distinct `col0Id`s of a full scan of this permutation.
+  // The `scanSpec` must not fix any of the columns, it is only used for its
+  // graph filter. See `CompressedRelationReader::getDistinctCol0Ids` for the
+  // exact semantics of `addGraphColumn` and `idFilter`.
+  //
+  // NOTE: `locatedTriplesState` and the `executor` (on which the blocks are
+  // read) have to be kept alive until the returned generator has been fully
+  // consumed.
+  cppcoro::generator<IdTable, CompressedRelationReader::LazyScanMetadata>
+  getDistinctCol0Ids(const ScanSpecification& scanSpec, bool addGraphColumn,
+                     std::optional<std::vector<Id>> idFilter,
+                     const CancellationHandle& cancellationHandle,
+                     const LocatedTriplesState& locatedTriplesState,
+                     qlever::Executor executor) const;
+#endif
 
   // Typedef to propagate the `MetadataAndblocks` and `IdTableGenerator` type.
   using MetadataAndBlocks =
@@ -122,6 +173,9 @@ class Permutation {
   //   in `ScanSpecAndBlocks`. The `BlockMetadatRanges` of the
   //   `ScanSpecAndBlocks` are ignored for scanning if `optBlocks` contains the
   //   join-specific prefiltered block metadata.
+  // - The blocks are read and decompressed on the `executor`, see
+  //   `CompressedRelationReader::lazyScan` for the requirements.
+  //
   // TODO<joka921> We should only communicate this interface via the
   // `ScanSpecAndBlocksAndBounds` class and make this a strong class that always
   // maintains its invariants.
@@ -130,8 +184,29 @@ class Permutation {
       std::optional<std::vector<CompressedBlockMetadata>> optBlocks,
       ColumnIndicesRef additionalColumns,
       const CancellationHandle& cancellationHandle,
-      const LocatedTriplesState& locatedTriplesState,
+      const LocatedTriplesState& locatedTriplesState, qlever::Executor executor,
       const LimitOffsetClause& limitOffset = {}) const;
+
+  // A lazy scan together with the independent `CompressedRelationReader` it
+  // reads from. The `reader_` owns the file handle and allocator that `blocks_`
+  // borrows from, so it must be kept alive for as long as `blocks_` is used.
+  struct LazyScanWithReader {
+    std::unique_ptr<CompressedRelationReader> reader_;
+    CompressedRelationReader::IdTableGeneratorInputRange blocks_;
+  };
+
+  // Like `lazyScan` above, but the scan is performed through a freshly created
+  // `CompressedRelationReader` with an unlimited-memory allocator instead of
+  // this permutation's shared reader. This allows the scan to run independently
+  // of memory constraints imposed on most queries. The blocks are read on the
+  // `executor`; the runtime index rebuild uses this to throttle its read
+  // parallelism (and hence peak CPU) without affecting queries.
+  LazyScanWithReader lazyScanWithUnlimitedReader(
+      const ScanSpecAndBlocks& scanSpecAndBlocks,
+      ColumnIndicesRef additionalColumns,
+      const CancellationHandle& cancellationHandle,
+      const LocatedTriplesState& locatedTriplesState,
+      qlever::Executor executor) const;
 
   // Returns the corresponding `CompressedRelationReader::ScanSpecAndBlocks`
   // with relevant `BlockMetadataRanges`.
@@ -152,10 +227,12 @@ class Permutation {
 
   // Get the exact size of the result of a scan, taking into account the
   // given located triples. This requires an exact location of the delta
-  // triples within the respective blocks.
+  // triples within the respective blocks (see
+  // `CompressedRelationReader::getResultSizeOfScan`).
   size_t getResultSizeOfScan(
       const ScanSpecAndBlocks& scanSpecAndBlocks,
-      const LocatedTriplesState& locatedTriplesState) const;
+      const LocatedTriplesState& locatedTriplesState,
+      const CancellationHandle& cancellationHandle) const;
 
   // Get a lower and upper bound for the size of the result of a scan, taking
   // into account the given `deltaTriples`. For this call, it is enough that
@@ -180,7 +257,7 @@ class Permutation {
   const std::string& fileSuffix() const { return fileSuffix_; }
 
   // _______________________________________________________
-  const KeyOrder& keyOrder() const { return keyOrder_; };
+  const KeyOrder& keyOrder() const { return keyOrder_; }
 
   // _______________________________________________________
   const bool& isLoaded() const { return isLoaded_; }
@@ -188,11 +265,17 @@ class Permutation {
   // _______________________________________________________
   const MetaData& metaData() const { return meta_; }
 
+  // _______________________________________________________
+  Type permutationType() const { return permutationType_; }
+
   // Returns the number of triples in the permutation excluding updates (located
   // triples).
   size_t numTriples() const { return metaData().totalElements(); }
 
-  // From the given snapshot, get the located triples for this permutation.
+  // From the given snapshot, get the located triples for this permutation. Note
+  // that for materialized views, this must not be the global
+  // `LocatedTriplesState`, instead they must use their own
+  // `LocatedTriplesState` provided by the `MaterializedView` object.
   const LocatedTriplesPerBlock& getLocatedTriplesForPermutation(
       const LocatedTriplesState& locatedTriplesState) const;
 
@@ -209,7 +292,39 @@ class Permutation {
   // permutation is available, this function throws an exception.
   const Permutation& internalPermutation() const;
 
+  // If this permutation is owned by a `MaterializedView`, set a back-reference
+  // to the `MaterializedView`.
+  void setMaterializedView(std::weak_ptr<const MaterializedView> view);
+
+  // If this permutation is owned by a `MaterializedView`, return a shared
+  // pointer to it. Returns `nullptr` if no view is connected or if the view
+  // has already been destroyed.
+  std::shared_ptr<const MaterializedView> materializedView() const;
+
+  // Check whether a column was marked to possibly contain undef values.
+  ColumnIndexAndTypeInfo::UndefStatus getColumnUndefStatus(
+      ColumnIndex col) const;
+
  private:
+  // Throw a `std::runtime_error` that names this permutation if it was not
+  // loaded (see `loadFromDisk`), for example for a `Qlever` instance that was
+  // loaded from a blob of the named result cache. Called by the entry points
+  // of the scans, so that such queries fail with a readable message instead of
+  // an assertion deep inside the scan.
+  void throwIfNotLoaded() const;
+
+  // Common implementation of the two `lazyScan` overloads above. Performs the
+  // scan through the given `reader`, which may either be this permutation's
+  // shared reader or an independently created one.
+  CompressedRelationReader::IdTableGeneratorInputRange lazyScanImpl(
+      const CompressedRelationReader& reader,
+      const ScanSpecAndBlocks& scanSpecAndBlocks,
+      std::optional<std::vector<CompressedBlockMetadata>> optBlocks,
+      ColumnIndicesRef additionalColumns,
+      const CancellationHandle& cancellationHandle,
+      const LocatedTriplesState& locatedTriplesState, qlever::Executor executor,
+      const LimitOffsetClause& limitOffset) const;
+
   // The base filename of the permutation without the suffix below
   std::string onDiskBase_;
   // Readable name for this permutation, e.g., `POS`.
@@ -232,7 +347,15 @@ class Permutation {
   Enum permutation_;
   std::unique_ptr<Permutation> internalPermutation_ = nullptr;
 
-  bool isInternalPermutation_ = false;
+  Type permutationType_ = Type::NORMAL;
+
+  // If this permutation is owned by a `MaterializedView`, store a reference
+  // back to the view.
+  std::weak_ptr<const MaterializedView> materializedView_;
+
+  // For materialized views unlike the regular index permutations, some columns
+  // may be undefined.
+  ad_utility::HashSet<ColumnIndex> possiblyUndefinedColumns_;
 };
 
 #endif  // QLEVER_SRC_INDEX_PERMUTATION_H

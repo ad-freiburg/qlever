@@ -26,14 +26,13 @@ struct UnaryNegate {
   }
 };
 
-CPP_template(typename NaryOperation)(
-    requires isOperation<NaryOperation>) class UnaryNegateExpressionImpl
-    : public NaryExpression<NaryOperation> {
+CPP_template(typename NaryOperation)(requires isOperation<NaryOperation>)
+class UnaryNegateExpressionImpl : public NaryExpression<NaryOperation> {
  public:
   using NaryExpression<NaryOperation>::NaryExpression;
 
   std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
-      bool isNegated) const override {
+      const LocalVocabContext& context, bool isNegated) const override {
     AD_CORRECTNESS_CHECK(this->N == 1);
     namespace p = prefilterExpressions;
     // The bool flag isNegated (by default false) acts as decision variable
@@ -68,7 +67,7 @@ CPP_template(typename NaryOperation)(
     // {<(!(>= IntId(10))), ?x>, <(!(>= IntId(10))), ?y>}
     // => Result (2): {<(< IntId(10)), ?x>, <(< IntId(10)), ?y>}
     auto child = this->children()[0].get()->getPrefilterExpressionForMetadata(
-        !isNegated);
+        context, !isNegated);
     ql::ranges::for_each(
         child | ql::views::keys,
         [](std::unique_ptr<p::PrefilterExpression>& expression) {

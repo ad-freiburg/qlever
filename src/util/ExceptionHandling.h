@@ -9,6 +9,8 @@
 
 #include <exception>
 #include <iostream>
+#include <mutex>
+#include <utility>
 
 #include "backports/type_traits.h"
 #include "util/Forward.h"
@@ -26,10 +28,9 @@ struct CallStdTerminate {
 // has to perform actions that might throw, but when handling these exceptions
 // is not important.
 CPP_template(typename F)(
-    requires ql::concepts::invocable<ql::remove_cvref_t<
-        F>>) void ignoreExceptionIfThrows(F&& f,
-                                          std::string_view additionalNote =
-                                              "") noexcept {
+    requires ql::concepts::invocable<ql::remove_cvref_t<F>>)
+void ignoreExceptionIfThrows(F&& f,
+                             std::string_view additionalNote = "") noexcept {
   if constexpr (std::is_nothrow_invocable_v<ql::remove_cvref_t<F>>) {
     std::invoke(AD_FWD(f));
     return;
@@ -54,14 +55,11 @@ CPP_template(typename F)(
 // The actual termination call can be configured for testing purposes. Note that
 // this function must never throw an exception.
 CPP_template(typename F, typename TerminateAction = detail::CallStdTerminate)(
-    requires ql::concepts::invocable<ql::remove_cvref_t<F>> CPP_and
-        std::is_nothrow_invocable_v<
-            TerminateAction>) void terminateIfThrows(F&& f,
-                                                     std::string_view message,
-                                                     TerminateAction
-                                                         terminateAction = {},
-                                                     ad_utility::source_location l =
-                                                         AD_CURRENT_SOURCE_LOC()) noexcept {
+    requires ql::concepts::invocable<ql::remove_cvref_t<F>> &&
+    std::is_nothrow_invocable_v<TerminateAction>)
+void terminateIfThrows(
+    F&& f, std::string_view message, TerminateAction terminateAction = {},
+    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) noexcept {
   auto getErrorMessage =
       [&message, &l](const auto&... additionalMessages) -> std::string {
     return absl::StrCat(
@@ -98,16 +96,16 @@ CPP_template(typename F, typename TerminateAction = detail::CallStdTerminate)(
 // file). Typically, exceptions in C++ destructors are very unsafe, because they
 // immediately lead to program termination if the destructor was called while
 // another exception was already handled. The use case is as follows:
-// 1. Declare a class member of type `ThrowInDestructorIfSafe`. This has the
-// effect that automatically the destructor of your class will implicitly be
-// `noexcept(false)` which enables exceptions in destructors.
+// 1. Declare a class member of type `ThrowInDestructorIfSafe` and explicitly
+// mark the enclosing destructor `noexcept(false)` so that an exception can
+// actually propagate out of it.
 // 2. Pass the potentially throwing code in the destructor as a callable to the
-// `ThrowInDestructorIfSafe` object. If this callable. throws, and it is safe to
+// `ThrowInDestructorIfSafe` object. If this callable throws, and it is safe to
 // throw, then the exception is normally propagated. If it is not safe to throw,
 // then the exception is caught and logged, but otherwise ignored. Example:
 // class C {
-//   ThrowOnDestructorIfSafe throwIfSafe_;
-//   ~C() {
+//   ThrowInDestructorIfSafe throwIfSafe_;
+//   ~C() noexcept(false) {
 //     throwIfSafe_([]{throw std::runtime_error("haha");});
 //   }
 class ThrowInDestructorIfSafe {
@@ -115,9 +113,9 @@ class ThrowInDestructorIfSafe {
 
  public:
   CPP_template(typename FuncType, typename... Args)(
-      requires ql::concepts::invocable<FuncType> CPP_and(
-          ...&& ql::concepts::convertible_to<Args, std::string_view>)) void
-  operator()(FuncType f, const Args&... additionalMessages) const {
+      requires ql::concepts::invocable<FuncType> &&
+      (... && ql::concepts::convertible_to<Args, std::string_view>))
+  void operator()(FuncType f, const Args&... additionalMessages) const {
     auto logIgnoredException = [&additionalMessages...](std::string_view what) {
       std::string_view sep = sizeof...(additionalMessages) == 0 ? "" : " ";
       AD_LOG_WARN
@@ -148,6 +146,96 @@ class ThrowInDestructorIfSafe {
     }
   }
   ~ThrowInDestructorIfSafe() = default;
+};
+
+// Collect exceptions produced by concurrent tasks so the first one can be
+// rethrown to the caller after the tasks have finished. The natural use case
+// is with `boost::asio` (see example).
+//
+// The collector itself satisfies the `void(std::exception_ptr)` completion
+// handler signature, so it can be used as `std::ref(collector)` instead of
+// `net::detached`. For executors that do not pass a completion handler (e.g.
+// `net::post`), use `wrap()` to adapt an arbitrary callable.
+//
+// Example:
+//   ad_utility::ExceptionCollector collector;
+//   net::post(pool, collector.wrap([&] { mayThrow(); }));
+//   net::co_spawn(pool, createCoroutineThatMightThrow(), std::ref(collector));
+//   pool.join();
+//   collector.rethrowIfException();
+//
+// NOTE: The captured exception is only ever thrown by `rethrowIfException`,
+// never by the destructor (see there), so the owner of a collector has to call
+// `rethrowIfException` on every path on which the exception matters.
+class ExceptionCollector {
+  mutable std::mutex mutex_;
+  std::exception_ptr firstException_;
+
+ public:
+  ExceptionCollector() = default;
+  ExceptionCollector(const ExceptionCollector&) = delete;
+  ExceptionCollector& operator=(const ExceptionCollector&) = delete;
+  ExceptionCollector(ExceptionCollector&&) = delete;
+  ExceptionCollector& operator=(ExceptionCollector&&) = delete;
+
+  // Destroy the collector. An exception that was captured but never rethrown
+  // (see `rethrowIfException`) is silently dropped: the destructor never
+  // throws. Typically, the collector is then destroyed while another exception
+  // propagates, which is the one that the caller should see.
+  ~ExceptionCollector() = default;
+
+  // Stores the first non-null exception. Subsequent exceptions are logged.
+  // Thread-safe.
+  void operator()(std::exception_ptr exception) noexcept {
+    if (!exception) return;
+    std::lock_guard lock{mutex_};
+    if (!firstException_) {
+      firstException_ = std::move(exception);
+      return;
+    }
+    try {
+      std::rethrow_exception(std::move(exception));
+    } catch (const std::exception& ex) {
+      AD_LOG_WARN << "Additional exception captured by `ExceptionCollector` "
+                     "while one was already stored; only the first one will "
+                     "be rethrown. Message: "
+                  << ex.what() << std::endl;
+    } catch (...) {
+      AD_LOG_WARN << "Additional exception of unknown type captured by "
+                     "`ExceptionCollector` while one was already stored."
+                  << std::endl;
+    }
+  }
+
+  // Adapt a nullary callable for executors that do not pass a completion
+  // handler (e.g. `boost::asio::post`). The returned callable holds a pointer
+  // to this collector, which must outlive any invocation of it.
+  template <typename Func>
+  auto wrap(Func func) {
+    return [this, func = std::move(func)]() mutable {
+      try {
+        std::invoke(func);
+      } catch (...) {
+        (*this)(std::current_exception());
+      }
+    };
+  }
+
+  // Return true iff an exception has been captured and not yet rethrown.
+  // Thread-safe.
+  bool hasException() const {
+    std::lock_guard lock{mutex_};
+    return firstException_ != nullptr;
+  }
+
+  // Rethrow the first captured exception, if any. After this call the exception
+  // is consumed and this object is ready to collect new exceptions.
+  void rethrowIfException() {
+    std::lock_guard lock{mutex_};
+    if (firstException_) {
+      std::rethrow_exception(std::exchange(firstException_, nullptr));
+    }
+  }
 };
 }  // namespace ad_utility
 

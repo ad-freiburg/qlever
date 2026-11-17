@@ -8,8 +8,10 @@
 #include <s2/s2earth.h>
 #include <s2/s2point.h>
 
+#include <cmath>
 #include <cstdlib>
 #include <fstream>
+#include <limits>
 #include <memory>
 #include <regex>
 #include <sstream>
@@ -18,8 +20,11 @@
 #include "../printers/VariablePrinters.h"
 #include "../printers/VariableToColumnMapPrinters.h"
 #include "../util/GTestHelpers.h"
+#include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/RuntimeParametersTestHelpers.h"
 #include "./SpatialJoinTestHelpers.h"
+#include "./ValuesForTesting.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
@@ -27,13 +32,16 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryPlanner.h"
 #include "engine/SpatialJoin.h"
+#include "engine/SpatialJoinConfig.h"
 #include "engine/VariableToColumnMap.h"
 #include "global/Constants.h"
 #include "global/Id.h"
-#include "global/ValueId.h"
+#include "index/ExportIds.h"
+#include "index/LocalVocabEntry.h"
+#include "parser/PayloadVariables.h"
 #include "parser/SparqlParser.h"
+#include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/Variable.h"
-#include "util/GeoSparqlHelpers.h"
 
 namespace {  // anonymous namespace to avoid linker problems
 
@@ -242,17 +250,15 @@ std::shared_ptr<SpatialJoin> makeSpatialJoinFromValues(
       "(?b) {(\"POINT(8.542 47.385)\"^^geo:wktLiteral)}}");
   QueryPlanner qp{qec, sharedHandle};
 
-  auto leftChild =
-      std::make_shared<QueryExecutionTree>(qp.createExecutionTree(pqLeft));
-  auto rightChild =
-      std::make_shared<QueryExecutionTree>(qp.createExecutionTree(pqRight));
+  auto leftChild = qp.createExecutionTree(pqLeft);
+  auto rightChild = qp.createExecutionTree(pqRight);
 
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
       ad_utility::makeExecutionTree<SpatialJoin>(
           qec,
-          SpatialJoinConfiguration{MaxDistanceConfig{0}, Variable{"?a"},
-                                   Variable{"?b"}, std::nullopt, pv, alg,
-                                   SpatialJoinType::INTERSECTS},
+          SpatialJoinConfiguration{
+              LibSpatialJoinConfig{SpatialJoinType::INTERSECTS}, Variable{"?a"},
+              Variable{"?b"}, std::nullopt, pv, alg},
           std::nullopt, std::nullopt);
   std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
   SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
@@ -315,13 +321,23 @@ class SpatialJoinVarColParamTest
     if (addDist) {
       dist = Variable{"?distOfTheTwoObjectsAddedInternally"};
     }
+    // Generate a mock `SpatialJoinTask` for testing.
+    SpatialJoinTask task = MaxDistanceConfig{0};
+    if (alg == SpatialJoinAlgorithm::LIBSPATIALJOIN) {
+      task = LibSpatialJoinConfig{joinType,
+                                  joinType == SpatialJoinType::WITHIN_DIST
+                                      ? std::optional<double>{0}
+                                      : std::nullopt,
+                                  std::nullopt};
+    }
+    SpatialJoinConfiguration config{
+        task, Variable{"?point1"}, Variable{"?point2"}, dist, pv, alg};
+    if (addDist) {
+      config.distanceUnit_ = UnitOfMeasurement::KILOMETERS;
+    }
     std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
-        ad_utility::makeExecutionTree<SpatialJoin>(
-            qec,
-            SpatialJoinConfiguration{MaxDistanceConfig{0}, Variable{"?point1"},
-                                     Variable{"?point2"}, dist, pv, alg,
-                                     joinType},
-            std::nullopt, std::nullopt);
+        ad_utility::makeExecutionTree<SpatialJoin>(qec, std::move(config),
+                                                   std::nullopt, std::nullopt);
     std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
     SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
     auto firstChild = addLeftChildFirst ? leftChild : rightChild;
@@ -381,28 +397,28 @@ class SpatialJoinVarColParamTest
         // test, that the column contains the correct values
         ColumnIndex ind =
             varColMap[Variable{expectedColumns.at(i).first}].columnIndex_;
-        const IdTable* r = &resultTable.idTable();
+        const IdTableView<0>* r = &resultTable.idTableView();
         ASSERT_LT(0, r->numRows());
         ASSERT_LT(ind, r->numColumns());
         ValueId tableEntry = r->at(0, ind);
 
         if (tableEntry.getDatatype() == Datatype::VocabIndex) {
-          std::string value = ExportQueryExecutionTrees::idToStringAndType(
-                                  qec->getIndex(), tableEntry, {})
-                                  .value()
-                                  .first;
+          std::string value =
+              ql::exportIds::idToStringAndType(qec->getIndex(), tableEntry, {})
+                  .value()
+                  .first;
           ASSERT_TRUE(value.find(expectedColumns.at(i).second, 0) !=
                       std::string::npos);
         } else if (tableEntry.getDatatype() == Datatype::Int) {
-          std::string value = ExportQueryExecutionTrees::idToStringAndType(
-                                  qec->getIndex(), tableEntry, {})
-                                  .value()
-                                  .first;
+          std::string value =
+              ql::exportIds::idToStringAndType(qec->getIndex(), tableEntry, {})
+                  .value()
+                  .first;
           ASSERT_EQ(value, expectedColumns.at(i).second);
         } else if (tableEntry.getDatatype() == Datatype::GeoPoint) {
-          auto [value, type] = ExportQueryExecutionTrees::idToStringAndType(
-                                   qec->getIndex(), tableEntry, {})
-                                   .value();
+          auto [value, type] =
+              ql::exportIds::idToStringAndType(qec->getIndex(), tableEntry, {})
+                  .value();
           value = absl::StrCat("\"", value, "\"^^<", type, ">");
           ASSERT_TRUE(value.find(expectedColumns.at(i).second, 0) !=
                       std::string::npos);
@@ -453,7 +469,7 @@ class SpatialJoinVarColParamTest
         // test, that the column contains the correct values
         ColumnIndex ind =
             varColMap[Variable{expectedColumns.at(i).first}].columnIndex_;
-        const IdTable* r = &resultTable.idTable();
+        const IdTableView<0>* r = &resultTable.idTableView();
         ASSERT_LT(0, r->numRows());
         ASSERT_LT(ind, r->numColumns());
 
@@ -461,9 +477,9 @@ class SpatialJoinVarColParamTest
         std::vector<std::string> columnEntries;
         columnEntries.reserve(r->numRows());
         for (const auto& valueId : col) {
-          auto [value, type] = ExportQueryExecutionTrees::idToStringAndType(
-                                   qec->getIndex(), valueId, {})
-                                   .value();
+          auto [value, type] =
+              ql::exportIds::idToStringAndType(qec->getIndex(), valueId, {})
+                  .value();
           if (valueId.getDatatype() == Datatype::GeoPoint) {
             value = absl::StrCat("\"", value, "\"^^<", type, ">");
           }
@@ -500,9 +516,21 @@ class SpatialJoinVarColParamTest
           ASSERT_THAT(
               vc, ::testing::UnorderedElementsAreArray(expectedVarToColMap));
           if (matchWarning) {
-            ASSERT_THAT(spatialJoin->collectWarnings(),
-                        ::testing::Contains(
-                            ::testing::HasSubstr(matchWarning.value())));
+            // The payload variables are also checked when computing the cache
+            // key, which must not add the warning a second time (hence
+            // `Times(1)` below).
+            spatialJoin->getCacheKey();
+            EXPECT_THAT(
+                spatialJoin->collectWarnings(),
+                ::testing::Contains(::testing::HasSubstr(matchWarning.value()))
+                    .Times(1));
+            // With `throw-on-unbound-variables`, the warning becomes an error.
+            auto cleanup = setRuntimeParameterForTest<
+                &RuntimeParameters::throwOnUnboundVariables_>(true);
+            AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+                spatialJoin->computeVariableToColumnMap(),
+                ::testing::HasSubstr(matchWarning.value()),
+                InvalidSparqlQueryException);
           }
         };
 
@@ -652,7 +680,7 @@ TEST(SpatialJoinVarColParamTest, testLibspatialjoinFromvalues) {
   auto spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
 
   auto resultTable = spatialJoin->computeResult(false);
-  ASSERT_EQ(resultTable.idTable().numRows(), 1);
+  ASSERT_EQ(resultTable.idTableView().numRows(), 1);
 }
 
 TEST_P(SpatialJoinVarColParamTest, payloadVariables) {
@@ -664,6 +692,123 @@ INSTANTIATE_TEST_SUITE_P(SpatialJoin, SpatialJoinVarColParamTest,
                                             ::testing::Bool(),
                                             ::testing::Bool(),
                                             ::testing::Bool()));
+
+// Regression test for #2992: When a child of `SpatialJoin` contained invisible
+// columns, `SpatialJoin` used `QueryExecutionTree::getResultWidth` which
+// returned the number of columns *including* the invisible ones, but later
+// accessed columns by `QueryExecutionTree::getVariableColumns` which *only
+// includes externally visible columns*. This led to an out-of-bounds error.
+TEST(SpatialJoinVarColTest, ChildResultWidth) {
+  auto* qec = ad_utility::testing::getQec();
+
+  // Both these children have some hidden columns.
+  auto qet1 = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{1, 2, 3}, {4, 5, 6}}),
+      std::vector<std::optional<Variable>>{V{"?a"}, std::nullopt, V{"?b"}},
+      false);
+  auto qet2 = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{1, 2, 3}}),
+      std::vector<std::optional<Variable>>{std::nullopt, V{"?c"}, V{"?d"}},
+      true);
+
+  auto spatialJoin = ad_utility::makeExecutionTree<SpatialJoin>(
+      qec,
+      SpatialJoinConfiguration{
+          LibSpatialJoinConfig{SpatialJoinType::INTERSECTS}, Variable{"?a"},
+          Variable{"?c"}, std::nullopt, PayloadVariables{{V{"?c"}}},
+          SpatialJoinAlgorithm::LIBSPATIALJOIN},
+      qet1, qet2);
+
+  // Of all the 6 columns in the children (3 in `childLeft_` and 3 in
+  // `childRight_`) only 4 are present in the respective `VariableToColumnMap`s.
+  // The `PayloadVariables` requests only one of the columns from the right
+  // child, so we expect a total of 3 columns to be exported by the
+  // `SpatialJoin`.
+  EXPECT_EQ(qet1->getResultWidth(), 3);
+  EXPECT_EQ(qet1->getVariableColumns().size(), 2);
+  EXPECT_EQ(qet2->getResultWidth(), 3);
+  EXPECT_EQ(qet2->getVariableColumns().size(), 2);
+  EXPECT_EQ(spatialJoin->getResultWidth(), 3);
+
+  // `getMultiplicity` does not return meaningful results here, but its
+  // assertion should throw as expected.
+  for (size_t i = 0; i < spatialJoin->getResultWidth(); ++i) {
+    EXPECT_NO_THROW(spatialJoin->getMultiplicity(i));
+  }
+  for (size_t i = spatialJoin->getResultWidth();
+       i < qet1->getResultWidth() + qet2->getResultWidth(); ++i) {
+    EXPECT_ANY_THROW(spatialJoin->getMultiplicity(i));
+  }
+
+  // The `SpatialJoin`'s `VariableToColumnMap` is expected to include all named
+  // columns from the left child and from the right child only the requested
+  // ones.
+  VariableToColumnMap expectedVarToCol{
+      {V{"?a"}, makeAlwaysDefinedColumn(0)},
+      {V{"?b"}, makeAlwaysDefinedColumn(1)},
+      {V{"?c"}, makeAlwaysDefinedColumn(2)},
+  };
+  EXPECT_THAT(spatialJoin->getVariableColumns(),
+              ::testing::UnorderedElementsAreArray(expectedVarToCol));
+}
+
+// Regression test for #3105.
+TEST(SpatialJoinVarColTest, InvisibleColumnsAndWithinSwap) {
+  // Test index with a rectangle polygon as the right side for `geof:sfWithin`.
+  std::string bb =
+      "\"POLYGON((0 0,5 0,5 5,0 5,0 0))\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+  auto* qec = ad_utility::testing::getQec("<a1> <a> " + bb + " .\n");
+  VocabIndex v;
+  ASSERT_TRUE(qec->getIndex().getVocab().getId(bb, &v));
+  auto bbId = ValueId::makeFromVocabIndex(v);
+  auto qetRight = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{bbId}}),
+      std::vector<std::optional<Variable>>{V{"?c"}}, true);
+
+  // The left side has two points (contained in the polygon), one invisible
+  // column and one visible payload column.
+  auto p1Id = ValueId::makeFromGeoPoint({1, 1});
+  auto p2Id = ValueId::makeFromGeoPoint({2, 2});
+  auto invisible1Id = ValueId::makeFromInt(10);
+  auto invisible2Id = ValueId::makeFromInt(11);
+  auto payload1Id = ValueId::makeFromInt(1);
+  auto payload2Id = ValueId::makeFromInt(2);
+  auto qetLeft = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec,
+      makeIdTableFromVector(
+          {{p1Id, invisible1Id, payload1Id}, {p2Id, invisible2Id, payload2Id}}),
+      std::vector<std::optional<Variable>>{V{"?a"}, std::nullopt, V{"?b"}},
+      false);
+
+  // Run a `SpatialJoin` with `SpatialJoinType::WITHIN`.
+  auto spatialJoin = ad_utility::makeExecutionTree<SpatialJoin>(
+      qec,
+      SpatialJoinConfiguration{LibSpatialJoinConfig{SpatialJoinType::WITHIN,
+                                                    std::nullopt, std::nullopt},
+                               Variable{"?a"}, Variable{"?c"}, std::nullopt,
+                               PayloadVariables::all(),
+                               SpatialJoinAlgorithm::LIBSPATIALJOIN},
+      qetLeft, qetRight);
+  auto result = spatialJoin->getResult();
+  ASSERT_TRUE(result->isFullyMaterialized());
+
+  // We expect the three visible columns (two join cols and the payload column)
+  // to be in the result, but not the invisible column.
+  VariableToColumnMap expectedVarToCol{
+      {Variable{"?a"}, makeAlwaysDefinedColumn(0)},
+      {Variable{"?b"}, makeAlwaysDefinedColumn(1)},
+      {Variable{"?c"}, makeAlwaysDefinedColumn(2)},
+  };
+  EXPECT_THAT(spatialJoin->getVariableColumns(),
+              ::testing::UnorderedElementsAreArray(expectedVarToCol));
+
+  // Check that the columns are correctly copied to the result.
+  EXPECT_THAT(result->idTableView(), matchesIdTableFromVector({
+                                         {p1Id, payload1Id, bbId},
+                                         {p2Id, payload2Id, bbId},
+                                     }));
+}
 
 }  // namespace variableColumnMapAndResultWidth
 
@@ -859,6 +1004,16 @@ TEST(SpatialJoin, getCacheKeyImpl) {
               std::string::npos);
   ASSERT_TRUE(cacheKeyString.find(leftCacheKeyString) != std::string::npos);
   ASSERT_TRUE(cacheKeyString.find(rightCacheKeyString) != std::string::npos);
+
+  // A maximum distance that differs only in the last bit (a `FILTER` with `<`
+  // uses the largest `double` below the constant) gives a different cache key.
+  auto maxDistBelow =
+      std::nextafter(1000.0, -std::numeric_limits<double>::infinity());
+  auto spatialJoinBelow = ad_utility::makeExecutionTree<SpatialJoin>(
+      qec, SpatialJoinConfiguration{MaxDistanceConfig{maxDistBelow}, subj, obj},
+      leftChild, rightChild);
+  ASSERT_NE(spatialJoinBelow->getRootOperation()->getCacheKey(),
+            spJoin2->getCacheKey());
 }
 
 // _____________________________________________________________________________
@@ -1117,12 +1272,12 @@ class SpatialJoinMultiplicityAndSizeEstimateTest
       auto rightChild =
           buildIndexScan(qec, {"?geometry2", "<asWKT>", "?point2"});
 
+      SpatialJoinConfiguration config{MaxDistanceConfig{10000000}, subj, obj,
+                                      Variable{"?distanceForTesting"}};
+      config.distanceUnit_ = UnitOfMeasurement::KILOMETERS;
       std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
           ad_utility::makeExecutionTree<SpatialJoin>(
-              qec,
-              SpatialJoinConfiguration{MaxDistanceConfig{10000000}, subj, obj,
-                                       Variable{"?distanceForTesting"}},
-              std::nullopt, std::nullopt);
+              qec, std::move(config), std::nullopt, std::nullopt);
 
       // add children and test, that multiplicity is a dummy return before all
       // children are added
@@ -1194,5 +1349,236 @@ INSTANTIATE_TEST_SUITE_P(
                                          MultiplicityOrSizeEst::SizeEstimate)));
 
 }  // namespace getMultiplicityAndSizeEstimate
+
+namespace invalidGeometries {
+
+using namespace ::testing;
+
+// Return the `Id` of the WKT literal `wkt` (which need not be valid WKT),
+// added to `localVocab`.
+Id wktLiteralId(QueryExecutionContext* qec, LocalVocab& localVocab,
+                std::string_view wkt) {
+  static const auto wktLiteralIri =
+      ad_utility::triple_component::Iri::fromIrirefWithoutBrackets(
+          GEO_WKT_LITERAL);
+  auto literal = ad_utility::triple_component::Literal::literalWithoutQuotes(
+      wkt, wktLiteralIri);
+  return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
+      LocalVocabEntry{std::move(literal), qec->getLocalVocabContext()}));
+}
+
+// Regression test for assertion error caused by only invalid geometries
+// surviving prefiltering:
+//
+// PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+// PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
+// SELECT * {
+//   VALUES ?a { "POINT(0 0)"^^geo:wktLiteral }
+//   VALUES ?b { "<a>"^^geo:wktLiteral "<b>"^^geo:wktLiteral
+//               "POINT(1 1)"^^geo:wktLiteral }
+//   FILTER geof:sfContains(?a, ?b)
+// }
+TEST(SpatialJoin, InvalidGeometriesAreExcludedFromNonEmptyCheck) {
+  auto* qec = ad_utility::testing::getQec();
+
+  // Build the valid and invalid literals.
+  LocalVocab localVocab;
+  auto wktId = [&](std::string_view wkt) {
+    return wktLiteralId(qec, localVocab, wkt);
+  };
+  Id pointLeft = ValueId::makeFromGeoPoint({0, 0});
+  Id invalidLiteralA = wktId("POINT(1 2, 3 4)");
+  Id invalidLiteralB = wktId("not wkt");
+  Id validLiteral = ValueId::makeFromGeoPoint({1, 1});
+
+  // `?a`: a single, valid point.
+  auto leftChild = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{pointLeft}}),
+      std::vector<std::optional<Variable>>{Variable{"?a"}}, false,
+      std::vector<ColumnIndex>{}, localVocab.clone());
+
+  // `?b`: two literals that are not valid WKT geometries, plus one valid
+  // point (which does not lie within `?a`, so no row of `?b` matches).
+  auto rightChild = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec,
+      makeIdTableFromVector(
+          {{invalidLiteralA}, {invalidLiteralB}, {validLiteral}}),
+      std::vector<std::optional<Variable>>{Variable{"?b"}}, false,
+      std::vector<ColumnIndex>{}, localVocab.clone());
+
+  auto spatialJoinOperation = ad_utility::makeExecutionTree<SpatialJoin>(
+      qec,
+      SpatialJoinConfiguration{LibSpatialJoinConfig{SpatialJoinType::CONTAINS},
+                               Variable{"?a"}, Variable{"?b"}, std::nullopt,
+                               PayloadVariables::all(),
+                               SpatialJoinAlgorithm::LIBSPATIALJOIN},
+      leftChild, rightChild);
+  auto spatialJoin = std::dynamic_pointer_cast<SpatialJoin>(
+      spatialJoinOperation->getRootOperation());
+
+  // This must neither crash nor throw, despite the two invalid WKT literals
+  // in `?b`, and the result must be empty because no value of `?b` is
+  // actually contained in `?a`.
+  auto result = spatialJoin->computeResult(false);
+  EXPECT_EQ(result.idTableView().numRows(), 0);
+
+  // Only `POINT(0 0)` from `?a` is a valid geometry that was added to the
+  // sweeper; none of the values of `?b` (two invalid literals and one point
+  // that is not contained in `?a`) contribute a valid geometry.
+  auto details = spatialJoin->runtimeInfo().details_;
+  EXPECT_THAT(details, AllOf(HasKeyMatching("num-valid-geoms-parsed", Eq(1)),
+                             HasKeyMatching("num-geoms-parsed", Eq(3)),
+                             HasKeyMatching("num-geoms-invalid", Eq(2))));
+  EXPECT_THAT(spatialJoin->collectWarnings(),
+              Contains(HasSubstr(
+                  "Spatial Join of ?a and ?b using contains: skipped rows with "
+                  "invalid or unsupported geometry literals (?b: 2)")));
+}
+
+// Test that the warning for skipped rows lists the left side before the
+// right side, no matter which of the two is the smaller side (which the
+// algorithm parses first).
+TEST(SpatialJoin, InvalidGeometriesWarningListsLeftSideFirst) {
+  auto* qec = ad_utility::testing::getQec();
+  LocalVocab localVocab;
+  auto wktId = [&](std::string_view wkt) {
+    return wktLiteralId(qec, localVocab, wkt);
+  };
+
+  // Compute the spatial join of the single-column inputs `left` and `right`
+  // and return its warnings.
+  auto warningsOf = [&](const Variable& leftVar, const VectorTable& left,
+                        const Variable& rightVar, const VectorTable& right) {
+    auto makeChild = [&](const Variable& var, const VectorTable& rows) {
+      return ad_utility::makeExecutionTree<ValuesForTesting>(
+          qec, makeIdTableFromVector(rows),
+          std::vector<std::optional<Variable>>{var}, false,
+          std::vector<ColumnIndex>{}, localVocab.clone());
+    };
+    auto tree = ad_utility::makeExecutionTree<SpatialJoin>(
+        qec,
+        SpatialJoinConfiguration{
+            LibSpatialJoinConfig{SpatialJoinType::INTERSECTS}, leftVar,
+            rightVar, std::nullopt, PayloadVariables::all(),
+            SpatialJoinAlgorithm::LIBSPATIALJOIN},
+        makeChild(leftVar, left), makeChild(rightVar, right));
+    auto spatialJoin =
+        std::dynamic_pointer_cast<SpatialJoin>(tree->getRootOperation());
+    auto result = spatialJoin->computeResult(false);
+    return spatialJoin->collectWarnings();
+  };
+
+  // `?a`: a valid point and one invalid literal. `?b`: a valid point and two
+  // invalid literals.
+  VectorTable a{{ValueId::makeFromGeoPoint({0, 0})},
+                {wktId("POINT(1 2, 3 4)")}};
+  VectorTable b{{ValueId::makeFromGeoPoint({1, 1})},
+                {wktId("not wkt")},
+                {wktId("POLYGON((0 0")}};
+
+  // With `?a` on the left, the left side is the smaller one.
+  EXPECT_THAT(warningsOf(Variable{"?a"}, a, Variable{"?b"}, b),
+              Contains(HasSubstr(
+                  "Spatial Join of ?a and ?b using intersects: skipped rows "
+                  "with invalid or unsupported geometry literals (?a: 1, ?b: "
+                  "2)")));
+
+  // With the sides swapped, the right side is the smaller one, and the
+  // warning still lists the left side first.
+  EXPECT_THAT(warningsOf(Variable{"?b"}, b, Variable{"?a"}, a),
+              Contains(HasSubstr(
+                  "Spatial Join of ?b and ?a using intersects: skipped rows "
+                  "with invalid or unsupported geometry literals (?b: 2, ?a: "
+                  "1)")));
+}
+
+// Test that the `s2` algorithm warns about skipped rows whose value is not a
+// `GeoPoint` and the `baseline` algorithm about skipped rows whose value is
+// not a valid geometry, each with the number of skipped rows per side.
+TEST(SpatialJoin, SkippedRowsWarning) {
+  auto* qec = ad_utility::testing::getQec();
+  LocalVocab localVocab;
+  auto wktId = [&](std::string_view wkt) {
+    return wktLiteralId(qec, localVocab, wkt);
+  };
+
+  // `?a`: a point and an invalid literal. `?b`: a point, a linestring (a valid
+  // geometry, but not a point) and an invalid literal.
+  Id point = ValueId::makeFromGeoPoint({0, 0});
+  Id invalid = wktId("not wkt");
+  Id linestring = wktId("LINESTRING(1 1, 2 2)");
+  auto makeChild = [&](IdTable rows, std::string var) {
+    return ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, std::move(rows),
+        std::vector<std::optional<Variable>>{Variable{var}}, false,
+        std::vector<ColumnIndex>{}, localVocab.clone());
+  };
+
+  // Compute the spatial join of `?a` and `?b` with the given algorithm and
+  // expect a warning about skipped rows that ends with `expected`.
+  auto expectWarning = [&](SpatialJoinAlgorithm algo,
+                           std::string_view expected) {
+    auto spatialJoinOperation = ad_utility::makeExecutionTree<SpatialJoin>(
+        qec,
+        SpatialJoinConfiguration{MaxDistanceConfig{10'000'000}, Variable{"?a"},
+                                 Variable{"?b"}, std::nullopt,
+                                 PayloadVariables::all(), algo},
+        makeChild(makeIdTableFromVector({{point}, {invalid}}), "?a"),
+        makeChild(makeIdTableFromVector({{point}, {linestring}, {invalid}}),
+                  "?b"));
+    auto spatialJoin = std::dynamic_pointer_cast<SpatialJoin>(
+        spatialJoinOperation->getRootOperation());
+    spatialJoin->computeResult(false);
+    EXPECT_THAT(spatialJoin->collectWarnings(),
+                Contains(HasSubstr(absl::StrCat(
+                    "MaxDistJoin ?a to ?b of 1e+07 meter(s): skipped rows "
+                    "with ",
+                    expected))));
+  };
+
+  // The `s2` algorithm also skips the linestring, the `baseline` algorithm
+  // only the invalid literals.
+  expectWarning(SpatialJoinAlgorithm::S2_GEOMETRY,
+                "values that are not points (?a: 1, ?b: 2)");
+  expectWarning(SpatialJoinAlgorithm::BASELINE,
+                "invalid or unsupported geometry literals (?a: 1, ?b: 1)");
+}
+
+}  // namespace invalidGeometries
+
+// Test that a `libspatialjoin` join whose result pairs exceed the memory limit
+// fails with the memory limit exception on the calling thread (the pairs are
+// collected on the worker threads of `libspatialjoin`, which do not forward
+// exceptions, so an exception there would terminate the process).
+TEST(SpatialJoin, libspatialjoinResultExceedsMemoryLimit) {
+  auto* qec = ad_utility::testing::getQec();
+
+  // A grid of 2500 points that all lie within 1000 km of each other.
+  VectorTable points;
+  for (size_t i = 0; i < 2500; ++i) {
+    points.push_back({ValueId::makeFromGeoPoint(
+        {static_cast<double>(i % 50) / 10, static_cast<double>(i / 50) / 10})});
+  }
+  auto makeChild = [&](const Variable& var) {
+    return ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, makeIdTableFromVector(points),
+        std::vector<std::optional<Variable>>{var});
+  };
+
+  // The `WITHIN_DIST` self join of the points has 6.25 million result pairs,
+  // whose two columns of `Id`s exceed the 100 MB memory limit of `getQec`.
+  auto tree = ad_utility::makeExecutionTree<SpatialJoin>(
+      qec,
+      SpatialJoinConfiguration{
+          LibSpatialJoinConfig{SpatialJoinType::WITHIN_DIST,
+                               std::optional<double>{1'000'000}, std::nullopt},
+          Variable{"?a"}, Variable{"?b"}, std::nullopt, PayloadVariables::all(),
+          SpatialJoinAlgorithm::LIBSPATIALJOIN},
+      makeChild(Variable{"?a"}), makeChild(Variable{"?b"}));
+  auto spatialJoin =
+      std::dynamic_pointer_cast<SpatialJoin>(tree->getRootOperation());
+  EXPECT_THROW(spatialJoin->computeResult(false),
+               ad_utility::detail::AllocationExceedsLimitException);
+}
 
 }  // anonymous namespace

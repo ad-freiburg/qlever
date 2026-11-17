@@ -30,8 +30,13 @@ using ad_utility::content_encoding::CompressionMethod;
 template <typename Range>
 cppcoro::generator<std::string> compressStream(
     Range range, CompressionMethod compressionMethod) {
-  io::filtering_ostream filteringStream;
+  // NOTE: `stringBuffer` must be declared before `filteringStream` so that it
+  // is destroyed after it. The `filteringStream` holds a reference to
+  // `stringBuffer` via `io::back_inserter`. If the coroutine is destroyed
+  // mid-iteration, the destructor of `filteringStream` flushes pending data
+  // into `stringBuffer`, which must still be alive at that point.
   std::string stringBuffer;
+  io::filtering_ostream filteringStream;
 
   // setup compression method
   if (compressionMethod == CompressionMethod::DEFLATE) {

@@ -2,18 +2,28 @@
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "../util/ColumnStrippingTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
 #include "./ValuesForTesting.h"
 #include "engine/Bind.h"
+#include "engine/ExistsJoin.h"
+#include "engine/IndexScan.h"
+#include "engine/Join.h"
+#include "engine/StripColumns.h"
+#include "engine/sparqlExpressions/BlankNodeExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
+#include "engine/sparqlExpressions/RandomExpression.h"
+#include "engine/sparqlExpressions/UuidExpressions.h"
 
 using namespace sparqlExpression;
 using Vars = std::vector<std::optional<Variable>>;
+using V = Variable;
 
 namespace {
 Bind makeBindForIdTable(QueryExecutionContext* qec, IdTable idTable) {
@@ -27,6 +37,56 @@ Bind makeBindForIdTable(QueryExecutionContext* qec, IdTable idTable) {
        Variable{"?b"}}};
 }
 
+// Construct a `Bind` that assigns `expression` to `?b`.
+Bind makeBindForExpression(QueryExecutionContext* qec,
+                           SparqlExpression::Ptr expression,
+                           std::string descriptor) {
+  // This is a dummy value. It is not accessed by any of the tests.
+  auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, IdTable{1, qec->getAllocator()}, Vars{Variable{"?a"}}, false,
+      std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt, true);
+  return {qec,
+          std::move(valuesTree),
+          {SparqlExpressionPimpl{std::move(expression),
+                                 std::move(descriptor) + " AS ?b"},
+           Variable{"?b"}}};
+}
+
+// Return a `Bind` of `IRI(?s) AS ?x` on an input whose column `?s` holds the
+// `strings` as literals.
+std::shared_ptr<QueryExecutionTree> makeIriBind(
+    QueryExecutionContext* qec, const std::vector<std::string>& strings) {
+  LocalVocab localVocab;
+  VectorTable rows;
+  for (const auto& s : strings) {
+    rows.push_back(
+        {Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
+            LocalVocabEntry::literalWithoutQuotes(
+                s, qec->getLocalVocabContext())))});
+  }
+  auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector(rows), Vars{Variable{"?s"}}, false,
+      std::vector<ColumnIndex>{}, std::move(localVocab));
+  return ad_utility::makeExecutionTree<Bind>(
+      qec, std::move(valuesTree),
+      parsedQuery::Bind{
+          SparqlExpressionPimpl{
+              makeIriOrUriExpression(
+                  std::make_unique<VariableExpression>(Variable{"?s"}),
+                  std::make_unique<IriExpression>(TripleComponent::Iri{})),
+              "IRI(?s) AS ?x"},
+          Variable{"?x"}});
+}
+
+// Return the `Id`s of the `variable` in the result of the `qet`.
+std::vector<Id> getIdsOfVariable(QueryExecutionTree& qet,
+                                 const Variable& variable) {
+  auto result = qet.getResult();
+  auto col = qet.getVariableColumn(variable);
+  const auto& table = result->idTableView();
+  return {table.getColumn(col).begin(), table.getColumn(col).end()};
+}
+
 void expectBindYieldsIdTable(
     QueryExecutionContext* qec, Bind& bind, const IdTable& expected,
     ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
@@ -36,7 +96,7 @@ void expectBindYieldsIdTable(
     qec->getQueryTreeCache().clearAll();
     auto result = bind.getResult(false, ComputationMode::FULLY_MATERIALIZED);
     ASSERT_TRUE(result->isFullyMaterialized());
-    EXPECT_EQ(result->idTable(), expected);
+    EXPECT_EQ(result->idTableView(), expected);
   }
 
   {
@@ -116,7 +176,7 @@ TEST(
     qec->getQueryTreeCache().clearAll();
     auto result = bind.getResult(false, ComputationMode::FULLY_MATERIALIZED);
     ASSERT_TRUE(result->isFullyMaterialized());
-    EXPECT_EQ(result->idTable(), table);
+    EXPECT_EQ(result->idTableView(), table);
   }
 
   {
@@ -162,15 +222,20 @@ TEST(Bind, limitIsPropagated) {
       std::nullopt, true);
   Bind bind{
       qec,
-      std::move(valuesTree),
+      valuesTree,
       {SparqlExpressionPimpl{
            std::make_unique<IdExpression>(Id::makeFromInt(42)), "42 as ?b"},
        Variable{"?b"}}};
 
-  bind.applyLimitOffset({1, 1});
+  bind.applyLimitOffset({1, 1}, false);
+  EXPECT_EQ(bind.getChildren().at(0)->getRootOperation()->getLimitOffset(),
+            LimitOffsetClause(1, 1));
+  // We expect that the original subtree is unchanged.
+  EXPECT_TRUE(
+      valuesTree->getRootOperation()->getLimitOffset().isUnconstrained());
 
   auto result = bind.computeResultOnlyForTesting();
-  const auto& idTable = result.idTable();
+  const auto& idTable = result.idTableView();
 
   EXPECT_EQ(idTable, makeIdTableFromVector({{1, 42}}, &Id::makeFromInt));
 }
@@ -221,3 +286,227 @@ INSTANTIATE_TEST_SUITE_P(BindUndefStatus, BindUndefStatusTest,
                            return info.param ? "DefinedVariable"
                                              : "UndefinedVariable";
                          });
+
+// _____________________________________________________________________________
+TEST(Bind, isDeterministic) {
+  auto* qec = ad_utility::testing::getQec();
+  auto isDeterministic = [qec](SparqlExpression::Ptr expression,
+                               std::string descriptor) {
+    return makeBindForExpression(qec, std::move(expression),
+                                 std::move(descriptor))
+        .isDeterministic();
+  };
+
+  // A deterministic expression (a constant literal).
+  EXPECT_TRUE(isDeterministic(
+      std::make_unique<IdExpression>(Id::makeFromInt(42)), "42"));
+
+  // `BNODE()`, `RAND()`, `STRUUID()` and `UUID()` are non-deterministic.
+  EXPECT_FALSE(isDeterministic(makeUniqueBlankNodeExpression(), "BNODE()"));
+  EXPECT_FALSE(isDeterministic(std::make_unique<RandomExpression>(), "RAND()"));
+  EXPECT_FALSE(isDeterministic(std::make_unique<UuidExpression>(), "UUID()"));
+  EXPECT_FALSE(
+      isDeterministic(std::make_unique<StrUuidExpression>(), "STRUUID()"));
+}
+
+// _____________________________________________________________________________
+// Cloning a non-deterministic Bind (e.g. with BNODE) must still succeed.
+// `clone()` is used internally for limit propagation and similar purposes.
+// Preventing the query planner from distributing such a `BIND` over a `UNION`
+// is handled separately (see
+// QueryPlannerTest.nondeterministicOperandNotDistributedOverUnion).
+TEST(Bind, cloneSucceedsForNondeterministicBind) {
+  auto* qec = ad_utility::testing::getQec();
+  Bind bind =
+      makeBindForExpression(qec, makeUniqueBlankNodeExpression(), "BNODE()");
+  EXPECT_FALSE(bind.isDeterministic());
+  auto clone = bind.clone();
+  ASSERT_TRUE(clone);
+  EXPECT_FALSE(clone->isDeterministic());
+}
+
+// Test that `makeTreeWithStrippedColumns` strips the subtree to the requested
+// variables plus the variables that are required by `Bind` to build its target,
+// erases `Bind` from the `QueryExecutionTree` if the parent does not request
+// the target of `Bind`, and adds a `StripColumns` for the evaluated variables
+// that the parent did not request.
+TEST(Bind, makeTreeWithStrippedColumns) {
+  using ::column_stripping_test_helpers::isStrippedColumns;
+  using ::testing::Key;
+  using ::testing::UnorderedElementsAre;
+  // A subtree with the variables `?a`, `?b`, `?c` and `?d`.
+  auto qec = ad_utility::testing::getQec();
+  auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec,
+      makeIdTableFromVector(
+          {{6, 1, 3, 6}, {2, 2, 3, 5}, {3, 6, 5, 4}, {1, 6, 5, 1}}),
+      std::vector<std::optional<V>>{V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}});
+  auto strip = [&](std::set<V> requestedVariables) {
+    // Create `Bind`(`?a` AS `?additionalA`).
+    auto varExpr = std::make_unique<VariableExpression>(V{"?a"});
+    SparqlExpressionPimpl pimpl{std::move(varExpr), V{"?a"}.name()};
+    Bind bind{qec, values, {std::move(pimpl), V{"?additionalA"}}};
+    auto tree = bind.makeTreeWithStrippedColumns(requestedVariables);
+    AD_CONTRACT_CHECK(tree.has_value() && tree.value() != nullptr);
+    return std::move(tree).value();
+  };
+
+  // `Bind` `?a` AS `?additionalA`, `?a` and `?additionalA` requested: the
+  // result has `?a` and `?additionalA`.
+  {
+    auto tree = strip({V{"?a"}, V{"?additionalA"}});
+    EXPECT_THAT(tree.get(),
+                isStrippedColumns<Bind>({V{"?a"}, V{"?additionalA"}},
+                                        matchesIdTableFromVector(
+                                            {{6, 6}, {2, 2}, {3, 3}, {1, 1}})));
+  }
+
+  // `Bind` `?a` AS `?additionalA`, `?a`, `?c` and `?additionalA` requested:
+  // `?b` and `?d` are stripped, columns are renumbered.
+  {
+    auto tree = strip({V{"?a"}, V{"?c"}, V{"?additionalA"}});
+    EXPECT_THAT(tree.get(),
+                isStrippedColumns<Bind>(
+                    {V{"?a"}, V{"?c"}, V{"?additionalA"}},
+                    matchesIdTableFromVector(
+                        {{6, 3, 6}, {2, 3, 2}, {3, 5, 3}, {1, 5, 1}})));
+    EXPECT_EQ(tree->getVariableColumn(V{"?a"}), 0u);
+    EXPECT_EQ(tree->getVariableColumn(V{"?c"}), 1u);
+    EXPECT_EQ(tree->getVariableColumn(V{"?additionalA"}), 2u);
+  }
+
+  // A requested variable that the subtree does not have is ignored.
+  {
+    auto tree = strip({V{"?a"}, V{"?b"}, V{"?additionalA"}, V{"?notIncluded"}});
+    EXPECT_THAT(tree->getVariableColumns(),
+                UnorderedElementsAre(Key(V{"?a"}), Key(V{"?b"}),
+                                     Key(V{"?additionalA"})));
+  }
+
+  // `Bind` `?a` AS `?additionalA`, only `?additionalA` requested: the `Bind`
+  // keeps `?a` and `?additionalA`, a `StripColumns` on top removes `?a`.
+  {
+    auto tree = strip({V{"?additionalA"}});
+    EXPECT_THAT(tree.get(),
+                isStrippedColumns<StripColumns>(
+                    {V{"?additionalA"}},
+                    matchesIdTableFromVector({{6}, {2}, {3}, {1}})));
+    EXPECT_THAT(tree->getRootOperation()->getChildren().at(0),
+                isStrippedColumns<Bind>({V{"?a"}, V{"?additionalA"}},
+                                        matchesIdTableFromVector(
+                                            {{6, 6}, {2, 2}, {3, 3}, {1, 1}})));
+  }
+
+  // `Bind` `?a` AS `?additionalA`, only `?b` requested: `Bind` is erased from
+  // the `QueryExecutionTree`, `?a`, `?c` and `?d` are stripped.
+  {
+    auto tree = strip({V{"?b"}});
+    auto bind = std::dynamic_pointer_cast<Bind>(tree->getRootOperation());
+    EXPECT_EQ(bind, nullptr);
+    EXPECT_THAT(tree->getVariableColumns(), UnorderedElementsAre(Key(V{"?b"})));
+    EXPECT_EQ(tree->getResult(false)->idTableView(),
+              makeIdTableFromVector({{1}, {2}, {6}, {6}}));
+  }
+
+  // All variables requested: nothing is stripped.
+  {
+    auto tree = strip({V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}, V{"?additionalA"}});
+    EXPECT_THAT(tree.get(),
+                isStrippedColumns<Bind>(
+                    {V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}, V{"?additionalA"}},
+                    matchesIdTableFromVector({{6, 1, 3, 6, 6},
+                                              {2, 2, 3, 5, 2},
+                                              {3, 6, 5, 4, 3},
+                                              {1, 6, 5, 1, 1}})));
+  }
+}
+
+// Test that `makeTreeWithStrippedColumns` keeps the column of the `ExistsJoin`
+// that the constructor added for an `EXISTS` in the bound expression, so that
+// the stripped `Bind` does not add a second `ExistsJoin`.
+TEST(Bind, makeTreeWithStrippedColumnsKeepsExistsJoin) {
+  using ::column_stripping_test_helpers::countOperations;
+  using ::column_stripping_test_helpers::isStrippedColumns;
+  using ::column_stripping_test_helpers::makeExistsExpression;
+  auto B = ad_utility::testing::BoolId;
+  auto I = ad_utility::testing::IntId;
+
+  // A subtree with `?a` and `?b` and a `Bind` of `EXISTS { ?a <is-a> ?x }`
+  // (which holds for `<x>` but not for `<z>`) to `?e`.
+  auto qec = ad_utility::testing::getQec();
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{getId("<x>"), 2}, {getId("<z>"), 4}}, I),
+      std::vector<std::optional<V>>{V{"?a"}, V{"?b"}});
+  Bind bind{qec, values, {makeExistsExpression("<is-a>").first, V{"?e"}}};
+
+  // `?b` and `?e` requested: the tree still has one `ExistsJoin`, and `?e` is
+  // true exactly for the row of `<x>`.
+  auto tree = bind.makeTreeWithStrippedColumns({V{"?b"}, V{"?e"}}).value();
+  EXPECT_EQ(countOperations<ExistsJoin>(*tree), 1u);
+  EXPECT_EQ(countOperations<Bind>(*tree), 1u);
+  EXPECT_THAT(
+      tree.get(),
+      isStrippedColumns<StripColumns>(
+          {V{"?b"}, V{"?e"}},
+          matchesIdTableFromVector({{I(2), B(true)}, {I(4), B(false)}})));
+}
+
+// Test that IRIs that are computed by an expression and that match a pattern of
+// the `EncodedIriManager` get the same `Id` as the same IRIs from the index, so
+// that a join on them finds all matches.
+//
+// NOTE: In the index, the non-encodable `<http://example.org/5a>` (a
+// `VocabIndex`) is sorted before the encoded `<http://example.org/5>` (an
+// `EncodedVal`), while the computed IRIs used to be sorted by their string
+// value, so in the opposite order.
+TEST(Bind, joinOfComputedEncodableIris) {
+  ad_utility::testing::TestIndexConfig config{
+      "<http://example.org/5> <p> \"five\" . "
+      "<http://example.org/5a> <p> \"fiveA\" ."};
+  config.encodedPrefixesWithoutAngleBrackets =
+      std::vector<std::string>{"http://example.org/"};
+  auto* qec = ad_utility::testing::getQec(std::move(config));
+
+  auto bind =
+      makeIriBind(qec, {"http://example.org/5", "http://example.org/5a"});
+  auto scan = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::PSO,
+      SparqlTripleSimple{Variable{"?x"},
+                         TripleComponent::Iri::fromIriref("<p>"),
+                         Variable{"?l"}});
+  auto join = ad_utility::makeExecutionTree<Join>(
+      qec, bind, scan, bind->getVariableColumn(Variable{"?x"}),
+      scan->getVariableColumn(Variable{"?x"}));
+
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  EXPECT_THAT(
+      getIdsOfVariable(*join, Variable{"?l"}),
+      ::testing::UnorderedElementsAre(getId("\"five\""), getId("\"fiveA\"")));
+}
+
+// Test that the `Id`s of a computed encodable IRI, a computed IRI that is not
+// in the vocabulary, and an IRI from the vocabulary are ordered by a strict
+// weak ordering, which sorting them requires. Before the computed encodable IRI
+// was encoded, the three formed a cycle.
+TEST(Bind, computedEncodableIrisAreStrictlyWeaklyOrdered) {
+  ad_utility::testing::TestIndexConfig config{"<http://z> <p> <o> ."};
+  config.encodedPrefixesWithoutAngleBrackets =
+      std::vector<std::string>{"http://example.org/"};
+  auto* qec = ad_utility::testing::getQec(std::move(config));
+
+  auto bind = makeIriBind(qec, {"http://example.org/1", "http://y"});
+  auto ids = getIdsOfVariable(*bind, Variable{"?x"});
+  ASSERT_EQ(ids.size(), 2);
+  ids.push_back(ad_utility::testing::makeGetId(qec->getIndex())("<http://z>"));
+  for (Id a : ids) {
+    EXPECT_FALSE(a < a) << a;
+    for (Id b : ids) {
+      for (Id c : ids) {
+        if (a < b && b < c) {
+          EXPECT_TRUE(a < c) << a << ' ' << b << ' ' << c;
+        }
+      }
+    }
+  }
+}

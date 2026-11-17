@@ -4,56 +4,111 @@
 
 #include "index/vocabulary/VocabularyInMemoryBinSearch.h"
 
+#include <absl/strings/str_cat.h>
+
+#include <memory>
+#include <optional>
+#include <utility>
+
+#include "backports/algorithm.h"
+
 using std::string;
 
 // _____________________________________________________________________________
 void VocabularyInMemoryBinSearch::open(const string& fileName) {
   AD_CORRECTNESS_CHECK(
-      words_.size() == 0 && indices_.empty(),
+      words().size() == 0 && indices().empty(),
       "Calling open on the same vocabulary twice is probably a bug");
   {
+    Words words;
     ad_utility::serialization::FileReadSerializer file(fileName);
-    file >> words_;
+    file >> words;
+    words_ = std::make_shared<const Words>(std::move(words));
   }
   {
-    ad_utility::serialization::FileReadSerializer idFile(fileName + ".ids");
+    ad_utility::serialization::FileReadSerializer idFile(
+        absl::StrCat(fileName, idsSuffix));
     idFile >> indices_;
   }
 }
 
 // _____________________________________________________________________________
-std::optional<std::string_view> VocabularyInMemoryBinSearch::operator[](
+std::optional<size_t> VocabularyInMemoryBinSearch::positionOfIndex(
     uint64_t index) const {
-  auto it = ql::ranges::lower_bound(indices_, index);
-  if (it != indices_.end() && *it == index) {
-    return words_[it - indices_.begin()];
+  auto indices = this->indices();
+  auto it = ql::ranges::lower_bound(indices, index);
+  if (it != indices.end() && *it == index) {
+    return static_cast<size_t>(it - indices.begin());
   }
   return std::nullopt;
 }
 
 // _____________________________________________________________________________
+uint64_t VocabularyInMemoryBinSearch::indexAtPosition(size_t position) const {
+  auto indices = this->indices();
+  AD_CORRECTNESS_CHECK(position < indices.size());
+  return indices[position];
+}
+
+// _____________________________________________________________________________
+uint64_t VocabularyInMemoryBinSearch::endIndex() const {
+  auto indices = this->indices();
+  return indices.empty() ? 0 : indices[indices.size() - 1] + 1;
+}
+
+// _____________________________________________________________________________
+std::string_view VocabularyInMemoryBinSearch::wordAtPosition(
+    size_t position) const {
+  AD_CORRECTNESS_CHECK(position < words().size());
+  return words()[position];
+}
+
+// _____________________________________________________________________________
+std::optional<std::string_view> VocabularyInMemoryBinSearch::operator[](
+    uint64_t index) const {
+  auto position = positionOfIndex(index);
+  if (!position.has_value()) {
+    return std::nullopt;
+  }
+  return wordAtPosition(position.value());
+}
+
+// _____________________________________________________________________________
 WordAndIndex VocabularyInMemoryBinSearch::iteratorToWordAndIndex(
     ql::ranges::iterator_t<Words> it) const {
-  if (it == words_.end()) {
+  if (it == words().end()) {
     return WordAndIndex::end();
   }
-  auto idx = static_cast<uint64_t>(it - words_.begin());
-  WordAndIndex result{words_[idx], indices_[idx]};
+  auto idx = static_cast<uint64_t>(it - words().begin());
+  auto indices = this->indices();
+  WordAndIndex result{words()[idx], indices[idx]};
   if (idx > 0) {
-    result.previousIndex() = indices_[idx - 1];
+    result.previousIndex() = indices[idx - 1];
   }
   return result;
 }
 
 // _____________________________________________________________________________
+[[noreturn]] std::unique_ptr<WordWriterBase>
+VocabularyInMemoryBinSearch::makeDiskWriterPtr(
+    [[maybe_unused]] const std::string& filename) {
+  AD_THROW(
+      "A vocabulary with holes cannot be built word by word, because the "
+      "`WordWriterBase` interface cannot express the explicit indices. Such a "
+      "vocabulary can only be created by filtering an existing vocabulary.");
+}
+
+// _____________________________________________________________________________
 void VocabularyInMemoryBinSearch::close() {
-  words_.clear();
-  indices_.clear();
+  // Install empty storage (batch-lookup results that are still alive keep the
+  // previous words).
+  words_ = std::make_shared<const Words>();
+  indices_ = {};
 }
 
 // _____________________________________________________________________________
 VocabularyInMemoryBinSearch::WordWriter::WordWriter(const std::string& filename)
-    : writer_{filename}, offsetWriter_{filename + ".ids"} {}
+    : writer_{filename}, offsetWriter_{absl::StrCat(filename, idsSuffix)} {}
 
 // _____________________________________________________________________________
 uint64_t VocabularyInMemoryBinSearch::WordWriter::operator()(
@@ -70,4 +125,38 @@ uint64_t VocabularyInMemoryBinSearch::WordWriter::operator()(
 void VocabularyInMemoryBinSearch::WordWriter::finish() {
   writer_.finish();
   offsetWriter_.finish();
+}
+
+// _____________________________________________________________________________
+VocabBatchLookupResult VocabularyInMemoryBinSearch::lookupBatch(
+    ql::span<const size_t> indices) const {
+  AD_CONTRACT_CHECK(!indices.empty());
+
+  // Translate each index to its position once (a binary search); the holes
+  // are the indices without a position.
+  const auto positions =
+      ::ranges::to_vector(indices | ql::views::transform([this](size_t index) {
+                            return positionOfIndex(index);
+                          }));
+  auto data =
+      std::make_shared<SharedWordsWithPlaceholdersVocabBatchLookupData>();
+  data->buffer().words_ = words_;
+  // The placeholders are created up front so that the views into them stay
+  // valid (the vector is not resized afterwards).
+  auto& placeholders = data->buffer().placeholders_;
+  placeholders.reserve(ql::ranges::count_if(
+      positions, [](const auto& position) { return !position.has_value(); }));
+  auto& views = data->views();
+  views.reserve(indices.size());
+  for (const auto& [index, position] :
+       ::ranges::views::zip(indices, positions)) {
+    if (position.has_value()) {
+      views.push_back(wordAtPosition(position.value()));
+    } else {
+      views.push_back(placeholders.emplace_back(
+          ad_utility::vocabulary::placeholderForMissingVocabIndex(index)));
+    }
+  }
+  return SharedWordsWithPlaceholdersVocabBatchLookupData::asResult(
+      std::move(data));
 }

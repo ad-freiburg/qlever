@@ -8,7 +8,7 @@
 #include "../util/GTestHelpers.h"
 #include "rdfTypes/Variable.h"
 #include "util/HashSet.h"
-#include "util/Serializer/ByteBufferSerializer.h"
+#include "util/serializer/ByteBufferSerializer.h"
 
 // _____________________________________________________________________________
 TEST(Variable, legalAndIllegalNames) {
@@ -75,6 +75,30 @@ TEST(Variable, ScoreAndMatchVariablesUnicode) {
 
   // Regression test for https://github.com/ad-freiburg/qlever/issues/2244
   EXPECT_NO_THROW(Variable("?x").getMatchingWordVariable("�"));
+}
+
+// _____________________________________________________________________________
+// Test both instantiations of `Variable::appendEscapedWord`. The `useICU ==
+// true` path escapes codepoints that are not suitable for variable names, the
+// ICU-free `useICU == false` path escapes all non-alphanumeric ASCII bytes.
+// For ASCII input the two produce identical results.
+TEST(Variable, appendEscapedWord) {
+  // ICU path: 'a' and 'b' are valid, the space (0x20 == 32) is escaped.
+  std::string targetIcu = "pre_";
+  Variable::appendEscapedWord<true>("a b", targetIcu);
+  EXPECT_EQ(targetIcu, "pre_a_32_b");
+
+  // ICU-free path: identical result for ASCII input.
+  std::string targetNoIcu = "pre_";
+  Variable::appendEscapedWord<false>("a b", targetNoIcu);
+  EXPECT_EQ(targetNoIcu, "pre_a_32_b");
+
+  // ICU-free path with non-ASCII input: the bytes of 'ä' (0xC3 0xA4 == 195
+  // 164) are escaped individually, the '*' (0x2A == 42) like in the ICU
+  // version.
+  std::string targetUnicode = "pre_";
+  Variable::appendEscapedWord<false>("äpfel*", targetUnicode);
+  EXPECT_EQ(targetUnicode, "pre__195__164_pfel_42_");
 }
 
 // _____________________________________________________________________________

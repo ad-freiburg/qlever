@@ -2,6 +2,7 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Hannah Bast <bast@cs.uni-freiburg.de>
 
+#include <absl/hash/hash.h>
 #include <gmock/gmock.h>
 
 #include <sstream>
@@ -30,19 +31,27 @@
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "global/Id.h"
+#include "global/Pattern.h"
 #include "util/IndexTestHelpers.h"
+#include "util/LocalVocabEntryTestHelpers.h"
+#include "util/OperationTestHelpers.h"
+
+using ad_utility::testing::colIndices;
+using ad_utility::testing::iriLocalVocabEntry;
+using ad_utility::testing::localVocabEntry;
 
 namespace {
 // Get test collection of words of a given size. The words are all distinct.
 
 using TestWords = std::vector<LocalVocabEntry>;
 
-TestWords getTestCollectionOfWords(size_t size) {
+TestWords getTestCollectionOfWords(size_t size,
+                                   const LocalVocabContext& context) {
   using namespace ad_utility::triple_component;
   TestWords testCollectionOfWords;
   for (size_t i = 0; i < size; ++i) {
-    testCollectionOfWords.push_back(
-        LiteralOrIri::literalWithoutQuotes(std::to_string(i * 7635475567ULL)));
+    testCollectionOfWords.push_back(LocalVocabEntry::literalWithoutQuotes(
+        std::to_string(i * 7635475567ULL), context));
   }
   return testCollectionOfWords;
 }
@@ -55,8 +64,10 @@ auto lit(std::string_view s) {
 
 // _____________________________________________________________________________
 TEST(LocalVocab, constructionAndAccess) {
+  auto* qec = ad_utility::testing::getQec();
   // Test collection of words.
-  TestWords testWords = getTestCollectionOfWords(1000);
+  TestWords testWords =
+      getTestCollectionOfWords(1000, qec->getLocalVocabContext());
 
   // Create empty local vocabulary.
   LocalVocab localVocab;
@@ -91,10 +102,9 @@ TEST(LocalVocab, constructionAndAccess) {
   // not contained in the local vocab. This makes use of the fact that the words
   // in our test vocabulary only contain digits as letters, see above.
   for (size_t i = 0; i < testWords.size(); ++i) {
-    std::string content{asStringViewUnsafe(testWords[i].getContent())};
-    auto illegalWord =
-        ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(
-            content + "A");
+    std::string content{testWords[i].getContent()};
+    auto illegalWord = LocalVocabEntry::literalWithoutQuotes(
+        content + "A", qec->getLocalVocabContext());
     ASSERT_FALSE(localVocab.getIndexOrNullopt(illegalWord));
   }
 
@@ -114,12 +124,63 @@ TEST(LocalVocab, constructionAndAccess) {
 }
 
 // _____________________________________________________________________________
+TEST(LocalVocab, getIdAndAddIfNotContained) {
+  using namespace ad_utility::testing;
+  // In this index, `<subject>` is part of the vocabulary and IRIs starting with
+  // `http://example.org/` are encoded directly in an `Id`.
+  TestIndexConfig config{"<subject> <predicate> <http://example.org/42>"};
+  config.encodedPrefixesWithoutAngleBrackets = {"http://example.org/"};
+  auto* qec = getQec(std::move(config));
+  const auto& context = qec->getLocalVocabContext();
+  LocalVocab localVocab;
+
+  // A word in the vocabulary of the index yields the corresponding `VocabIndex`
+  // `Id` and is not stored in the local vocab.
+  auto inVocab = iriLocalVocabEntry("<subject>", context);
+  auto idInVocab = localVocab.getIdAndAddIfNotContained(inVocab);
+  auto [lower, upper] = qec->getIndex().getVocab().getPositionOfWord(
+      inVocab.toStringRepresentation());
+  ASSERT_NE(lower, upper);
+  EXPECT_EQ(idInVocab.getBits(), Id::makeFromVocabIndex(lower).getBits());
+  EXPECT_TRUE(localVocab.empty());
+
+  // A word that can be encoded directly in an `Id` can't be stored in a
+  // `LocalVocabEntry` at all, `toIdOrLocalVocabEntry` yields the encoded `Id`.
+  auto encodable = toIdOrLocalVocabEntry(
+      ad_utility::triple_component::LiteralOrIri{
+          ad_utility::triple_component::Iri::fromIriref(
+              "<http://example.org/69>")},
+      context);
+  ASSERT_TRUE(std::holds_alternative<Id>(encodable));
+  EXPECT_EQ(std::get<Id>(encodable).getBits(),
+            qec->getIndex()
+                .encodedIriManager()
+                .encode("<http://example.org/69>")
+                .value()
+                .getBits());
+
+  // A word that is neither in the vocabulary nor encodable is stored in the
+  // local vocab, just like with `getIndexAndAddIfNotContained`.
+  auto notInVocab = iriLocalVocabEntry("<notInVocab>", context);
+  auto idNotInVocab = localVocab.getIdAndAddIfNotContained(notInVocab);
+  ASSERT_EQ(idNotInVocab.getDatatype(), Datatype::LocalVocabIndex);
+  EXPECT_EQ(*idNotInVocab.getLocalVocabIndex(), notInVocab);
+  EXPECT_EQ(localVocab.size(), 1);
+  // Asking a second time doesn't add the word again.
+  EXPECT_EQ(localVocab.getIdAndAddIfNotContained(notInVocab).getBits(),
+            idNotInVocab.getBits());
+  EXPECT_EQ(localVocab.size(), 1);
+}
+
+// _____________________________________________________________________________
 TEST(LocalVocab, clone) {
+  auto* qec = ad_utility::testing::getQec();
   // Create a small local vocabulary.
   size_t localVocabSize = 100;
   LocalVocab localVocabOriginal;
   std::vector<LocalVocabIndex> indices;
-  auto inputWords = getTestCollectionOfWords(localVocabSize);
+  auto inputWords =
+      getTestCollectionOfWords(localVocabSize, qec->getLocalVocabContext());
   for (const auto& word : inputWords) {
     indices.push_back(localVocabOriginal.getIndexAndAddIfNotContained(word));
   }
@@ -155,13 +216,19 @@ TEST(LocalVocab, merge) {
   std::vector<LocalVocabIndex> indices;
   LocalVocab vocA;
   LocalVocab vocB;
+  auto* qec = ad_utility::testing::getQec();
+  const auto& localVocabContext = qec->getLocalVocabContext();
   constexpr auto lit = [](std::string_view s) {
     return ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(s);
   };
-  indices.push_back(vocA.getIndexAndAddIfNotContained(lit("oneA")));
-  indices.push_back(vocA.getIndexAndAddIfNotContained(lit("twoA")));
-  indices.push_back(vocA.getIndexAndAddIfNotContained(lit("oneB")));
-  indices.push_back(vocA.getIndexAndAddIfNotContained(lit("twoB")));
+  indices.push_back(vocA.getIndexAndAddIfNotContained(
+      localVocabEntry(lit("oneA"), localVocabContext)));
+  indices.push_back(vocA.getIndexAndAddIfNotContained(
+      localVocabEntry(lit("twoA"), localVocabContext)));
+  indices.push_back(vocA.getIndexAndAddIfNotContained(
+      localVocabEntry(lit("oneB"), localVocabContext)));
+  indices.push_back(vocA.getIndexAndAddIfNotContained(
+      localVocabEntry(lit("twoB"), localVocabContext)));
 
   // Clone it and test that the clone contains the same words.
   auto vocabs = std::vector{&std::as_const(vocA), &std::as_const(vocB)};
@@ -219,12 +286,13 @@ TEST(LocalVocab, propagation) {
           ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) -> void {
     auto t = generateLocationTrace(loc);
     TestWords expectedWords;
-    auto toLitOrIri = [](const auto& word) {
+    const auto& localVocabContext = testQec->getLocalVocabContext();
+    auto toLitOrIri = [&localVocabContext](const auto& word) {
       using namespace ad_utility::triple_component;
       if (ql::starts_with(word, '<')) {
-        return LiteralOrIri::iriref(word);
+        return iriLocalVocabEntry(word, localVocabContext);
       } else {
-        return LiteralOrIri::literalWithoutQuotes(word);
+        return LocalVocabEntry::literalWithoutQuotes(word, localVocabContext);
       }
     };
     ql::ranges::transform(expectedWordsAsStrings,
@@ -318,12 +386,12 @@ TEST(LocalVocab, propagation) {
   checkLocalVocab(orderBy, localVocab1);
 
   // SORT operation (the third operation is the sort column).
-  Sort sort(testQec, qet(values1), {0});
+  Sort sort(testQec, qet(values1), colIndices({0}));
   checkLocalVocab(sort, localVocab1);
 
   // DISTINCT operation (the third argument are the indices of the input columns
   // that are considered for the output; not important for this test).
-  Distinct distinct1(testQec, qet(values1), {0, 1});
+  Distinct distinct1(testQec, qet(values1), colIndices({0, 1}));
   checkLocalVocab(distinct1, localVocab1);
 
   // GROUP BY operation.
@@ -353,7 +421,7 @@ TEST(LocalVocab, propagation) {
   // DISTINCT again, but after something has been added to the local vocabulary
   // (to check that the "y1|y2" added by the GROUP BY does not also appear here,
   // as it did before GroupBy::computeResult copied it's local vocabulary).
-  Distinct distinct2(testQec, qet(values1), {0});
+  Distinct distinct2(testQec, qet(values1), colIndices({0}));
   checkLocalVocab(distinct2, localVocab1);
 
   // UNION operation with exactly one non-empty local vocab and with two
@@ -426,9 +494,11 @@ TEST(LocalVocab, getBlankNodeIndex) {
 // _____________________________________________________________________________
 TEST(LocalVocab, otherWordSetIsTransitivelyPropagated) {
   using ad_utility::triple_component::LiteralOrIri;
+  auto* qec = ad_utility::testing::getQec();
+  const auto& localVocabContext = qec->getLocalVocabContext();
   LocalVocab original;
   original.getIndexAndAddIfNotContained(
-      LocalVocabEntry{LiteralOrIri::literalWithoutQuotes("test")});
+      LocalVocabEntry::literalWithoutQuotes("test", localVocabContext));
 
   LocalVocab clone = original.clone();
   LocalVocab mergeCandidate;
@@ -444,9 +514,11 @@ TEST(LocalVocab, otherWordSetIsTransitivelyPropagated) {
 TEST(LocalVocab, sizeIsProperlyUpdatedOnMerge) {
   using ad_utility::triple_component::LiteralOrIri;
   using ::testing::UnorderedElementsAre;
+  auto* qec = ad_utility::testing::getQec();
+  const auto& localVocabContext = qec->getLocalVocabContext();
   LocalVocab original;
   original.getIndexAndAddIfNotContained(
-      LocalVocabEntry{LiteralOrIri::literalWithoutQuotes("test")});
+      LocalVocabEntry::literalWithoutQuotes("test", localVocabContext));
 
   LocalVocab clone1 = original.clone();
   LocalVocab clone2 = original.clone();
@@ -471,35 +543,41 @@ TEST(LocalVocab, sizeIsProperlyUpdatedOnMerge) {
 // _____________________________________________________________________________
 TEST(LocalVocab, modificationIsBlockedAfterCloneOrMerge) {
   using ad_utility::triple_component::LiteralOrIri;
+  auto* qec = ad_utility::testing::getQec();
+  const auto& localVocabContext = qec->getLocalVocabContext();
   auto literal = LiteralOrIri::literalWithoutQuotes("test");
   auto otherLiteral = LiteralOrIri::literalWithoutQuotes("other");
   {
     LocalVocab original;
-    original.getIndexAndAddIfNotContained(LocalVocabEntry{literal});
+    original.getIndexAndAddIfNotContained(
+        localVocabEntry(literal, localVocabContext));
     (void)original.clone();
-    EXPECT_NE(original.getIndexOrNullopt(LocalVocabEntry{literal}),
-              std::nullopt);
-    EXPECT_THROW(
-        original.getIndexAndAddIfNotContained(LocalVocabEntry{literal}),
-        ad_utility::Exception);
-    EXPECT_THROW(
-        original.getIndexAndAddIfNotContained(LocalVocabEntry{otherLiteral}),
-        ad_utility::Exception);
+    EXPECT_NE(
+        original.getIndexOrNullopt(localVocabEntry(literal, localVocabContext)),
+        std::nullopt);
+    EXPECT_THROW(original.getIndexAndAddIfNotContained(
+                     localVocabEntry(literal, localVocabContext)),
+                 ad_utility::Exception);
+    EXPECT_THROW(original.getIndexAndAddIfNotContained(
+                     localVocabEntry(otherLiteral, localVocabContext)),
+                 ad_utility::Exception);
     EXPECT_EQ(original.size(), 1);
   }
   {
     LocalVocab original;
     LocalVocab other;
-    original.getIndexAndAddIfNotContained(LocalVocabEntry{literal});
+    original.getIndexAndAddIfNotContained(
+        localVocabEntry(literal, localVocabContext));
     other.mergeWith(original);
-    EXPECT_NE(original.getIndexOrNullopt(LocalVocabEntry{literal}),
-              std::nullopt);
-    EXPECT_THROW(
-        original.getIndexAndAddIfNotContained(LocalVocabEntry{literal}),
-        ad_utility::Exception);
-    EXPECT_THROW(
-        original.getIndexAndAddIfNotContained(LocalVocabEntry{otherLiteral}),
-        ad_utility::Exception);
+    EXPECT_NE(
+        original.getIndexOrNullopt(localVocabEntry(literal, localVocabContext)),
+        std::nullopt);
+    EXPECT_THROW(original.getIndexAndAddIfNotContained(
+                     localVocabEntry(literal, localVocabContext)),
+                 ad_utility::Exception);
+    EXPECT_THROW(original.getIndexAndAddIfNotContained(
+                     localVocabEntry(otherLiteral, localVocabContext)),
+                 ad_utility::Exception);
     EXPECT_EQ(original.size(), 1);
   }
 }
@@ -507,6 +585,8 @@ TEST(LocalVocab, modificationIsBlockedAfterCloneOrMerge) {
 // _____________________________________________________________________________
 TEST(LocalVocab, modificationIsNotBlockedAfterAcquiringHolder) {
   using ad_utility::triple_component::LiteralOrIri;
+  auto* qec = ad_utility::testing::getQec();
+  const auto& localVocabContext = qec->getLocalVocabContext();
   auto literal = LiteralOrIri::literalWithoutQuotes("test");
   auto otherLiteral = LiteralOrIri::literalWithoutQuotes("other");
   std::optional<LocalVocab::LifetimeExtender> extender = std::nullopt;
@@ -514,19 +594,21 @@ TEST(LocalVocab, modificationIsNotBlockedAfterAcquiringHolder) {
   LocalVocabIndex encodedOther;
   {
     LocalVocab original;
-    encodedTest =
-        original.getIndexAndAddIfNotContained(LocalVocabEntry{literal});
+    encodedTest = original.getIndexAndAddIfNotContained(
+        localVocabEntry(literal, localVocabContext));
     extender = original.getLifetimeExtender();
 
-    EXPECT_EQ(original.getIndexOrNullopt(LocalVocabEntry{literal}),
-              std::optional{encodedTest});
+    EXPECT_EQ(
+        original.getIndexOrNullopt(localVocabEntry(literal, localVocabContext)),
+        std::optional{encodedTest});
 
-    EXPECT_EQ(original.getIndexAndAddIfNotContained(LocalVocabEntry{literal}),
+    EXPECT_EQ(original.getIndexAndAddIfNotContained(
+                  localVocabEntry(literal, localVocabContext)),
               encodedTest);
     EXPECT_EQ(original.size(), 1);
 
-    encodedOther =
-        original.getIndexAndAddIfNotContained(LocalVocabEntry{otherLiteral});
+    encodedOther = original.getIndexAndAddIfNotContained(
+        localVocabEntry(otherLiteral, localVocabContext));
     EXPECT_EQ(original.size(), 2);
   }
   // The `extender` keeps the `LocalVocabIndex`es valid even though the
@@ -640,4 +722,132 @@ TEST(LocalVocab, reserveBlankNodeBlocksFromExplicitIndices_PreconditionCheck) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       vocab.reserveBlankNodeBlocksFromExplicitIndices(indices, &bnm),
       ::testing::HasSubstr("Assertion"));
+}
+
+// Test that the addresses of the words of a `LocalVocab` (which are the
+// `LocalVocabIndex`es) stay stable when the arena and the hash table grow.
+TEST(LocalVocab, wordsHaveStableAddresses) {
+  // Many words (and a single word that is much larger than the initial blocks
+  // of the arena), such that the arena and the hash table of the words have to
+  // grow several times, which must not change the addresses of the words.
+  const auto& context = ad_utility::testing::getQec()->getLocalVocabContext();
+  LocalVocab localVocab;
+  std::vector<std::pair<LocalVocabIndex, std::string>> indices;
+  auto add = [&](std::string content) {
+    auto word = LocalVocabEntry::literalWithoutQuotes(content, context);
+    indices.emplace_back(localVocab.getIndexAndAddIfNotContained(word),
+                         std::string{word.toStringRepresentation()});
+  };
+  for (size_t i = 0; i < 20'000; ++i) {
+    add(std::to_string(i));
+    if (i == 10'000) {
+      add(std::string(1'000'000, 'x'));
+    }
+  }
+  ASSERT_EQ(localVocab.size(), indices.size());
+  for (const auto& [index, representation] : indices) {
+    EXPECT_EQ(index->toStringRepresentation(), representation);
+    EXPECT_EQ(localVocab.getIndexOrNullopt(*index), index);
+  }
+  // The words of the vocab are views into characters that are owned by the
+  // vocab (and not by the words that were added).
+  for (const auto& [index, representation] : indices) {
+    EXPECT_NE(index->toStringRepresentation().data(), representation.data());
+  }
+}
+
+// Test that a word that is stored in one `LocalVocab` can be added to another
+// `LocalVocab`, which then owns a copy of it.
+TEST(LocalVocab, addWordsOfOtherLocalVocab) {
+  auto* qec = ad_utility::testing::getQec(
+      ad_utility::testing::TestIndexConfig{"<a> <b> <c> ."});
+  const auto& context = qec->getLocalVocabContext();
+  LocalVocab vocab1;
+  auto word = ad_utility::testing::iriLocalVocabEntry("<bb>", context);
+  LocalVocabIndex index1 = vocab1.getIndexAndAddIfNotContained(word);
+  // Compute (and thereby cache) the position of the stored word.
+  auto position = index1->positionInVocab();
+
+  // Adding the stored word to another vocab makes a copy of it (including the
+  // cached position), adding it again doesn't.
+  LocalVocab vocab2;
+  LocalVocabIndex index2 = vocab2.getIndexAndAddIfNotContained(*index1);
+  EXPECT_NE(index1, index2);
+  EXPECT_NE(index1->toStringRepresentation().data(),
+            index2->toStringRepresentation().data());
+  EXPECT_EQ(*index1, *index2);
+  EXPECT_EQ(index2->positionInVocab(), position);
+  EXPECT_EQ(vocab2.getIndexAndAddIfNotContained(*index1), index2);
+  EXPECT_EQ(vocab2.getIndexAndAddIfNotContained(word), index2);
+  EXPECT_EQ(vocab2.getIndexOrNullopt(*index1), index2);
+  EXPECT_EQ(vocab2.size(), 1);
+  EXPECT_EQ(vocab2.getIdAndAddIfNotContained(*index1),
+            Id::makeFromLocalVocabIndex(index2));
+
+  // The word lives as long as `vocab2`, even if `vocab1` is destroyed.
+  vocab1 = LocalVocab{};
+  EXPECT_EQ(index2->toStringRepresentation(), word.toStringRepresentation());
+}
+
+// Test that `LocalVocabEntry`s and `LocalVocabEntryView`s compare and hash
+// alike, and that a view can be converted back to an owning entry.
+TEST(LocalVocab, viewsAndOwningEntries) {
+  const auto& context = ad_utility::testing::getQec()->getLocalVocabContext();
+  auto a = LocalVocabEntry::literalWithoutQuotes("a", context);
+  auto b = LocalVocabEntry::literalWithoutQuotes("b", context);
+  LocalVocab localVocab;
+  const LocalVocabEntryView& viewOfA =
+      *localVocab.getIndexAndAddIfNotContained(a);
+  // A view of an entry that refers to the characters of the entry itself.
+  LocalVocabEntryView viewOfB{b};
+  EXPECT_EQ(viewOfB.toStringRepresentation().data(),
+            b.toStringRepresentation().data());
+
+  // Owning entries and views can be compared with each other.
+  EXPECT_EQ(viewOfA, a);
+  EXPECT_EQ(a, viewOfA);
+  EXPECT_NE(viewOfA, b);
+  EXPECT_NE(viewOfA, viewOfB);
+  EXPECT_EQ(viewOfA.compareThreeWay(b), ql::strong_ordering::less);
+  EXPECT_EQ(b.compareThreeWay(viewOfA), ql::strong_ordering::greater);
+  EXPECT_EQ(viewOfA.compareThreeWay(a), ql::strong_ordering::equal);
+  EXPECT_LT(viewOfA, viewOfB);
+  EXPECT_EQ(absl::HashOf(viewOfA), absl::HashOf(a));
+
+  // An owning copy of a view.
+  LocalVocabEntry copyOfA = viewOfA.toOwned();
+  EXPECT_EQ(copyOfA, a);
+  EXPECT_NE(copyOfA.toStringRepresentation().data(),
+            viewOfA.toStringRepresentation().data());
+  EXPECT_EQ(&copyOfA.getContextForTesting(), &context);
+  EXPECT_THAT(localVocab.getAllWordsForTesting(), ::testing::ElementsAre(a));
+}
+
+// Test that a stored word keeps the structure of the entry it was created from
+// (and is not parsed again from its string representation).
+TEST(LocalVocab, wordsAreStoredWithTheirStructure) {
+  using ad_utility::triple_component::Iri;
+  using ad_utility::triple_component::Literal;
+  using ad_utility::triple_component::LiteralView;
+  const auto& context = ad_utility::testing::getQec()->getLocalVocabContext();
+  // A literal with a datatype that contains a quote, for which the position of
+  // the datatype can't be determined from the string representation alone.
+  LocalVocabEntry word{Literal::literalWithoutQuotes(
+                           "x", Iri::fromStringRepresentation("<a\"b>")),
+                       context};
+  EXPECT_ANY_THROW(
+      LiteralView::fromStringRepresentation(word.toStringRepresentation()));
+
+  LocalVocab localVocab;
+  const LocalVocabEntryView& stored =
+      *localVocab.getIndexAndAddIfNotContained(word);
+  EXPECT_NE(stored.toStringRepresentation().data(),
+            word.toStringRepresentation().data());
+  EXPECT_EQ(stored, word);
+  EXPECT_EQ(stored.getLiteral().getContent(), "x");
+  EXPECT_EQ(stored.getLiteral().getDatatype(), "a\"b");
+
+  // The same holds for a view of the entry itself.
+  LocalVocabEntryView view{word};
+  EXPECT_EQ(view.getLiteral().getDatatype(), "a\"b");
 }

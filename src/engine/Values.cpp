@@ -10,6 +10,9 @@
 #include <absl/strings/str_join.h>
 
 #include "engine/CallFixedSize.h"
+#include "engine/QueryExecutionTree.h"
+#include "index/TripleComponentConversions.h"
+#include "parser/TripleComponent.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
 
@@ -20,6 +23,14 @@ Values::Values(QueryExecutionContext* qec, SparqlValues parsedValues)
       ql::ranges::all_of(parsedValues_._values, [&](const auto& row) {
         return row.size() == parsedValues_._variables.size();
       }));
+}
+
+// ____________________________________________________________________________
+std::shared_ptr<QueryExecutionTree> makeValuesForSingleValue(
+    QueryExecutionContext* qec, Variable variable, TripleComponent value) {
+  return ad_utility::makeExecutionTree<Values>(
+      qec,
+      parsedQuery::SparqlValues{{std::move(variable)}, {{std::move(value)}}});
 }
 
 // ____________________________________________________________________________
@@ -40,7 +51,9 @@ size_t Values::getResultWidth() const {
 }
 
 // ____________________________________________________________________________
-std::vector<ColumnIndex> Values::resultSortedOn() const { return {}; }
+qlm::vector<ColumnIndex> Values::resultSortedOn() const {
+  return qlm::vector<ColumnIndex>{allocator()};
+}
 
 // ____________________________________________________________________________
 VariableToColumnMap Values::computeVariableToColumnMap() const {
@@ -87,9 +100,15 @@ size_t Values::getCostEstimate() { return parsedValues_._values.size(); }
 // ____________________________________________________________________________
 void Values::computeMultiplicities() {
   if (parsedValues_._variables.empty()) {
-    // If the result is empty we still add a column to the multiplicities to
-    // mark them as computed.
+    // If there are no variables (and hence no columns), still add one entry to
+    // the multiplicities to mark them as computed.
     multiplicities_.resize(1, 1);
+    return;
+  }
+  if (parsedValues_._values.empty()) {
+    // If there are variables but no rows, every column gets multiplicity 1 (the
+    // general formula below would divide zero rows by zero distinct values).
+    multiplicities_.resize(parsedValues_._variables.size(), 1);
     return;
   }
   multiplicities_.resize(parsedValues_._variables.size());
@@ -130,12 +149,13 @@ void Values::writeValues(IdTable* idTablePtr, LocalVocab* localVocab) {
   size_t rowIdx = 0;
   std::vector<size_t> numLocalVocabPerColumn(idTable.numColumns());
   for (auto& row : parsedValues_._values) {
+    // Each `toValueId` below might require a lookup in the vocabulary.
+    checkCancellation();
     for (size_t colIdx = 0; colIdx < idTable.numColumns(); colIdx++) {
       const TripleComponent& tc = row[colIdx];
       // TODO<joka921> We don't want to move, but also don't want to
       // unconditionally copy.
-      Id id = TripleComponent{tc}.toValueId(getIndex().getVocab(), *localVocab,
-                                            getIndex().encodedIriManager());
+      Id id = toValueId(TripleComponent{tc}, getIndex(), *localVocab);
       idTable(rowIdx, colIdx) = id;
       if (id.getDatatype() == Datatype::LocalVocabIndex) {
         ++numLocalVocabPerColumn[colIdx];

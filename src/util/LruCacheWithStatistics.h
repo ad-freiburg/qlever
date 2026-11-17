@@ -1,5 +1,6 @@
 // Copyright 2026 The QLever Authors, in particular:
 // 2026 Marvin Stoetzel <marvin.stoetzel@email.uni-freiburg.de>, UFR
+//
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 //
 // You may not use this file except in compliance with the Apache 2.0 License,
@@ -43,9 +44,9 @@ class LRUCacheWithStatistics {
   // Otherwise, compute the value using `computeFunction`, store it, and return
   // it (cache miss).
   CPP_template(typename Func)(
-      requires ad_utility::InvocableWithConvertibleReturnType<
-          Func, V, const K&>) const V& getOrCompute(const K& key,
-                                                    Func computeFunction) {
+      requires ad_utility::InvocableWithConvertibleReturnType<Func, V,
+                                                              const K&>)
+  const V& getOrCompute(const K& key, Func computeFunction) {
     bool wasMiss = false;
     const V& result =
         cache_.getOrCompute(key, [&wasMiss, &computeFunction](const K& k) {
@@ -58,6 +59,17 @@ class LRUCacheWithStatistics {
       ++stats_.hits_;
     }
     return result;
+  }
+
+  // Check if `key` is in the cache. If found, update LRU order, increment the
+  // hit counter, and return a reference to the cached value wrapped in
+  // `boost::optional`. If not found, return `boost::none`. Does not insert or
+  // compute anything.
+  template <typename Key>
+  boost::optional<const V&> tryGet(const Key& key) {
+    auto v = cache_.tryGet(key);
+    if (v) ++stats_.hits_;
+    return v;
   }
 
   const LRUCacheStats& stats() const { return stats_; }

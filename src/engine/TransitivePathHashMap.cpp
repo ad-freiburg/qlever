@@ -68,7 +68,7 @@ void HashMapWrapper::setGraphId(Id graphId) {
 
 // _____________________________________________________________________________
 HashMapWrapper TransitivePathHashMap::setupEdgesMap(
-    const IdTable& sub, const TransitivePathSide& startSide,
+    const IdTableView<0>& sub, const TransitivePathSide& startSide,
     const TransitivePathSide& targetSide) const {
   decltype(auto) startCol = sub.getColumn(startSide.subCol_);
   decltype(auto) targetCol = sub.getColumn(targetSide.subCol_);
@@ -97,9 +97,7 @@ HashMapWrapper TransitivePathHashMap::setupEdgesMap(
 // _____________________________________________________________________________
 std::unique_ptr<Operation> TransitivePathHashMap::cloneImpl() const {
   auto copy = std::make_unique<TransitivePathHashMap>(*this);
-  copy->subtree_ = subtree_->clone();
-  copy->lhs_ = lhs_.clone();
-  copy->rhs_ = rhs_.clone();
+  setTreeAndChildrenToClone(*copy);
   return copy;
 }
 

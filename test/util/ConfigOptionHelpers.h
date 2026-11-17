@@ -5,8 +5,8 @@
 #ifndef QLEVER_TEST_UTIL_CONFIGOPTIONHELPERS_H
 #define QLEVER_TEST_UTIL_CONFIGOPTIONHELPERS_H
 
-#include "util/ConfigManager/ConfigOption.h"
 #include "util/ConstexprUtils.h"
+#include "util/configManager/ConfigOption.h"
 
 /*
 @brief Call the function with each of the alternatives in
@@ -17,7 +17,7 @@
 arguments. Should be passed per deduction.
 */
 template <typename Function>
-static void doForTypeInConfigOptionValueType(Function function) {
+void doForTypeInConfigOptionValueType(Function function) {
   ad_utility::forEachTypeInTemplateType<
       ad_utility::ConfigOption::AvailableTypes>(function);
 }

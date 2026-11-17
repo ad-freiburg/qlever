@@ -21,8 +21,8 @@
 for `ad_benchmark::ResultTable`.
 */
 CPP_template(typename Type)(requires ad_utility::SimilarToAnyTypeIn<
-                            Type, ad_benchmark::ResultTable::EntryType>) Type
-    createDummyValueEntryType();
+                                  Type, ad_benchmark::ResultTable::EntryType>)
+Type createDummyValueEntryType();
 
 /*
 @brief Call the lambda with each of the alternatives in
@@ -34,7 +34,7 @@ parameter.
 arguments. Should be passed per deduction.
 */
 template <typename Function>
-static void doForTypeInResultTableEntryType(Function function) {
+void doForTypeInResultTableEntryType(Function function) {
   ad_utility::forEachTypeInTemplateTypeWithTI(
       ad_utility::use_type_identity::ti<ad_benchmark::ResultTable::EntryType>,
       [&function](auto t) {

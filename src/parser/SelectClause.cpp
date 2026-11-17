@@ -77,13 +77,9 @@ void SelectClause::setSelected(std::vector<Variable> variables) {
 // ____________________________________________________________________________
 [[nodiscard]] std::vector<std::string>
 SelectClause::getSelectedVariablesAsStrings() const {
-  std::vector<std::string> result;
-  const auto& vars = getSelectedVariables();
-  result.reserve(vars.size());
-  for (const auto& var : vars) {
-    result.push_back(var.name());
-  }
-  return result;
+  return getSelectedVariables() |
+         ql::views::transform([](const Variable& var) { return var.name(); }) |
+         ::ranges::to_vector;
 }
 
 // ____________________________________________________________________
@@ -97,12 +93,12 @@ SelectClause::getSelectedVariablesAsStrings() const {
   }
 }
 
-void SelectClause::deleteAliasesButKeepVariables() {
+std::vector<Alias> SelectClause::deleteAliasesButKeepVariables() {
   if (isAsterisk()) {
-    return;
+    return {};
   }
   auto& varsAndAliases = std::get<VarsAndAliases>(varsAndAliasesOrAsterisk_);
   // The variables that the aliases are bound to have previously been stored
   // separately in `varsAndAliases.vars_`, so we can simply delete the aliases.
-  varsAndAliases.aliases_.clear();
+  return std::exchange(varsAndAliases.aliases_, {});
 }

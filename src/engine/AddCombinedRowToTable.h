@@ -15,11 +15,11 @@
 #include <vector>
 
 #include "backports/concepts.h"
-#include "engine/LocalVocab.h"
 #include "engine/Result.h"
 #include "engine/idTable/IdTable.h"
 #include "engine/idTable/IdTableConcepts.h"
 #include "global/Id.h"
+#include "index/LocalVocab.h"
 #include "util/CancellationHandle.h"
 #include "util/Exception.h"
 #include "util/TransparentFunctors.h"
@@ -157,9 +157,8 @@ class AddCombinedRowToIdTable {
   // `rowIndicesA` and `rowIndicesB` with an optimization for the special case
   // that the `resultTable` has zero columns.
   CPP_template(typename R1, typename R2)(
-      requires sizedRangeOfUnsigned<R1> CPP_and
-          sizedRangeOfUnsigned<R2>) void addRows(const R1& rowIndicesA,
-                                                 const R2& rowIndicesB) {
+      requires sizedRangeOfUnsigned<R1> && sizedRangeOfUnsigned<R2>)
+  void addRows(const R1& rowIndicesA, const R2& rowIndicesB) {
     size_t total =
         ql::ranges::size(rowIndicesA) * ql::ranges::size(rowIndicesB);
     if (resultTable_.numColumns() == 0) {

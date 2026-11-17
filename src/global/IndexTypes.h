@@ -13,13 +13,17 @@
 
 // Note the `VocabIndex` is declared in a separate header `VocabIndex` to break
 // a cyclic dependency (it is needed by `LocalVocabEntry.h`).
-using LocalVocabIndex = const LocalVocabEntry*;
+using LocalVocabIndex = const LocalVocabEntryView*;
 inline constexpr ad_utility::IndexTag textRecordIndexTag = "TextRecordIndex";
 using TextRecordIndex = ad_utility::TypedIndex<uint64_t, textRecordIndexTag>;
 inline constexpr ad_utility::IndexTag wordVocabIndexTag = "WordVocabIndex";
 using WordVocabIndex = ad_utility::TypedIndex<uint64_t, wordVocabIndexTag>;
 inline constexpr ad_utility::IndexTag blankNodeIndexTag = "BlankNodeIndex";
 using BlankNodeIndex = ad_utility::TypedIndex<uint64_t, blankNodeIndexTag>;
+inline constexpr ad_utility::IndexTag secondaryVocabIndexTag =
+    "SecondaryVocabIndex";
+using SecondaryVocabIndex =
+    ad_utility::TypedIndex<uint64_t, secondaryVocabIndexTag>;
 inline constexpr ad_utility::IndexTag documentIndexTag = "DocumentIndex";
 using DocumentIndex = ad_utility::TypedIndex<uint64_t, documentIndexTag>;
 

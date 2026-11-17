@@ -11,31 +11,42 @@
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "util/ContainersWithAllocator.h"
 
 class Distinct : public Operation {
  private:
   std::shared_ptr<QueryExecutionTree> subtree_;
-  std::vector<ColumnIndex> keepIndices_;
-
-  static constexpr int64_t CHUNK_SIZE = 100'000;
+  qlm::vector<ColumnIndex> keepIndices_;
 
  public:
+  static constexpr int64_t CHUNK_SIZE = 100'000;
+
   Distinct(QueryExecutionContext* qec,
            std::shared_ptr<QueryExecutionTree> subtree,
-           const std::vector<ColumnIndex>& keepIndices);
+           ql::span<const ColumnIndex> keepIndices);
 
   [[nodiscard]] size_t getResultWidth() const override;
 
   [[nodiscard]] std::string getDescriptor() const override;
 
-  [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override {
+  [[nodiscard]] qlm::vector<ColumnIndex> resultSortedOn() const override {
     return subtree_->resultSortedOn();
   }
 
   // Get all columns that need to be distinct.
-  const std::vector<ColumnIndex>& getDistinctColumns() const {
+  const qlm::vector<ColumnIndex>& getDistinctColumns() const {
     return keepIndices_;
   }
+
+  // The result of a `Distinct` contains no two rows that agree on all columns
+  // in `keepIndices_`, hence it is also distinct wrt any superset of
+  // `keepIndices_`.
+  bool isDistinctByImpl(
+      ql::span<const ColumnIndex> distinctIndices) const override;
+
+  // Non-template wrapper around `outOfPlaceDistinct` for use in unit tests.
+  // Dispatches to the right WIDTH via `callFixedSizeVi`.
+  IdTable outOfPlaceDistinctForTesting(const IdTable& input) const;
 
  private:
   uint64_t getSizeEstimateBeforeLimit() override {
@@ -53,14 +64,20 @@ class Distinct : public Operation {
 
   bool knownEmptyResult() override { return subtree_->knownEmptyResult(); }
 
-  std::vector<QueryExecutionTree*> getChildren() override {
-    return {subtree_.get()};
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithStrippedColumns(
+      const std::set<Variable>& variables) const override;
+
+ private:
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return {{subtree_.get()}, allocator()};
   }
 
  protected:
   [[nodiscard]] std::string getCacheKeyImpl() const override;
 
  private:
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
   std::unique_ptr<Operation> cloneImpl() const override;
   Result computeResult(bool requestLaziness) override;
 
@@ -92,11 +109,7 @@ class Distinct : public Operation {
   // Out-of-place implementation of the unique algorithm. Does only copy values
   // if they're actually unique.
   template <size_t WIDTH>
-  IdTable outOfPlaceDistinct(const IdTable& dynInput) const;
-
-  FRIEND_TEST(Distinct, distinct);
-  FRIEND_TEST(Distinct, distinctWithEmptyInput);
-  FRIEND_TEST(Distinct, testChunkEdgeCases);
+  IdTable outOfPlaceDistinct(const IdTableView<0>& dynInput) const;
 };
 
 #endif  // QLEVER_SRC_ENGINE_DISTINCT_H

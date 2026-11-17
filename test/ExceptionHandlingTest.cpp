@@ -2,11 +2,21 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#include "gmock/gmock.h"
-#include "gtest/gtest.h"
-#include "util/ExceptionHandling.h"
+#include <absl/cleanup/cleanup.h>
+#include <gmock/gmock.h>
 
-// ________________________________________________________________
+#include <array>
+#include <atomic>
+#include <sstream>
+#include <stdexcept>
+#include <type_traits>
+
+#include "./util/GTestHelpers.h"
+#include "util/ExceptionHandling.h"
+#include "util/Log.h"
+#include "util/jthread.h"
+
+// _____________________________________________________________________________
 TEST(ExceptionHandling, terminateIfThrows) {
   // Avoid warnings and crashes when running all tests at once.
   ::testing::FLAGS_gtest_death_test_style = "threadsafe";
@@ -35,11 +45,14 @@ TEST(ExceptionHandling, terminateIfThrows) {
                                 mockedTerminate);
   EXPECT_EQ(numCallsToMockedTerminate, 2);
 
+  // `EXPECT_EXIT` has no `_IF_SUPPORTED` variant (needed for Emscripten).
+#ifdef GTEST_HAS_DEATH_TEST
   auto noThrowThenExit = []() {
     ad_utility::terminateIfThrows([]() {}, "");
     std::exit(42);
   };
   EXPECT_EXIT(noThrowThenExit(), ::testing::ExitedWithCode(42), ::testing::_);
+#endif
 
   ad_utility::terminateIfThrows([]() {}, "", mockedTerminate);
   EXPECT_EQ(numCallsToMockedTerminate, 2);
@@ -81,7 +94,153 @@ template <auto innerThrowingFunction>
   throw std::system_error{std::error_code{}};
 };
 }  // namespace
-// ________________________________________________________________
+
+// _____________________________________________________________________________
+TEST(ExceptionCollector, isNoOpWhenEmpty) {
+  ad_utility::ExceptionCollector collector;
+  EXPECT_NO_THROW(collector.rethrowIfException());
+  collector(std::exception_ptr{});
+  EXPECT_NO_THROW(collector.rethrowIfException());
+}
+
+// Test that `hasException` reports a captured exception until it is
+// rethrown.
+TEST(ExceptionCollector, hasException) {
+  ad_utility::ExceptionCollector collector;
+  EXPECT_FALSE(collector.hasException());
+  collector(std::make_exception_ptr(std::runtime_error{"captured"}));
+  EXPECT_TRUE(collector.hasException());
+  EXPECT_THROW(collector.rethrowIfException(), std::runtime_error);
+  EXPECT_FALSE(collector.hasException());
+}
+
+// _____________________________________________________________________________
+TEST(ExceptionCollector, asCompletionHandler) {
+  auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+
+  ad_utility::ExceptionCollector collector;
+  try {
+    throw std::runtime_error{"first"};
+  } catch (...) {
+    collector(std::current_exception());
+  }
+  // Additional `std::exception`s are logged with their message; only the first
+  // one is rethrown.
+  try {
+    throw std::logic_error{"second"};
+  } catch (...) {
+    collector(std::current_exception());
+  }
+  EXPECT_THAT(logStream.str(),
+              ifLogLevelIsCompiledIn<LogLevel::Enum::WARN>(::testing::AllOf(
+                  ::testing::HasSubstr("Additional exception captured"),
+                  ::testing::HasSubstr("second"))));
+
+  // Reset stream.
+  logStream.str("");
+
+  // Additional exceptions that do not derive from `std::exception` exercise
+  // the catch-all branch and are logged with a generic message.
+  try {
+    throw 42;
+  } catch (...) {
+    collector(std::current_exception());
+  }
+  EXPECT_THAT(logStream.str(),
+              ifLogLevelIsCompiledIn<LogLevel::Enum::WARN>(::testing::HasSubstr(
+                  "Additional exception of unknown type captured")));
+
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(collector.rethrowIfException(),
+                                        ::testing::StrEq("first"),
+                                        std::runtime_error);
+}
+
+// _____________________________________________________________________________
+TEST(ExceptionCollector, wrap) {
+  ad_utility::ExceptionCollector collector;
+  int sideEffect = 0;
+  auto noThrowing = collector.wrap([&] { sideEffect = 7; });
+  noThrowing();
+  EXPECT_EQ(sideEffect, 7);
+  EXPECT_NO_THROW(collector.rethrowIfException());
+
+  auto throwing = collector.wrap([] { throw std::runtime_error{"from wrap"}; });
+  EXPECT_NO_THROW(throwing());
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(collector.rethrowIfException(),
+                                        ::testing::StrEq("from wrap"),
+                                        std::runtime_error);
+}
+
+// _____________________________________________________________________________
+TEST(ExceptionCollector, isThreadSafe) {
+  ad_utility::ExceptionCollector collector;
+  {
+    constexpr int numThreads = 16;
+    std::atomic<int> ready = 0;
+    std::array<ad_utility::JThread, numThreads> threads;
+    for (int i = 0; i < numThreads; ++i) {
+      threads.at(i) = ad_utility::JThread{[&collector, &ready, i] {
+        ++ready;
+        while (ready.load() < numThreads) {
+          // Spin until all threads are ready, to maximise contention.
+        }
+        try {
+          throw std::runtime_error{"t" + std::to_string(i)};
+        } catch (...) {
+          collector(std::current_exception());
+        }
+      }};
+    }
+    // Wait for threads to complete.
+  }
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(collector.rethrowIfException(),
+                                        MatchesRegex("t[0-9]+"),
+                                        std::runtime_error);
+}
+
+// _____________________________________________________________________________
+TEST(ExceptionCollector, destructorDropsUncollectedException) {
+  static_assert(std::is_nothrow_destructible_v<ad_utility::ExceptionCollector>);
+  // If `rethrowIfException()` is never called, the captured exception is
+  // silently dropped by the destructor.
+  EXPECT_NO_THROW({
+    ad_utility::ExceptionCollector collector;
+    try {
+      throw std::runtime_error{"dropped"};
+    } catch (...) {
+      collector(std::current_exception());
+    }
+  });
+  // The same holds if the destructor runs while another exception propagates,
+  // which then reaches the caller unchanged.
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      {
+        ad_utility::ExceptionCollector collector;
+        try {
+          throw std::runtime_error{"silently dropped"};
+        } catch (...) {
+          collector(std::current_exception());
+        }
+        throw std::logic_error{"propagated to caller"};
+      },
+      ::testing::StrEq("propagated to caller"), std::logic_error);
+}
+
+// _____________________________________________________________________________
+TEST(ExceptionCollector, rethrowClearsException) {
+  ad_utility::ExceptionCollector collector;
+  try {
+    throw std::runtime_error{"my error"};
+  } catch (...) {
+    collector(std::current_exception());
+  }
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(collector.rethrowIfException(),
+                                        ::testing::StrEq("my error"),
+                                        std::runtime_error);
+  EXPECT_NO_THROW(collector.rethrowIfException());
+}
+
+// _____________________________________________________________________________
 TEST(ExceptionHandling, throwIfSafe) {
   using namespace ad_utility;
   ThrowInDestructorIfSafe t;

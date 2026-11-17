@@ -13,7 +13,7 @@
 #include "./util/IdTableHelpers.h"
 #include "backports/algorithm.h"
 #include "engine/idTable/IdTable.h"
-#include "global/ValueId.h"
+#include "global/Id.h"
 #include "util/Algorithm.h"
 #include "util/ConstexprUtils.h"
 #include "util/IdTestHelpers.h"
@@ -33,7 +33,7 @@ be read.
 CPP_template(typename R,
              typename E = std::iter_value_t<ql::ranges::iterator_t<R>>)(
     requires ql::ranges::forward_range<R>)
-    std::vector<std::vector<E>> calculateAllSubSets(R&& setToCalculateFor) {
+std::vector<std::vector<E>> calculateAllSubSets(R&& setToCalculateFor) {
   // Getting rid of duplicated elements.
 
   std::vector<std::vector<E>> calculatedSubSets;
@@ -75,17 +75,18 @@ TEST(IdTableHelpersHelpersTest, calculateAllSubSets) {
   doTest({}, {{}});
 
   // Single element.
-  doTest({1uL}, {{}, {1uL}});
+  doTest({uint64_t{1}}, {{}, {uint64_t{1}}});
 
   // Three elements.
-  doTest({4uL, 2uL, 5uL}, {{},
-                           {4uL, 2uL, 5uL},
-                           {4uL},
-                           {2uL},
-                           {5uL},
-                           {4uL, 5uL},
-                           {2uL, 5uL},
-                           {4uL, 2uL}});
+  doTest({uint64_t{4}, uint64_t{2}, uint64_t{5}},
+         {{},
+          {uint64_t{4}, uint64_t{2}, uint64_t{5}},
+          {uint64_t{4}},
+          {uint64_t{2}},
+          {uint64_t{5}},
+          {uint64_t{4}, uint64_t{5}},
+          {uint64_t{2}, uint64_t{5}},
+          {uint64_t{4}, uint64_t{2}}});
 }
 
 // _____________________________________________________________________________
@@ -135,7 +136,7 @@ void generalIdTableCheck(const IdTable& table,
 
   if (allEntriesWereSet) {
     ASSERT_TRUE(ql::ranges::all_of(table, [](const auto& row) {
-      return ql::ranges::all_of(row, [](const ValueId& entry) {
+      return ql::ranges::all_of(row, [](ConstIdRef entry) {
         return ad_utility::testing::VocabId(0) <= entry &&
                entry <= ad_utility::testing::VocabId(ValueId::maxIndex);
       });
@@ -178,7 +179,7 @@ TEST(IdTableHelpersTest, createRandomlyFilledIdTableWithoutGenerators) {
                         const size_t& lowerBound, const size_t& upperBound) {
     ASSERT_TRUE(ql::ranges::all_of(
         table.getColumn(columnNumber),
-        [&lowerBound, &upperBound](const ValueId& entry) {
+        [&lowerBound, &upperBound](ConstIdRef entry) {
           return ad_utility::testing::VocabId(lowerBound) <= entry &&
                  entry <= ad_utility::testing::VocabId(upperBound);
         }));

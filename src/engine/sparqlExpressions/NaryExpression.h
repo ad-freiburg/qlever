@@ -38,6 +38,11 @@ SparqlExpression::Ptr makeOrExpression(SparqlExpression::Ptr child1,
 SparqlExpression::Ptr makeSubtractExpression(SparqlExpression::Ptr child1,
                                              SparqlExpression::Ptr child2);
 
+// Return true iff `expression` is an `&&` (made by `makeAndExpression`).
+bool isAndExpression(const SparqlExpression& expression);
+// Return true iff `expression` is an `||` (made by `makeOrExpression`).
+bool isOrExpression(const SparqlExpression& expression);
+
 SparqlExpression::Ptr makeUnaryMinusExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeUnaryNegateExpression(SparqlExpression::Ptr child);
 
@@ -62,21 +67,33 @@ SparqlExpression::Ptr makeDistWithUnitExpression(
     SparqlExpression::Ptr child1, SparqlExpression::Ptr child2,
     std::optional<SparqlExpression::Ptr> child3 = std::nullopt);
 
-template <SpatialJoinType Relation>
+template <SpatialJoinType::Enum Relation>
 SparqlExpression::Ptr makeGeoRelationExpression(SparqlExpression::Ptr child1,
                                                 SparqlExpression::Ptr child2);
+
+SparqlExpression::Ptr makeDe9imRelationExpression(SparqlExpression::Ptr child1,
+                                                  SparqlExpression::Ptr child2,
+                                                  SparqlExpression::Ptr child3);
 
 SparqlExpression::Ptr makeLatitudeExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeLongitudeExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeCentroidExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeEnvelopeExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeEnvelopeLowerLeftExpression(
+    SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeEnvelopeUpperRightExpression(
+    SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeGeometryTypeExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeCrsTypeExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeNumGeometriesExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeLengthExpression(SparqlExpression::Ptr child1,
                                            SparqlExpression::Ptr child2);
 SparqlExpression::Ptr makeMetricLengthExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeGeometryNExpression(SparqlExpression::Ptr child1,
                                               SparqlExpression::Ptr child2);
+SparqlExpression::Ptr makeSimplifyGeometryExpression(
+    SparqlExpression::Ptr child1, SparqlExpression::Ptr child2);
+SparqlExpression::Ptr makeAsGeoJsonExpression(SparqlExpression::Ptr child);
 
 template <ad_utility::BoundingCoordinate RequestedCoordinate>
 SparqlExpression::Ptr makeBoundingCoordinateExpression(
@@ -92,6 +109,7 @@ SparqlExpression::Ptr makeHoursExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeDayExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeTimezoneStrExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeTimezoneExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeToEpochExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeMonthExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeYearExpression(SparqlExpression::Ptr child);
 
@@ -165,6 +183,7 @@ std::optional<Variable> getVariableFromLangExpression(
 SparqlExpression::Ptr makeEncodeForUriExpression(SparqlExpression::Ptr child);
 
 SparqlExpression::Ptr makeIsIriExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeIsEncodedIriExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeIsLiteralExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeIsNumericExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeIsBlankExpression(SparqlExpression::Ptr child);
@@ -219,11 +238,10 @@ struct VariadicExpressionFactory {
 // `make...` functions for n-ary expressions that have a compile-time known
 // number of children. This makes the testing easier, as we then can use the
 // same test helpers for all expressions.
-CPP_template(auto function)(
-    requires std::is_invocable_r_v<
-        SparqlExpression::Ptr, decltype(function),
-        std::vector<
-            SparqlExpression::Ptr> >) constexpr auto variadicExpressionFactory =
+CPP_template(auto function)(requires std::is_invocable_r_v<
+                                  SparqlExpression::Ptr, decltype(function),
+                                  std::vector<SparqlExpression::Ptr> >)
+constexpr auto variadicExpressionFactory =
     detail::VariadicExpressionFactory<function>{};
 
 SparqlExpression::Ptr makeCoalesceExpression(

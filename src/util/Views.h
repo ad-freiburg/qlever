@@ -39,8 +39,9 @@ CPP_concept RangeCanEmpty = CPP_requires_ref(can_empty_, R);
 // optional `supportsConst` argument explicitly disables const iteration for
 // this view when set to false, see `OwningViewNoConst` below for details.
 CPP_template(typename UnderlyingRange, bool supportConst = true)(
-    requires ql::ranges::range<UnderlyingRange> CPP_and
-        ql::concepts::movable<UnderlyingRange>) class OwningView
+    requires ql::ranges::range<UnderlyingRange> &&
+    ql::concepts::movable<UnderlyingRange>)
+class OwningView
     : public ql::ranges::view_interface<OwningView<UnderlyingRange>> {
  private:
   UnderlyingRange underlyingRange_;
@@ -73,13 +74,13 @@ CPP_template(typename UnderlyingRange, bool supportConst = true)(
 
   constexpr auto end() { return ql::ranges::end(underlyingRange_); }
 
-  CPP_auto_member constexpr auto CPP_fun(begin)()(
+  CPP_auto_member constexpr auto CPP_fun(begin) ()(
       const  //
       requires(supportConst&& ql::ranges::range<const UnderlyingRange>)) {
     return ql::ranges::begin(underlyingRange_);
   }
 
-  CPP_auto_member constexpr auto CPP_fun(end)()(
+  CPP_auto_member constexpr auto CPP_fun(end) ()(
       const  //
       requires(supportConst&& ql::ranges::range<const UnderlyingRange>)) {
     return ql::ranges::end(underlyingRange_);
@@ -95,73 +96,23 @@ CPP_template(typename UnderlyingRange, bool supportConst = true)(
     return ql::ranges::size(underlyingRange_);
   }
 
-  CPP_member constexpr auto size() const -> CPP_ret(size_t)(
-      requires ql::ranges::sized_range<const UnderlyingRange>) {
+  CPP_member constexpr auto size() const
+      -> CPP_ret(size_t)(
+          requires ql::ranges::sized_range<const UnderlyingRange>) {
     return ql::ranges::size(underlyingRange_);
   }
 
-  CPP_auto_member constexpr auto CPP_fun(data)()(
-      requires ql::ranges::contiguous_range<UnderlyingRange>) {
+  CPP_auto_member constexpr auto
+      CPP_fun(data) ()(requires ql::ranges::contiguous_range<UnderlyingRange>) {
     return ql::ranges::data(underlyingRange_);
   }
 
-  CPP_auto_member constexpr auto CPP_fun(data)()(
+  CPP_auto_member constexpr auto CPP_fun(data) ()(
       const  //
       requires ql::ranges::contiguous_range<const UnderlyingRange>) {
     return ql::ranges::data(underlyingRange_);
   }
 };
-
-// Takes a view of blocks and yields the elements of the same view, but removes
-// consecutive duplicates inside the blocks and across block boundaries.
-template <typename SortedBlockView,
-          typename BlockType = ql::ranges::range_value_t<SortedBlockView>,
-          typename ValueType = ql::ranges::range_value_t<BlockType>>
-InputRangeTypeErased<BlockType> uniqueBlockView(SortedBlockView view) {
-  struct UniqueBlockViewFromGet : InputRangeFromGet<BlockType> {
-    SortedBlockView view_;
-
-    decltype(ql::views::filter(view_,
-                               std::not_fn(ql::ranges::empty))) nonEmptyView_;
-    decltype(ql::ranges::begin(nonEmptyView_)) iter_;
-
-    std::optional<ValueType> lastValueFromPreviousBlock_{std::nullopt};
-    size_t numInputs_{0};
-    size_t numUnique_{0};
-
-    explicit UniqueBlockViewFromGet(SortedBlockView view)
-        : view_{std::move(view)},
-          nonEmptyView_(
-              ql::views::filter(view_, std::not_fn(ql::ranges::empty))),
-          iter_{ql::ranges::begin(nonEmptyView_)} {}
-
-    std::optional<BlockType> get() override {
-      if (iter_ == ql::ranges::end(nonEmptyView_)) {
-        AD_LOG_INFO << "Number of inputs to `uniqueView`: " << numInputs_
-                    << '\n';
-        AD_LOG_INFO << "Number of unique elements: " << numUnique_ << std::endl;
-        return std::nullopt;
-      }
-
-      auto block = std::move(*iter_);
-      ++iter_;
-      numInputs_ += block.size();
-      auto beg = lastValueFromPreviousBlock_
-                     ? ql::ranges::find_if(
-                           block, [&p = lastValueFromPreviousBlock_.value()](
-                                      const auto& el) { return el != p; })
-                     : block.begin();
-      lastValueFromPreviousBlock_ = block.back();
-      auto it = std::unique(beg, block.end());
-      block.erase(it, block.end());
-      block.erase(block.begin(), beg);
-      numUnique_ += block.size();
-      return block;
-    }
-  };
-  return InputRangeTypeErased{
-      std::make_unique<UniqueBlockViewFromGet>(std::move(view))};
-}
 
 // Like `OwningView` above, but the const overloads to `begin()` and `end()` do
 // not exist. This is currently used in the `CompressedExternalIdTable.h`, where
@@ -208,14 +159,25 @@ using all_t = decltype(allView(std::declval<Range>()));
 // view is destroyed, or the iteration reaches `end`, whichever happens first,
 // the given `callback` is invoked.
 CPP_template(typename V, typename F)(
-    requires ql::ranges::input_range<V> CPP_and ql::ranges::view<V>&&
-        ql::concepts::invocable<F&>) class CallbackOnEndView
+    requires ql::ranges::input_range<V> && ql::ranges::view<V> &&
+    ql::concepts::invocable<F&>)
+class CallbackOnEndView
     : public ql::ranges::view_interface<CallbackOnEndView<V, F>> {
  private:
   V base_;
-  F callback_;
+  ::ranges::semiregular_box_t<F> callback_;
   // Don't invoke the callback if the view was moved from.
   ad_utility::ResetWhenMoved<bool, true> called_ = false;
+
+  // The `callback_` might be called from the destructor, so we have to make
+  // sure the exceptions from the callback don't terminate the program. We use
+  // the `ThrowInDestructorIfSafe` mechanism, which ignores exceptions that
+  // would terminate the program because other exceptions are in flight during
+  // stack unwinding.
+  static constexpr bool isNoexcept = std::is_nothrow_invocable_v<F>;
+  using ThrowIfSafe =
+      std::conditional_t<isNoexcept, std::monostate, ThrowInDestructorIfSafe>;
+  [[no_unique_address]] ThrowIfSafe throwIfSafe_;
 
   // Invoke the `callback` iff it hasn't been invoked yet.
   void maybeInvoke() {
@@ -267,11 +229,36 @@ CPP_template(typename V, typename F)(
   CallbackOnEndView& operator=(const CallbackOnEndView&) = delete;
 
   CallbackOnEndView(CallbackOnEndView&&) = default;
-  CallbackOnEndView& operator=(CallbackOnEndView&&) = default;
+  // Invoke the callback of the overwritten view (if not yet invoked).
+  CallbackOnEndView& operator=(CallbackOnEndView&& other) noexcept(
+      isNoexcept && std::is_nothrow_move_assignable_v<V> &&
+      std::is_nothrow_move_assignable_v<::ranges::semiregular_box_t<F>>) {
+    if (this != &other) {
+      maybeInvoke();
+      base_ = std::move(other.base_);
+      callback_ = std::move(other.callback_);
+      called_ = std::move(other.called_);
+    }
+    return *this;
+  }
 
-  ~CallbackOnEndView() { maybeInvoke(); }
+  ~CallbackOnEndView() noexcept(isNoexcept) {
+    if constexpr (isNoexcept) {
+      maybeInvoke();
+    } else {
+      throwIfSafe_([this]() { maybeInvoke(); });
+    }
+  }
 
-  auto begin() { return Iterator{ql::ranges::begin(base_), this}; }
+  auto begin() {
+    auto it = ql::ranges::begin(base_);
+    // For an empty range the iteration ends right away, without any call to
+    // `operator++` of the `Iterator`.
+    if (it == ql::ranges::end(base_)) {
+      maybeInvoke();
+    }
+    return Iterator{std::move(it), this};
+  }
 
   auto end() { return ql::ranges::end(base_); }
 };
@@ -285,8 +272,9 @@ CallbackOnEndView(R&&, F) -> CallbackOnEndView<all_t<R>, F>;
 // rvalue references via `std::move`. It is implemented via
 // `ql::make_move_iterator`.
 CPP_template(typename UnderlyingRange)(
-    requires ql::ranges::view<UnderlyingRange> CPP_and
-        ql::ranges::input_range<UnderlyingRange>) class RvalueView
+    requires ql::ranges::view<UnderlyingRange> &&
+    ql::ranges::input_range<UnderlyingRange>)
+class RvalueView
     : public ql::ranges::view_interface<RvalueView<UnderlyingRange>> {
  private:
   UnderlyingRange underlyingRange_;
@@ -341,8 +329,9 @@ CPP_template(typename UnderlyingRange)(
     return ql::ranges::size(underlyingRange_);
   }
 
-  CPP_member constexpr auto size() const -> CPP_ret(size_t)(
-      requires ql::ranges::sized_range<const UnderlyingRange>) {
+  CPP_member constexpr auto size() const
+      -> CPP_ret(size_t)(
+          requires ql::ranges::sized_range<const UnderlyingRange>) {
     return ql::ranges::size(underlyingRange_);
   }
 };
@@ -357,9 +346,9 @@ RvalueView(Range&&) -> RvalueView<all_t<Range>>;
 // fulfill the predicate anymore. This is technically undefined behavior, but
 // works in practice if the filter_view is treated as an `input_range`.
 // In C++26 this will become obsolete by `std::views::to_input`.
-CPP_template(typename V)(requires ql::ranges::view<V> CPP_and
-                             ql::ranges::input_range<V>) class ForceInputView
-    : public ql::ranges::view_interface<ForceInputView<V>> {
+CPP_template(typename V)(requires ql::ranges::view<V> &&
+                               ql::ranges::input_range<V>)
+class ForceInputView : public ql::ranges::view_interface<ForceInputView<V>> {
  private:
   V base_;
   bool beginWasCalled_ = false;
@@ -447,7 +436,7 @@ CPP_template(typename V)(requires ql::ranges::view<V> CPP_and
 
 // Deduction guides
 CPP_template(typename Range)(requires ql::ranges::input_range<Range>)
-    ForceInputView(Range&&) -> ForceInputView<all_t<Range>>;
+ForceInputView(Range&&) -> ForceInputView<all_t<Range>>;
 
 namespace detail {
 // The implementation of `bufferedAsyncView` (see below). It yields its result
@@ -479,7 +468,7 @@ struct BufferedAsyncView : InputRangeMixin<BufferedAsyncView<View>> {
       ++i;
     }
     return buffer;
-  };
+  }
 
   void start() {
     it_ = view_.begin();
@@ -509,7 +498,7 @@ struct BufferedAsyncView : InputRangeMixin<BufferedAsyncView<View>> {
 template <typename View>
 auto bufferedAsyncView(View view, uint64_t blockSize) {
   return ql::views::join(
-      allView(detail::BufferedAsyncView<View>{std::move(view), blockSize}));
+      detail::BufferedAsyncView<View>{std::move(view), blockSize});
 }
 
 // Returns a view that contains all the values in `[0, upperBound)`, similar to
@@ -518,8 +507,8 @@ auto bufferedAsyncView(View view, uint64_t blockSize) {
 // `ql::views::iota(0, size_t(INT_MAX) + 1)` leads to undefined behavior
 // because of an integer overflow, but `ad_utility::integerRange(size_t(INT_MAX)
 // + 1)` is perfectly safe and behaves as expected.
-CPP_template(typename Int)(requires ql::concepts::unsigned_integral<
-                           Int>) auto integerRange(Int upperBound) {
+CPP_template(typename Int)(requires ql::concepts::unsigned_integral<Int>)
+auto integerRange(Int upperBound) {
   return ql::views::iota(Int{0}, upperBound);
 }
 

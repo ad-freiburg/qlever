@@ -15,6 +15,7 @@
 #include "backports/functional.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "util/ContainersWithAllocator.h"
 
 using TreeAndCol = std::pair<std::shared_ptr<QueryExecutionTree>, size_t>;
 struct TransitivePathSide {
@@ -51,13 +52,18 @@ struct TransitivePathSide {
     return std::move(os).str();
   }
 
+  std::optional<ColumnIndex> getJoinColumnIfPresent() const {
+    return isBoundVariable() ? treeAndCol_->second
+                             : std::optional<ColumnIndex>();
+  }
+
   bool isSortedOnInputCol() const {
     if (!treeAndCol_.has_value()) {
       return false;
     }
 
     auto [tree, col] = treeAndCol_.value();
-    const std::vector<ColumnIndex>& sortedOn =
+    const qlm::vector<ColumnIndex>& sortedOn =
         tree->getRootOperation()->getResultSortedOn();
 
     // If the column contains undef values, we can't guarantee the output order.
@@ -70,8 +76,18 @@ struct TransitivePathSide {
   TransitivePathSide clone() const {
     TransitivePathSide copy = *this;
     if (copy.treeAndCol_.has_value()) {
-      copy.treeAndCol_.value().first = copy.treeAndCol_.value().first->clone();
+      copy.treeAndCol_.value().first = treeAndCol_.value().first->clone();
     }
+    return copy;
+  }
+
+  // Overload of `clone()`, but instead of creating a new tree, use a given
+  // one to slot in. Requires side to be bound.
+  TransitivePathSide clone(
+      std::shared_ptr<QueryExecutionTree> foreignTree) const {
+    AD_CORRECTNESS_CHECK(isBoundVariable());
+    TransitivePathSide copy = *this;
+    copy.treeAndCol_->first = std::move(foreignTree);
     return copy;
   }
 };
@@ -137,7 +153,7 @@ class TransitivePathBase : public Operation {
   size_t maxDist_;
   VariableToColumnMap variableColumns_;
   // Indicate that the variable is only bound because the path is empty, not
-  // because `bindLeftOrRightSide` was called. This means that it is bound to a
+  // because `bindSides` was called. This means that it is bound to a
   // full scan of all subjects and objects in the knowledge graph, but can be
   // re-bound to something cheaper later if the query permits it.
   bool boundVariableIsForEmptyPath_ = false;
@@ -153,6 +169,11 @@ class TransitivePathBase : public Operation {
   // form `?x wdt:P31 ?g . GRAPH ?g { ?g wdt:P279* ?y }`.
   static const Variable internalGraphHelper_;
 
+  // Set the tree and sides of a clone of one of the implemented types of
+  // transitive paths (`TransitivePathHashMap` or `TransitivePathBinSearch`).
+  // Unites shared logic from their `cloneImpl` members.
+  void setTreeAndChildrenToClone(TransitivePathBase& copy) const;
+
  public:
   TransitivePathBase(QueryExecutionContext* qec,
                      std::shared_ptr<QueryExecutionTree> child,
@@ -162,25 +183,16 @@ class TransitivePathBase : public Operation {
 
   ~TransitivePathBase() override = 0;
 
-  /**
-   * Returns a new TransitivePath operation that uses the fact that leftop
-   * generates all possible values for the left side of the paths. If the
-   * results of leftop is smaller than all possible values this will result in a
-   * faster transitive path operation (as the transitive paths has to be
-   * computed for fewer elements).
-   */
-  std::shared_ptr<TransitivePathBase> bindLeftSide(
-      std::shared_ptr<QueryExecutionTree> leftop, size_t inputCol) const;
-
-  /**
-   * Returns a new TransitivePath operation that uses the fact that rightop
-   * generates all possible values for the right side of the paths. If the
-   * results of rightop is smaller than all possible values this will result in
-   * a faster transitive path operation (as the transitive paths has to be
-   * computed for fewer elements).
-   */
-  std::shared_ptr<TransitivePathBase> bindRightSide(
-      std::shared_ptr<QueryExecutionTree> rightop, size_t inputCol) const;
+  // Return a new transitive path `Operation` that uses the fact that either
+  // the left, right or both input columns (each given by their index) generate
+  // all possible values of their corresponding side. If they are
+  // `std::nullopt`, this side is not bound. This may result in a faster
+  // transitive path operation if the amount of those values is smaller than all
+  // possible values (as the transitive path has to be computed for fewer
+  // elements).
+  std::shared_ptr<TransitivePathBase> bindSides(
+      std::shared_ptr<QueryExecutionTree> op, std::optional<size_t> leftCol,
+      std::optional<size_t> rightCol = std::nullopt) const;
 
   bool isBoundOrId() const;
 
@@ -200,10 +212,10 @@ class TransitivePathBase : public Operation {
    * start and where it should end. The start and target side are chosen by
    * the following criteria:
    *
-   * 1. If a side is bound, then this side will be the start side.
-   * 2. If a side is an id, then this side will be the start side.
-   * 3. If both sides are variables, the left side is chosen as start
-   * (arbitrarily).
+   * 1. If one side is bound, then this side will be the start side.
+   * 2. If one side is an id, then this side will be the start side.
+   * 3. If both sides are variables and optionally bound, the left side is
+   * chosen as start (arbitrarily).
    *
    * @return std::pair<TransitivePathSide&, TransitivePathSide&> The first entry
    * of the pair is the start side, the second entry is the target side.
@@ -241,18 +253,20 @@ class TransitivePathBase : public Operation {
   std::optional<ColumnIndex> getActualGraphColumnIndex(
       const std::shared_ptr<QueryExecutionTree>& tree) const;
 
-  // Return how many columns would be joined given the passed `tree`. Return 1
-  // if `getActualGraphColumnIndex(tree)` is `std::nullopt` or the returned
-  // index is equal to `joinColumn`. Return 2 otherwise.
-  size_t numJoinColumnsWith(const std::shared_ptr<QueryExecutionTree>& tree,
-                            ColumnIndex joinColumn) const;
+  // Return the indices of the payload columns of `op`, that is, all columns
+  // except the bound side columns `leftCol` and `rightCol` and the graph
+  // column, in ascending order.
+  std::vector<ColumnIndex> computePayloadColumns(
+      const std::shared_ptr<QueryExecutionTree>& op,
+      const std::optional<ColumnIndex>& leftCol,
+      const std::optional<ColumnIndex>& rightCol) const;
 
  public:
   std::string getDescriptor() const override;
 
   size_t getResultWidth() const override;
 
-  std::vector<ColumnIndex> resultSortedOn() const override;
+  qlm::vector<ColumnIndex> resultSortedOn() const override;
 
   bool knownEmptyResult() override;
 
@@ -261,52 +275,58 @@ class TransitivePathBase : public Operation {
  private:
   uint64_t getSizeEstimateBeforeLimit() override;
 
+  // Estimates from which the size, cost and multiplicity estimates are
+  // derived, see `computeEstimates` for details.
+  struct Estimates {
+    double size_;
+    // The number of graph nodes that are visited when computing the hull.
+    double numVisitedNodes_;
+    // The average number of result rows per row of the start side.
+    double rowsPerStartRow_;
+    double startMultiplicity_;
+    double targetMultiplicity_;
+  };
+  Estimates computeEstimates();
+
   template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
   Result::Generator fillTableWithHullImpl(NodeGenerator hull,
                                           size_t startSideCol,
                                           size_t targetSideCol,
                                           bool yieldOnce) const;
 
-  // Create two instances of `IndexScan` that perform full scans using the
-  // pattern `?variable ?a ?b` and `?c ?d ?variable`, respectively and properly
-  // use `activeGraphs` and the optional `graphVariable`.
-  static std::array<std::shared_ptr<QueryExecutionTree>, 2> makeIndexScanPair(
-      QueryExecutionContext* qec, Graphs activeGraphs, const Variable& variable,
-      const std::optional<Variable>& graphVariable);
-
-  // Return an execution tree, that "joins" the given `tripleComponent` with all
-  // the subjects or objects in the knowledge graph, so if the graph does not
-  // contain this value it is filtered out.
-  static std::shared_ptr<QueryExecutionTree> joinWithIndexScan(
-      QueryExecutionContext* qec, Graphs activeGraphs,
+  // Return an execution tree that yields the given `tripleComponent` as the
+  // single starting point of the empty path. If a `graphVariable` is set, the
+  // value is combined with all the graphs of `activeGraphs` via a cartesian
+  // product, because the implementations require a graph id for every starting
+  // point.
+  static std::shared_ptr<QueryExecutionTree> makeStartingPoint(
+      QueryExecutionContext* qec, const Graphs& activeGraphs,
       const std::optional<Variable>& graphVariable,
       const TripleComponent& tripleComponent);
-
-  // Return an execution tree that represents one side of an empty path. This is
-  // used as a starting point for evaluating the empty path and returns a single
-  // column containung all distinct entities the appear either as a subject or
-  // object in the knowledge graph. The optional parameter `variable` can be set
-  // to explicitly define the name of the column this produces (useful for
-  // subsequent joins), by default it is `?internal_property_path_variable_x`.
-  static std::shared_ptr<QueryExecutionTree> makeEmptyPathSide(
-      QueryExecutionContext* qec, Graphs activeGraphs,
-      const std::optional<Variable>& graphVariable,
-      std::optional<Variable> variable = std::nullopt);
 
   // Make sure that all values in `inputCol` returned by `leftOrRightOp` can be
   // found in the knowledge graph. In many cases we can statically guarantee
   // this and just return the `leftOrRightOp` unchanged, in all other cases the
-  // result will be a join with the result of `makeEmptyPathSide` above.
+  // result will be an `EmptyPath` operation that performs the existence check
+  // (and adds the graph column if required).
   std::shared_ptr<QueryExecutionTree> matchWithKnowledgeGraph(
       size_t& inputCol,
       std::shared_ptr<QueryExecutionTree> leftOrRightOp) const;
+
+  // Add the variables of the `payloadCols` of `op` (see
+  // `computePayloadColumns`) to the variable columns of `plan`, after the two
+  // side columns and in the order of `op`. Called from `bindSides`.
+  static void setPayloadColumnIndices(
+      const std::shared_ptr<QueryExecutionTree>& op,
+      const std::vector<ColumnIndex>& payloadCols,
+      const std::shared_ptr<TransitivePathBase>& plan);
 
  public:
   size_t getCostEstimate() override;
 
   /**
    * @brief Make a concrete TransitivePath object using the given parameters.
-   * The concrete object will either be TransitivePathFallback or
+   * The concrete object will either be TransitivePathHashMap or
    * TransitivePathBinSearch, depending on the useBinSearch flag.
    *
    * @param qec QueryExecutionContext for the TransitivePath Operation
@@ -318,7 +338,7 @@ class TransitivePathBase : public Operation {
    * @param maxDist Maximum distance a resulting path may have (distance =
    * number of nodes)
    * @param useBinSearch If true, the returned object will be a
-   * TransitivePathBinSearch. Else it will be a TransitivePathFallback
+   * TransitivePathBinSearch. Else it will be a TransitivePathHashMap
    * @param activeGraphs Contains the graphs that are active in the current
    * context.
    * @param graphVariable Set a graph variable when inside a `GRAPH ?g { ... }`.
@@ -331,7 +351,7 @@ class TransitivePathBase : public Operation {
 
   /**
    * @brief Make a concrete TransitivePath object using the given parameters.
-   * The concrete object will either be TransitivePathFallback or
+   * The concrete object will either be TransitivePathHashMap or
    * TransitivePathBinSearch, depending on the runtime constant "use-binsearch".
    *
    * @param qec QueryExecutionContext for the TransitivePath Operation
@@ -352,18 +372,14 @@ class TransitivePathBase : public Operation {
       size_t maxDist, Graphs activeGraphs = Graphs::All(),
       const std::optional<Variable>& graphVariable = std::nullopt);
 
-  std::vector<QueryExecutionTree*> getChildren() override;
+ private:
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override;
 
+ public:
   VariableToColumnMap computeVariableToColumnMap() const override;
 
   bool columnOriginatesFromGraphOrUndef(
       const Variable& variable) const override;
-
-  // The internal implementation of `bindLeftSide` and `bindRightSide` which
-  // share a lot of code.
-  std::shared_ptr<TransitivePathBase> bindLeftOrRightSide(
-      std::shared_ptr<QueryExecutionTree> leftOrRightOp, size_t inputCol,
-      bool isLeft) const;
 
   // Return a set of subtrees that can be used alternatively when the left or
   // right side is bound. This is used by the `TransitivePathBinSearch` class,

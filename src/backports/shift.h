@@ -29,7 +29,8 @@ namespace ql {
 // at position first + n + i to position first + i.
 ///
 CPP_template(typename ForwardIt)(
-    requires ql::concepts::forward_iterator<ForwardIt>) constexpr ForwardIt
+    requires ql::concepts::forward_iterator<ForwardIt>)
+constexpr ForwardIt
     shift_left(ForwardIt first, ForwardIt last,
                typename std::iterator_traits<ForwardIt>::difference_type n) {
   assert(n >= 0);
@@ -53,7 +54,8 @@ CPP_template(typename ForwardIt)(
 // at position first + i to position first + n + i.
 ///
 CPP_template(typename ForwardIt)(
-    requires ql::concepts::forward_iterator<ForwardIt>) constexpr ForwardIt
+    requires ql::concepts::forward_iterator<ForwardIt>)
+constexpr ForwardIt
     shift_right(ForwardIt first, ForwardIt last,
                 typename std::iterator_traits<ForwardIt>::difference_type n) {
   assert(n >= 0);

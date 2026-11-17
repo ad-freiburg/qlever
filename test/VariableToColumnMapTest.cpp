@@ -2,12 +2,17 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
+#include <array>
+#include <vector>
+
 #include "./printers/VariablePrinters.h"
 #include "./printers/VariableToColumnMapPrinters.h"
 #include "engine/VariableToColumnMap.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "util/Serializer/ByteBufferSerializer.h"
+#include "util/serializer/ByteBufferSerializer.h"
+
+using JoinColumns = std::vector<std::array<ColumnIndex, 2>>;
 
 class VariableToColumnMapTest : public ::testing::TestWithParam<bool> {};
 
@@ -25,8 +30,9 @@ TEST_P(VariableToColumnMapTest, gapsInRightCols) {
   rightCols[V{"?a"}] = makePossiblyUndefinedColumn(2);
   rightCols[V{"?b"}] = makeAlwaysDefinedColumn(5);
 
-  auto joinCols = makeVarToColMapForJoinOperation(
-      leftCols, rightCols, {{0, 1}}, BinOpType::Join, 2, keepJoinCols);
+  auto joinCols =
+      makeVarToColMapForJoinOperation(leftCols, rightCols, JoinColumns{{0, 1}},
+                                      BinOpType::Join, 2, keepJoinCols);
   VariableToColumnMap expected;
   if (keepJoinCols) {
     expected[V{"?x"}] = makeAlwaysDefinedColumn(0);
@@ -52,8 +58,9 @@ TEST_P(VariableToColumnMapTest, gapsInLeftCols) {
   rightCols[V{"?x"}] = makePossiblyUndefinedColumn(0);
   rightCols[V{"?a"}] = makeAlwaysDefinedColumn(1);
 
-  auto joinCols = makeVarToColMapForJoinOperation(
-      leftCols, rightCols, {{2, 0}}, BinOpType::Join, 4, keepJoinCols);
+  auto joinCols =
+      makeVarToColMapForJoinOperation(leftCols, rightCols, JoinColumns{{2, 0}},
+                                      BinOpType::Join, 4, keepJoinCols);
   VariableToColumnMap expected;
   if (keepJoinCols) {
     expected[V{"?x"}] = makeAlwaysDefinedColumn(2);
@@ -80,7 +87,8 @@ TEST_P(VariableToColumnMapTest, mixedJoinAndNonJoinColumns) {
   rightCols[V{"?c"}] = makeAlwaysDefinedColumn(2);
 
   auto joinCols = makeVarToColMapForJoinOperation(
-      leftCols, rightCols, {{2, 0}, {0, 1}}, BinOpType::Join, 4, keepJoinCols);
+      leftCols, rightCols, JoinColumns{{2, 0}, {0, 1}}, BinOpType::Join, 4,
+      keepJoinCols);
   VariableToColumnMap expected;
   if (keepJoinCols) {
     expected[V{"?y"}] = makeAlwaysDefinedColumn(0);
@@ -114,8 +122,8 @@ TEST_P(VariableToColumnMapTest, undefinedJoinColumn) {
   rightCols[V{"?z"}] = makePossiblyUndefinedColumn(1);
 
   auto joinCols = makeVarToColMapForJoinOperation(
-      leftCols, rightCols, {{0, 0}, {1, 2}, {2, 1}}, BinOpType::Join, 3,
-      keepJoinCols);
+      leftCols, rightCols, JoinColumns{{0, 0}, {1, 2}, {2, 1}}, BinOpType::Join,
+      3, keepJoinCols);
   VariableToColumnMap expected;
   if (keepJoinCols) {
     expected[V{"?x"}] = makeAlwaysDefinedColumn(0);
@@ -139,9 +147,9 @@ TEST_P(VariableToColumnMapTest, optionalJoin) {
   rightCols[V{"?y"}] = makeAlwaysDefinedColumn(2);
   rightCols[V{"?a"}] = makeAlwaysDefinedColumn(1);
 
-  auto joinCols =
-      makeVarToColMapForJoinOperation(leftCols, rightCols, {{0, 0}, {1, 2}},
-                                      BinOpType::OptionalJoin, 2, keepJoinCols);
+  auto joinCols = makeVarToColMapForJoinOperation(
+      leftCols, rightCols, JoinColumns{{0, 0}, {1, 2}}, BinOpType::OptionalJoin,
+      2, keepJoinCols);
   VariableToColumnMap expected;
   if (keepJoinCols) {
     expected[V{"?x"}] = makeAlwaysDefinedColumn(0);
@@ -173,4 +181,49 @@ TEST(ColumnIndexAndTypeInfo, serialization) {
   reader | c4;
   EXPECT_EQ(c1, c3);
   EXPECT_EQ(c2, c4);
+}
+
+// _____________________________________________________________________________
+TEST(VariableToColumnMap, serializeDeterministically) {
+  using V = Variable;
+  using namespace ad_utility::serialization;
+  VariableToColumnMap map;
+  map[V{"?x"}] = makeAlwaysDefinedColumn(0);
+  map[V{"?a"}] = makePossiblyUndefinedColumn(1);
+  map[V{"?zebra"}] = makeAlwaysDefinedColumn(2);
+
+  ByteBufferWriteSerializer writer;
+  serializeDeterministically(writer, map);
+
+  // The map is read back with exactly the same contents.
+  ByteBufferReadSerializer reader{writer.data()};
+  VariableToColumnMap readMap;
+  // The previous contents of the map are overwritten, not added to.
+  readMap[V{"?notInTheSerializedMap"}] = makeAlwaysDefinedColumn(17);
+  serializeDeterministically(reader, readMap);
+  EXPECT_THAT(readMap, ::testing::UnorderedElementsAreArray(map));
+}
+
+// _____________________________________________________________________________
+TEST(VariableToColumnMap,
+     serializeDeterministicallyIsIndependentOfInsertionOrder) {
+  using V = Variable;
+  using namespace ad_utility::serialization;
+  // The same entries, but inserted in the opposite order, such that the
+  // iteration order of the underlying hash map may differ.
+  VariableToColumnMap map1;
+  map1[V{"?x"}] = makeAlwaysDefinedColumn(0);
+  map1[V{"?a"}] = makePossiblyUndefinedColumn(1);
+  map1[V{"?zebra"}] = makeAlwaysDefinedColumn(2);
+  VariableToColumnMap map2;
+  map2[V{"?zebra"}] = makeAlwaysDefinedColumn(2);
+  map2[V{"?a"}] = makePossiblyUndefinedColumn(1);
+  map2[V{"?x"}] = makeAlwaysDefinedColumn(0);
+
+  auto serialize = [](const VariableToColumnMap& map) {
+    ByteBufferWriteSerializer writer;
+    serializeDeterministically(writer, map);
+    return std::move(writer).data();
+  };
+  EXPECT_EQ(serialize(map1), serialize(map2));
 }

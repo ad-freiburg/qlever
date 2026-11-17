@@ -12,7 +12,6 @@
 
 #include "./util/GTestHelpers.h"
 #include "util/InputRangeUtils.h"
-#include "util/Random.h"
 #include "util/ResetWhenMoved.h"
 #include "util/ValueIdentity.h"
 #include "util/Views.h"
@@ -31,71 +30,19 @@ TEST(Views, BufferedAsyncView) {
   };
 
   uint64_t numElements = 1000;
-  const std::vector<uint64_t> ints = [numElements]() {
-    std::vector<uint64_t> ints;
-    ints.reserve(numElements);
-    for (uint64_t i = 0; i < numElements; ++i) {
-      ints.push_back(numElements - i);
-    }
-    return ints;
-  }();
+  const auto ints = ad_utility::integerRange(numElements) |
+                    ql::views::transform(
+                        [numElements](uint64_t i) { return numElements - i; }) |
+                    ::ranges::to_vector;
 
-  const std::vector<std::string> strings = [numElements]() {
-    std::vector<std::string> strings;
-    strings.reserve(numElements);
-    for (uint64_t i = 0; i < numElements; ++i) {
-      strings.push_back(std::to_string(numElements - i));
-    }
-    return strings;
-  }();
+  const auto strings = ad_utility::integerRange(numElements) |
+                       ql::views::transform([numElements](uint64_t i) {
+                         return std::to_string(numElements - i);
+                       }) |
+                       ::ranges::to_vector;
 
   testWithVector(ints);
   testWithVector(strings);
-}
-
-TEST(Views, uniqueBlockView) {
-  const uint64_t numInts = 50'000;
-  std::vector<int> ints;
-
-  ad_utility::SlowRandomIntGenerator<int> r(0, 1000);
-  for (size_t i = 0; i < numInts; ++i) {
-    ints.push_back(r());
-  }
-
-  std::vector<int> intsWithDuplicates;
-  intsWithDuplicates.reserve(3 * numInts);
-  for (size_t i = 0; i < 3; ++i) {
-    for (auto num : ints) {
-      intsWithDuplicates.push_back(num);
-    }
-  }
-
-  std::sort(intsWithDuplicates.begin(), intsWithDuplicates.end());
-
-  ad_utility::SlowRandomIntGenerator<int> vecSizeGenerator(2, 200);
-
-  size_t i = 0;
-  std::vector<std::vector<int>> inputs;
-  while (i < intsWithDuplicates.size()) {
-    auto vecSize = vecSizeGenerator();
-    size_t nextI = std::min(i + vecSize, intsWithDuplicates.size());
-    inputs.emplace_back(intsWithDuplicates.begin() + i,
-                        intsWithDuplicates.begin() + nextI);
-    i = nextI;
-  }
-
-  auto unique = ql::views::join(
-      ad_utility::OwningView{ad_utility::uniqueBlockView(inputs)});
-  std::vector<int> result;
-  for (const auto& element : unique) {
-    result.push_back(element);
-  }
-  std::sort(ints.begin(), ints.end());
-  // Erase "accidentally" unique duplicates from the random initialization.
-  auto it = std::unique(ints.begin(), ints.end());
-  ints.erase(it, ints.end());
-  ASSERT_EQ(ints.size(), result.size());
-  ASSERT_EQ(ints, result);
 }
 
 TEST(Views, owningView) {
@@ -170,7 +117,7 @@ TEST(Views, CallbackOnEndView) {
   EXPECT_EQ(numCalls, 1);
   {
     auto view = CallbackOnEndView{ad_utility::integerRange(10u), callback};
-    for ([[maybe_unused]] size_t i : integerRange(5ul)) {
+    for ([[maybe_unused]] auto i : integerRange(5u)) {
       EXPECT_EQ(numCalls, 1u);
     }
     // Callback not invoked, because because end was not reached yet.
@@ -191,7 +138,115 @@ TEST(Views, CallbackOnEndView) {
   EXPECT_EQ(numCalls, 3);
 }
 
+// For an empty range, the callback is invoked as soon as the iteration starts
+// (and ends), not only during the destruction of the view.
+TEST(Views, CallbackOnEndViewEmptyRange) {
+  using namespace ad_utility;
+  size_t numCalls{0};
+  {
+    auto view = CallbackOnEndView{ad_utility::integerRange(0u),
+                                  [&numCalls]() { ++numCalls; }};
+    EXPECT_EQ(numCalls, 0u);
+    EXPECT_TRUE(view.begin() == view.end());
+    EXPECT_EQ(numCalls, 1u);
+  }
+  // Callback not invoked again during destruction.
+  EXPECT_EQ(numCalls, 1u);
+}
+
+// Overwriting a view invokes its callback, unless it was already invoked.
+TEST(Views, CallbackOnEndViewMoveAssignment) {
+  using namespace ad_utility;
+  std::vector<int> calls;
+  auto makeView = [&calls](int id) {
+    return CallbackOnEndView{integerRange(10u),
+                             [&calls, id]() { calls.push_back(id); }};
+  };
+  {
+    auto a = makeView(1);
+    auto b = makeView(2);
+    a = std::move(b);
+    EXPECT_THAT(calls, ::testing::ElementsAre(1));
+
+    // Self-assignment doesn't invoke the callback.
+    auto& alias = a;
+    a = std::move(alias);
+    EXPECT_THAT(calls, ::testing::ElementsAre(1));
+
+    for ([[maybe_unused]] auto i : a) {
+    }
+    EXPECT_THAT(calls, ::testing::ElementsAre(1, 2));
+    // The callback of `a` was already invoked at the end of the iteration.
+    a = makeView(3);
+    EXPECT_THAT(calls, ::testing::ElementsAre(1, 2));
+  }
+  EXPECT_THAT(calls, ::testing::ElementsAre(1, 2, 3));
+}
+
+TEST(Views, CallbackOnEndViewConcepts) {
+  [[maybe_unused]] auto nonthrowing = [](auto&&...) noexcept {};
+  using V =
+      ad_utility::CallbackOnEndView<ql::ranges::ref_view<std::vector<int>>,
+                                    decltype(nonthrowing)>;
+  static_assert(ql::ranges::input_range<V>);
+  static_assert(!ql::ranges::forward_range<V>);
+
+  [[maybe_unused]] auto throwing = [](auto&&...) {};
+  using V2 =
+      ad_utility::CallbackOnEndView<ql::ranges::ref_view<std::vector<int>>,
+                                    decltype(throwing)>;
+  static_assert(ql::ranges::input_range<V2>);
+  static_assert(!ql::ranges::forward_range<V2>);
+
+  // V2 has a potentially throwing destructor, so it doesn't fulfill the `view`
+  // concept.
+  static_assert(!ql::ranges::view<V2>);
+}
+
 #endif
+
+// Add the behavior of `CallbackOnEndView` when the callback is invoked in the
+// constructor and might throw.
+template <typename T>
+class CallbackOnEndViewExceptionsInDestructor : public ::testing::Test {};
+
+using IsNoexceptTypes = ::testing::Types<std::integral_constant<bool, true>,
+                                         std::integral_constant<bool, false>>;
+TYPED_TEST_SUITE(CallbackOnEndViewExceptionsInDestructor, IsNoexceptTypes);
+
+TYPED_TEST(CallbackOnEndViewExceptionsInDestructor, CallbackBehavior) {
+  constexpr bool isNoexcept = TypeParam::value;
+  struct TestException : public std::exception {};
+
+  auto callback = []() noexcept(isNoexcept) {
+    if constexpr (!isNoexcept) {
+      throw TestException{};
+    }
+  };
+
+  auto makeView = [&]() {
+    return ad_utility::CallbackOnEndView{ad_utility::integerRange(10u),
+                                         callback};
+  };
+  using V = decltype(makeView());
+
+  ASSERT_EQ(std::is_nothrow_destructible_v<V>, isNoexcept);
+  auto makeAndDestroy = [&]() {
+    auto v = makeView();
+    // Destructor invoked, callback should not throw.
+  };
+  auto makeAndThrowOtherException = [&]() {
+    auto v = makeView();
+    throw std::runtime_error{"ups"};
+  };
+
+  if constexpr (isNoexcept) {
+    EXPECT_NO_THROW(makeAndDestroy());
+  } else {
+    EXPECT_THROW(makeAndDestroy(), TestException);
+  }
+  EXPECT_THROW(makeAndThrowOtherException(), std::runtime_error);
+}
 // _____________________________________________________________________________
 TEST(Views, RvalueView) {
   // Initial value is `true` and when being moved from it will be `false`.

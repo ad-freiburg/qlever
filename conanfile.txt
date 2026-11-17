@@ -1,5 +1,5 @@
 [requires]
-boost/1.81.0
+boost/1.83.0
 icu/76.1
 openssl/3.1.1
 zstd/1.5.5

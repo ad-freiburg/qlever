@@ -8,8 +8,8 @@
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "engine/CallFixedSize.h"
-#include "engine/Engine.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
+#include "index/IdTableUtils.h"
 
 namespace sparqlExpression {
 
@@ -57,14 +57,14 @@ ExpressionResult CountStarExpression::evaluate(
     ++targetColIdx;
     checkCancellation();
   }
-  ctx->_qec.getSortPerformanceEstimator().throwIfEstimateTooLong(
-      table.numRows(), table.numColumns(), ctx->deadline_,
-      "Sort for COUNT(DISTINCT *)");
-  ad_utility::callFixedSizeVi(table.numColumns(), [&table](auto i) {
-    Engine::sort<i>(&table, ql::ranges::lexicographical_compare);
-  });
-  return Id::makeFromInt(
-      static_cast<int64_t>(Engine::countDistinct(table, checkCancellation)));
+  ad_utility::callFixedSizeVi(
+      table.numColumns(),
+      [&table, &sortConfig = ctx->_qec.sortConfig()](auto i) {
+        IdTableUtils::sort<i>(&table, ql::ranges::lexicographical_compare,
+                              sortConfig);
+      });
+  return Id::makeFromInt(static_cast<int64_t>(
+      IdTableUtils::countDistinct(table, checkCancellation)));
 }
 
 // _____________________________________________________________________________

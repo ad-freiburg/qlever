@@ -72,12 +72,15 @@ TEST(LimitOffsetClause, mergeLimitAndOffset) {
   EXPECT_EQ(l, LimitOffsetClause(20, 3));
 
   l.mergeLimitAndOffset({std::nullopt, 4});
-  EXPECT_EQ(l, LimitOffsetClause(20, 7));
+  EXPECT_EQ(l, LimitOffsetClause(16, 7));
 
-  l.mergeLimitAndOffset({10, 8});
-  EXPECT_EQ(l, LimitOffsetClause(10, 15));
+  l.mergeLimitAndOffset({6, 7});
+  EXPECT_EQ(l, LimitOffsetClause(6, 14));
 
   // Make sure everything that's not LIMIT/OFFSET is ignored.
   l.mergeLimitAndOffset({std::nullopt, 0, 100, 200});
-  EXPECT_EQ(l, LimitOffsetClause(10, 15));
+  EXPECT_EQ(l, LimitOffsetClause(6, 14));
+
+  l.mergeLimitAndOffset({std::nullopt, 100});
+  EXPECT_EQ(l, LimitOffsetClause(0, 114));
 }

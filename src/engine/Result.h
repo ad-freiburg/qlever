@@ -12,19 +12,22 @@
 #include <vector>
 
 #include "backports/span.h"
-#include "engine/LocalVocab.h"
 #include "engine/VariableToColumnMap.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
+#include "index/LocalVocab.h"
 #include "parser/data/LimitOffsetClause.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/InputRangeUtils.h"
+#include "util/NoCopyNoMove.h"
 
 // The result of an `Operation`. This is the class QLever uses for all
 // intermediate or final results when processing a SPARQL query. The actual data
-// is either a table and contained in the member `idTable()` or can be consumed
-// through a generator via `idTables()` when it is supposed to be lazily
-// evaluated.
-class Result {
+// is either a table accessible via `idTableView()` or can be consumed through a
+// generator via `idTables()` when it is supposed to be lazily evaluated.
+//
+// A `Result` is move-only to prevent accidental copies of a result table.
+class Result : public ad_utility::NoCopy {
  public:
   using IdTablePtr = std::shared_ptr<const IdTable>;
 
@@ -36,7 +39,16 @@ class Result {
     // See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=103909 for details.
     IdTableVocabPair(IdTable idTable, LocalVocab localVocab)
         : idTable_{std::move(idTable)}, localVocab_{std::move(localVocab)} {}
+
+    // Helper constructor for `IdTables` with a static amount of columns.
+    template <int COLS>
+    IdTableVocabPair(IdTableStatic<COLS> idTable, LocalVocab localVocab)
+        : IdTableVocabPair{std::move(idTable).toDynamic(),
+                           std::move(localVocab)} {}
   };
+
+  // Helper enum to indicate the state of a generator after consumption.
+  enum class GeneratorState { FINISHED, CANCELLED, FAILED };
 
   // The lazy result type that is actually stored. It is type-erased and allows
   // explicit conversion from the `Generator` above.
@@ -65,8 +77,8 @@ class Result {
     explicit GenContainer(LazyResult generator)
         : generator_{std::move(generator)} {}
     CPP_template(typename Range)(
-        requires std::is_constructible_v<
-            LazyResult, Range>) explicit GenContainer(Range range)
+        requires std::is_constructible_v<LazyResult, Range>)
+    explicit GenContainer(Range range)
         : generator_{LazyResult{std::move(range)}} {}
   };
 
@@ -77,11 +89,40 @@ class Result {
   // is useful when the result is still being constructed (because it is
   // mutable), the latter is useful when the result is read from a cache (e.g.
   // the named query cache), because the shared ownership doesn't require a copy
-  // of the result.
-  struct IdTableSharedLocalVocabPair {
-    std::variant<IdTable, std::shared_ptr<const IdTable>> idTableOrPtr_;
-    // The local vocabulary of the result.
+  // of the result. The `view_` member always reflects the current state of
+  // `idTableOrPtr_` and is kept in sync by the constructors and by
+  // `applyLimitOffset()`. This invariant enables callers to take the address of
+  // the view (e.g. for an alias `shared_ptr`) with a stable pointer.
+  // The spans inside `view_` survive moving this object because `IdTable` keeps
+  // its columns in heap-backed storage that the move only re-points to.
+  class IdTableSharedLocalVocabPair {
+    std::variant<IdTable, IdTablePtr, IdTableView<0>> idTableOrPtr_;
     LocalVocabPtr localVocab_;
+    IdTableView<0> view_;
+
+    // Build the view from `idTableOrPtr_`. Used by the constructors and by
+    // `applyLimitOffset()` after the data has been modified.
+    static IdTableView<0> makeView(
+        const std::variant<IdTable, IdTablePtr, IdTableView<0>>& idTableOrPtr);
+
+   public:
+    IdTableSharedLocalVocabPair(IdTable idTable, LocalVocabPtr localVocab);
+    IdTableSharedLocalVocabPair(IdTablePtr idTablePtr,
+                                LocalVocabPtr localVocab);
+    // Construct from a non-owning view. The caller is responsible for ensuring
+    // that the underlying data outlives this object.
+    IdTableSharedLocalVocabPair(IdTableView<0> view, LocalVocabPtr localVocab);
+
+    // The returned reference is stable for the lifetime of this object.
+    // `applyLimitOffset()` refreshes the view in place; copies of the view
+    // value taken before that call should not be reused afterwards.
+    const IdTableView<0>& idTableView() const { return view_; }
+    const LocalVocab& localVocab() const { return *localVocab_; }
+    LocalVocabPtr localVocabPtr() const { return localVocab_; }
+
+    // Resize/replace the internal `IdTable` according to `limitOffset` and
+    // refresh `view_`.
+    void applyLimitOffset(const LimitOffsetClause& limitOffset);
   };
   using Data = std::variant<IdTableSharedLocalVocabPair, GenContainer>;
 
@@ -90,7 +131,7 @@ class Result {
 
   // The column indices by which the result is sorted (primary sort key first).
   // Empty if the result is not sorted on any column.
-  std::vector<ColumnIndex> sortedBy_;
+  qlm::vector<ColumnIndex> sortedBy_;
 
   // Note: If additional members and invariants are added to the class (for
   // example information about the datatypes in each column) make sure that
@@ -135,41 +176,47 @@ class Result {
   // The first overload of the constructor is for local vocabs that are shared
   // with another `Result` via the `getSharedLocalVocab...` methods below.
   // The second overload is for newly created local vocabularies.
-  Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
+  Result(IdTable idTable, qlm::vector<ColumnIndex> sortedBy,
          SharedLocalVocabWrapper localVocab);
-  Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
+  Result(IdTable idTable, qlm::vector<ColumnIndex> sortedBy,
          LocalVocab&& localVocab);
   Result(std::shared_ptr<const IdTable> idTablePtr,
-         std::vector<ColumnIndex> sortedBy, LocalVocab&& localVocab);
-  Result(IdTableVocabPair pair, std::vector<ColumnIndex> sortedBy);
+         qlm::vector<ColumnIndex> sortedBy, LocalVocab&& localVocab);
+
+  // Construct from a non-owning view. The caller is responsible for ensuring
+  // that the underlying data outlives this `Result`.
+  Result(IdTableView<0> view, qlm::vector<ColumnIndex> sortedBy,
+         LocalVocab&& localVocab);
+  Result(IdTableVocabPair pair, qlm::vector<ColumnIndex> sortedBy);
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
-  Result(Generator idTables, std::vector<ColumnIndex> sortedBy);
+  Result(Generator idTables, qlm::vector<ColumnIndex> sortedBy);
 #endif
-  Result(LazyResult idTables, std::vector<ColumnIndex> sortedBy);
-
-  // Prevent accidental copying of a result table.
-  Result(const Result& other) = delete;
-  Result& operator=(const Result& other) = delete;
-
-  // Moving of a result table is OK.
-  Result(Result&& other) = default;
-  Result& operator=(Result&& other) = default;
+  Result(LazyResult idTables, qlm::vector<ColumnIndex> sortedBy);
 
   // Wrap the generator stored in `data_` within a new generator that calls
   // `onNewChunk` every time a new `IdTableVocabPair` is yielded by the original
   // generator and passed this new `IdTableVocabPair` along with microsecond
   // precision timing information on how long it took to compute this new chunk.
   // `onGeneratorFinished` is guaranteed to be called eventually as long as the
-  // generator is consumed at least partially, with `true` if an exception
-  // occurred during consumption or with `false` when the generator is done
-  // processing or abandoned and destroyed.
+  // generator is consumed at least partially, with `GeneratorState::FAILED` if
+  // an exception occurred during consumption, with `GeneratorState::CANCELLED`
+  // if said exception is a cancellation exception or with
+  // `GeneratorState::FINISHED` when the generator is done processing or
+  // abandoned and destroyed. The second argument of `onGeneratorFinished` is
+  // the time spent in the call that exhausted (or failed to advance) the
+  // original generator. It is not part of any chunk, but still has to be
+  // accounted for, because the original generator may do expensive work after
+  // the last chunk (for example, a filter that discards all remaining input).
+  // It is zero if the generator was abandoned before being exhausted, or if
+  // `onNewChunk` threw (the time of that chunk was already passed to it).
   //
   // Throw an `ad_utility::Exception` if the underlying `data_` member holds the
   // wrong variant.
   void runOnNewChunkComputed(
       std::function<void(const IdTableVocabPair&, std::chrono::microseconds)>
           onNewChunk,
-      std::function<void(bool)> onGeneratorFinished);
+      std::function<void(GeneratorState, std::chrono::microseconds)>
+          onGeneratorFinished);
 
   // Wrap the generator stored in `data_` within a new generator that aggregates
   // the entries yielded by the generator into a cacheable `IdTable`. Once
@@ -186,9 +233,20 @@ class Result {
           fitInCache,
       std::function<void(Result)> storeInCache);
 
-  // Const access to the underlying `IdTable`. Throw if this result is not fully
-  // materialized.
-  const IdTable& idTable() const;
+  // Return a non-owning view of the materialized table. Throw if not fully
+  // materialized. The reference is stable for the lifetime of this `Result`;
+  // `applyLimitOffset()` refreshes the view in place, so copies of the view
+  // value taken before that call should not be reused afterwards.
+  const IdTableView<0>& idTableView() const;
+
+  // Return a clone of the materialized table. Throw if not fully materialized.
+  // This operation is potentially expensive as it copies all data, so it calls
+  // `chunkOperation` (e.g. a cancellation check) regularly, see
+  // `IdTable::clone`.
+  template <typename ChunkOperation = ad_utility::Noop>
+  IdTable cloneIdTable(ChunkOperation chunkOperation = {}) const {
+    return idTableView().clone(std::move(chunkOperation));
+  }
 
   // Access to the underlying `IdTable`s. Throw an `ad_utility::Exception`
   // if the underlying `data_` member holds the wrong variant or if the result
@@ -198,8 +256,8 @@ class Result {
   // was destroyed.
   LazyResult idTables() const;
 
-  // Const access to the columns by which the `idTable()` is sorted.
-  const std::vector<ColumnIndex>& sortedBy() const { return sortedBy_; }
+  // Const access to the columns by which the `idTableView()` is sorted.
+  const qlm::vector<ColumnIndex>& sortedBy() const { return sortedBy_; }
 
   // Get the local vocabulary of this result, used for lookup only.
   //
@@ -214,7 +272,7 @@ class Result {
   //
   const LocalVocab& localVocab() const {
     AD_CONTRACT_CHECK(isFullyMaterialized());
-    return *std::get<IdTableSharedLocalVocabPair>(data_).localVocab_;
+    return std::get<IdTableSharedLocalVocabPair>(data_).localVocab();
   }
 
   // Get the local vocab as a shared pointer to const. This can be used if one
@@ -222,7 +280,7 @@ class Result {
   SharedLocalVocabWrapper getSharedLocalVocab() const {
     AD_CONTRACT_CHECK(isFullyMaterialized());
     return SharedLocalVocabWrapper{
-        std::get<IdTableSharedLocalVocabPair>(data_).localVocab_};
+        std::get<IdTableSharedLocalVocabPair>(data_).localVocabPtr()};
   }
 
   // Like `getSharedLocalVocabFrom`, but takes more than one result and merges
@@ -232,10 +290,9 @@ class Result {
 
   // Overload for more than two `Results`
   CPP_template(typename R)(
-      requires ql::ranges::forward_range<R> CPP_and ql::concepts::
-          convertible_to<ql::ranges::range_value_t<R>,
-                         const Result&>) static SharedLocalVocabWrapper
-      getMergedLocalVocab(R&& subResults) {
+      requires ql::ranges::forward_range<R> &&
+      ql::concepts::convertible_to<ql::ranges::range_value_t<R>, const Result&>)
+  static SharedLocalVocabWrapper getMergedLocalVocab(R&& subResults) {
     std::vector<const LocalVocab*> vocabs;
     for (const Result& table : subResults) {
       vocabs.push_back(&table.localVocab());
@@ -271,7 +328,7 @@ class Result {
   // those are still correct after performing this operation.
   void applyLimitOffset(
       const LimitOffsetClause& limitOffset,
-      std::function<void(std::chrono::microseconds, const IdTable&)>
+      std::function<void(std::chrono::microseconds, const IdTableView<0>&)>
           limitTimeCallback);
 
   // Check if the operation did fulfill its contract and only returns as many

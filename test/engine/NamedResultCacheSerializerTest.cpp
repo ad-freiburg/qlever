@@ -4,65 +4,95 @@
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
+#include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include <filesystem>
-
+#include "../QueryPlannerTestHelpers.h"
+#include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
+#include "../util/IdTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/LocalVocabEntryTestHelpers.h"
+#include "../util/OperationTestHelpers.h"
+#include "backports/algorithm.h"
 #include "engine/NamedResultCache.h"
 #include "engine/NamedResultCacheSerializer.h"
-#include "util/Serializer/ByteBufferSerializer.h"
+#include "index/LocalVocabEntry.h"
+#include "util/serializer/ByteBufferSerializer.h"
 
 using namespace ad_utility::serialization;
+using ad_utility::testing::colIndices;
+using ad_utility::testing::iriLocalVocabEntry;
 using ::testing::ElementsAre;
-using ::testing::Pointee;
 using ::testing::UnorderedElementsAreArray;
 
 namespace {
+auto V = ad_utility::testing::VocabId;
 
 // Test fixture for NamedResultCacheSerializer tests.
 class NamedResultCacheSerializerTest : public ::testing::Test {
  protected:
   // Blank node manager and allocator that can be used when we don't really
   // care about blank nodes and allocation details.
-  ad_utility::BlankNodeManager blankNodeManager_;
+  QueryExecutionContext* qec_ = ad_utility::testing::getQec();
   ad_utility::AllocatorWithLimit<Id> alloc_{
       ad_utility::makeUnlimitedAllocator<Id>()};
 
   // Serialize and immediately deserialize and return the `value`.
   NamedResultCache::Value serializeAndDeserializeValue(
-      const NamedResultCache::Value& value, ad_utility::BlankNodeManager& bm,
+      const NamedResultCache::Value& value,
       ad_utility::AllocatorWithLimit<Id> allocator) const {
     ByteBufferWriteSerializer writeSerializer;
     writeSerializer << value;
     ByteBufferReadSerializer readSerializer{std::move(writeSerializer).data()};
-    NamedResultCache::Value result;
+    NamedResultCache::Value result{{}, {}, colIndices({}, allocator),
+                                   {}, {}, {}};
     result.allocatorForSerialization_ = std::move(allocator);
-    result.blankNodeManagerForSerialization_.emplace(bm);
+    result.contextForSerialization_ = &qec_->getIndex().getLocalVocabContext();
     readSerializer >> result;
     return result;
   }
 
-  // Overload that uses the default member variables, cannot be const, because
-  // the calls might modify the `BlankNodeManager` or the `LocalVocab`.
+  // Overload that uses the default member variables.
   NamedResultCache::Value serializeAndDeserializeValue(
       const NamedResultCache::Value& value) {
-    return serializeAndDeserializeValue(value, blankNodeManager_, alloc_);
+    return serializeAndDeserializeValue(value, alloc_);
+  }
+
+  // Create a simple `Value` with a two-column table, one variable per column,
+  // and the given `cacheKey`.
+  static NamedResultCache::Value makeSimpleValue(std::string cacheKey) {
+    VariableToColumnMap varColMap;
+    varColMap[Variable{"?x"}] = makeAlwaysDefinedColumn(0);
+    varColMap[Variable{"?y"}] = makeAlwaysDefinedColumn(1);
+    return NamedResultCache::Value{std::make_shared<const IdTable>(
+                                       makeIdTableFromVector({{1, 2}, {3, 4}})),
+                                   std::move(varColMap),
+                                   colIndices({0}),
+                                   LocalVocab{},
+                                   std::move(cacheKey),
+                                   std::nullopt};
+  }
+
+  // Read a `Value` from the given serialized `data`.
+  NamedResultCache::Value deserializeValue(std::vector<char> data) const {
+    ByteBufferReadSerializer readSerializer{std::move(data)};
+    NamedResultCache::Value value{{}, {}, colIndices({}, alloc_), {}, {}, {}};
+    value.allocatorForSerialization_ = alloc_;
+    value.contextForSerialization_ = &qec_->getIndex().getLocalVocabContext();
+    readSerializer >> value;
+    return value;
   }
 };
 
 // Test serialization of a complete `NamedResultCache::Value`.
 TEST_F(NamedResultCacheSerializerTest, ValueSerialization) {
-  // we need to setup a dummy index somewhere, because otherwise the comparison
-  // of `IdTable`s won't work;
-  [[maybe_unused]] auto qec = ad_utility::testing::getQec();
   // Create a test Value
   LocalVocab localVocab;
-  [[maybe_unused]] auto local = localVocab.getIndexAndAddIfNotContained(
-      ad_utility::triple_component::LiteralOrIri::iriref(
-          "<http://example.org/test>"));
+  [[maybe_unused]] auto local =
+      localVocab.getIndexAndAddIfNotContained(iriLocalVocabEntry(
+          "<http://example.org/test>", qec_->getLocalVocabContext()));
 
   // Note: Currently the serialization throws if we pass a `LocalVocabIndex`
   // inside the `IdTable` As soon as we have improved the serialization of local
@@ -74,7 +104,7 @@ TEST_F(NamedResultCacheSerializerTest, ValueSerialization) {
   varColMap[Variable{"?x"}] = makeAlwaysDefinedColumn(0);
   varColMap[Variable{"?y"}] = makePossiblyUndefinedColumn(1);
 
-  std::vector<ColumnIndex> sortedOn = {0, 1};
+  auto sortedOn = colIndices({0, 1});
 
   std::string cacheKey = "test-cache-key";
 
@@ -92,8 +122,12 @@ TEST_F(NamedResultCacheSerializerTest, ValueSerialization) {
 
   auto deserializedValue = serializeAndDeserializeValue(value);
 
-  // Check the result pointer is valid.
-  ASSERT_NE(deserializedValue.result_, nullptr);
+  // Check the result pointer is valid (the non-aligned serializer used here
+  // always deserializes into the owning `shared_ptr<const IdTable>`
+  // alternative, never a zero-copy view).
+  ASSERT_THAT(deserializedValue.result_,
+              ::testing::VariantWith<std::shared_ptr<const IdTable>>(
+                  ::testing::Ne(nullptr)));
 
   // Check the local vocab.
   auto deserWords = deserializedValue.localVocab_.getAllWordsForTesting();
@@ -103,12 +137,53 @@ TEST_F(NamedResultCacheSerializerTest, ValueSerialization) {
               deserWords[i].toStringRepresentation());
   }
   // Check the result
-  EXPECT_THAT(deserializedValue.result_, Pointee(matchesIdTable(table)));
+  EXPECT_THAT(ExplicitIdTableOperation::viewOf(deserializedValue.result_),
+              matchesIdTable(table));
   EXPECT_THAT(deserializedValue.varToColMap_,
               UnorderedElementsAreArray(varColMap));
   EXPECT_THAT(deserializedValue.resultSortedOn_, ElementsAre(0, 1));
   EXPECT_EQ(deserializedValue.cacheKey_, cacheKey);
   EXPECT_FALSE(deserializedValue.cachedGeoIndex_.has_value());
+}
+
+// Test that deserializing from an `AlignedByteBufferReadSerializer` (which
+// supports zero-copy deserialization) yields a non-owning `IdTableView<0>`
+// that points directly into the serializer's buffer, instead of an owning
+// `shared_ptr<const IdTable>`.
+TEST_F(NamedResultCacheSerializerTest, ValueSerializationZeroCopy) {
+  auto table = makeIdTableFromVector({{0, 7}, {9, 11}, {13, 17}});
+
+  VariableToColumnMap varColMap;
+  varColMap[Variable{"?x"}] = makeAlwaysDefinedColumn(0);
+  varColMap[Variable{"?y"}] = makePossiblyUndefinedColumn(1);
+
+  NamedResultCache::Value value{std::make_shared<const IdTable>(table.clone()),
+                                varColMap,
+                                colIndices({0, 1}),
+                                LocalVocab{},
+                                "test-cache-key",
+                                std::nullopt};
+
+  AlignedByteBufferWriteSerializer writeSerializer;
+  writeSerializer << value;
+  AlignedByteBufferReadSerializer readSerializer{
+      std::move(writeSerializer).data()};
+
+  NamedResultCache::Value deserializedValue{{}, {}, colIndices({}, alloc_),
+                                            {}, {}, {}};
+  deserializedValue.allocatorForSerialization_ = alloc_;
+  deserializedValue.contextForSerialization_ =
+      &qec_->getIndex().getLocalVocabContext();
+  readSerializer >> deserializedValue;
+
+  ASSERT_TRUE(
+      std::holds_alternative<IdTableView<0>>(deserializedValue.result_));
+  EXPECT_THAT(ExplicitIdTableOperation::viewOf(deserializedValue.result_),
+              matchesIdTable(table));
+  EXPECT_THAT(deserializedValue.varToColMap_,
+              UnorderedElementsAreArray(varColMap));
+  EXPECT_THAT(deserializedValue.resultSortedOn_, ElementsAre(0, 1));
+  EXPECT_EQ(deserializedValue.cacheKey_, "test-cache-key");
 }
 
 // Test serialization of the entire NamedResultCache.
@@ -128,43 +203,35 @@ TEST_F(NamedResultCacheSerializerTest, CacheSerialization) {
   varColMap2[Variable{"?y"}] = makeAlwaysDefinedColumn(1);
   varColMap2[Variable{"?z"}] = makeAlwaysDefinedColumn(2);
 
+  const auto& localVocabContext = qec_->getLocalVocabContext();
   LocalVocab vocab1;
   vocab1.getIndexAndAddIfNotContained(
-      ad_utility::triple_component::LiteralOrIri::iriref(
-          "<http://example.org/1>"));
+      iriLocalVocabEntry("<http://example.org/1>", localVocabContext));
 
   LocalVocab vocab2;
   vocab2.getIndexAndAddIfNotContained(
-      ad_utility::triple_component::LiteralOrIri::iriref(
-          "<http://example.org/2>"));
+      iriLocalVocabEntry("<http://example.org/2>", localVocabContext));
 
-  cache.store("query-1", NamedResultCache::Value{
-                             std::make_shared<const IdTable>(table1.clone()),
-                             varColMap1,
-                             {0},
-                             std::move(vocab1),
-                             "key1",
-                             std::nullopt});
+  cache.store("query-1",
+              NamedResultCache::Value{
+                  std::make_shared<const IdTable>(table1.clone()), varColMap1,
+                  colIndices({0}), std::move(vocab1), "key1", std::nullopt});
 
-  cache.store("query-2", NamedResultCache::Value{
-                             std::make_shared<const IdTable>(table2.clone()),
-                             varColMap2,
-                             {1, 0},
-                             std::move(vocab2),
-                             "key2",
-                             std::nullopt});
+  cache.store("query-2",
+              NamedResultCache::Value{
+                  std::make_shared<const IdTable>(table2.clone()), varColMap2,
+                  colIndices({1, 0}), std::move(vocab2), "key2", std::nullopt});
 
   EXPECT_EQ(cache.numEntries(), 2);
 
-  auto qec = ad_utility::testing::getQec();
-  auto cache2 = [&qec, &cache] {
+  auto cache2 = [this, &cache] {
     using namespace ad_utility::serialization;
     ByteBufferWriteSerializer writer;
     cache.writeToSerializer(writer);
     NamedResultCache cache2;
     ByteBufferReadSerializer reader{std::move(writer).data()};
     cache2.readFromSerializer(reader, ad_utility::makeUnlimitedAllocator<Id>(),
-                              *qec->getIndex().getBlankNodeManager());
+                              qec_->getLocalVocabContext());
     return cache2;
   }();
 
@@ -173,14 +240,16 @@ TEST_F(NamedResultCacheSerializerTest, CacheSerialization) {
 
   auto result1 = cache2.get("query-1");
   ASSERT_NE(result1, nullptr);
-  EXPECT_THAT(result1->result_, Pointee(matchesIdTable(table1)));
+  EXPECT_THAT(ExplicitIdTableOperation::viewOf(result1->result_),
+              matchesIdTable(table1));
   EXPECT_THAT(result1->varToColMap_, UnorderedElementsAreArray(varColMap1));
   EXPECT_THAT(result1->resultSortedOn_, ElementsAre(0));
   EXPECT_EQ(result1->cacheKey_, "key1");
 
   auto result2 = cache2.get("query-2");
   ASSERT_NE(result2, nullptr);
-  EXPECT_THAT(result2->result_, Pointee(matchesIdTable(table2)));
+  EXPECT_THAT(ExplicitIdTableOperation::viewOf(result2->result_),
+              matchesIdTable(table2));
   EXPECT_THAT(result2->varToColMap_, UnorderedElementsAreArray(varColMap2));
   EXPECT_THAT(result2->resultSortedOn_, ElementsAre(1, 0));
   EXPECT_EQ(result2->cacheKey_, "key2");
@@ -192,18 +261,330 @@ TEST_F(NamedResultCacheSerializerTest, EmptyCacheSerialization) {
   NamedResultCache cache;
   EXPECT_EQ(cache.numEntries(), 0);
 
-  auto qec = ad_utility::testing::getQec();
-  auto cache2 = [&qec, &cache] {
+  auto cache2 = [this, &cache] {
     using namespace ad_utility::serialization;
     ByteBufferWriteSerializer writer;
     cache.writeToSerializer(writer);
     NamedResultCache cache2;
     ByteBufferReadSerializer reader{std::move(writer).data()};
     cache2.readFromSerializer(reader, ad_utility::makeUnlimitedAllocator<Id>(),
-                              *qec->getIndex().getBlankNodeManager());
+                              qec_->getLocalVocabContext());
     return cache2;
   }();
   EXPECT_EQ(cache2.numEntries(), 0);
+}
+
+// Test that `readFromSerializer` throws a helpful error message when the
+// magic byte or the format version of the input do not match, instead of
+// silently misinterpreting unrelated or incompatible data.
+TEST_F(NamedResultCacheSerializerTest, WrongMagicByteOrFormatVersionThrows) {
+  NamedResultCache cache;
+  ByteBufferWriteSerializer writer;
+  cache.writeToSerializer(writer);
+  auto data = std::move(writer).data();
+  ASSERT_GE(data.size(), 3u);
+
+  // Corrupt the magic byte, which is the very first byte of the serialized
+  // data.
+  auto dataWithWrongMagicByte = data;
+  dataWithWrongMagicByte[0] = static_cast<char>(~dataWithWrongMagicByte[0]);
+  ByteBufferReadSerializer readerWithWrongMagicByte{
+      std::move(dataWithWrongMagicByte)};
+  NamedResultCache cacheForWrongMagicByte;
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      cacheForWrongMagicByte.readFromSerializer(
+          readerWithWrongMagicByte, ad_utility::makeUnlimitedAllocator<Id>(),
+          qec_->getLocalVocabContext()),
+      ::testing::HasSubstr("magic byte"));
+
+  // Corrupt the format version, which directly follows the magic byte.
+  auto dataWithWrongVersion = data;
+  dataWithWrongVersion[1] = static_cast<char>(dataWithWrongVersion[1] + 1);
+  ByteBufferReadSerializer readerWithWrongVersion{
+      std::move(dataWithWrongVersion)};
+  NamedResultCache cacheForWrongVersion;
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      cacheForWrongVersion.readFromSerializer(
+          readerWithWrongVersion, ad_utility::makeUnlimitedAllocator<Id>(),
+          qec_->getLocalVocabContext()),
+      ::testing::HasSubstr("format version"));
+}
+
+// _____________________________________________________________________________
+// Test that entries can be written in the legacy format version 1 and are read
+// correctly, including a geo index with a single segment, and that writing a
+// geo index with more than one segment in that format is rejected.
+TEST_F(NamedResultCacheSerializerTest, LegacyEntriesVersion) {
+  using namespace namedResultCacheSerializer;
+  auto writeWithVersion = [](uint16_t version) {
+    return [version](auto& serializer, [[maybe_unused]] const std::string& key,
+                     const NamedResultCache::Value& v) {
+      writeValue(serializer, v,
+                 ExplicitIdTableOperation::viewOf(v.result_).getColumns(),
+                 v.resultSortedOn_, /*writeLocalVocabWords=*/true, version);
+    };
+  };
+  auto writeLegacy =
+      writeWithVersion(namedResultCacheSerializer::legacyFormatVersion);
+  NamedResultCache cache;
+  cache.store("a", makeSimpleValue("key-a"));
+  ByteBufferWriteSerializer writer;
+  writeEntries(writer, cache.getAllEntriesSortedByKey(), writeLegacy,
+               namedResultCacheSerializer::legacyFormatVersion);
+  auto data = std::move(writer).data();
+  EXPECT_EQ(static_cast<uint8_t>(data.at(1)),
+            namedResultCacheSerializer::legacyFormatVersion);
+
+  NamedResultCache cache2;
+  ByteBufferReadSerializer reader{std::move(data)};
+  cache2.readFromSerializer(reader, alloc_, qec_->getLocalVocabContext());
+  ASSERT_EQ(cache2.numEntries(), 1);
+  EXPECT_EQ(cache2.get("a")->cacheKey_, "key-a");
+  EXPECT_FALSE(cache2.get("a")->cachedGeoIndex_.has_value());
+
+  // The generic serialization uses the current version.
+  ByteBufferWriteSerializer writer2;
+  cache.writeToSerializer(writer2);
+  EXPECT_EQ(static_cast<uint8_t>(std::move(writer2).data().at(1)),
+            namedResultCacheSerializer::formatVersion);
+
+  // An unknown version is rejected when writing.
+  ByteBufferWriteSerializer writer3;
+  EXPECT_ANY_THROW(
+      writeEntries(writer3, cache.getAllEntriesSortedByKey(), writeLegacy, 7));
+
+  // An entry with a geo index that has a single segment can be written in the
+  // legacy version.
+  auto qec = ad_utility::testing::getQec(
+      "<s> <p> \"LINESTRING(1.5 2.5, 1.55 2.5)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral> .");
+  qec->pinResultWithName() = {"geo", Variable{"?o"}};
+  auto plan =
+      queryPlannerTestHelpers::parseAndPlan("SELECT * { ?s <p> ?o }", qec);
+  [[maybe_unused]] auto result = plan->getResult();
+  auto entries = qec->namedResultCache().getAllEntriesSortedByKey();
+  ASSERT_EQ(entries.size(), 1);
+  const auto& value = *entries.at(0).second;
+  ASSERT_TRUE(value.cachedGeoIndex_.has_value());
+  ASSERT_EQ(value.cachedGeoIndex_.value().numSegments(), 1);
+  ByteBufferWriteSerializer writer4;
+  writeEntries(writer4, entries, writeLegacy,
+               namedResultCacheSerializer::legacyFormatVersion);
+  NamedResultCache cache4;
+  ByteBufferReadSerializer reader4{std::move(writer4).data()};
+  cache4.readFromSerializer(reader4, alloc_, qec->getLocalVocabContext());
+  ASSERT_EQ(cache4.numEntries(), 1);
+  const auto& geoIndex4 = cache4.get("geo")->cachedGeoIndex_;
+  ASSERT_TRUE(geoIndex4.has_value());
+  EXPECT_EQ(geoIndex4.value().numSegments(), 1);
+  EXPECT_EQ(geoIndex4.value().numLiveShapes(), 1);
+  EXPECT_EQ(geoIndex4.value().getRow(0, 0), 0);
+
+  // A geo index with two segments (the shape of the only row is replaced by a
+  // new one in a second segment) cannot be written in the legacy version, but
+  // in the current one.
+  const auto& geoIndex = value.cachedGeoIndex_.value();
+  auto twoSegments = SpatialJoinCachedIndex::forUpdatedTable(
+      geoIndex, std::vector{SpatialJoinCachedIndex::NO_ROW},
+      ExplicitIdTableOperation::viewOf(value.result_),
+      plan->getVariableColumn(Variable{"?o"}), qec->getIndex());
+  ASSERT_EQ(twoSegments.numSegments(), 2);
+  NamedResultCache::Entries entriesWithTwoSegments{
+      {"geo",
+       std::make_shared<const NamedResultCache::Value>(NamedResultCache::Value{
+           value.result_, value.varToColMap_, value.resultSortedOn_,
+           value.localVocab_.clone(), value.cacheKey_, twoSegments})}};
+  ByteBufferWriteSerializer writer5;
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      writeEntries(writer5, entriesWithTwoSegments, writeLegacy,
+                   namedResultCacheSerializer::legacyFormatVersion),
+      ::testing::HasSubstr("single segment"));
+  ByteBufferWriteSerializer writer6;
+  EXPECT_NO_THROW(
+      writeEntries(writer6, entriesWithTwoSegments,
+                   writeWithVersion(namedResultCacheSerializer::formatVersion),
+                   namedResultCacheSerializer::formatVersion));
+}
+
+// _____________________________________________________________________________
+// Test that `writeEntries` calls `writeEntry` once per entry, in the order of
+// the keys, with the key that belongs to the value, and that `writeEntry` can
+// use the key to modify the written value.
+TEST_F(NamedResultCacheSerializerTest, WriteEntriesPassesKeyOfEachValue) {
+  using namespace namedResultCacheSerializer;
+  NamedResultCache cache;
+  for (std::string key : {"c", "a", "b"}) {
+    cache.store(key, makeSimpleValue(absl::StrCat("key-", key)));
+  }
+  std::vector<std::string> visitedKeys;
+  auto writeEntry = [&visitedKeys](auto& serializer, const std::string& key,
+                                   const NamedResultCache::Value& v) {
+    visitedKeys.push_back(key);
+    EXPECT_EQ(v.cacheKey_, absl::StrCat("key-", key));
+    // Write a copy of the value, the cache key of which is derived from the
+    // `key`.
+    NamedResultCache::Value copy{v.result_,
+                                 v.varToColMap_,
+                                 v.resultSortedOn_,
+                                 v.localVocab_.clone(),
+                                 absl::StrCat("written-", key),
+                                 std::nullopt};
+    writeValue(serializer, copy,
+               ExplicitIdTableOperation::viewOf(copy.result_).getColumns(),
+               copy.resultSortedOn_, /*writeLocalVocabWords=*/true,
+               formatVersion);
+  };
+  ByteBufferWriteSerializer writer;
+  writeEntries(writer, cache.getAllEntriesSortedByKey(), writeEntry,
+               formatVersion);
+  EXPECT_THAT(visitedKeys, ElementsAre("a", "b", "c"));
+
+  NamedResultCache readCache;
+  ByteBufferReadSerializer reader{std::move(writer).data()};
+  readCache.readFromSerializer(reader, alloc_, qec_->getLocalVocabContext());
+  ASSERT_EQ(readCache.numEntries(), 3);
+  for (std::string key : {"a", "b", "c"}) {
+    EXPECT_EQ(readCache.get(key)->cacheKey_, absl::StrCat("written-", key));
+  }
+}
+
+// _____________________________________________________________________________
+// Test that `getAllEntriesSortedByKey` returns all entries of the cache,
+// sorted by their key, no matter in which order they were stored.
+TEST_F(NamedResultCacheSerializerTest, GetAllEntriesSortedByKey) {
+  NamedResultCache cache;
+  EXPECT_THAT(cache.getAllEntriesSortedByKey(), ::testing::IsEmpty());
+
+  cache.store("zebra", makeSimpleValue("key-zebra"));
+  cache.store("apple", makeSimpleValue("key-apple"));
+  cache.store("mango", makeSimpleValue("key-mango"));
+
+  auto entries = cache.getAllEntriesSortedByKey();
+  ASSERT_EQ(entries.size(), 3);
+  EXPECT_THAT(entries | ql::views::keys,
+              ElementsAre("apple", "mango", "zebra"));
+  // The values are exactly the stored ones (the same objects that `get`
+  // returns).
+  for (const auto& [key, value] : entries) {
+    ASSERT_NE(value, nullptr);
+    EXPECT_EQ(value, cache.get(key));
+    EXPECT_EQ(value->cacheKey_, absl::StrCat("key-", key));
+  }
+}
+
+// _____________________________________________________________________________
+// Test that the serialization is deterministic: identical contents yield
+// identical bytes, also if the `varToColMap_` entries or the cache entries
+// were inserted in a different order.
+TEST_F(NamedResultCacheSerializerTest, SerializationIsDeterministic) {
+  // Create a `Value` with four variables that are inserted in the given
+  // order, but otherwise identical contents.
+  auto makeValue = [](bool reverseInsertionOrder) {
+    std::vector<std::string> names{"?d", "?c", "?b", "?a"};
+    VariableToColumnMap varColMap;
+    for (size_t i = 0; i < names.size(); ++i) {
+      size_t index = reverseInsertionOrder ? names.size() - 1 - i : i;
+      varColMap[Variable{names.at(index)}] = makeAlwaysDefinedColumn(index);
+    }
+    return NamedResultCache::Value{
+        std::make_shared<const IdTable>(
+            makeIdTableFromVector({{0, 1, 2, 3}, {4, 5, 6, 7}})),
+        std::move(varColMap),
+        colIndices({0, 1}),
+        LocalVocab{},
+        "cache-key",
+        std::nullopt};
+  };
+  auto serializeValue = [](const NamedResultCache::Value& value) {
+    ByteBufferWriteSerializer writer;
+    writer << value;
+    return std::move(writer).data();
+  };
+
+  // Serializing the same value twice yields the same bytes.
+  auto value = makeValue(false);
+  EXPECT_EQ(serializeValue(value), serializeValue(value));
+
+  // Two values that only differ in the insertion order of their
+  // `varToColMap_` entries also yield the same bytes.
+  EXPECT_EQ(serializeValue(makeValue(false)), serializeValue(makeValue(true)));
+
+  // The same holds for a whole cache whose entries were stored in a different
+  // order.
+  auto serializeCache = [](const std::vector<std::string>& names) {
+    NamedResultCache cache;
+    for (const auto& name : names) {
+      cache.store(name, makeSimpleValue(absl::StrCat("key-", name)));
+    }
+    ByteBufferWriteSerializer writer;
+    cache.writeToSerializer(writer);
+    return std::move(writer).data();
+  };
+  EXPECT_EQ(serializeCache({"apple", "mango", "zebra"}),
+            serializeCache({"zebra", "apple", "mango"}));
+}
+
+// _____________________________________________________________________________
+// Test `writeValue` with columns and a sort order that differ from those of
+// the `Value`, and without the words of the local vocab, as a caller that has
+// rewritten the `Id`s to a persistent vocabulary would use it.
+TEST_F(NamedResultCacheSerializerTest, WriteValueWithReplacedColumns) {
+  auto table = makeIdTableFromVector({{0, 7}, {9, 11}, {13, 17}});
+  VariableToColumnMap varColMap;
+  varColMap[Variable{"?x"}] = makeAlwaysDefinedColumn(0);
+  varColMap[Variable{"?y"}] = makePossiblyUndefinedColumn(1);
+  LocalVocab localVocab;
+  localVocab.getIndexAndAddIfNotContained(iriLocalVocabEntry(
+      "<http://example.org/test>", qec_->getLocalVocabContext()));
+  ASSERT_EQ(localVocab.size(), 1);
+
+  NamedResultCache::Value value{std::make_shared<const IdTable>(table.clone()),
+                                std::move(varColMap),
+                                colIndices({0, 1}),
+                                std::move(localVocab),
+                                "test-cache-key",
+                                std::nullopt};
+
+  // The replaced columns have the same shape as the table of the `value`, but
+  // different `Id`s. The sort order is shortened, because the replacement
+  // invalidates the sortedness of the second column.
+  std::vector<std::vector<Id>> replacedColumns{{V(1), V(2), V(3)},
+                                               {V(4), V(5), V(6)}};
+  std::vector<ColumnIndex> shortenedSortOrder{0};
+
+  ByteBufferWriteSerializer writer;
+  namedResultCacheSerializer::writeValue(
+      writer, value, replacedColumns, shortenedSortOrder,
+      /*writeLocalVocabWords=*/false,
+      namedResultCacheSerializer::formatVersion);
+  auto readValue = deserializeValue(std::move(writer).data());
+
+  EXPECT_THAT(ExplicitIdTableOperation::viewOf(readValue.result_),
+              matchesIdTableFromVector({{1, 4}, {2, 5}, {3, 6}}));
+  EXPECT_THAT(readValue.resultSortedOn_, ElementsAre(0));
+  EXPECT_EQ(readValue.cacheKey_, "test-cache-key");
+  EXPECT_THAT(readValue.varToColMap_,
+              UnorderedElementsAreArray(value.varToColMap_));
+  // The words of the local vocab were not written, so the local vocab of the
+  // deserialized value is empty.
+  EXPECT_EQ(readValue.localVocab_.size(), 0);
+  EXPECT_THAT(readValue.localVocab_.getAllWordsForTesting(),
+              ::testing::IsEmpty());
+
+  // The number of the columns and the number of rows in each column have to
+  // agree with the table of the `value`.
+  std::vector<std::vector<Id>> tooFewColumns{{V(1), V(2), V(3)}};
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      namedResultCacheSerializer::writeValue(
+          writer, value, tooFewColumns, shortenedSortOrder, false,
+          namedResultCacheSerializer::formatVersion),
+      ::testing::HasSubstr("resultView.numColumns()"));
+  std::vector<std::vector<Id>> tooFewRows{{V(1), V(2)}, {V(4), V(5)}};
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      namedResultCacheSerializer::writeValue(
+          writer, value, tooFewRows, shortenedSortOrder, false,
+          namedResultCacheSerializer::formatVersion),
+      ::testing::HasSubstr("resultView.numRows()"));
 }
 
 }  // namespace

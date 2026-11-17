@@ -14,6 +14,7 @@
 #include "parser/RdfParser.h"
 #include "parser/SparqlParser.h"
 #include "util/http/HttpUtils.h"
+#include "util/http/ResponseMiddleware.h"
 #include "util/http/UrlParser.h"
 
 // Transform SPARQL Graph Store Protocol requests to their equivalent
@@ -21,9 +22,9 @@
 class GraphStoreProtocol {
  private:
   // Extract the mediatype from a request.
-  CPP_template_2(typename RequestT)(requires ad_utility::httpUtils::HttpRequest<
-                                    RequestT>) static ad_utility::MediaType
-      extractMediatype(const RequestT& rawRequest) {
+  CPP_template_2(typename RequestT)(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>)
+  static ad_utility::MediaType extractMediatype(const RequestT& rawRequest) {
     using namespace boost::beast::http;
 
     std::string_view contentTypeString;
@@ -92,23 +93,67 @@ class GraphStoreProtocol {
   // and sets the correct graph.
   static updateClause::GraphUpdate::Triples convertTriples(
       const GraphOrDefault& graph, std::vector<TurtleTriple>&& triples,
-      Quads::BlankNodeAdder& blankNodeAdder);
+      BlankNodeAdder& blankNodeAdder);
   FRIEND_TEST(GraphStoreProtocolTest, convertTriples);
+
+  // Creates a `ResponseMiddleware` that sets the `Location` of the response to
+  // the IRI and the HTTP status to `201 Created`.
+  static ResponseMiddleware makePostNewGraphMiddleware(
+      const ad_utility::triple_component::Iri& graphIri);
+
+  // Determine if the graph identifies the instance. Then the payload of this
+  // GSP POST must be inserted into a new graph. If it cannot be determined
+  // whether the graph identifies the instance, `false` is returned.
+  CPP_template_2(typename RequestT)(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>)
+  static bool mustInsertIntoNewGraph(const RequestT& rawRequest,
+                                     const GraphOrDefault& graph) {
+    if (!std::holds_alternative<GraphRef>(graph) ||
+        rawRequest.find(boost::beast::http::field::host) == rawRequest.end()) {
+      return false;
+    }
+    // In a better world, we'd get the external URL of the instance as a
+    // configuration value. Try our best to estimate it and fix the protocol to
+    // `http`. It doesn't matter that the URL is not `https` since it is not
+    // actually accessed.
+    ad_utility::triple_component::Iri graphStoreLocation =
+        ad_utility::triple_component::Iri::fromIriref(absl::StrCat(
+            "<http://",
+            std::string(rawRequest[boost::beast::http::field::host]), "/",
+            GSP_DIRECT_GRAPH_IDENTIFICATION_PREFIX, ">"));
+    return graphStoreLocation == std::get<GraphRef>(graph);
+  }
+
+  // Generates a new graph IRI from a UUID-V4. Used when triples have to be
+  // inserted into a new graph.
+  static ad_utility::triple_component::Iri generateNewGraphIri();
 
   // Transform a SPARQL Graph Store Protocol POST to an equivalent ParsedQuery
   // which is an SPARQL Update.
   CPP_template_2(typename RequestT)(
-      requires ad_utility::httpUtils::HttpRequest<RequestT>) static ParsedQuery
+      requires ad_utility::httpUtils::HttpRequest<RequestT>)
+  static ParsedQuery
       transformPost(const RequestT& rawRequest, const GraphOrDefault& graph,
                     const Index& index) {
     throwIfRequestBodyEmpty(rawRequest);
     auto triples =
         parseTriples(rawRequest.body(), extractMediatype(rawRequest));
-    Quads::BlankNodeAdder bn{{}, {}, index.getBlankNodeManager()};
-    auto convertedTriples = convertTriples(graph, std::move(triples), bn);
+    BlankNodeAdder bn{index.getBlankNodeManager()};
+    auto insertIntoNewGraph = mustInsertIntoNewGraph(rawRequest, graph);
+    const GraphOrDefault effectiveGraph =
+        insertIntoNewGraph ? generateNewGraphIri() : graph;
+    auto convertedTriples =
+        convertTriples(effectiveGraph, std::move(triples), bn);
     updateClause::GraphUpdate up{std::move(convertedTriples), {}};
     ParsedQuery res;
     res._clause = parsedQuery::UpdateClause{std::move(up)};
+    if (insertIntoNewGraph) {
+      AD_CORRECTNESS_CHECK(
+          std::holds_alternative<ad_utility::triple_component::Iri>(
+              effectiveGraph));
+      res.responseMiddleware_ = makePostNewGraphMiddleware(
+          std::get<ad_utility::triple_component::Iri>(effectiveGraph));
+    }
     // Graph store protocol POST requests might have a very large body. Limit
     // the length used for the string representation.
     res._originalString = truncatedStringRepresentation("POST", rawRequest);
@@ -120,13 +165,14 @@ class GraphStoreProtocol {
   // `TSOP` (`POST` backwards) does a `DELETE DATA` of the payload. It is an
   // extension to the Graph Store Protocol.
   CPP_template_2(typename RequestT)(
-      requires ad_utility::httpUtils::HttpRequest<RequestT>) static ParsedQuery
+      requires ad_utility::httpUtils::HttpRequest<RequestT>)
+  static ParsedQuery
       transformTsop(const RequestT& rawRequest, const GraphOrDefault& graph,
                     const Index& index) {
     throwIfRequestBodyEmpty(rawRequest);
     auto triples =
         parseTriples(rawRequest.body(), extractMediatype(rawRequest));
-    Quads::BlankNodeAdder bn{{}, {}, index.getBlankNodeManager()};
+    BlankNodeAdder bn{index.getBlankNodeManager()};
     auto convertedTriples = convertTriples(graph, std::move(triples), bn);
     updateClause::GraphUpdate up{{}, std::move(convertedTriples)};
     ParsedQuery res;
@@ -136,22 +182,23 @@ class GraphStoreProtocol {
   }
 
   // Transform a SPARQL Graph Store Protocol GET to an equivalent ParsedQuery
-  // which is an SPARQL Query.
+  // which is a SPARQL Query.
   static ParsedQuery transformGet(const GraphOrDefault& graph,
                                   const EncodedIriManager* encodedIriManager);
   FRIEND_TEST(GraphStoreProtocolTest, transformGet);
 
+  // Transform a SPARQL Graph Store Protocol HEAD to an equivalent
+  // `ParsedQuery`. The response is the same as for GET but without the body.
+  static ParsedQuery transformHead(const GraphOrDefault& graph,
+                                   const EncodedIriManager* encodedIriManager);
+
   // Transform a SPARQL Graph Store Protocol PUT to equivalent ParsedQueries
   // which are SPARQL Updates.
   CPP_template_2(typename RequestT)(
-      requires ad_utility::httpUtils::HttpRequest<RequestT>) static std::
-      vector<ParsedQuery> transformPut(const RequestT& rawRequest,
-                                       const GraphOrDefault& graph,
-                                       const Index& index) {
-    // TODO: The response codes are not conform to the specs. "If new RDF graph
-    //  content is created", then the status must be `201 Created`. "If
-    //  existing graph content is modified", then the status must be `200 OK`
-    //  or `204 No Content`.
+      requires ad_utility::httpUtils::HttpRequest<RequestT>)
+  static std::vector<ParsedQuery> transformPut(const RequestT& rawRequest,
+                                               const GraphOrDefault& graph,
+                                               const Index& index) {
     std::string stringRepresentation =
         truncatedStringRepresentation("PUT", rawRequest);
 
@@ -174,10 +221,28 @@ class GraphStoreProtocol {
 
     auto triples =
         parseTriples(rawRequest.body(), extractMediatype(rawRequest));
-    Quads::BlankNodeAdder bn{{}, {}, index.getBlankNodeManager()};
+    BlankNodeAdder bn{index.getBlankNodeManager()};
     auto convertedTriples = convertTriples(graph, std::move(triples), bn);
     updateClause::GraphUpdate up{std::move(convertedTriples), {}};
     ParsedQuery insertData;
+    // Interpretation of the very vague GSP 5.3:
+    // - 201 Created if a new graph is created
+    // - 200 Ok or 204 No Content if an existing graph is modified
+    // When the drop (first operation) deletes triples then the graph has
+    // existed before in our model of implicit graph existence.
+    drop.responseMiddleware_ = ResponseMiddleware(
+        [](ResponseMiddleware::ResponseT response,
+           const std::vector<UpdateMetadata>& updateMetadata) {
+          AD_CORRECTNESS_CHECK(updateMetadata.size() == 2);
+          const auto& dropMeta = updateMetadata.at(0);
+          AD_CORRECTNESS_CHECK(dropMeta.inUpdate_.has_value());
+          if (dropMeta.inUpdate_.value().triplesDeleted_ > 0) {
+            response.result(boost::beast::http::status::ok);
+          } else {
+            response.result(boost::beast::http::status::created);
+          }
+          return response;
+        });
     insertData._clause = parsedQuery::UpdateClause{std::move(up)};
     insertData._originalString = stringRepresentation;
     return {std::move(drop), std::move(insertData)};
@@ -195,11 +260,10 @@ class GraphStoreProtocol {
   // Transform the Graph Store Protocol request into it's equivalent Query or
   // Update.
   CPP_template_2(typename RequestT)(
-      requires ad_utility::httpUtils::HttpRequest<RequestT>) static std::
-      vector<ParsedQuery> transformGraphStoreProtocol(
-          ad_utility::url_parser::sparqlOperation::GraphStoreOperation
-              operation,
-          const RequestT& rawRequest, const Index& index) {
+      requires ad_utility::httpUtils::HttpRequest<RequestT>)
+  static std::vector<ParsedQuery> transformGraphStoreProtocol(
+      ad_utility::url_parser::sparqlOperation::GraphStoreOperation operation,
+      const RequestT& rawRequest, const Index& index) {
     ad_utility::url_parser::ParsedUrl parsedUrl =
         ad_utility::url_parser::parseRequestTarget(rawRequest.target());
     using enum boost::beast::http::verb;
@@ -217,7 +281,7 @@ class GraphStoreProtocol {
       // DATA` of the payload.
       return {transformTsop(rawRequest, operation.graph_, index)};
     } else if (method == "HEAD") {
-      throwNotYetImplementedHTTPMethod("HEAD");
+      return {transformHead(operation.graph_, &index.encodedIriManager())};
     } else if (method == "PATCH") {
       throwNotYetImplementedHTTPMethod("PATCH");
     } else {

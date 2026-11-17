@@ -46,13 +46,17 @@ class RelationalExpression : public SparqlExpression {
   // `CompressedBlockMetadata`. In addition we return the `Variable` that
   // corresponds to the sorted column.
   std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
-      bool isNegated) const override;
+      const LocalVocabContext& context, bool isNegated) const override;
 
   // These expressions are typically used inside `FILTER` clauses, so we need
   // proper estimates.
   Estimates getEstimatesForFilterExpression(
       uint64_t inputSizeEstimate,
       const std::optional<Variable>& firstSortedVariable) const override;
+
+  [[nodiscard]] bool isDeterministic() const override {
+    return areChildrenDeterministic();
+  }
 
  private:
   ql::span<SparqlExpression::Ptr> childrenImpl() override;
@@ -81,6 +85,7 @@ class InExpression : public SparqlExpression {
       const VariableToColumnMap& varColMap) const override;
 
   std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
+      [[maybe_unused]] const LocalVocabContext& context,
       [[maybe_unused]] bool isNegated) const override;
 
   // These expressions are typically used inside `FILTER` clauses, so we need
@@ -90,6 +95,10 @@ class InExpression : public SparqlExpression {
       const std::optional<Variable>& firstSortedVariable) const override;
 
   std::optional<LangFilterData> getLanguageFilterExpression() const override;
+
+  [[nodiscard]] bool isDeterministic() const override {
+    return areChildrenDeterministic();
+  }
 
  private:
   ql::span<SparqlExpression::Ptr> childrenImpl() override;
@@ -114,12 +123,21 @@ using GreaterEqualExpression =
 
 using InExpression = relational::InExpression;
 
+// Return the comparison of `expression` if it is one of the six relational
+// expressions above (e.g. `Comparison::LT` for `a < b`), and `std::nullopt`
+// otherwise.
+std::optional<valueIdComparators::Comparison> getComparison(
+    const SparqlExpression& expression);
+
 // This function is a helper for the query planner. It allows unpacking a
 // `SparqlExpression` of any of these forms
 // * `geof:distance(?variable1, ?variable2) <= constant`
 // * `geof:distance(?variable1, ?variable2, unit-constant) <= constant`
 // * `geof:metricDistance(?variable1, ?variable2) <= constant`
-// for rewriting filters to spatial joins.
+// for rewriting filters to spatial joins. Each form may also use `<` instead
+// of `<=`. The returned maximum distance (in meters) is then the largest
+// `double` below the constant, because a spatial join includes the maximum
+// distance. A filter with a negative maximum distance is not rewritten.
 std::optional<std::pair<sparqlExpression::GeoFunctionCall, double>>
 getGeoDistanceFilter(const SparqlExpression& expr);
 

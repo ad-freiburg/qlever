@@ -38,7 +38,7 @@ std::string GroupBy::getCacheKeyImpl() const {
 size_t GroupBy::getResultWidth() const { return _impl->getResultWidth(); }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> GroupBy::resultSortedOn() const {
+qlm::vector<ColumnIndex> GroupBy::resultSortedOn() const {
   return _impl->resultSortedOn();
 }
 
@@ -59,7 +59,7 @@ uint64_t GroupBy::getSizeEstimateBeforeLimit() {
 size_t GroupBy::getCostEstimate() { return _impl->getCostEstimate(); }
 
 // _____________________________________________________________________________
-std::vector<QueryExecutionTree*> GroupBy::getChildren() {
+qlm::vector<QueryExecutionTree*> GroupBy::getChildrenImpl() const {
   return _impl->getChildren();
 }
 
@@ -82,6 +82,11 @@ const std::vector<Variable>& GroupBy::groupByVariables() const {
 const std::vector<Alias>& GroupBy::aliases() const { return _impl->aliases(); }
 
 // _____________________________________________________________________________
+bool GroupBy::isDeterministicImpl() const {
+  return _impl->isDeterministicImpl();
+}
+
+// _____________________________________________________________________________
 std::unique_ptr<Operation> GroupBy::cloneImpl() const {
   // We need to return a `unique_ptr<GroupBy>` to let the unit tests for `clone`
   // pass and to make `GroupByImpl` a true hidden implementation.
@@ -89,6 +94,13 @@ std::unique_ptr<Operation> GroupBy::cloneImpl() const {
       static_cast<GroupByImpl*>(_impl->cloneImpl().release())};
   return std::make_unique<GroupBy>(_impl->getExecutionContext(),
                                    std::move(ptr));
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+GroupBy::makeTreeWithStrippedColumns(
+    const std::set<Variable>& requestedVariables) const {
+  return _impl->makeTreeWithStrippedColumns(requestedVariables);
 }
 
 // _____________________________________________________________________________

@@ -1,15 +1,17 @@
 //  Copyright 2023, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+#include "engine/sparqlExpressions/BinaryExpression.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "global/RuntimeParameters.h"
 
 namespace sparqlExpression {
 namespace detail {
+
 // Multiplication.
 using Multiply = MakeNumericExpression<std::multiplies<>>;
-NARY_EXPRESSION(MultiplyExpression, 2, FV<Multiply, NumericValueGetter>);
+BINARY_EXPRESSION(MultiplyExpression, FV<Multiply, NumericValueGetter>);
 
 // Division.
 //
@@ -29,19 +31,102 @@ struct DivideImpl {
 };
 
 using Divide1 = MakeNumericExpression<DivideImpl, true>;
-NARY_EXPRESSION(DivideExpressionByZeroIsUndef, 2,
-                FV<Divide1, NumericValueGetter>);
+BINARY_EXPRESSION(DivideExpressionByZeroIsUndef,
+                  FV<Divide1, NumericValueGetter>);
 
 using Divide2 = MakeNumericExpression<DivideImpl, false>;
-NARY_EXPRESSION(DivideExpressionByZeroIsNan, 2,
-                FV<Divide2, NumericValueGetter>);
+BINARY_EXPRESSION(DivideExpressionByZeroIsNan, FV<Divide2, NumericValueGetter>);
 
-// Addition and subtraction, currently all results are converted to double.
-using Add = MakeNumericExpression<std::plus<>>;
-NARY_EXPRESSION(AddExpression, 2, FV<Add, NumericValueGetter>);
+// _____________________________________________________________________________
+// Addition.
+struct AddImpl {
+  ValueId operator()(NumericOrDateValue lhs, NumericOrDateValue rhs) const {
+    return std::visit(AddImpl{}, lhs, rhs);
+  }
 
-using Subtract = MakeNumericExpression<std::minus<>>;
-NARY_EXPRESSION(SubtractExpression, 2, FV<Subtract, NumericValueGetter>);
+  ValueId operator()(int64_t lhs, int64_t rhs) const {
+    return Id::makeFromInt(lhs + rhs);
+  }
+  ValueId operator()(int64_t lhs, double rhs) const {
+    return Id::makeFromDouble(static_cast<double>(lhs) + rhs);
+  }
+  ValueId operator()(double lhs, double rhs) const {
+    return Id::makeFromDouble(lhs + rhs);
+  }
+  ValueId operator()(double lhs, int64_t rhs) const {
+    return Id::makeFromDouble(lhs + static_cast<double>(rhs));
+  }
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  ValueId operator()(DateYearOrDuration lhs, DateYearOrDuration rhs) const {
+    // Using `operator+` implementation in `DateYearOrDuration`.
+    auto difference = lhs + rhs;
+    if (difference.has_value()) {
+      return Id::makeFromDate(difference.value());
+    } else {
+      return Id::makeUndefined();
+    }
+  }
+#endif
+  template <typename L, typename R>
+  ValueId operator()(L, R) const {
+    // For all other operations return `Undefined`.
+    // It is not allowed to use addition between a `DateYearOrDuration` and
+    // a `NumericValue`.
+    return Id::makeUndefined();
+  }
+};
+// Passing any value that is neither numeric nor a date to addition
+// always yields `UNDEF`. Booleans are converted to integers by the value
+// getter.
+template <>
+inline constexpr bool undefForNonNumericOrDate<AddImpl> = true;
+BINARY_EXPRESSION(AddExpression, FV<AddImpl, NumericOrDateValueGetter>);
+
+// _____________________________________________________________________________
+// Subtraction.
+struct SubtractImpl {
+  ValueId operator()(NumericOrDateValue lhs, NumericOrDateValue rhs) const {
+    return std::visit(SubtractImpl{}, lhs, rhs);
+  }
+
+  ValueId operator()(int64_t lhs, int64_t rhs) const {
+    return Id::makeFromInt(lhs - rhs);
+  }
+  ValueId operator()(int64_t lhs, double rhs) const {
+    return Id::makeFromDouble(static_cast<double>(lhs) - rhs);
+  }
+  ValueId operator()(double lhs, double rhs) const {
+    return Id::makeFromDouble(lhs - rhs);
+  }
+  ValueId operator()(double lhs, int64_t rhs) const {
+    return Id::makeFromDouble(lhs - static_cast<double>(rhs));
+  }
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  ValueId operator()(DateYearOrDuration lhs, DateYearOrDuration rhs) const {
+    // Using `operator-` implementation in `DateYearOrDuration`.
+    auto difference = lhs - rhs;
+    if (difference.has_value()) {
+      return Id::makeFromDate(difference.value());
+    } else {
+      return Id::makeUndefined();
+    }
+  }
+#endif
+  template <typename L, typename R>
+  ValueId operator()(L, R) const {
+    // For all other operations return `Undefined`.
+    // It is not allowed to use subtractionn between a `DateYearOrDuration` and
+    // a `NumericValue`.
+    return Id::makeUndefined();
+  }
+};
+// Passing any value that is neither numeric nor a date to subtraction
+// always yields `UNDEF`. Booleans are converted to integers by the value
+// getter.
+template <>
+inline constexpr bool undefForNonNumericOrDate<SubtractImpl> = true;
+BINARY_EXPRESSION(SubtractExpression,
+                  FV<SubtractImpl, NumericOrDateValueGetter>);
 
 // _____________________________________________________________________________
 // Power.
@@ -51,7 +136,7 @@ struct PowImpl {
   }
 };
 using Pow = MakeNumericExpression<PowImpl>;
-NARY_EXPRESSION(PowExpression, 2, FV<Pow, NumericValueGetter>);
+BINARY_EXPRESSION(PowExpression, FV<Pow, NumericValueGetter>);
 
 // OR and AND
 // _____________________________________________________________________________
@@ -330,17 +415,19 @@ constexpr auto getMergeFunction(bool isNegated) {
 
 //______________________________________________________________________________
 CPP_template(typename BinaryPrefilterExpr, typename NaryOperation)(
-    requires isOperation<NaryOperation>) class LogicalBinaryExpressionImpl
-    : public NaryExpression<NaryOperation> {
+    requires isOperation<NaryOperation>)
+class LogicalBinaryExpressionImpl : public NaryExpression<NaryOperation> {
  public:
   using NaryExpression<NaryOperation>::NaryExpression;
 
   std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
-      bool isNegated) const override {
+      const LocalVocabContext& context, bool isNegated) const override {
     const auto& children = this->children();
     AD_CORRECTNESS_CHECK(children.size() == 2);
-    auto leftChild = children[0]->getPrefilterExpressionForMetadata(isNegated);
-    auto rightChild = children[1]->getPrefilterExpressionForMetadata(isNegated);
+    auto leftChild =
+        children[0]->getPrefilterExpressionForMetadata(context, isNegated);
+    auto rightChild =
+        children[1]->getPrefilterExpressionForMetadata(context, isNegated);
     return constructPrefilterExpr::getMergeFunction<BinaryPrefilterExpr>(
         isNegated)(std::move(leftChild), std::move(rightChild));
   }
@@ -363,6 +450,24 @@ CPP_template(typename BinaryPrefilterExpr, typename NaryOperation)(
       return leftFilter;
     }
     return std::nullopt;
+  }
+
+  // _____________________________________________________________________________
+  bool isResultAlwaysDefined(const VariableToColumnMap& map) const override {
+    auto isAlwaysDefined = [&map](const auto& child) {
+      return child->isResultAlwaysDefined(map);
+    };
+    if constexpr (std::is_same_v<BinaryPrefilterExpr,
+                                 prefilterExpressions::OrExpression>) {
+      // For an OR expression, it is sufficient that one child is always
+      // defined.
+      return ql::ranges::any_of(this->children(), isAlwaysDefined);
+    } else {
+      static_assert(std::is_same_v<BinaryPrefilterExpr,
+                                   prefilterExpressions::AndExpression>);
+      // For an AND expression, both children must be always defined.
+      return ql::ranges::all_of(this->children(), isAlwaysDefined);
+    }
   }
 };
 
@@ -413,9 +518,17 @@ SparqlExpression::Ptr makeAndExpression(SparqlExpression::Ptr child1,
   return std::make_unique<AndExpression>(std::move(child1), std::move(child2));
 }
 
+bool isAndExpression(const SparqlExpression& expression) {
+  return dynamic_cast<const AndExpression*>(&expression) != nullptr;
+}
+
 SparqlExpression::Ptr makeOrExpression(SparqlExpression::Ptr child1,
                                        SparqlExpression::Ptr child2) {
   return std::make_unique<OrExpression>(std::move(child1), std::move(child2));
+}
+
+bool isOrExpression(const SparqlExpression& expression) {
+  return dynamic_cast<const OrExpression*>(&expression) != nullptr;
 }
 
 SparqlExpression::Ptr makePowExpression(SparqlExpression::Ptr child1,

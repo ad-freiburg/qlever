@@ -1,0 +1,10 @@
+coverage:
+  status:
+    project:
+      default:
+        # The project status compares against the exact coverage of the base
+        # commit, so the run-to-run measurement noise of the coverage runs
+        # (timing-dependent branches, observed deviations of up to 0.02%)
+        # makes it fail spuriously. Allow deviations up to 0.05%, which is
+        # about 25 lines. Real regressions still fail the status.
+        threshold: 0.05%

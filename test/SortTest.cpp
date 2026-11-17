@@ -11,23 +11,29 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "./util/ColumnStrippingTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "engine/Sort.h"
+#include "engine/StripColumns.h"
 #include "engine/ValuesForTesting.h"
 #include "global/RuntimeParameters.h"
 #include "global/ValueIdComparators.h"
+#include "index/IdTableUtils.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
+#include "util/Tie.h"
 
 using namespace std::string_literals;
-using namespace std::chrono_literals;
 using ad_utility::source_location;
+using ad_utility::testing::colIndices;
+using V = Variable;
 
 namespace {
 
 // Create a `Sort` operation that sorts the `input` by the `sortColumns`.
-Sort makeSort(IdTable input, const std::vector<ColumnIndex>& sortColumns) {
+Sort makeSort(IdTable input, const std::vector<ColumnIndex>& sortColumns,
+              bool explicitSort = false) {
   std::vector<std::optional<Variable>> vars;
   auto qec = ad_utility::testing::getQec();
   for (ColumnIndex i = 0; i < input.numColumns(); ++i) {
@@ -35,7 +41,10 @@ Sort makeSort(IdTable input, const std::vector<ColumnIndex>& sortColumns) {
   }
   auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
       ad_utility::testing::getQec(), std::move(input), vars);
-  return Sort{qec, subtree, sortColumns};
+  return Sort{qec, subtree,
+              qlm::vector<ColumnIndex>{sortColumns.begin(), sortColumns.end(),
+                                       qec->getAllocator()},
+              explicitSort};
 }
 
 // Test that the `input`, when being sorted by its 0-th column as its primary
@@ -73,12 +82,59 @@ void testSort(IdTable input, const IdTable& expected,
       randomShuffle(permutedInput.begin(), permutedInput.end());
       Sort s = makeSort(permutedInput.clone(), sortColumns);
       auto result = s.getResult();
-      const auto& resultTable = result->idTable();
+      const auto& resultTable = result->idTableView();
       ASSERT_EQ(resultTable, permutedExpected);
     }
   } while (std::next_permutation(sortColumns.begin(), sortColumns.end()));
 }
 }  // namespace
+
+// Test that the result of `IdTableUtils::sort` is the same for any number of
+// tasks of the `SortConfig`. With two columns, `blockIndirectSort` uses at most
+// one task per 131,072 rows, so the 1M rows allow all `8` tasks, which also
+// exercises the sorting in blocks (6 or more tasks, see `blockIndirectSort`).
+TEST(Sort, sortNumTasksInFlight) {
+  constexpr int64_t numRows = 1'000'000;
+  IdTable shuffled{2, ad_utility::testing::makeAllocator()};
+  IdTable expected{2, ad_utility::testing::makeAllocator()};
+  for (int64_t i = 0; i < numRows; ++i) {
+    // `7919` is coprime to `numRows`, so this is a permutation of the rows.
+    int64_t j = (i * 7919) % numRows;
+    shuffled.push_back({Id::makeFromInt(j), Id::makeFromInt(-j)});
+    expected.push_back({Id::makeFromInt(i), Id::makeFromInt(-i)});
+  }
+  for (uint32_t numTasks : {0, 1, 2, 3, 8}) {
+    IdTable input = shuffled.clone();
+    IdTableUtils::sort(
+        input, colIndices({0}),
+        SortConfig{ad_utility::testing::multiThreadExecutor(), numTasks});
+    EXPECT_EQ(input, expected) << "numTasks = " << numTasks;
+  }
+}
+
+// Test that the number of tasks of the `SortConfig` of a query is the runtime
+// parameter `sort-num-tasks-in-flight`, not capped by
+// `max-num-threads-per-query` (which limits the threads of the query's executor
+// instead), and that it checks the given cancellation handle.
+TEST(Sort, makeSortConfig) {
+  auto numTasks = [](size_t sortNumTasks, size_t maxNumThreadsPerQuery) {
+    auto cleanup1 =
+        setRuntimeParameterForTest<&RuntimeParameters::sortNumTasksInFlight_>(
+            sortNumTasks);
+    auto cleanup2 =
+        setRuntimeParameterForTest<&RuntimeParameters::maxNumThreadsPerQuery_>(
+            maxNumThreadsPerQuery);
+    auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+    auto config = QueryExecutionContext::makeSortConfig(
+        ad_utility::testing::singleThreadExecutor(), handle);
+    EXPECT_TRUE(static_cast<bool>(config.executor_));
+    EXPECT_EQ(config.cancellationHandle_, handle);
+    return config.numTasksInFlight_;
+  };
+  EXPECT_EQ(numTasks(3, 6), 3);
+  EXPECT_EQ(numTasks(10, 4), 10);
+  EXPECT_EQ(numTasks(1, 6), 1);
+}
 
 TEST(Sort, ComputeSortSingleIntColumn) {
   VectorTable input{{0},   {1},       {-1},  {3},
@@ -187,10 +243,10 @@ TEST(Sort, checkSortedCloneIsProperlyHandled) {
                       {-17}, {1230957}, {123}, {-1249867132}};
     auto inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
     Sort sort = makeSort(std::move(inputTable), {0});
-    EXPECT_THROW(sort.makeSortedTree({0}), ad_utility::Exception);
+    EXPECT_THROW(sort.makeSortedTree(colIndices({0})), ad_utility::Exception);
     EXPECT_THROW(sort.makeSortedTree({}), ad_utility::Exception);
     // Check that we don't double sort
-    auto operation = sort.makeSortedTree({0, 1});
+    auto operation = sort.makeSortedTree(colIndices({0, 1}));
     ASSERT_TRUE(operation.has_value());
     const auto& childReference =
         *operation.value()->getRootOperation()->getChildren().at(0);
@@ -201,7 +257,7 @@ TEST(Sort, checkSortedCloneIsProperlyHandled) {
     auto inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
     Sort sort = makeSort(std::move(inputTable), {0, 1});
     // Check that we don't double sort
-    auto operation = sort.makeSortedTree({1, 0});
+    auto operation = sort.makeSortedTree(colIndices({1, 0}));
     ASSERT_TRUE(operation.has_value());
     const auto& childReference =
         *operation.value()->getRootOperation()->getChildren().at(0);
@@ -210,26 +266,42 @@ TEST(Sort, checkSortedCloneIsProperlyHandled) {
 }
 
 // _____________________________________________________________________________
-
-TEST(Sort, verifyOperationIsPreemptivelyAbortedWithNoRemainingTime) {
-  VectorTable input;
-  // Make sure the estimator estimates a couple of ms to sort this
-  for (int64_t i = 0; i < 1000; i++) {
-    input.push_back({0, i});
-  }
+TEST(Sort, explicitSortIsOnlyKeptIfALimitIsPresent) {
+  VectorTable input{{0, 0}, {1, 1}};
   auto inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
-  Sort sort = makeSort(std::move(inputTable), {1, 0});
-  // Safe to do, because we know the underlying estimator is mutable
-  const_cast<SortPerformanceEstimator&>(
-      sort.getExecutionContext()->getSortPerformanceEstimator())
-      .computeEstimatesExpensively(
-          ad_utility::makeUnlimitedAllocator<ValueId>(), 1'000'000);
+  Sort sort = makeSort(std::move(inputTable), {0, 1}, true);
+  // Without a `LIMIT`/`OFFSET` the sort order of an explicit `INTERNAL SORT BY`
+  // is not observable, so it may be replaced by a different one.
+  EXPECT_TRUE(sort.makeSortedTree(colIndices({1, 0})).has_value());
+  // With a `LIMIT` the sort order determines which rows are part of the result,
+  // so an additional `Sort` has to be placed on top of this operation instead.
+  sort.applyLimitOffset({1}, false);
+  EXPECT_FALSE(sort.makeSortedTree(colIndices({1, 0})).has_value());
+}
 
-  sort.recursivelySetTimeConstraint(0ms);
+// Test that `IdTableUtils::sort` (the in-memory sort of `Sort`, `OrderBy`,
+// ...) throws when its cancellation handle has been cancelled.
+TEST(Sort, inMemorySortIsCancellable) {
+  // The same permutation of 1M rows as in `sortNumTasksInFlight` above.
+  constexpr int64_t numRows = 1'000'000;
+  IdTable table{2, ad_utility::testing::makeAllocator()};
+  for (int64_t i = 0; i < numRows; ++i) {
+    int64_t j = (i * 7919) % numRows;
+    table.push_back({Id::makeFromInt(j), Id::makeFromInt(-j)});
+  }
 
-  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      sort.getResult(true), ::testing::HasSubstr("time estimate exceeded"),
-      ad_utility::CancellationException);
+  // A sort with a cancelled handle throws, in a single task and in parallel.
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+  handle->cancel(ad_utility::CancellationState::MANUAL);
+  for (uint32_t numTasks : {1, 8}) {
+    IdTable input = table.clone();
+    EXPECT_THROW(IdTableUtils::sort(
+                     input, colIndices({0}),
+                     SortConfig{ad_utility::testing::multiThreadExecutor(),
+                                numTasks, handle}),
+                 ad_utility::CancellationException)
+        << "numTasks = " << numTasks;
+  }
 }
 
 // _____________________________________________________________________________
@@ -242,10 +314,40 @@ TEST(Sort, clone) {
   EXPECT_EQ(clone->getDescriptor(), sort.getDescriptor());
 }
 
+// Test that cloning also works if the original has already computed its
+// mapping from variables to columns (here via the runtime information), while
+// the freshly constructed clone has not (regression test for #3568). A `Sort`
+// is used because its constructor does not compute the mapping.
+TEST(Sort, cloneAfterVariableColumnsWereComputed) {
+  Sort sort = makeSort(makeIdTableFromVector({{0, 0}}), {0});
+  sort.createRuntimeInfoFromEstimates(sort.getRuntimeInfoPointer());
+
+  auto clone = sort.clone();
+  ASSERT_TRUE(clone);
+  EXPECT_THAT(sort, IsDeepCopy(*clone));
+}
+
+// Test that a clone hides the same variables as the original (see #1943).
+TEST(Sort, cloneKeepsHiddenVariablesHidden) {
+  // A `Sort` with the variables `?0` and `?1`, of which the enclosing subquery
+  // selects only `?0`.
+  Sort sort = makeSort(makeIdTableFromVector({{0, 0}}), {0});
+  sort.setSelectedVariablesForSubquery({Variable{"?0"}});
+
+  auto clone = sort.clone();
+  ASSERT_TRUE(clone);
+  EXPECT_THAT(sort, IsDeepCopy(*clone));
+  EXPECT_FALSE(
+      clone->getExternallyVisibleVariableColumns().contains(Variable{"?1"}));
+}
+
 // Test external sorting with lazy input (multiple IdTable blocks). The test
 // uses 4 blocks where block 3 exceeds the threshold, so block 4 exercises the
 // "remaining blocks" loop in `computeResultExternal`.
 TEST(Sort, externalSortLazyInput) {
+  // The inputs of this test are so small that the memory limit of the external
+  // sorter would report false positives.
+  auto ignoreMemoryLimit = ad_utility::testing::setIgnoreMemoryLimit(true);
   auto qec = ad_utility::testing::getQec();
 
   // Create multiple tables to simulate lazy input. Total size needs to exceed
@@ -274,22 +376,25 @@ TEST(Sort, externalSortLazyInput) {
           ad_utility::MemorySize::kilobytes(100));
 
   // Create the `Sort` operation and get the result.
-  Sort externalSort{qec, subtree, {0, 1, 2}};
+  Sort externalSort{qec, subtree, colIndices({0, 1, 2})};
   auto result = externalSort.getResult();
 
   // Verify the result is sorted correctly.
-  const auto& table = result->idTable();
+  const auto& table = result->idTableView();
   EXPECT_EQ(8000u, table.numRows());
   for (size_t i = 1; i < table.numRows(); ++i) {
     bool isLessOrEqual =
-        std::tie(table(i - 1, 0), table(i - 1, 1), table(i - 1, 2)) <=
-        std::tie(table(i, 0), table(i, 1), table(i, 2));
+        ad_utility::tie(table(i - 1, 0), table(i - 1, 1), table(i - 1, 2)) <=
+        ad_utility::tie(table(i, 0), table(i, 1), table(i, 2));
     EXPECT_TRUE(isLessOrEqual) << "Row " << i << " is not in order";
   }
 }
 
 // Test external sorting with fully materialized input.
 TEST(Sort, externalSortMaterializedInput) {
+  // The inputs of this test are so small that the memory limit of the external
+  // sorter would report false positives.
+  auto ignoreMemoryLimit = ad_utility::testing::setIgnoreMemoryLimit(true);
   auto qec = ad_utility::testing::getQec();
 
   // Clear cache to avoid hits from previous tests.
@@ -319,22 +424,25 @@ TEST(Sort, externalSortMaterializedInput) {
       LocalVocab{}, std::nullopt, true);
 
   // Create the `Sort` operation and get the result.
-  Sort externalSort{qec, subtree, {0, 1, 2}};
+  Sort externalSort{qec, subtree, colIndices({0, 1, 2})};
   auto result = externalSort.getResult();
 
   // Verify the result is sorted correctly.
-  const auto& table = result->idTable();
+  const auto& table = result->idTableView();
   EXPECT_EQ(5000u, table.numRows());
   for (size_t i = 1; i < table.numRows(); ++i) {
     bool isLessOrEqual =
-        std::tie(table(i - 1, 0), table(i - 1, 1), table(i - 1, 2)) <=
-        std::tie(table(i, 0), table(i, 1), table(i, 2));
+        ad_utility::tie(table(i - 1, 0), table(i - 1, 1), table(i - 1, 2)) <=
+        ad_utility::tie(table(i, 0), table(i, 1), table(i, 2));
     EXPECT_TRUE(isLessOrEqual) << "Row " << i << " is not in order";
   }
 }
 
 // Test external sorting with lazy output.
 TEST(Sort, externalSortLazyOutput) {
+  // The inputs of this test are so small that the memory limit of the external
+  // sorter would report false positives.
+  auto ignoreMemoryLimit = ad_utility::testing::setIgnoreMemoryLimit(true);
   auto qec = ad_utility::testing::getQec();
 
   // Clear cache at start to avoid hits from previous tests.
@@ -380,7 +488,7 @@ TEST(Sort, externalSortLazyOutput) {
   }
 
   // Compare with in-memory result.
-  EXPECT_EQ(inMemoryResult->idTable(), externalResultIdTable);
+  EXPECT_EQ(inMemoryResult->idTableView(), externalResultIdTable);
 }
 
 // Test in-memory sorting with fully materialized input (exercises the code path
@@ -412,16 +520,140 @@ TEST(Sort, inMemorySortMaterializedInput) {
       LocalVocab{}, std::nullopt, true);
 
   // Create the `Sort` operation and get the result.
-  Sort inMemorySort{qec, subtree, {0, 1, 2}};
+  Sort inMemorySort{qec, subtree, colIndices({0, 1, 2})};
   auto result = inMemorySort.getResult();
 
   // Verify the result is sorted correctly.
-  const auto& table = result->idTable();
+  const auto& table = result->idTableView();
   EXPECT_EQ(100u, table.numRows());
   for (size_t i = 1; i < table.numRows(); ++i) {
     bool isLessOrEqual =
-        std::tie(table(i - 1, 0), table(i - 1, 1), table(i - 1, 2)) <=
-        std::tie(table(i, 0), table(i, 1), table(i, 2));
+        ad_utility::tie(table(i - 1, 0), table(i - 1, 1), table(i - 1, 2)) <=
+        ad_utility::tie(table(i, 0), table(i, 1), table(i, 2));
     EXPECT_TRUE(isLessOrEqual) << "Row " << i << " is not in order";
+  }
+}
+
+// _____________________________________________________________________________
+TEST(Sort, limitOffsetIsPropagated) {
+  auto qec = ad_utility::testing::getQec();
+  auto inputTable = makeIdTableFromVector({{1}, {2}, {3}});
+
+  std::vector<std::optional<Variable>> vars = {Variable{"?x"}};
+  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(inputTable), vars);
+
+  Sort sort{qec, subtree, colIndices({0})};
+  sort.applyLimitOffset({2, 1}, false);
+
+  EXPECT_EQ(sort.getChildren().at(0)->getRootOperation()->getLimitOffset(),
+            LimitOffsetClause(2, 1));
+  // We expect that the original subtree is unchanged.
+  EXPECT_TRUE(subtree->getRootOperation()->getLimitOffset().isUnconstrained());
+}
+
+// _____________________________________________________________________________
+TEST(Sort, limitOffsetIsNotPropagatedForExplicitSort) {
+  auto qec = ad_utility::testing::getQec();
+  auto inputTable = makeIdTableFromVector({{1}, {2}, {3}});
+
+  std::vector<std::optional<Variable>> vars = {Variable{"?x"}};
+  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(inputTable), vars);
+
+  auto tree = QueryExecutionTree::createSortedTree(subtree, {0}, true);
+  auto sort = std::dynamic_pointer_cast<Sort>(tree->getRootOperation());
+  ASSERT_NE(sort, nullptr);
+  EXPECT_EQ(sort->handlesLimitOffset(), LimitOffsetHandling::NONE);
+
+  sort->applyLimitOffset({2, 1}, false);
+
+  EXPECT_EQ(sort->getLimitOffset(), LimitOffsetClause(2, 1));
+  EXPECT_TRUE(sort->getChildren()
+                  .at(0)
+                  ->getRootOperation()
+                  ->getLimitOffset()
+                  .isUnconstrained());
+  EXPECT_TRUE(subtree->getRootOperation()->getLimitOffset().isUnconstrained());
+}
+
+// Test that `makeTreeWithStrippedColumns` strips the subtree to the requested
+// variables plus the variables the `Sort` sorts by, translates
+// `sortColumnIndices_` accordingly, and adds a `StripColumns` operation for
+// the sort variables that the parent did not request.
+TEST(Sort, makeTreeWithStrippedColumns) {
+  using ::column_stripping_test_helpers::isStrippedColumns;
+  using ::testing::ElementsAre;
+  using ::testing::Key;
+  using ::testing::UnorderedElementsAre;
+  // A subtree with the variables `?a`, `?b`, `?c` and `?d`.
+  auto qec = ad_utility::testing::getQec();
+  auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec,
+      makeIdTableFromVector(
+          {{6, 1, 3, 6}, {2, 6, 3, 5}, {3, 5, 5, 4}, {1, 2, 5, 1}}),
+      std::vector<std::optional<V>>{V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}});
+  auto strip = [&](std::vector<ColumnIndex> sortColumnIndices,
+                   std::set<V> requestedVariables) {
+    Sort sort{
+        qec, values,
+        qlm::vector<ColumnIndex>{sortColumnIndices.begin(),
+                                 sortColumnIndices.end(), qec->getAllocator()}};
+    auto tree = sort.makeTreeWithStrippedColumns(requestedVariables);
+    AD_CONTRACT_CHECK(tree.has_value() && tree.value() != nullptr);
+    return std::move(tree).value();
+  };
+
+  // `Sort` on `?b`, only `?b` requested: the result has only `?b`, the
+  // `Sort` now sorts by column 0.
+  {
+    auto tree = strip({1}, {V{"?b"}});
+    EXPECT_THAT(tree.get(),
+                isStrippedColumns<Sort>(
+                    {V{"?b"}}, matchesIdTableFromVector({{1}, {2}, {5}, {6}})));
+  }
+
+  // `Sort` by `?b` and `?d`, `?a`, `?b` and `?d` requested: `?c` is stripped
+  // and the columns are renumbered.
+  {
+    auto tree = strip({1, 3}, {V{"?a"}, V{"?b"}, V{"?d"}});
+    auto sort = std::dynamic_pointer_cast<Sort>(tree->getRootOperation());
+    ASSERT_TRUE(sort);
+    EXPECT_THAT(sort->resultSortedOn(), ElementsAre(1, 2));
+    EXPECT_EQ(tree->getVariableColumn(V{"?a"}), 0u);
+    EXPECT_EQ(tree->getVariableColumn(V{"?b"}), 1u);
+    EXPECT_EQ(tree->getVariableColumn(V{"?d"}), 2u);
+  }
+
+  // A requested variable that the subtree does not have is ignored.
+  {
+    auto tree = strip({1}, {V{"?a"}, V{"?b"}, V{"?d"}, V{"?notIncluded"}});
+    EXPECT_THAT(tree->getVariableColumns(),
+                UnorderedElementsAre(Key(V{"?a"}), Key(V{"?b"}), Key(V{"?d"})));
+  }
+
+  // `Sort` on `?b`, only `?c` requested: the `Sort` keeps `?b` and `?c`,
+  // a `StripColumns` on top removes `?b`.
+  {
+    auto tree = strip({1}, {V{"?c"}});
+    EXPECT_THAT(tree.get(),
+                isStrippedColumns<StripColumns>(
+                    {V{"?c"}}, matchesIdTableFromVector({{3}, {5}, {5}, {3}})));
+
+    EXPECT_THAT(tree->getRootOperation()->getChildren().at(0),
+                isStrippedColumns<Sort>({V{"?b"}, V{"?c"}},
+                                        matchesIdTableFromVector(
+                                            {{1, 3}, {2, 5}, {5, 5}, {6, 3}})));
+  }
+
+  // All variables requested: nothing is stripped and the indices stay.
+  {
+    auto tree = strip({0}, {V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}});
+    EXPECT_THAT(
+        tree.get(),
+        isStrippedColumns<Sort>(
+            {V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}},
+            matchesIdTableFromVector(
+                {{1, 2, 5, 1}, {2, 6, 3, 5}, {3, 5, 5, 4}, {6, 1, 3, 6}})));
   }
 }

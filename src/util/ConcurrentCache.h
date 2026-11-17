@@ -10,11 +10,12 @@
 #include <utility>
 
 #include "backports/keywords.h"
+#include "util/EnumSize.h"
 #include "util/Forward.h"
 #include "util/HashMap.h"
 #include "util/Log.h"
-#include "util/MemorySize/MemorySize.h"
 #include "util/Synchronized.h"
+#include "util/memorySize/MemorySize.h"
 
 namespace ad_utility {
 
@@ -40,6 +41,7 @@ enum struct CacheStatus {
   computed,
   notInCacheAndNotComputed
 };
+QLEVER_ENUM_SIZE(CacheStatus, 4);
 
 // Convert a `CacheStatus` to a human-readable string. We mostly use it for
 // JSON exports, so we use a hyphenated format.
@@ -160,7 +162,7 @@ class ConcurrentCache {
   /// Constructor: all arguments are forwarded to the underlying cache type.
   CPP_template(typename CacheArg, typename... CacheArgs)(requires(
       !ql::concepts::same_as<ConcurrentCache, ql::remove_cvref_t<CacheArg>>))
-      ConcurrentCache(CacheArg&& cacheArg, CacheArgs&&... cacheArgs)
+  ConcurrentCache(CacheArg&& cacheArg, CacheArgs&&... cacheArgs)
       : _cacheAndInProgressMap{AD_FWD(cacheArg), AD_FWD(cacheArgs)...} {}
 
   struct ResultAndCacheStatus {
@@ -186,9 +188,9 @@ class ConcurrentCache {
    *
    */
   CPP_template_2(typename ComputeFuncT, typename SuitabilityFuncT)(
-      requires InvocableWithConvertibleReturnType<ComputeFuncT, Value> CPP_and_2
-          InvocableWithConvertibleReturnType<SuitabilityFuncT, bool,
-                                             const Value&>) ResultAndCacheStatus
+      requires InvocableWithConvertibleReturnType<ComputeFuncT, Value> &&
+      InvocableWithConvertibleReturnType<SuitabilityFuncT, bool, const Value&>)
+  ResultAndCacheStatus
       computeOnce(const Key& key, const ComputeFuncT& computeFunction,
                   bool onlyReadFromCache,
                   const SuitabilityFuncT& suitableForCache) {
@@ -199,9 +201,9 @@ class ConcurrentCache {
   /// Similar to computeOnce, with the following addition: After the call
   /// completes, the result will be pinned in the underlying cache.
   CPP_template_2(typename ComputeFuncT, typename SuitabilityFuncT)(
-      requires InvocableWithConvertibleReturnType<ComputeFuncT, Value> CPP_and_2
-          InvocableWithConvertibleReturnType<SuitabilityFuncT, bool,
-                                             const Value&>) ResultAndCacheStatus
+      requires InvocableWithConvertibleReturnType<ComputeFuncT, Value> &&
+      InvocableWithConvertibleReturnType<SuitabilityFuncT, bool, const Value&>)
+  ResultAndCacheStatus
       computeOncePinned(const Key& key, const ComputeFuncT& computeFunction,
                         bool onlyReadFromCache,
                         const SuitabilityFuncT& suitedForCache) {
@@ -213,13 +215,12 @@ class ConcurrentCache {
   // compute it, but do not store it in the cache. The interface is the same as
   // for the above two functions, therefore some of the arguments are unused.
   CPP_template_2(typename ComputeFuncT, typename SuitabilityFuncT)(
-      requires InvocableWithConvertibleReturnType<ComputeFuncT, Value> CPP_and_2
-          InvocableWithConvertibleReturnType<SuitabilityFuncT, bool,
-                                             const Value&>) ResultAndCacheStatus
-      computeButDontStore(
-          const Key& key, const ComputeFuncT& computeFunction,
-          bool onlyReadFromCache,
-          [[maybe_unused]] const SuitabilityFuncT& suitedForCache) {
+      requires InvocableWithConvertibleReturnType<ComputeFuncT, Value> &&
+      InvocableWithConvertibleReturnType<SuitabilityFuncT, bool, const Value&>)
+  ResultAndCacheStatus computeButDontStore(
+      const Key& key, const ComputeFuncT& computeFunction,
+      bool onlyReadFromCache,
+      [[maybe_unused]] const SuitabilityFuncT& suitedForCache) {
     {
       auto resultPtr = _cacheAndInProgressMap.wlock()->_cache[key];
       if (resultPtr != nullptr) {
@@ -239,14 +240,7 @@ class ConcurrentCache {
   void tryInsertIfNotPresent(bool pinned, const Key& key,
                              std::shared_ptr<Value> value) {
     auto lockPtr = _cacheAndInProgressMap.wlock();
-    auto& cache = lockPtr->_cache;
-    if (pinned) {
-      if (!cache.containsAndMakePinnedIfExists(key)) {
-        cache.insertPinned(key, std::move(value));
-      }
-    } else if (!cache.contains(key)) {
-      cache.insert(key, std::move(value));
-    }
+    insertIfNotPresent(lockPtr->_cache, pinned, key, std::move(value));
   }
 
   /// Clear the cache (but not the pinned entries)
@@ -319,6 +313,9 @@ class ConcurrentCache {
     _cacheAndInProgressMap.wlock()->_cache.setMaxSizeSingleEntry(maxSize);
   }
 
+  MemorySize getMaxSize() const {
+    return _cacheAndInProgressMap.wlock()->_cache.getMaxSize();
+  }
   MemorySize getMaxSizeSingleEntry() const {
     return _cacheAndInProgressMap.wlock()->_cache.getMaxSizeSingleEntry();
   }
@@ -339,38 +336,59 @@ class ConcurrentCache {
     CacheAndInProgressMap() = default;
     CPP_template_2(typename Arg, typename... Args)(requires(
         !ql::concepts::same_as<ql::remove_cvref_t<Arg>, CacheAndInProgressMap>))
-        QL_EXPLICIT(sizeof...(Args) > 0)
-            CacheAndInProgressMap(Arg&& arg, Args&&... args)
+    QL_EXPLICIT(sizeof...(Args) > 0)
+    CacheAndInProgressMap(Arg&& arg, Args&&... args)
         : _cache{AD_FWD(arg), AD_FWD(args)...} {}
   };
 
   // make the whole class thread-safe by making all the data members thread-safe
   using SyncCache = ad_utility::Synchronized<CacheAndInProgressMap, std::mutex>;
 
-  // delete the operation with the key from the hash map of the operations that
-  // are in progress, and add it to the cache using the computationResult
-  // Will crash if the key cannot be found in the hash map
+  // Delete the operation with the key from the hash map of the operations
+  // that are in progress, and add it to the cache using the computationResult
+  // (unless the key is already present, see the NOTE below). Will crash if
+  // the key cannot be found in the hash map.
   void moveFromInProgressToCache(Key key,
                                  std::shared_ptr<Value> computationResult) {
     // Obtain a lock for the whole operation, making it atomic.
     auto lockPtr = _cacheAndInProgressMap.wlock();
     AD_CONTRACT_CHECK(lockPtr->_inProgress.contains(key));
     bool pinned = lockPtr->_inProgress[key].first;
-    if (pinned) {
-      lockPtr->_cache.insertPinned(std::move(key),
-                                   std::move(computationResult));
-    } else {
-      lockPtr->_cache.insert(std::move(key), std::move(computationResult));
-    }
+    // NOTE: The key might already be present in the cache: If a computation
+    // finishes with a result that is unsuitable for caching, it deregisters
+    // the key without inserting and signals a null result, whereupon a thread
+    // that was waiting for it computes the result itself and inserts it via
+    // `tryInsertIfNotPresent` (see `computeOnceImpl`). The same can happen via
+    // direct calls to `tryInsertIfNotPresent` (this is how lazy results are
+    // cached once they have been fully consumed). A thread that started a
+    // fresh computation of the same key in that window ends up here with the
+    // key already inserted. Hence the `insertIfNotPresent` instead of an
+    // unconditional insert.
+    insertIfNotPresent(lockPtr->_cache, pinned, key,
+                       std::move(computationResult));
     lockPtr->_inProgress.erase(key);
+  }
+
+  // Insert `value` under `key` into `cache` if the key is not already present.
+  // Assume that the caller holds the lock on the cache. If `pinned` is true and
+  // the key already exists, pin the existing entry.
+  static void insertIfNotPresent(Cache& cache, bool pinned, const Key& key,
+                                 std::shared_ptr<Value> value) {
+    if (pinned) {
+      if (!cache.containsAndMakePinnedIfExists(key)) {
+        cache.insertPinned(key, std::move(value));
+      }
+    } else if (!cache.contains(key)) {
+      cache.insert(key, std::move(value));
+    }
   }
 
  private:
   // implementation for computeOnce (pinned and normal variant).
   CPP_template_2(typename ComputeFuncT, typename SuitabilityFuncT)(
-      requires InvocableWithConvertibleReturnType<ComputeFuncT, Value> CPP_and_2
-          InvocableWithConvertibleReturnType<SuitabilityFuncT, bool,
-                                             const Value&>) ResultAndCacheStatus
+      requires InvocableWithConvertibleReturnType<ComputeFuncT, Value> &&
+      InvocableWithConvertibleReturnType<SuitabilityFuncT, bool, const Value&>)
+  ResultAndCacheStatus
       computeOnceImpl(bool pinned, const Key& key,
                       const ComputeFuncT& computeFunction,
                       bool onlyReadFromCache,

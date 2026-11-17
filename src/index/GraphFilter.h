@@ -11,7 +11,7 @@
 #include <variant>
 
 #include "backports/three_way_comparison.h"
-#include "global/ValueId.h"
+#include "global/Id.h"
 #include "parser/TripleComponent.h"
 #include "util/HashSet.h"
 #include "util/OverloadCallOperator.h"
@@ -29,7 +29,7 @@ class GraphFilter {
  public:
   // Marker type for the "ALL" case.
   struct AllTag {
-    QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(AllTag)
+    QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(AllTag, )
   };
 
   // ALL, WHITELIST, BLACKLIST
@@ -57,9 +57,9 @@ class GraphFilter {
   // Transforms this `GraphFilter` into another one with a different template
   // argument, by using `func` to transform the underlying values from `T` to a
   // new type.
-  CPP_template(typename Func)(requires ql::concepts::invocable<Func, const T&>)
-      GraphFilter<std::invoke_result_t<Func, T>> transform(
-          const Func& func) const {
+  CPP_template(typename Func)(
+      requires ql::concepts::invocable<Func, const T&>)
+  GraphFilter<std::invoke_result_t<Func, T>> transform(const Func& func) const {
     using TransformedT = std::invoke_result_t<Func, T>;
     using ResultT = GraphFilter<TransformedT>;
     return std::visit(ad_utility::OverloadCallOperator{
@@ -82,6 +82,10 @@ class GraphFilter {
 
   // Return true iff all graphs are always allowed.
   bool areAllGraphsAllowed() const;
+
+  // Return the whitelisted graphs if this filter is a whitelist, and `nullptr`
+  // otherwise.
+  const ad_utility::HashSet<T>* whitelistIfPresent() const;
 
   // Make sure this filter is comparable.
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(GraphFilter, filter_)

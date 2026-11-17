@@ -1,92 +1,195 @@
-// Copyright 2023, University of Freiburg,
-//                 Chair of Algorithms and Data Structures.
-// Author: Benedikt Maria Beckermann <benedikt.beckermann@dagstuhl.de>
+// Copyright 2023 - 2026 The QLever Authors, in particular:
+//
+// 2023 Benedikt Maria Beckermann <benedikt.beckermann@dagstuhl.de>
+// 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_PARSER_LITERAL_H
+
 #define QLEVER_SRC_PARSER_LITERAL_H
 
 #include <optional>
+#include <string>
+#include <string_view>
+#include <type_traits>
 #include <variant>
 
+#include "backports/StartsWithAndEndsWith.h"
 #include "backports/concepts.h"
 #include "backports/three_way_comparison.h"
-#include "parser/NormalizedString.h"
 #include "rdfTypes/Iri.h"
 
 namespace ad_utility::triple_component {
-// A class to hold literal values.
-class Literal {
+
+class Literal;
+class LiteralView;
+
+// A class template to hold literal values. When `isOwning = true` (the
+// default), storage is `std::string`. When `isOwning = false`, storage is
+// `std::string_view` and all mutating/allocating functions are disabled. Use
+// the `Literal` and `LiteralView` wrapper classes for the concrete owning and
+// non-owning variants.
+template <bool isOwning = true>
+class BasicLiteral {
+ public:
+  using StorageType =
+      std::conditional_t<isOwning, std::string, std::string_view>;
+
  private:
+  // Required for `toOwned` below, and for the constructor of `LiteralView`
+  // from an equal literal.
+  template <bool>
+  friend class BasicLiteral;
+  friend class LiteralView;
+
   // Store the normalized version of the literal, including possible datatypes
   // and descriptors.
   //  For example `"Hello World"@en`  or `"With"Quote"^^<someDatatype>` (note
   //  that the quote in the middle is unescaped because this is the normalized
   //  form that QLever stores.
-  std::string content_;
+  StorageType storage_;
   // The position after the closing `"`, so either the size of the string, or
   // the position of the `@` or `^^` for literals with language tags or
   // datatypes.
   std::size_t beginOfSuffix_;
 
-  // Create a new literal without any descriptor
-  explicit Literal(std::string content, size_t beginOfSuffix_);
+  // Like the constructor below, but without its checks. Only for a `content`
+  // and a `beginOfSuffix` that are taken from a valid literal (see `toOwned`
+  // and the constructor of `LiteralView` from an equal literal, which is called
+  // for each word that is added to a `LocalVocab`).
+  struct UncheckedTag {};
+  BasicLiteral(UncheckedTag, StorageType content, size_t beginOfSuffix)
+      : storage_{std::move(content)}, beginOfSuffix_{beginOfSuffix} {}
+
+ protected:
+  // Create a new literal without any descriptor.
+  explicit BasicLiteral(StorageType content, size_t beginOfSuffix);
+
+  StorageType& storage() { return storage_; }
+  const StorageType& storage() const { return storage_; }
+
+  std::size_t& beginOfSuffix() { return beginOfSuffix_; }
+  std::size_t beginOfSuffix() const { return beginOfSuffix_; }
 
   // Internal helper function. Return either the empty string (for a plain
   // literal), `@langtag` or `^^<datatypeIri>`.
   std::string_view getSuffix() const {
-    std::string_view result = content_;
+    std::string_view result = storage_;
     result.remove_prefix(beginOfSuffix_);
     return result;
   }
 
-  NormalizedStringView content() const {
-    return asNormalizedStringViewUnsafe(content_);
-  }
+  std::string_view content() const { return storage_; }
 
  public:
-  CPP_template(typename H,
-               typename L)(requires ql::concepts::same_as<L, Literal>) friend H
-      AbslHashValue(H h, const L& literal) {
-    return H::combine(std::move(h), literal.content_);
+  CPP_template(typename H, typename L)(
+      requires ql::concepts::same_as<L, BasicLiteral>)
+  friend H AbslHashValue(H h, const L& literal) {
+    return H::combine(std::move(h), literal.storage_);
   }
-  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Literal, content_, beginOfSuffix_)
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(BasicLiteral, storage_,
+                                              beginOfSuffix_)
 
-  const std::string& toStringRepresentation() const&;
-  std::string toStringRepresentation() &&;
+  // Return an owning copy of this literal.
+  Literal toOwned() const;
 
-  static Literal fromStringRepresentation(std::string internal);
+  std::conditional_t<isOwning, const std::string&, std::string_view>
+  toStringRepresentation() const& {
+    return storage_;
+  }
 
-  // Return true if the literal has an assigned language tag
+  std::conditional_t<isOwning, std::string, std::string_view>
+  toStringRepresentation() && {
+    return std::move(storage_);
+  }
+
+  static BasicLiteral fromStringRepresentation(StorageType internal);
+
+  // Return true if the literal has an assigned language tag.
   bool hasLanguageTag() const;
 
-  // Return true if the literal has an assigned datatype
+  // Return true if the literal has an assigned datatype. `XSD_STRING` is not
+  // considered a datatype for this function, so literals with the `XSD_STRING`
+  // datatype are considered to have no datatype.
   bool hasDatatype() const;
 
-  // Return the value of the literal without quotation marks and  without any
-  // datatype or language tag
-  NormalizedStringView getContent() const;
+  // Return the value of the literal without quotation marks and without any
+  // datatype or language tag.
+  std::string_view getContent() const;
 
   // Return the language tag of the literal, if available, without leading @
   // character. Throws an exception if the literal has no language tag.
-  NormalizedStringView getLanguageTag() const;
+  std::string_view getLanguageTag() const;
 
   // Return the datatype of the literal, if available, without leading ^^
   // prefix. Throws an exception if the literal has no datatype.
-  NormalizedStringView getDatatype() const;
+  std::string_view getDatatype() const;
 
-  // For documentation, see documentation of function
-  // LiteralORIri::fromEscapedRdfLiteral
+  // Remove the datatype suffix from the Literal.
+  void removeDatatypeOrLanguageTag();
+
+  // Returns true if the literal has no language tag or datatype suffix.
+  // `XSD_STRING` is not considered a datatype for this function, so literals
+  // with the `XSD_STRING` datatype are considered plain.
+  bool isPlain() const;
+};
+
+// Owning Literal type (stores its own `std::string`).
+class Literal : public BasicLiteral<true> {
+ public:
+  using BasicLiteral<true>::BasicLiteral;
+
+ private:
+  // The qualified name is needed, because inside a class derived from
+  // `BasicLiteral<...>` GCC 8 resolves a plain `BasicLiteral` to the
+  // specialization of the base class.
+  template <bool>
+  friend class ::ad_utility::triple_component::BasicLiteral;
+
+  explicit Literal(BasicLiteral<true>&& base)
+      : BasicLiteral<true>(std::move(base)) {}
+
+  // Create a `Literal` from `storage`, which must already contain the
+  // normalized content including the surrounding quotes, and then append the
+  // `descriptor` (a datatype IRI or a language tag). To keep the whole literal
+  // a single allocation, the capacity of `storage` should also account for the
+  // descriptor, see `maxSuffixSize` in `Literal.cpp`.
+  static Literal withDescriptor(
+      std::string storage,
+      std::optional<std::variant<Iri, std::string>> descriptor);
+
+ public:
+  using BasicLiteral<true>::toStringRepresentation;
+
+  template <typename H>
+  friend H AbslHashValue(H h, const Literal& lit) {
+    return H::combine(std::move(h),
+                      static_cast<const BasicLiteral<true>&>(lit));
+  }
+
+  static Literal fromStringRepresentation(std::string internal);
+
+  // Create a Literal from an escaped RDF literal string with quotes.
   static Literal fromEscapedRdfLiteral(
       std::string_view rdfContentWithQuotes,
       std::optional<std::variant<Iri, std::string>> descriptor = std::nullopt);
 
   // Similar to `fromEscapedRdfLiteral`, except the rdfContent is expected to
-  // already be normalized
+  // already be normalized, i.e. without the surrounding quotes and with all
+  // escape sequences already resolved. This is not checked.
   static Literal literalWithNormalizedContent(
-      NormalizedStringView normalizedRdfContent,
+      std::string_view normalizedRdfContent,
       std::optional<std::variant<Iri, std::string>> descriptor = std::nullopt);
 
   void addLanguageTag(std::string_view languageTag);
+
+  // Add a datatype to the literal. If the literal already has a datatype or a
+  // language tag, this function will throw an error. The `XSD_STRING` datatype
+  // is ignored.
   void addDatatype(const Iri& datatype);
 
   // For documentation, see documentation of function
@@ -95,29 +198,68 @@ class Literal {
       std::string_view rdfContentWithoutQuotes,
       std::optional<std::variant<Iri, std::string>> descriptor = std::nullopt);
 
-  // Returns true if the literal has no language tag or datatype suffix
-  bool isPlain() const;
-
   // Erase everything but the substring in the range ['start', 'start'+'length')
   // from the inner content. Note that the start position does not count the
   // leading quotes, so the first character after the quote has index 0.
   // Throws if either 'start' or 'start' + 'length' is out of bounds.
   void setSubstr(std::size_t start, std::size_t length);
 
-  // Remove the datatype suffix from the Literal.
-  void removeDatatypeOrLanguageTag();
-
   // Replace the content of the Literal object with `newContent`.
   // It truncates or extends the content based on the length of newContent
-  // Used in UCASE/LCASE functions in StringExpressions.cpp.
+  // Used in `UCASE`/`LCASE` functions in `StringExpressions.cpp`.
   void replaceContent(std::string_view newContent);
 
   // Concatenates the content of the current literal with another literal.
   // If the language tag or datatype of the literals differ, the existing
   // language tag or datatype is removed from the current literal. Used in the
-  // CONCAT function in StringExpressions.cpp.
+  // `CONCAT` function in `ConcatExpression.cpp`.
   void concat(const Literal& other);
 };
+
+// Non-owning Literal view type (stores a `std::string_view`).
+class LiteralView : public BasicLiteral<false> {
+ public:
+  using BasicLiteral<false>::BasicLiteral;
+
+ private:
+  // The qualified name is needed, because inside a class derived from
+  // `BasicLiteral<...>` GCC 8 resolves a plain `BasicLiteral` to the
+  // specialization of the base class.
+  template <bool>
+  friend class ::ad_utility::triple_component::BasicLiteral;
+
+  explicit LiteralView(BasicLiteral<false>&& base)
+      : BasicLiteral<false>(std::move(base)) {}
+
+  // Only for the corresponding constructor of `LiteralOrIriView` (see there).
+  friend class LiteralOrIriView;
+  template <bool isOwning>
+  LiteralView(const BasicLiteral<isOwning>& equal, std::string_view storage)
+      : BasicLiteral<false>{BasicLiteral<false>::UncheckedTag{}, storage,
+                            equal.beginOfSuffix_} {
+    AD_EXPENSIVE_CHECK(storage ==
+                       std::string_view{equal.toStringRepresentation()});
+  }
+
+ public:
+  template <typename H>
+  friend H AbslHashValue(H h, const LiteralView& lit) {
+    return H::combine(std::move(h),
+                      static_cast<const BasicLiteral<false>&>(lit));
+  }
+
+  static LiteralView fromStringRepresentation(std::string_view internal) {
+    return LiteralView{BasicLiteral<false>::fromStringRepresentation(internal)};
+  }
+};
+
+// _____________________________________________________________________________
+template <bool isOwning>
+Literal BasicLiteral<isOwning>::toOwned() const {
+  return Literal{BasicLiteral<true>{typename BasicLiteral<true>::UncheckedTag{},
+                                    std::string{storage_}, beginOfSuffix_}};
+}
+
 }  // namespace ad_utility::triple_component
 
 #endif  // QLEVER_SRC_PARSER_LITERAL_H

@@ -11,7 +11,9 @@
 #include "backports/functional.h"
 #include "engine/Operation.h"
 #include "engine/VariableToColumnMap.h"
+#include "parser/BlankNodeAdder.h"
 #include "parser/ParsedQuery.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/LazyJsonParser.h"
 #include "util/http/HttpClient.h"
 
@@ -70,7 +72,9 @@ class Service : public Operation {
   // Methods inherited from base class `Operation`.
   std::string getDescriptor() const override;
   size_t getResultWidth() const override;
-  std::vector<ColumnIndex> resultSortedOn() const override { return {}; }
+  qlm::vector<ColumnIndex> resultSortedOn() const override {
+    return qlm::vector<ColumnIndex>{allocator()};
+  }
   float getMultiplicity(size_t col) override;
 
  private:
@@ -83,14 +87,19 @@ class Service : public Operation {
   // We know nothing about the result at query planning time.
   bool knownEmptyResult() override { return false; }
 
+ private:
   // A SERVICE clause has no children.
-  std::vector<QueryExecutionTree*> getChildren() override { return {}; }
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return {{}, allocator()};
+  }
 
-  // Convert the given binding to TripleComponent.
+ public:
+  // Convert the given binding to TripleComponent. Blank nodes are resolved via
+  // the `blankNodeAdder`, which has to be the same for all bindings of a single
+  // SERVICE result, because blank node labels are scoped to the result set they
+  // occur in.
   TripleComponent bindingToTripleComponent(
-      const nlohmann::json& binding,
-      ad_utility::HashMap<std::string, Id>& blankNodeMap,
-      LocalVocab* localVocab) const;
+      const nlohmann::json& binding, BlankNodeAdder& blankNodeAdder) const;
 
   // Create a value for the VALUES-clause used in `getSiblingValuesClause` from
   // id. If the id is of type blank node `std::nullopt` is returned.
@@ -101,12 +110,22 @@ class Service : public Operation {
   // operation, this method tries to precompute the result of one if the other
   // one (its sibling) is a `Service` operation. If `rightOnly` is true (used by
   // `OptionalJoin` and `Minus`), only the right operation can be a `Service`.
+  // `Sort` and `StripColumns` operations on top of the children are looked
+  // through.
   static void precomputeSiblingResult(std::shared_ptr<Operation> left,
                                       std::shared_ptr<Operation> right,
                                       bool rightOnly, bool requestLaziness);
 
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
+
+  // SERVICE queries a remote endpoint and may return different results on
+  // successive invocations, so it is non-deterministic by default. It is
+  // treated as deterministic (and hence cacheable) iff the runtime parameter
+  // `cache-service-results` is enabled, in which case the user guarantees that
+  // the remote endpoint returns a stable result. This is kept consistent with
+  // `getCacheKeyImpl()`, which also reads the parameter live.
+  [[nodiscard]] bool isDeterministicImpl() const override;
 
   // The string returned by this function is used as cache key.
   std::string getCacheKeyImpl() const override;
@@ -122,6 +141,12 @@ class Service : public Operation {
 
   // Compute the result using `getResultFunction_` and `siblingInfo_`.
   Result computeResult(bool requestLaziness) override;
+
+  // Read the result from the `response`, which is in QLever's binary format
+  // (see `engine/binaryExport/BinaryExport.h`). This is the counterpart of the
+  // JSON handling in `computeResultImpl`.
+  Result computeBinaryResult(bool requestLaziness,
+                             HttpOrHttpsResponse response);
 
   // Actually compute the result for the function above.
   Result computeResultImpl(bool requestLaziness);
@@ -143,15 +168,22 @@ class Service : public Operation {
       std::string_view msg, std::string_view first100,
       std::string_view last100 = ""sv) const;
 
+  // Throws if the IRI is forbidden by the IRI prefix whitelist.
+  void throwIfIriNotWhitelisted();
+
   // Write the given JSON result to the given result object. The `I` is the
   // width of the result table.
   //
   // NOTE: This is similar to `Values::writeValues`, except that we have to
   // parse JSON here and not a VALUES clause.
+  // NOTE: The `localVocab` holds the words of the current block only, whereas
+  // the `blankNodeAdder` (and thereby the blank nodes) is shared by all blocks,
+  // see `computeResultLazily`.
   template <size_t I>
   void writeJsonResult(const std::vector<std::string>& vars,
                        const nlohmann::json& partJson, IdTable* idTable,
-                       LocalVocab* localVocab, size_t& rowIdx);
+                       LocalVocab* localVocab, BlankNodeAdder& blankNodeAdder,
+                       size_t& rowIdx);
 
   // Compute the result lazy as IdTable generator.
   // If the `singleIdTable` flag is set, the result is yielded as one idTable.
@@ -164,6 +196,8 @@ class Service : public Operation {
   FRIEND_TEST(ServiceTest, precomputeSiblingResultDoesNotWorkWithCaching);
   FRIEND_TEST(ServiceTest, precomputeSiblingResultDoesNotWorkWithLimit);
   FRIEND_TEST(ServiceTest, precomputeSiblingResult);
+  FRIEND_TEST(ServiceTest, precomputeSiblingResultWithStripColumns);
+  FRIEND_TEST(ServiceTest, pushDownValuesPlacesValuesAtEnd);
 };
 #else
 // In the C++17 mode, where the If we disable the `Service` operation isled,

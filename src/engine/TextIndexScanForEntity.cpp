@@ -32,7 +32,7 @@ Result TextIndexScanForEntity::computeResult(
   oss << config_;
   runtimeInfo().addDetail("text-index-scan-for-entity-config", oss.str());
   IdTable idTable = getExecutionContext()->getIndex().getEntityMentionsForWord(
-      config_.word_, getExecutionContext()->getAllocator());
+      config_.word_, getExecutionContext()->getAllocator(), sortConfig());
 
   std::vector<ColumnIndex> cols{0};
   if (hasFixedEntity()) {
@@ -123,8 +123,8 @@ bool TextIndexScanForEntity::knownEmptyResult() {
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> TextIndexScanForEntity::resultSortedOn() const {
-  return {ColumnIndex(0)};
+qlm::vector<ColumnIndex> TextIndexScanForEntity::resultSortedOn() const {
+  return {{ColumnIndex(0)}, allocator()};
 }
 
 // _____________________________________________________________________________
@@ -136,8 +136,8 @@ std::string TextIndexScanForEntity::getDescriptor() const {
 // _____________________________________________________________________________
 std::string TextIndexScanForEntity::getCacheKeyImpl() const {
   std::ostringstream os;
-  os << "ENTITY INDEX SCAN FOR WORD: "
-     << " with word: \"" << config_.word_ << "\" and fixed-entity: \""
+  os << "ENTITY INDEX SCAN FOR WORD: " << " with word: \"" << config_.word_
+     << "\" and fixed-entity: \""
      << (hasFixedEntity() ? fixedEntity() : "no fixed-entity")
      << "\", has variable: " << config_.scoreVar_.has_value();
   return std::move(os).str();

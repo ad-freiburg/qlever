@@ -15,12 +15,13 @@
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "global/Constants.h"
 #include "global/Id.h"
-#include "global/ValueId.h"
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "util/ConstexprSmallString.h"
+#include "util/Iterators.h"
 #include "util/LruCache.h"
 #include "rdfTypes/TensorData.h"
+#include "util/ParsedUri.h"
 #include "util/TypeTraits.h"
 #include "util/UnitOfMeasurement.h"
 
@@ -38,6 +39,11 @@ struct NotNumeric {};
 // The input to an expression that expects a numeric value.
 using NumericValue = std::variant<NotNumeric, double, int64_t>;
 using IntOrDouble = std::variant<double, int64_t>;
+// The input to an expression that expects a numeric value or a
+// `DateYearOrDuration`. Will be used in `NumericBinaryExpressions.cpp` to allow
+// for subtraction of `DateYearOrDuration` objects.
+using NumericOrDateValue =
+    std::variant<NotNumeric, double, int64_t, DateYearOrDuration>;
 
 // Return type for `DatatypeValueGetter`.
 using LiteralOrString =
@@ -60,8 +66,9 @@ CPP_concept ValueAsNumericId =
 // Convert a numeric value (either a plain number, or the `NumericValue` variant
 // from above) into an `ID`. When `NanOrInfToUndef` is `true` then floating
 // point `NaN` or `+-infinity` values will become `Id::makeUndefined()`.
-CPP_template(bool NanOrInfToUndef = false,
-             typename T)(requires ValueAsNumericId<T>) Id makeNumericId(T t) {
+CPP_template(bool NanOrInfToUndef = false, typename T)(
+    requires ValueAsNumericId<T>)
+Id makeNumericId(T t) {
   if constexpr (concepts::integral<T>) {
     return Id::makeFromInt(t);
   } else if constexpr (ql::concepts::floating_point<T> && NanOrInfToUndef) {
@@ -79,11 +86,11 @@ CPP_template(bool NanOrInfToUndef = false,
 }
 
 // All the numeric value getters have an `operator()` for `ValueId` and one for
-// `std::string`. This mixin adds the `operator()` for the `IdOrLiteralOrIri`
+// `std::string`. This mixin adds the `operator()` for the `IdOrLocalVocabEntry`
 // variant via the CRTP pattern.
 template <typename Self>
 struct Mixin {
-  decltype(auto) operator()(IdOrLiteralOrIri s,
+  decltype(auto) operator()(IdOrLocalVocabEntry s,
                             const EvaluationContext* ctx) const {
     return std::visit(
         [this, ctx](auto el) {
@@ -95,12 +102,29 @@ struct Mixin {
 
 // Return `NumericValue` which is then used as the input to numeric expressions.
 struct NumericValueGetter : Mixin<NumericValueGetter> {
+  using Value = NumericValue;
   using Mixin<NumericValueGetter>::operator();
   NumericValue operator()(const LiteralOrIri&, const EvaluationContext*) const {
     return NotNumeric{};
   }
 
   NumericValue operator()(ValueId id, const EvaluationContext*) const;
+};
+
+// Return `NumericOrDateValue` which is then used as the input to numeric
+// expressions.
+struct NumericOrDateValueGetter : Mixin<NumericOrDateValueGetter> {
+  using Mixin<NumericOrDateValueGetter>::operator();
+  using Value = NumericOrDateValue;
+  // Same as in `NumericValueGetter`.
+  // Here a `LiteralOrIri` can never be of type `bool`, `int`, `double` or
+  // `DateYearOrDuration`. These types were already folded into `ValueId`s.
+  NumericOrDateValue operator()(const LiteralOrIri&,
+                                const EvaluationContext*) const {
+    return NotNumeric{};
+  }
+
+  NumericOrDateValue operator()(ValueId id, const EvaluationContext*) const;
 };
 
 /// Return the type exactly as it was passed in.
@@ -116,6 +140,7 @@ struct ActualValueGetter {
 /// Returns true iff the valid is not a NULL/UNDEF value (from optional) and
 /// not a nan (signalling an error in a previous calculation).
 struct IsValidValueGetter : Mixin<IsValidValueGetter> {
+  using Value = bool;
   using Mixin<IsValidValueGetter>::operator();
   // check for NULL/UNDEF values.
   bool operator()(ValueId id, const EvaluationContext*) const;
@@ -130,6 +155,7 @@ struct IsValidValueGetter : Mixin<IsValidValueGetter> {
 struct EffectiveBooleanValueGetter : Mixin<EffectiveBooleanValueGetter> {
   using Mixin<EffectiveBooleanValueGetter>::operator();
   enum struct Result { False, True, Undef };
+  using Value = Result;
 
   Result operator()(ValueId id, const EvaluationContext*) const;
 
@@ -142,24 +168,25 @@ struct EffectiveBooleanValueGetter : Mixin<EffectiveBooleanValueGetter> {
 // This class can be used as the `ValueGetter` argument of Expression
 // templates. It produces a string value.
 struct StringValueGetter : Mixin<StringValueGetter> {
+  using Value = std::optional<std::string>;
   using Mixin<StringValueGetter>::operator();
   std::optional<std::string> operator()(ValueId,
                                         const EvaluationContext*) const;
 
   // TODO<joka921> probably we should return a reference or a view here.
-  // TODO<joka921> use a `NormalizedStringView` inside the expressions.
   std::optional<std::string> operator()(const LiteralOrIri& s,
                                         const EvaluationContext*) const {
-    return std::string(asStringViewUnsafe(s.getContent()));
+    return std::string(s.getContent());
   }
 };
 
 // This class can be used as the `ValueGetter` argument of Expression
 // templates. It implicitly applies the STR() function. In particular,
 // all datatypes are removed, language tags are preserved,
-// see `ExportQueryExecutionTrees::idToLiteral` for details.
+// see `ql::exportIds::idToLiteral` for details.
 struct LiteralValueGetterWithStrFunction
     : Mixin<LiteralValueGetterWithStrFunction> {
+  using Value = std::optional<ad_utility::triple_component::Literal>;
   using Mixin<LiteralValueGetterWithStrFunction>::operator();
 
   std::optional<ad_utility::triple_component::Literal> operator()(
@@ -173,6 +200,7 @@ struct LiteralValueGetterWithStrFunction
 // returned. This is used in the string expressions in `StringExpressions.cpp`.
 struct LiteralValueGetterWithoutStrFunction
     : Mixin<LiteralValueGetterWithoutStrFunction> {
+  using Value = std::optional<ad_utility::triple_component::Literal>;
   using Mixin<LiteralValueGetterWithoutStrFunction>::operator();
 
   std::optional<ad_utility::triple_component::Literal> operator()(
@@ -183,10 +211,17 @@ struct LiteralValueGetterWithoutStrFunction
 };
 // Boolean value getter that checks whether the given `Id` is a `ValueId` of the
 // given `datatype`.
+//
+// NOTE: For this and all the `is...` getters below, the result for UNDEF is
+// UNDEF, because an unbound argument is an error in SPARQL.
 template <Datatype datatype>
 struct IsValueIdValueGetter : Mixin<IsValueIdValueGetter<datatype>> {
+  using Value = Id;
   using Mixin<IsValueIdValueGetter>::operator();
   Id operator()(Id id, const EvaluationContext*) const {
+    if (id.isUndefined()) {
+      return Id::makeUndefined();
+    }
     return Id::makeFromBool(id.getDatatype() == datatype);
   }
 
@@ -198,8 +233,12 @@ struct IsValueIdValueGetter : Mixin<IsValueIdValueGetter<datatype>> {
 // Boolean value getter for `isNumeric`. Regarding which datatypes count as
 // numeric, see https://www.w3.org/TR/sparql11-query/#operandDataTypes .
 struct IsNumericValueGetter : Mixin<IsNumericValueGetter> {
+  using Value = Id;
   using Mixin<IsNumericValueGetter>::operator();
   Id operator()(ValueId id, const EvaluationContext*) const {
+    if (id.isUndefined()) {
+      return Id::makeUndefined();
+    }
     Datatype datatype = id.getDatatype();
     return Id::makeFromBool(datatype == Datatype::Double ||
                             datatype == Datatype::Int);
@@ -214,6 +253,7 @@ template <auto isSomethingFunction, const auto& isLiteralOrIriSomethingFunction>
 struct IsSomethingValueGetter
     : Mixin<IsSomethingValueGetter<isSomethingFunction,
                                    isLiteralOrIriSomethingFunction>> {
+  using Value = Id;
   using Mixin<IsSomethingValueGetter>::operator();
   Id operator()(ValueId id, const EvaluationContext* context) const;
 
@@ -237,6 +277,7 @@ using IsLiteralValueGetter =
 struct DateValueGetter : Mixin<DateValueGetter> {
   using Mixin<DateValueGetter>::operator();
   using Opt = std::optional<DateYearOrDuration>;
+  using Value = Opt;
 
   Opt operator()(ValueId id, const EvaluationContext*) const {
     if (id.getDatatype() == Datatype::Date) {
@@ -256,6 +297,7 @@ struct DateValueGetter : Mixin<DateValueGetter> {
 struct GeoPointValueGetter : Mixin<GeoPointValueGetter> {
   using Mixin<GeoPointValueGetter>::operator();
   using Opt = std::optional<GeoPoint>;
+  using Value = Opt;
 
   Opt operator()(ValueId id, const EvaluationContext*) const {
     if (id.getDatatype() == Datatype::GeoPoint) {
@@ -286,6 +328,7 @@ struct TensorValueGetter : Mixin<TensorValueGetter> {
 // `std::nullopt`. This is used for expressions that work on strings, but for
 // the input of which the `STR()` function was not used in a query.
 struct LiteralFromIdGetter : Mixin<LiteralFromIdGetter> {
+  using Value = std::optional<std::string>;
   using Mixin<LiteralFromIdGetter>::operator();
   std::optional<std::string> operator()(ValueId id,
                                         const EvaluationContext* context) const;
@@ -294,7 +337,7 @@ struct LiteralFromIdGetter : Mixin<LiteralFromIdGetter> {
     if (s.isIri()) {
       return std::nullopt;
     }
-    return std::string{asStringViewUnsafe(s.getContent())};
+    return std::string{s.getContent()};
   }
 };
 
@@ -303,6 +346,7 @@ struct LiteralFromIdGetter : Mixin<LiteralFromIdGetter> {
 // '\1 \\abc $', where the former variant is valid in the SPARQL standard and
 // the latter represents the format that re2 expects.
 struct ReplacementStringGetter : Mixin<ReplacementStringGetter> {
+  using Value = std::optional<std::string>;
   using Mixin<ReplacementStringGetter>::operator();
   std::optional<std::string> operator()(ValueId,
                                         const EvaluationContext*) const;
@@ -319,11 +363,11 @@ struct ReplacementStringGetter : Mixin<ReplacementStringGetter> {
 struct RegexValueGetter {
   mutable ad_utility::util::LRUCache<std::string, std::shared_ptr<RE2>> cache_{
       100};
+  using Value = std::shared_ptr<RE2>;
   template <typename S>
   auto operator()(S&& input, const EvaluationContext* context) const
-      -> CPP_ret(std::shared_ptr<RE2>)(
-          requires SingleExpressionResult<S>&& ranges::invocable<
-              LiteralFromIdGetter, S&&, const EvaluationContext*>) {
+      -> CPP_ret(Value)(requires SingleExpressionResult<S>&& ranges::invocable<
+                        LiteralFromIdGetter, S&&, const EvaluationContext*>) {
     auto str = LiteralFromIdGetter{}(AD_FWD(input), context);
     if (!str.has_value()) {
       return nullptr;
@@ -337,6 +381,7 @@ struct RegexValueGetter {
 // `ToNumericValueGetter` returns `IntDoubleStr` a `std::variant` object which
 // can contain: `int64_t`, `double`, `std::string` or `std::monostate`(empty).
 struct ToNumericValueGetter : Mixin<ToNumericValueGetter> {
+  using Value = IntDoubleStr;
   using Mixin<ToNumericValueGetter>::operator();
   IntDoubleStr operator()(ValueId id, const EvaluationContext*) const;
   IntDoubleStr operator()(const LiteralOrIri& s,
@@ -347,6 +392,7 @@ struct ToNumericValueGetter : Mixin<ToNumericValueGetter> {
 // Returns an object of type std::variant<std::monostate,
 // ad_utility::triple_component::Literal, std::string> object.
 struct DatatypeValueGetter : Mixin<DatatypeValueGetter> {
+  using Value = OptIri;
   using Mixin<DatatypeValueGetter>::operator();
   OptIri operator()(ValueId id, const EvaluationContext* context) const;
   OptIri operator()(const LiteralOrIri& litOrIri,
@@ -356,9 +402,10 @@ struct DatatypeValueGetter : Mixin<DatatypeValueGetter> {
 // `IriValueGetter` returns an
 // `std::optional<ad_utility::triple_component::Iri>` object. If the
 // `LiteralOrIri` object contains an `Iri`, the Iri is returned. This
-// ValueGetter is currently used in `StringExpressions.cpp` within the
-// implementation of `STRDT()`.
+// ValueGetter is currently used in `StrLangAndStrDtExpressions.cpp` within
+// the implementation of `STRDT()`.
 struct IriValueGetter : Mixin<IriValueGetter> {
+  using Value = OptIri;
   using Mixin<IriValueGetter>::operator();
   OptIri operator()([[maybe_unused]] ValueId id,
                     const EvaluationContext*) const {
@@ -367,26 +414,42 @@ struct IriValueGetter : Mixin<IriValueGetter> {
   OptIri operator()(const LiteralOrIri& s, const EvaluationContext*) const;
 };
 
-// `UnitOfMeasurementValueGetter` returns a `UnitOfMeasurement`.
-struct UnitOfMeasurementValueGetter : Mixin<UnitOfMeasurementValueGetter> {
-  // Set the size of this cache to at least the number of supported units.
-  mutable ad_utility::util::LRUCache<ValueId, UnitOfMeasurement> cache_{10};
-  using Mixin<UnitOfMeasurementValueGetter>::operator();
-  UnitOfMeasurement operator()(ValueId id, const EvaluationContext*) const;
-  UnitOfMeasurement operator()(const LiteralOrIri& s,
-                               const EvaluationContext*) const;
+// `EnumValueGetter` turns an IRI, or a literal of datatype `xsd:anyURI`, into
+// a value of an enum via the function `iriToValue` (which takes the IRI
+// without brackets). Everything else, including unknown IRIs, becomes the enum
+// value `undefined`. Instances are `UnitOfMeasurementValueGetter` and
+// `CRSTypeValueGetter` below.
+CPP_template(auto iriToValue, auto undefined)(
+    requires ad_utility::InvocableWithExactReturnType<
+        decltype(iriToValue), decltype(undefined), std::string_view>)
+struct EnumValueGetter : Mixin<EnumValueGetter<iriToValue, undefined>> {
+  using Value = decltype(undefined);
+  // Cache for the ID path. Its size must be at least twice the number of
+  // values of the enum (each value has an IRI and a literal form), 32 covers
+  // both instances.
+  mutable ad_utility::util::LRUCache<ValueId, Value> cache_{32};
+  using Mixin<EnumValueGetter<iriToValue, undefined>>::operator();
+  Value operator()(ValueId id, const EvaluationContext*) const;
+  Value operator()(const LiteralOrIri& s, const EvaluationContext*) const;
 
-  // The actual implementation for a given `LiteralOrIri` which is guaranteed
-  // not to use the `EvaluationContext`. This method can be used to convert
-  // `LiteralOrIri` objects holding a unit of measurement, even when no
-  // `EvaluationContext` is available. Currently used for `geof:distance` filter
-  // substitution during query planning.
-  static UnitOfMeasurement litOrIriToUnit(const LiteralOrIri& s);
+  // The actual implementation for a given `LiteralOrIri`, which does not need
+  // an `EvaluationContext`. Used by the `geof:distance` filter substitution
+  // during query planning, where there is none.
+  static Value litOrIriToValue(const LiteralOrIri& s);
 };
+
+using UnitOfMeasurementValueGetter =
+    EnumValueGetter<&ad_utility::detail::iriToUnitOfMeasurement,
+                    UnitOfMeasurement::UNKNOWN>;
+
+using CRSTypeValueGetter =
+    EnumValueGetter<&ad_utility::SourceCrsType::iriToCrsType,
+                    ad_utility::crsTypeUnsupported>;
 
 // This value getter retrieves geometries: `GeoPoints` or literals with
 // `geo:wktLiteral` datatype.
 struct GeoPointOrWktValueGetter : Mixin<GeoPointOrWktValueGetter> {
+  using Value = std::optional<ad_utility::GeoPointOrWkt>;
   using Mixin<GeoPointOrWktValueGetter>::operator();
   std::optional<ad_utility::GeoPointOrWkt> operator()(
       ValueId id, const EvaluationContext*) const;
@@ -400,6 +463,7 @@ struct GeoPointOrWktValueGetter : Mixin<GeoPointOrWktValueGetter> {
 // `LangExpression.cpp` for the (simple) implementation of the
 // `LANG()`-expression.
 struct LanguageTagValueGetter : Mixin<LanguageTagValueGetter> {
+  using Value = std::optional<std::string>;
   using Mixin<LanguageTagValueGetter>::operator();
   std::optional<std::string> operator()(ValueId id,
                                         const EvaluationContext* context) const;
@@ -408,7 +472,7 @@ struct LanguageTagValueGetter : Mixin<LanguageTagValueGetter> {
       [[maybe_unused]] const EvaluationContext*) const {
     if (litOrIri.isLiteral()) {
       if (litOrIri.hasLanguageTag()) {
-        return std::string(asStringViewUnsafe(litOrIri.getLanguageTag()));
+        return std::string(litOrIri.getLanguageTag());
       }
       // If we encounter a literal without a language tag, we return an empty
       // string by the definition of the Sparql-standard.
@@ -421,11 +485,24 @@ struct LanguageTagValueGetter : Mixin<LanguageTagValueGetter> {
 
 // Value getter for implementing the expressions `IRI()`/`URI()`.
 struct IriOrUriValueGetter : Mixin<IriOrUriValueGetter> {
+  using Value = IdOrLiteralOrIri;
   using Mixin<IriOrUriValueGetter>::operator();
   IdOrLiteralOrIri operator()(ValueId id,
                               const EvaluationContext* context) const;
   IdOrLiteralOrIri operator()(const LiteralOrIri& litOrIri,
                               const EvaluationContext* context) const;
+};
+
+// Value getter similar to `IriOrUriValueGetter`. Parses the base IRI once so
+// that the parsing cost is not repeated for every row when the base is a
+// constant expression.
+struct ParsedUriGetter : Mixin<ParsedUriGetter> {
+  using Value = std::optional<qlever::util::ParsedUri>;
+  using Mixin<ParsedUriGetter>::operator();
+  [[noreturn]] std::optional<qlever::util::ParsedUri> operator()(
+      ValueId id, const EvaluationContext* context) const;
+  std::optional<qlever::util::ParsedUri> operator()(
+      const LiteralOrIri& litOrIri, const EvaluationContext* context) const;
 };
 
 // Value getter for `GeometryInfo` objects or parts thereof. If a `ValueId`
@@ -437,9 +514,9 @@ struct IriOrUriValueGetter : Mixin<IriOrUriValueGetter> {
 // calculated, when requesting the centroid).
 
 CPP_template(typename RequestedInfo = ad_utility::GeometryInfo)(
-    requires ad_utility::RequestedInfoT<
-        RequestedInfo>) struct GeometryInfoValueGetter
-    : Mixin<GeometryInfoValueGetter<RequestedInfo>> {
+    requires ad_utility::RequestedInfoT<RequestedInfo>)
+struct GeometryInfoValueGetter : Mixin<GeometryInfoValueGetter<RequestedInfo>> {
+  using Value = std::optional<RequestedInfo>;
   using Mixin<GeometryInfoValueGetter<RequestedInfo>>::operator();
   std::optional<RequestedInfo> operator()(
       ValueId id, const EvaluationContext* context) const;
@@ -459,6 +536,7 @@ using OptStringOrDate =
 // This value-getter retrieves `DateYearOrDuration` or `std::string`
 // (from literal) values.
 struct StringOrDateGetter : Mixin<StringOrDateGetter> {
+  using Value = OptStringOrDate;
   using Mixin<StringOrDateGetter>::operator();
   // Remark: We use only LiteralFromIdGetter because Iri values should never
   // contain date-related string values.
@@ -478,11 +556,36 @@ struct StringOrDateGetter : Mixin<StringOrDateGetter> {
 // Value getter that returns only integer values (unlike `NumericValueGetter`
 // which returns double or int).
 struct IntValueGetter : Mixin<IntValueGetter> {
+  using Value = std::optional<int64_t>;
   using Mixin<IntValueGetter>::operator();
   std::optional<int64_t> operator()(const LiteralOrIri& litOrIri,
                                     const EvaluationContext*) const;
 
   std::optional<int64_t> operator()(ValueId id, const EvaluationContext*) const;
+};
+
+// Dummy value getter that always returns true, only used for unit tests.
+struct AlwaysTrueValueGetter : Mixin<AlwaysTrueValueGetter> {
+  using Value = bool;
+  template <typename... Args>
+  Value operator()(Args&&...) const {
+    return true;
+  }
+};
+
+// A struct that converts one of the overloaded `value getters` from
+// `SparqlExpressionValueGetters.h` into a callable that takes an
+// `ExpressionResult` variant, and returns a `TypeErasedInputRange`. This is
+// exactly the signature that the type erased expression implementation in
+// `NaryExpressionImpl` requires.
+// NOTE: As this is used only in the cheaper compilation mode, we have
+// deliberately moved the definition of the `operator()` into the `.cpp` file.
+// When adding a new value getter above, an explicit instantiation for this
+// class thus has to be added there.
+template <typename ValueGetter>
+struct TypeErasedValueGetter {
+  ad_utility::InputRangeTypeErased<typename ValueGetter::Value> operator()(
+      ExpressionResult res, EvaluationContext* context, size_t size) const;
 };
 
 }  // namespace sparqlExpression::detail

@@ -2,20 +2,24 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
+#include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 
 #include "./VocabularyTestHelpers.h"
 #include "backports/algorithm.h"
 #include "index/vocabulary/VocabularyInMemory.h"
-#include "util/Serializer/ByteBufferSerializer.h"
+#include "util/serializer/ByteBufferSerializer.h"
 using Vocab = VocabularyInMemory;
 
 namespace {
 
 using namespace vocabulary_test;
 
+// Create a `Vocab` with the given `words` by writing it to the file with the
+// name of the current test and reading it back. The caller has to delete that
+// file again, for which `getFileCleanup` below is used.
 auto createVocabulary(const std::vector<std::string>& words) {
-  auto filename = "vocabInMemoryCreation.tmp";
+  auto filename = gtestCurrentTestName();
   {
     Vocab v;
     auto writerPtr = v.makeDiskWriterPtr(filename);
@@ -32,34 +36,76 @@ auto createVocabulary(const std::vector<std::string>& words) {
   return v;
 }
 
+// An `absl::Cleanup` that deletes the file that a `Vocab` with the given base
+// `filename` consists of.
+auto getFileCleanup(const std::string& filename) {
+  return makeVocabFileCleanup<Vocab>(filename);
+}
+
+// Same as above, for the file that `createVocabulary` above writes.
+auto getFileCleanup() { return getFileCleanup(gtestCurrentTestName()); }
+
 TEST(VocabularyInMemory, UpperLowerBound) {
+  auto cleanup = getFileCleanup();
   testUpperAndLowerBoundWithStdLess(createVocabulary);
 }
 
 TEST(VocabularyInMemory, UpperLowerBoundAlternativeComparator) {
+  auto cleanup = getFileCleanup();
   testUpperAndLowerBoundWithNumericComparator(createVocabulary);
 }
 
 TEST(VocabularyInMemory, AccessOperator) {
+  auto cleanup = getFileCleanup();
   testAccessOperatorForUnorderedVocabulary(createVocabulary);
+}
+
+// Test that `lookupBatch` returns views into the vocabulary (no copy), in the
+// order of the indices, also for duplicates, that it rejects the empty batch
+// and an index that is out of range, and that a result stays valid after the
+// vocabulary is closed (the result shares the ownership of the words).
+TEST(VocabularyInMemory, LookupBatch) {
+  auto cleanup = getFileCleanup();
+  const std::vector<std::string> words{"alpha", "beta", "gamma", "delta"};
+  auto vocab = createVocabulary(words);
+  const std::vector<size_t> indices{3, 0, 2, 0};
+  const auto result = vocab.lookupBatch(indices);
+  assertLookupResultMatchesVocabularyAtIndices(vocab, result, indices);
+  for (const auto& [index, word] : ::ranges::views::zip(indices, *result)) {
+    EXPECT_EQ(word.data(), vocab[index].data()) << "copied";
+  }
+  AD_EXPECT_THROW_WITH_MESSAGE(vocab.lookupBatch(ql::span<const size_t>{}),
+                               ::testing::HasSubstr("!indices.empty()"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      vocab.lookupBatch(std::vector<size_t>{0, words.size()}),
+      ::testing::HasSubstr("idx < size()"));
+
+  vocab.close();
+  ASSERT_EQ(vocab.size(), 0u);
+  for (const auto& [index, word] : ::ranges::views::zip(indices, *result)) {
+    EXPECT_EQ(word, words[index]);
+  }
 }
 
 TEST(VocabularyInMemory, ReadAndWriteFromFile) {
   const std::vector<std::string> words{"alpha", "delta", "beta", "42",
                                        "31",    "0",     "al"};
+  auto cleanup = getFileCleanup();
   const auto vocab = createVocabulary(words);
-  const std::string vocabularyFilename = "testvocab.dat";
+  const std::string vocabularyFilename =
+      absl::StrCat(gtestCurrentTestName(), ".copy");
+  auto copyCleanup = getFileCleanup(vocabularyFilename);
   vocab.writeToFile(vocabularyFilename);
 
   Vocab readVocab;
   readVocab.open(vocabularyFilename);
   assertThatRangesAreEqual(vocab, readVocab);
-  ad_utility::deleteFile(vocabularyFilename);
 }
 
 TEST(VocabularyInMemory, WriteAndReadWithSerializer) {
   const std::vector<std::string> words{"alpha", "delta", "beta", "42",
                                        "31",    "0",     "al"};
+  auto cleanup = getFileCleanup();
   const auto vocab = createVocabulary(words);
 
   // Write using serializer.
@@ -76,12 +122,49 @@ TEST(VocabularyInMemory, WriteAndReadWithSerializer) {
 }
 
 TEST(VocabularyInMemory, EmptyVocabulary) {
+  auto cleanup = getFileCleanup();
   testEmptyVocabulary(createVocabulary);
 }
 
 // _____________________________________________________________________________
+TEST(VocabularyInMemory, ScanAll) {
+  // `scanAll` uses the generic `operator[]` fallback here and must yield all
+  // words in order.
+  const std::vector<std::string> words{"alpha", "delta", "beta", "42", "0"};
+  auto cleanup = getFileCleanup();
+  const auto vocab = createVocabulary(words);
+  EXPECT_THAT(scanAllToVector(vocab.scanAll()),
+              ::testing::ElementsAreArray(words));
+}
+
+// _____________________________________________________________________________
+TEST(VocabularyInMemory, ScanAllEmptyVocabulary) {
+  auto cleanup = getFileCleanup();
+  const auto vocab = createVocabulary({});
+  EXPECT_TRUE(scanAllToVector(vocab.scanAll()).empty());
+}
+
+// _____________________________________________________________________________
+TEST(VocabularyInMemory, ZeroCopyDeserialization) {
+  const std::vector<std::string> words{"alpha", "delta", "beta", "42",
+                                       "31",    "0",     "al"};
+  auto cleanup = getFileCleanup();
+  const auto vocab = createVocabulary(words);
+
+  ad_utility::serialization::AlignedByteBufferWriteSerializer writeSerializer;
+  writeSerializer << vocab;
+
+  ad_utility::serialization::AlignedByteBufferReadSerializer readSerializer{
+      std::move(writeSerializer).data()};
+  auto view = Vocab::fromZeroCopyDeserializer(readSerializer);
+
+  assertThatRangesAreEqual(vocab, view);
+}
+
+// _____________________________________________________________________________
 TEST(VocabularyInMemory, WordWriterDestructorBehavior) {
-  const std::string filename = "VocabInMemoryWordWriterDestructorBehavior.tmp";
+  const std::string filename = gtestCurrentTestName();
+  auto cleanup = getFileCleanup(filename);
   Vocab v;
   {
     auto writerPtr = v.makeDiskWriterPtr(filename);
@@ -100,7 +183,6 @@ TEST(VocabularyInMemory, WordWriterDestructorBehavior) {
     vocab.open(filename);
     EXPECT_EQ(vocab[0], "alpha");
   }
-  ad_utility::deleteFile(filename);
   {
     VocabularyInMemory vocab;
     auto wwPtr = vocab.makeDiskWriterPtr(filename);
@@ -111,7 +193,6 @@ TEST(VocabularyInMemory, WordWriterDestructorBehavior) {
     vocab.open(filename);
     EXPECT_EQ(vocab[0], "beta");
   }
-  ad_utility::deleteFile(filename);
 }
 
 }  // namespace

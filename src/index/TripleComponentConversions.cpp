@@ -1,0 +1,165 @@
+// Copyright 2026 The QLever Authors, in particular:
+//
+// 2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
+
+#include "index/TripleComponentConversions.h"
+
+#include <absl/strings/str_cat.h>
+
+#include "index/ExportIds.h"
+#include "index/IndexImpl.h"
+#include "index/LocalVocabContext.h"
+#include "rdfTypes/GeoPoint.h"
+
+namespace localVocabEntryDetail::onlyForTripleComponentConversions {
+// Calls the private constructors of `LocalVocabEntry`. It is only used by
+// `toIdOrLocalVocabEntry` and `toValueId` below, which make sure that an IRI
+// that can be encoded directly in an `Id` is never stored in a
+// `LocalVocabEntry`. Do NOT use it anywhere else.
+class LocalVocabEntryFactory {
+ public:
+  static LocalVocabEntry make(LocalVocabEntry::Base&& word,
+                              const LocalVocabContext& context) {
+    return LocalVocabEntry{std::move(word), context};
+  }
+
+  static LocalVocabEntry makeWithKnownBounds(LocalVocabEntry::Base&& word,
+                                             Id lower, Id upper,
+                                             const LocalVocabContext& context) {
+    return LocalVocabEntry{std::move(word), lower, upper, context};
+  }
+};
+}  // namespace localVocabEntryDetail::onlyForTripleComponentConversions
+
+using localVocabEntryDetail::onlyForTripleComponentConversions::
+    LocalVocabEntryFactory;
+
+// ____________________________________________________________________________
+std::optional<Id> toValueIdIfNotString(
+    const TripleComponent& tripleComponent,
+    const EncodedIriManager* encodedIriManager) {
+  auto visitor = [encodedIriManager](const auto& value) -> std::optional<Id> {
+    using T = std::decay_t<decltype(value)>;
+    using Literal = TripleComponent::Literal;
+    using Iri = TripleComponent::Iri;
+    if constexpr (std::is_same_v<T, Iri>) {
+      return encodedIriManager->encode(value.toStringRepresentation());
+
+    } else if constexpr (ad_utility::SameAsAny<T, std::string, Literal>) {
+      return std::nullopt;
+    } else if constexpr (std::is_same_v<T, int64_t>) {
+      return Id::makeFromInt(value);
+    } else if constexpr (std::is_same_v<T, Id>) {
+      return value;
+    } else if constexpr (std::is_same_v<T, double>) {
+      return Id::makeFromDouble(value);
+    } else if constexpr (std::is_same_v<T, bool>) {
+      return Id::makeFromBool(value);
+    } else if constexpr (std::is_same_v<T, TripleComponent::UNDEF>) {
+      return Id::makeUndefined();
+    } else if constexpr (std::is_same_v<T, DateYearOrDuration>) {
+      return Id::makeFromDate(value);
+    } else if constexpr (std::is_same_v<T, GeoPoint>) {
+      return Id::makeFromGeoPoint(value);
+    } else if constexpr (std::is_same_v<T, Variable>) {
+      // Cannot turn a variable into a ValueId.
+      AD_FAIL();
+    } else {
+      static_assert(ad_utility::alwaysFalse<T>);
+    }
+  };
+  return tripleComponent.visit(visitor);
+}
+
+// _____________________________________________________________________________
+IdOrLocalVocabEntry toIdOrLocalVocabEntry(
+    ad_utility::triple_component::LiteralOrIri word,
+    const LocalVocabContext& context) {
+  if (word.isIri()) {
+    if (auto id = context.encodeAsId(word.toStringRepresentation())) {
+      return id.value();
+    }
+  }
+  return LocalVocabEntryFactory::make(std::move(word), context);
+}
+
+// ____________________________________________________________________________
+std::string toRdfLiteral(const TripleComponent& tripleComponent) {
+  if (auto view = toRdfLiteralView(tripleComponent)) {
+    return std::string{view.value()};
+  }
+  EncodedIriManager ev;
+  auto [value, type] = ql::exportIds::idToStringAndTypeForEncodedValue(
+                           toValueIdIfNotString(tripleComponent, &ev).value())
+                           .value();
+  return absl::StrCat("\"", value, "\"^^<", type, ">");
+}
+
+// _____________________________________________________________________________
+LocalVocabContext::IdOrVocabBounds toValueIdOrBounds(
+    const TripleComponent& tripleComponent, const IndexImpl& index) {
+  AD_CONTRACT_CHECK(!tripleComponent.isString());
+  std::optional<Id> vid =
+      toValueIdIfNotString(tripleComponent, &index.encodedIriManager());
+  if (vid != std::nullopt) {
+    return vid.value();
+  }
+  AD_CORRECTNESS_CHECK(tripleComponent.isLiteral() || tripleComponent.isIri());
+  const std::string& content =
+      tripleComponent.isLiteral()
+          ? tripleComponent.getLiteral().toStringRepresentation()
+          : tripleComponent.getIri().toStringRepresentation();
+  // Look up the word in the vocabularies of the index. NOTE: This is exactly
+  // the lookup that a `LocalVocabEntry` performs, which is required because
+  // `toValueId` below passes the result to the constructor of that class that
+  // takes the position in the vocabularies, see
+  // `LocalVocabContext::lookupWordInVocabularies`. That function returns
+  // exactly the type that this function returns, so the result is passed on
+  // unchanged.
+  return index.getLocalVocabContext().lookupWordInVocabularies(content);
+}
+
+// _____________________________________________________________________________
+std::optional<Id> toValueId(const TripleComponent& tripleComponent,
+                            const IndexImpl& index) {
+  auto idOrBounds = toValueIdOrBounds(tripleComponent, index);
+  if (auto* id = std::get_if<Id>(&idOrBounds)) {
+    return *id;
+  }
+  return std::nullopt;
+}
+
+// _____________________________________________________________________________
+Id toValueId(TripleComponent&& tripleComponent, const IndexImpl& index,
+             LocalVocab& localVocab) {
+  auto idOrBounds = toValueIdOrBounds(tripleComponent, index);
+  if (const auto* id = std::get_if<Id>(&idOrBounds)) {
+    return *id;
+  }
+  using Bounds = LocalVocabContext::VocabBounds;
+  AD_CORRECTNESS_CHECK(std::holds_alternative<Bounds>(idOrBounds));
+  auto [lower, upper] = std::get<Bounds>(idOrBounds);
+  // If `toValueIdOrBounds` could not convert to `Id`, we have a Literal or Iri,
+  // which we look up in (and potentially add to) our local vocabulary. NOTE:
+  // The bounds are the position of a word that is contained in none of the
+  // vocabularies of the index, which is exactly the position that the
+  // `LocalVocabEntry` below requires, see `positionInVocab()` there.
+  AD_CORRECTNESS_CHECK(tripleComponent.isLiteral() || tripleComponent.isIri());
+  using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
+  auto moveWord = [&tripleComponent]() {
+    if (tripleComponent.isLiteral()) {
+      return LiteralOrIri{std::move(tripleComponent.getLiteral())};
+    } else {
+      return LiteralOrIri{std::move(tripleComponent.getIri())};
+    }
+  };
+  return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
+      LocalVocabEntryFactory::makeWithKnownBounds(
+          moveWord(), Id::makeFromVocabIndex(lower),
+          Id::makeFromVocabIndex(upper), index.getLocalVocabContext())));
+}

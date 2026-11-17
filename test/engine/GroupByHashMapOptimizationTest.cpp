@@ -22,13 +22,15 @@ class GroupByHashMapOptimizationTest : public ::testing::Test {
   sparqlExpression::EvaluationContext context_{
       *qec_,
       varToColMap_,
-      table_,
+      table_.asStaticView<0>(),
       qec_->getAllocator(),
       localVocab_,
-      std::make_shared<ad_utility::CancellationHandle<>>(),
-      sparqlExpression::EvaluationContext::TimePoint::max()};
+      std::make_shared<ad_utility::CancellationHandle<>>()};
 
-  Id calculate(const auto& data) { return data.calculateResult(&localVocab_); }
+  template <typename Data>
+  Id calculate(const Data& data) {
+    return data.calculateResult(qec_->getLocalVocabContext(), &localVocab_);
+  }
 
   template <typename T>
   auto makeCalcAndAddValue(T& data) {
@@ -41,7 +43,8 @@ class GroupByHashMapOptimizationTest : public ::testing::Test {
 
   std::string idToString(Id result, bool stripQuotes = true) const {
     auto index = result.getLocalVocabIndex();
-    auto resultString = localVocab_.getWord(index).toStringRepresentation();
+    std::string resultString{
+        localVocab_.getWord(index).toStringRepresentation()};
     if (!stripQuotes) {
       return resultString;
     }
@@ -52,10 +55,9 @@ class GroupByHashMapOptimizationTest : public ::testing::Test {
   };
 
   Id idFromString(std::string_view string) {
-    using ad_utility::triple_component::LiteralOrIri;
-    auto literal = LiteralOrIri::literalWithoutQuotes(string);
-    return Id::makeFromLocalVocabIndex(
-        localVocab_.getIndexAndAddIfNotContained(std::move(literal)));
+    return Id::makeFromLocalVocabIndex(localVocab_.getIndexAndAddIfNotContained(
+        LocalVocabEntry::literalWithoutQuotes(string,
+                                              qec_->getLocalVocabContext())));
   };
 };
 
@@ -82,10 +84,10 @@ TEST_F(GroupByHashMapOptimizationTest, AvgAggregationDataAggregatesCorrectly) {
 
   data.reset();
   EXPECT_EQ(calc(), I(0));
-  using ad_utility::triple_component::LiteralOrIri;
-  auto literal = LiteralOrIri::literalWithoutQuotes("non-numeric value");
-  auto id = Id::makeFromLocalVocabIndex(
-      localVocab_.getIndexAndAddIfNotContained(std::move(literal)));
+  auto id =
+      Id::makeFromLocalVocabIndex(localVocab_.getIndexAndAddIfNotContained(
+          LocalVocabEntry::literalWithoutQuotes("non-numeric value",
+                                                qec_->getLocalVocabContext())));
   addValue(id);
   EXPECT_TRUE(calc().isUndefined());
 }
@@ -228,11 +230,11 @@ TEST_F(GroupByHashMapOptimizationTest,
 
   auto addStringWithLangTag = [&](std::string_view string,
                                   std::string langTag) {
-    using ad_utility::triple_component::LiteralOrIri;
-    auto literal =
-        LiteralOrIri::literalWithoutQuotes(string, std::move(langTag));
+    using ad_utility::triple_component::Literal;
+    auto literal = Literal::literalWithoutQuotes(string, std::move(langTag));
     addValue(Id::makeFromLocalVocabIndex(
-        localVocab_.getIndexAndAddIfNotContained(std::move(literal))));
+        localVocab_.getIndexAndAddIfNotContained(LocalVocabEntry{
+            std::move(literal), qec_->getLocalVocabContext()})));
   };
 
   data.reset();
@@ -245,16 +247,16 @@ TEST_F(GroupByHashMapOptimizationTest,
   data.reset();
   EXPECT_EQ(getResultString(), "");
   addStringWithLangTag("a", "en");
-  EXPECT_EQ(getResultString(false), "\"a\"@en");
+  EXPECT_EQ(getResultString(false), "\"a\"");
   addStringWithLangTag("b", "en");
-  EXPECT_EQ(getResultString(false), "\"a;b\"@en");
+  EXPECT_EQ(getResultString(false), "\"a;b\"");
   addStringWithLangTag("c", "de");
   EXPECT_EQ(getResultString(false), "\"a;b;c\"");
 
   data.reset();
   EXPECT_EQ(getResultString(), "");
   addStringWithLangTag("a", "en");
-  EXPECT_EQ(getResultString(false), "\"a\"@en");
+  EXPECT_EQ(getResultString(false), "\"a\"");
   addString("b");
   EXPECT_EQ(getResultString(false), "\"a;b\"");
 }
@@ -290,6 +292,7 @@ TEST_F(GroupByHashMapOptimizationTest,
   EXPECT_TRUE(calc().isUndefined());
 
   data.reset();
-  addValue(localVocab_.getWord(idFromString("Abc").getLocalVocabIndex()));
+  addValue(
+      localVocab_.getWord(idFromString("Abc").getLocalVocabIndex()).toOwned());
   EXPECT_EQ(calc(), idFromString("Abc"));
 }

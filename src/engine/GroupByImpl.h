@@ -15,6 +15,7 @@
 #include <utility>
 #include <vector>
 
+#include "backports/algorithm.h"
 #include "backports/concepts.h"
 #include "engine/GroupByHashMapOptimization.h"
 #include "engine/Join.h"
@@ -23,6 +24,7 @@
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "parser/Alias.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/TypeIdentity.h"
 
 // Block size for when using the hash map optimization
@@ -46,6 +48,10 @@ class GroupByImpl : public Operation {
   std::shared_ptr<QueryExecutionTree> _subtree;
   vector<Variable> _groupByVariables;
   std::vector<Alias> _aliases;
+  // True iff there is no GROUP BY clause, so that even an empty input forms a
+  // group. This differs from `_groupByVariables.empty()`, from which unbound
+  // variables have been removed.
+  bool isImplicitGroupBy_;
 
  public:
   /**
@@ -60,6 +66,12 @@ class GroupByImpl : public Operation {
               std::vector<Alias> aliases,
               std::shared_ptr<QueryExecutionTree> subtree);
 
+ private:
+  // Needed by `cloneImpl`, where `_groupByVariables` is already reduced.
+  GroupByImpl(QueryExecutionContext* qec, bool isImplicitGroupBy,
+              vector<Variable> groupByVariables, std::vector<Alias> aliases,
+              std::shared_ptr<QueryExecutionTree> subtree);
+
  public:
   virtual string getCacheKeyImpl() const override;
 
@@ -68,14 +80,18 @@ class GroupByImpl : public Operation {
 
   virtual size_t getResultWidth() const override;
 
-  virtual vector<ColumnIndex> resultSortedOn() const override;
+  virtual qlm::vector<ColumnIndex> resultSortedOn() const override;
 
   virtual bool knownEmptyResult() override {
     // Implicit group by always returns a single row.
-    return _subtree->knownEmptyResult() && !_groupByVariables.empty();
+    return _subtree->knownEmptyResult() && !isImplicitGroupBy_;
   }
 
   virtual float getMultiplicity(size_t col) override;
+
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithStrippedColumns(
+      const std::set<Variable>& requestedVariables) const override;
 
  public:
   uint64_t getSizeEstimateBeforeLimit() override;
@@ -89,10 +105,12 @@ class GroupByImpl : public Operation {
    */
   vector<ColumnIndex> computeSortColumns(const QueryExecutionTree* subtree);
 
-  vector<QueryExecutionTree*> getChildren() override {
-    return {_subtree.get()};
+ private:
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
+    return {{_subtree.get()}, allocator()};
   }
 
+ public:
   // Getters for testing
   const auto& groupByVariables() const { return _groupByVariables; }
   const auto& aliases() const { return _aliases; }
@@ -108,7 +126,7 @@ class GroupByImpl : public Operation {
   // Helper function to create evaluation contexts in various places for the
   // GROUP BY operation.
   sparqlExpression::EvaluationContext createEvaluationContext(
-      LocalVocab& localVocab, const IdTable& idTable) const;
+      LocalVocab& localVocab, const IdTableView<0>& idTable) const;
 
   // Find the boundaries of blocks in a sorted `IdTable`. If these represent a
   // whole group they can be aggregated into ids afterwards. This can happen by
@@ -163,14 +181,16 @@ class GroupByImpl : public Operation {
                     size_t resultColumn, LocalVocab* localVocab) const;
 
   template <size_t IN_WIDTH, size_t OUT_WIDTH>
-  IdTable doGroupBy(const IdTable& inTable, const vector<size_t>& groupByCols,
+  IdTable doGroupBy(const IdTableView<0>& inTable,
+                    const vector<size_t>& groupByCols,
                     const vector<Aggregate>& aggregates,
                     LocalVocab* outLocalVocab) const;
 
   template <size_t IN_WIDTH, size_t OUT_WIDTH>
   friend class groupBy::detail::LazyGroupByRange;
 
-  FRIEND_TEST(GroupByTest, doGroupBy);
+  // `GroupBy` needs access to the private `isDeterministicImpl()`.
+  friend class GroupBy;
 
  public:
   // TODO<joka921> use `FRIEND_TEST` here once we have converged on the set
@@ -402,7 +422,7 @@ class GroupByImpl : public Operation {
     // Returns a vector containing the offsets for all ids of `groupByCols`,
     // inserting entries if necessary.
     std::vector<size_t> getHashEntries(
-        const ArrayOrVector<ql::span<const Id>>& groupByCols);
+        const ArrayOrVector<ConstIdColumnRef>& groupByCols);
 
     // Return the index of `id`.
     [[nodiscard]] size_t getIndex(const ArrayOrVector<Id>& ids) const {
@@ -422,8 +442,11 @@ class GroupByImpl : public Operation {
       return aggregationData_.at(aggregationDataIndex);
     }
 
-    // Get the values of the grouped column in ascending order.
-    [[nodiscard]] ArrayOrVector<std::vector<Id>> getSortedGroupColumns() const;
+    // Get the values of the grouped column in ascending order. The sort runs
+    // according to the `sortConfig` (which can cancel it). The data has no
+    // access to the operation, hence the argument.
+    [[nodiscard]] ArrayOrVector<std::vector<Id>> getSortedGroupColumns(
+        const SortConfig& sortConfig) const;
 
     // Returns the number of groups.
     [[nodiscard]] size_t getNumberOfGroups() const { return map_.size(); }
@@ -452,7 +475,8 @@ class GroupByImpl : public Operation {
       IdTable* resultTable,
       const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
       size_t dataIndex, size_t beginIndex, size_t endIndex,
-      LocalVocab* localVocab, const Allocator& allocator);
+      const LocalVocabContext& context, LocalVocab* localVocab,
+      const Allocator& allocator);
 
   // Helper function of `evaluateAlias`.
   // 1. In the Expressions for the aliases of this GROUP BY, replace all
@@ -471,7 +495,8 @@ class GroupByImpl : public Operation {
       HashMapAliasInformation& alias, IdTable* result,
       sparqlExpression::EvaluationContext& evaluationContext,
       const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-      LocalVocab* localVocab, const Allocator& allocator,
+      const LocalVocabContext& context, LocalVocab* localVocab,
+      const Allocator& allocator,
       std::vector<HashMapAggregateInformation>& info,
       const std::vector<HashMapGroupedVariableInformation>& substitutions);
 
@@ -483,7 +508,8 @@ class GroupByImpl : public Operation {
       HashMapAliasInformation& alias, IdTable* result,
       sparqlExpression::EvaluationContext& evaluationContext,
       const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-      LocalVocab* localVocab, const Allocator& allocator);
+      const LocalVocabContext& context, LocalVocab* localVocab,
+      const Allocator& allocator);
 
   // Helper function to evaluate the child expression of an aggregate function.
   // Only `COUNT(*)` does not have a single child, so we make a special case for
@@ -509,6 +535,7 @@ class GroupByImpl : public Operation {
   // Check if hash map optimization is applicable. This is the case when
   // the following conditions hold true:
   // - Runtime parameter is set
+  // - There is at least one GROUP BY column
   // - Child operation is SORT
   std::optional<HashMapOptimizationData> checkIfHashMapOptimizationPossible(
       std::vector<Aggregate>& aggregates) const;
@@ -538,8 +565,8 @@ class GroupByImpl : public Operation {
           std::vector<HashMapAggregateInformation>& info, size_t beginIndex,
           size_t endIndex,
           const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-          IdTable* resultTable, LocalVocab* localVocab,
-          const Allocator& allocator);
+          IdTable* resultTable, const LocalVocabContext& context,
+          LocalVocab* localVocab, const Allocator& allocator);
 
   // Check if an expression is a currently supported aggregate.
   static std::optional<HashMapAggregateTypeWithData> isSupportedAggregate(
@@ -584,7 +611,7 @@ class GroupByImpl : public Operation {
     // the JOIN, etc. `SPO` if the variable that joins the three variable triple
     // and the rest of the query body is the subject of the three variable
     // triple, `PSO` if it is the predicate, `OSP` if it is the object.
-    Permutation::Enum permutation_;
+    const Permutation& permutation_;
     // The column index wrt the `otherSubtree_` of the variable that joins the
     // three variable triple and the rest of the query body.
     size_t subtreeColumnIndex_;
@@ -599,12 +626,12 @@ class GroupByImpl : public Operation {
   // Check if the following is true: the `tree` represents a three variable
   // triple, that contains both `variableByWhichToSort` and
   // `variableThatMustBeContained`. (They might be the same). If this check
-  // fails, `std::nullopt` is returned. Else the permutation corresponding to
-  // `variableByWhichToSort` is returned, for example `SPO` if the
+  // fails, an empty optional is returned. Else the permutation corresponding
+  // to `variableByWhichToSort` is returned, for example `SPO` if the
   // `variableByWhichToSort` is the subject of the triple.
-  static std::optional<Permutation::Enum> getPermutationForThreeVariableTriple(
+  boost::optional<const Permutation&> getPermutationForThreeVariableTriple(
       const QueryExecutionTree& tree, const Variable& variableByWhichToSort,
-      const Variable& variableThatMustBeContained);
+      const Variable& variableThatMustBeContained) const;
 
   // If this GROUP BY has exactly one alias, and that alias is a non-distinct
   // count of a single variable, return that variable. Else return
@@ -624,6 +651,14 @@ class GroupByImpl : public Operation {
 
  public:
   std::unique_ptr<Operation> cloneImpl() const override;
+
+ private:
+  // Returns false if any alias expression is non-deterministic.
+  [[nodiscard]] bool isDeterministicImpl() const override {
+    return ql::ranges::all_of(_aliases, [](const Alias& alias) {
+      return alias._expression.isDeterministic();
+    });
+  }
 
   // TODO<joka921> implement optimization when *additional* Variables are
   // grouped.

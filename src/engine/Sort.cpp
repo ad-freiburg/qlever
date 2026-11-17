@@ -12,11 +12,12 @@
 #include "engine/Sort.h"
 
 #include "engine/CallFixedSize.h"
-#include "engine/Engine.h"
+#include "engine/ColumnStrippingHelpers.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/RuntimeParameters.h"
 #include "index/ExternalSortFunctors.h"
+#include "index/IdTableUtils.h"
 #include "util/Algorithm.h"
 #include "util/Random.h"
 
@@ -34,10 +35,11 @@ size_t Sort::getResultWidth() const { return subtree_->getResultWidth(); }
 // _____________________________________________________________________________
 Sort::Sort(QueryExecutionContext* qec,
            std::shared_ptr<QueryExecutionTree> subtree,
-           std::vector<ColumnIndex> sortColumnIndices)
+           qlm::vector<ColumnIndex> sortColumnIndices, bool explicitSort)
     : Operation{qec},
       subtree_{std::move(subtree)},
-      sortColumnIndices_{std::move(sortColumnIndices)} {}
+      sortColumnIndices_{std::move(sortColumnIndices)},
+      explicitSort_{explicitSort} {}
 
 // _____________________________________________________________________________
 std::string Sort::getCacheKeyImpl() const {
@@ -67,28 +69,39 @@ std::string Sort::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
+void Sort::onLimitOffsetChanged(const LimitOffsetClause& limitOffset,
+                                bool childrenAreExclusivelyOwned) {
+  // For an explicit `INTERNAL SORT BY` we deliberately keep the complete sorted
+  // result and let the `LIMIT`/`OFFSET` be applied externally (see
+  // `handlesLimitOffset()`), so we must not push it down to the subtree.
+  if (explicitSort_) {
+    return;
+  }
+  applyLimitOffsetToChild(subtree_, limitOffset, childrenAreExclusivelyOwned);
+}
+
+// _____________________________________________________________________________
 Result Sort::computeResult(bool requestLaziness) {
   size_t numColumns = subtree_->getResultWidth();
   // Maximum number of rows that can be sorted in memory.
   size_t maxNumRowsToBeSortedInMemory =
       getRuntimeParameter<&RuntimeParameters::sortInMemoryThreshold_>()
           .getBytes() /
-      (numColumns * sizeof(Id));
+      (numColumns * BYTES_PER_ID_COLUMN_ENTRY);
 
   // Always request lazy input to avoid premature materialization.
   std::shared_ptr<const Result> input = subtree_->getResult(true);
 
   // For fully materialized input, we know the size upfront.
   if (input->isFullyMaterialized()) {
-    const IdTable& inputTable = input->idTable();
-    if (inputTable.numRows() <= maxNumRowsToBeSortedInMemory) {
-      return computeResultInMemory(inputTable.clone(),
+    if (input->idTableView().numRows() <= maxNumRowsToBeSortedInMemory) {
+      return computeResultInMemory(input->cloneIdTable(cancellationChecker()),
                                    input->getCopyOfLocalVocab());
     } else {
       LocalVocab localVocab = input->getCopyOfLocalVocab();
-      std::span<const IdTable> inputTableSpan{&inputTable, 1};
+      ql::span<const IdTableView<0>> inputViewSpan{&input->idTableView(), 1};
       return computeResultExternal({}, std::move(localVocab),
-                                   inputTableSpan.begin(), inputTableSpan.end(),
+                                   inputViewSpan.begin(), inputViewSpan.end(),
                                    std::move(input), requestLaziness);
     }
   }
@@ -120,6 +133,7 @@ Result Sort::computeResult(bool requestLaziness) {
   IdTable combined{numColumns, allocator()};
   combined.reserve(totalRows);
   for (auto& block : collectedBlocks) {
+    checkCancellation();
     combined.insertAtEnd(block);
   }
   return computeResultInMemory(std::move(combined),
@@ -131,15 +145,7 @@ Result Sort::computeResultInMemory(IdTable idTable,
                                    LocalVocab localVocab) const {
   runtimeInfo().addDetail("is-external", "false");
 
-  getExecutionContext()->getSortPerformanceEstimator().throwIfEstimateTooLong(
-      idTable.numRows(), idTable.numColumns(), deadline_, "Sort operation");
-
-  Engine::sort(idTable, sortColumnIndices_);
-
-  // Don't report missed timeout check because the in-memory sort is currently
-  // not cancellable.
-  cancellationHandle_->resetWatchDogState();
-  checkCancellation();
+  IdTableUtils::sort(idTable, sortColumnIndices_, sortConfig());
 
   return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
 }
@@ -171,7 +177,7 @@ Result Sort::computeResultExternal(std::vector<IdTable> collectedBlocks,
   auto sorter = std::make_unique<Sorter>(
       tempFilename, numColumns, memoryLimit, allocator(),
       ad_utility::DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE,
-      SortByColumns{sortColumnIndices_});
+      SortByColumns{sortColumnIndices_}, cancellationHandle());
 
   // Push the already collected blocks and the remaining blocks from the
   // iterator. For lazy input, the iterator yields `IdTableVocabPair` (move the
@@ -182,16 +188,15 @@ Result Sort::computeResultExternal(std::vector<IdTable> collectedBlocks,
   }
   while (it != end) {
     checkCancellation();
-    if constexpr (ad_utility::isSimilar<std::iter_value_t<Iterator>,
+    if constexpr (ad_utility::isSimilar<ql::iter_value_t<Iterator>,
                                         Result::IdTableVocabPair>) {
       auto& idTableAndLocalVocab = *it;
       sorter->pushBlock(std::move(idTableAndLocalVocab.idTable_));
       mergedLocalVocab.mergeWith(idTableAndLocalVocab.localVocab_);
     } else {
-      // NOTE: `pushBlock` with a const reference iterates over the rows and
-      // calls `push` for each, which buffers rows and flushes to disk when the
-      // buffer is full. This avoids having to clone the (potentially large)
-      // input table.
+      // NOTE: `pushBlock` copies the columns of the input into the sorter's
+      // internal buffer and flushes that buffer to disk when it is full. This
+      // avoids having to clone the (potentially large) input table.
       sorter->pushBlock(*it);
     }
     ++it;
@@ -204,8 +209,7 @@ Result Sort::computeResultExternal(std::vector<IdTable> collectedBlocks,
   // size of the result, so we can reserve exactly the right amount of space.
   //
   // TODO: We could tell `getSortedBlocks` to give us a single block and thus
-  // avoid the loop. However, we would then have to handle cancellation inside
-  // `getSortedBlocks`.
+  // avoid the loop (the merge checks the cancellation handle itself).
   if (!requestLaziness) {
     IdTable result{numColumns, allocator()};
     result.reserve(sorter->size());
@@ -213,7 +217,6 @@ Result Sort::computeResultExternal(std::vector<IdTable> collectedBlocks,
       checkCancellation();
       result.insertAtEnd(block);
     }
-    cancellationHandle_->resetWatchDogState();
     checkCancellation();
     return {std::move(result), resultSortedOn(), std::move(mergedLocalVocab)};
   }
@@ -236,48 +239,72 @@ Result Sort::computeResultExternal(std::vector<IdTable> collectedBlocks,
 
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>> Sort::makeSortedTree(
-    const std::vector<ColumnIndex>& sortColumns) const {
+    ql::span<const ColumnIndex> sortColumns) const {
   AD_CONTRACT_CHECK(!isSortedBy(sortColumns));
+  // For an explicit `INTERNAL SORT BY` with a `LIMIT`/`OFFSET` the sort order
+  // determines which rows are part of the result, so we must not replace it by
+  // a different one:
+  //
+  //   SELECT * {
+  //     { SELECT * { ?x <p> ?y . ?y <q> ?z }
+  //       INTERNAL SORT BY ?z LIMIT 5 OFFSET 7 }
+  //     ?x <r> ?w
+  //   }
+  //
+  // The subquery uses the cheap `INTERNAL SORT BY ?z` (instead of an
+  // `ORDER BY`) to obtain a deterministic subset. The outer join needs `?x`
+  // order, but sorting by `?x` instead of `?z` would change which 5 rows
+  // survive. We therefore return `std::nullopt`, such that a second `Sort` (on
+  // `?x`) is stacked on top of this one (on `?z`). Without a `LIMIT`/`OFFSET`
+  // the sort order is not observable, because the result is re-sorted anyway.
+  if (explicitSort_ && !getLimitOffset().isUnconstrained()) {
+    return std::nullopt;
+  }
   AD_LOG_DEBUG
       << "Tried to re-sort a subtree that is already sorted by `Sort` with a "
          "different sort order. This indicates a flaw during query planning."
       << std::endl;
-  return ad_utility::makeExecutionTree<Sort>(_executionContext, subtree_,
-                                             sortColumns);
+  return ad_utility::makeExecutionTree<Sort>(
+      _executionContext, subtree_,
+      qlm::vector<ColumnIndex>{sortColumns.begin(), sortColumns.end(),
+                               allocator()},
+      explicitSort_);
 }
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Sort::cloneImpl() const {
   return std::make_unique<Sort>(_executionContext, subtree_->clone(),
-                                sortColumnIndices_);
+                                sortColumnIndices_, explicitSort_);
 }
 
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
-Sort::makeTreeWithStrippedColumns(const std::set<Variable>& variables) const {
-  std::set<Variable> newVariables;
-  std::vector<Variable> sortVars;
-  const auto* vars = &variables;
-  for (const auto& jcl : sortColumnIndices_) {
-    const auto& var = subtree_->getVariableAndInfoByColumnIndex(jcl).first;
-    sortVars.push_back(var);
-    if (!ad_utility::contains(variables, var)) {
-      if (vars == &variables) {
-        newVariables = variables;
-      }
-      newVariables.insert(var);
-      vars = &newVariables;
-    }
+Sort::makeTreeWithStrippedColumns(
+    const std::set<Variable>& requestedVariables) const {
+  // The subtree must provide the `requestedVariables` and the variables that
+  // `Sort` sorts by (those at `sortColumnIndices_`).
+  std::vector<const Variable*> sortVars;
+  columnStrippingHelpers::VarsRequiredFromSubtree varsRequiredFromSubtree(
+      &requestedVariables);
+  for (const auto& sortIndex : sortColumnIndices_) {
+    const auto& var =
+        subtree_->getVariableAndInfoByColumnIndex(sortIndex).first;
+    sortVars.push_back(&var);
+    varsRequiredFromSubtree.add(var);
   }
 
-  // TODO<joka921> Code duplication including a former copy-paste bug.
-  auto subtree =
-      QueryExecutionTree::makeTreeWithStrippedColumns(subtree_, *vars);
-  std::vector<ColumnIndex> sortColumnIndices;
+  // Strip the subtree and translate `sortColumnIndices_` to the column indices
+  // of the stripped subtree.
+  auto subtree = QueryExecutionTree::makeTreeWithStrippedColumns(
+      subtree_, varsRequiredFromSubtree.get());
+  qlm::vector<ColumnIndex> sortColumnIndices{allocator()};
   for (const auto& var : sortVars) {
-    sortColumnIndices.push_back(subtree->getVariableColumn(var));
+    sortColumnIndices.push_back(subtree->getVariableColumn(*var));
   }
 
-  return ad_utility::makeExecutionTree<Sort>(
-      getExecutionContext(), std::move(subtree), sortColumnIndices);
+  // The new `Sort` also exports the variables it sorts by that the parent did
+  // not request. The helper adds a `StripColumns` operation for them.
+  return columnStrippingHelpers::makeTreeWithOptionalStripOperation<Sort>(
+      getExecutionContext(), requestedVariables, std::move(subtree),
+      std::move(sortColumnIndices), explicitSort_);
 }

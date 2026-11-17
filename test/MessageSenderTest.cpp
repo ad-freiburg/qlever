@@ -16,7 +16,9 @@ using ad_utility::websocket::MessageSender;
 using ad_utility::websocket::OwningQueryId;
 using ad_utility::websocket::QueryHub;
 using ad_utility::websocket::QueryId;
+using ad_utility::websocket::QueryOperation;
 using ad_utility::websocket::QueryRegistry;
+using ad_utility::websocket::QueryStatus;
 using PayloadType = std::pair<std::shared_ptr<const std::string>, size_t>;
 
 using namespace boost::asio::experimental::awaitable_operators;
@@ -29,8 +31,9 @@ using ::testing::VariantWith;
 
 ASYNC_TEST(MessageSender, destructorCallsSignalEnd) {
   QueryRegistry queryRegistry;
-  OwningQueryId queryId = queryRegistry.uniqueId("my-query");
-  QueryHub queryHub{ioContext};
+  OwningQueryId queryId =
+      queryRegistry.uniqueId("my-query", QueryOperation::QUERY);
+  QueryHub queryHub{ioContext.get_executor()};
 
   auto distributor =
       queryHub.createOrAcquireDistributorForReceiving(queryId.toQueryId());
@@ -55,8 +58,9 @@ ASYNC_TEST(MessageSender, destructorCallsSignalEnd) {
 
 ASYNC_TEST(MessageSender, callingOperatorBroadcastsPayload) {
   QueryRegistry queryRegistry;
-  OwningQueryId queryId = queryRegistry.uniqueId("my-query");
-  QueryHub queryHub{ioContext};
+  OwningQueryId queryId =
+      queryRegistry.uniqueId("my-query", QueryOperation::QUERY);
+  QueryHub queryHub{ioContext.get_executor()};
 
   {
     auto distributor =
@@ -94,9 +98,10 @@ ASYNC_TEST(MessageSender, callingOperatorBroadcastsPayload) {
 
 ASYNC_TEST(MessageSender, testGetQueryIdGetterWorks) {
   QueryRegistry queryRegistry;
-  OwningQueryId queryId = queryRegistry.uniqueId("my-query");
+  OwningQueryId queryId =
+      queryRegistry.uniqueId("my-query", QueryOperation::QUERY);
   QueryId reference = queryId.toQueryId();
-  QueryHub queryHub{ioContext};
+  QueryHub queryHub{ioContext.get_executor()};
 
   {
     MessageSender messageSender{std::move(queryId), queryHub};
@@ -105,5 +110,28 @@ ASYNC_TEST(MessageSender, testGetQueryIdGetterWorks) {
   // The destructor of `MessageSender` calls `signalEnd` on the underlying
   // distributor instance asynchronously, so we need to wait for it to be
   // executed before destroying the backing `QueryHub` instance.
+  co_await net::post(net::use_awaitable);
+}
+
+// _____________________________________________________________________________
+
+// `sharedStatus()` must hand out the OwningQueryId's own status atomic, so a
+// write through one handle is visible through another.
+ASYNC_TEST(MessageSender, sharedStatusForwardsToOwningQueryId) {
+  QueryRegistry queryRegistry;
+  OwningQueryId queryId =
+      queryRegistry.uniqueId("my-query", QueryOperation::QUERY);
+  QueryHub queryHub{ioContext.get_executor()};
+
+  {
+    MessageSender messageSender{std::move(queryId), queryHub};
+    auto handle = messageSender.sharedStatus();
+    EXPECT_NE(handle, nullptr);
+    EXPECT_EQ(handle->load(), QueryStatus::FAILED);
+
+    handle->store(QueryStatus::OK);
+    EXPECT_EQ(messageSender.sharedStatus()->load(), QueryStatus::OK);
+  }
+  // Wait for the asynchronous `signalEnd` before the `QueryHub` is destroyed.
   co_await net::post(net::use_awaitable);
 }

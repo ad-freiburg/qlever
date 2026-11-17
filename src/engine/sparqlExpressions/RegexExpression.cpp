@@ -36,7 +36,7 @@ void ensureIsValidRegexIfConstant(const SparqlExpression& expression) {
       dynamic_cast<const StringLiteralExpression*>(&expression);
   if (stringLiteralExpression) {
     const auto& literal = stringLiteralExpression->value();
-    const auto& string = asStringViewUnsafe(literal.getContent());
+    const auto& string = literal.getContent();
     RE2 regex{string, RE2::Quiet};
     if (!regex.ok()) {
       throw std::runtime_error{absl::StrCat(
@@ -54,7 +54,7 @@ void ensureIsValidFlagIfConstant(const SparqlExpression& expression) {
       dynamic_cast<const StringLiteralExpression*>(&expression);
   if (stringLiteralExpression) {
     const auto& literal = stringLiteralExpression->value();
-    const auto& string = asStringViewUnsafe(literal.getContent());
+    const auto& string = literal.getContent();
     auto firstInvalidFlag = string.find_first_not_of("imsU");
     if (firstInvalidFlag != std::string::npos) {
       throw std::runtime_error{absl::StrCat(
@@ -118,13 +118,10 @@ std::optional<std::string> PrefixRegexExpression::getPrefixRegex(
     if (!escaped && isControlChar) {
       return std::nullopt;
     } else if (escaped && !isControlChar) {
-      const std::string error =
-          "Escaping the character "s + c +
-          " is not allowed in QLever's regex filters. (Regex was " + regex +
-          ") Please note that "
-          "there are two levels of escaping in place here: One for SPARQL "
-          "and one for the regex engine";
-      throw std::runtime_error(error);
+      // The regex contains an escape of a non-special char (e.g. `\d`).
+      // This is a valid regex feature (handled by RE2 in the general path),
+      // but it is not expressible as a simple prefix filter, so bail out.
+      return std::nullopt;
     }
     escaped = false;
   }
@@ -204,41 +201,78 @@ ExpressionResult PrefixRegexExpression::evaluate(
   }
   checkCancellation(context);
 
-  // Begin and end of the input (for each row of which we want to
-  // evaluate the regex).
-  auto beg = context->_inputTable.begin() + context->_beginIndex;
-  auto end = context->_inputTable.begin() + context->_endIndex;
-  AD_CONTRACT_CHECK(end <= context->_inputTable.end());
+  // Helper that checks whether a single `Id` lies in (at least) one of the
+  // prefix ranges.
+  auto matchesPrefix = [&lowerAndUpperIds](Id id) {
+    if (id.isUndefined()) {
+      return Id::makeUndefined();
+    }
+    return Id::makeFromBool(
+        ql::ranges::any_of(lowerAndUpperIds, [&](const auto& lowerUpper) {
+          return !valueIdComparators::compareByBits(id, lowerUpper.first) &&
+                 valueIdComparators::compareByBits(id, lowerUpper.second);
+        }));
+  };
+
+  // When we work on aggregated data (i.e. as part of a GROUP BY, but outside of
+  // an aggregate), the variable is grouped and thus constant within each group.
+  if (worksOnAggregatedData(context)) {
+    AD_CORRECTNESS_CHECK(
+        context->_groupedVariables.contains(variable_),
+        "A non-grouped variable outside of an aggregate should have been "
+        "rejected by the parser");
+    return std::visit(
+        [context, &matchesPrefix](const auto& childResult) -> ExpressionResult {
+          using T = std::decay_t<decltype(childResult)>;
+          // Usually the child of a prefix-regex expression is a
+          // `VariableExpression`, so the result is a single `ValueId`.
+          if constexpr (ad_utility::isSimilar<T, ValueId>) {
+            return matchesPrefix(childResult);
+            // Hash-map based or lazy GROUP BY implementations can lead to the
+            // child being replaced by `sparqlExpression::VectorIdExpression`.
+            // In this case, we have to apply the prefix check to each value in
+            // the vector.
+          } else if constexpr (ad_utility::isSimilar<
+                                   T, VectorWithMemoryLimit<ValueId>>) {
+            VectorWithMemoryLimit<Id> result{context->_allocator};
+            result.reserve(childResult.size());
+            for (Id id : childResult) {
+              result.push_back(matchesPrefix(id));
+              checkCancellation(context);
+            }
+            return ExpressionResult{std::move(result)};
+          } else {
+            // The child of a prefix-regex expression is always a single
+            // variable, so this is unreachable.
+            AD_FAIL();
+          }
+        },
+        child_->evaluate(context));
+  }
 
   // In this function, the expression is a simple variable. If the input is
   // sorted by that variable, the result can be computed by a constant number
   // of binary searches and the result is a set of intervals.
-  const auto& column = optColumn.value();
-  if (context->isResultSortedBy(variable_) &&
-      (beg == end || !(*beg)[column].isUndefined())) {
+  if (auto sortedColumn =
+          context->getSortedAlwaysDefinedColumnOrNullopt(variable_);
+      sortedColumn.has_value()) {
+    auto column = sortedColumn.value();
     std::vector<ad_utility::SetOfIntervals> resultSetOfIntervals;
     for (auto [lowerId, upperId] : lowerAndUpperIds) {
       // Two binary searches to find the lower and upper bounds of the range.
-      auto lower = std::lower_bound(
-          beg, end, nullptr,
-          [column, lowerId = lowerId](const auto& l, const auto&) {
-            return l[column] < lowerId;
-          });
-      auto upper = std::lower_bound(
-          beg, end, nullptr,
-          [column, upperId = upperId](const auto& l, const auto&) {
-            return l[column] < upperId;
-          });
+      auto lower = ql::ranges::lower_bound(column, lowerId);
+      auto upper = ql::ranges::lower_bound(column, upperId);
       // Return the empty result as an empty `SetOfIntervals` instead of as an
       // empty range.
       if (lower != upper) {
-        resultSetOfIntervals.push_back(
-            ad_utility::SetOfIntervals{{{lower - beg, upper - beg}}});
+        resultSetOfIntervals.push_back(ad_utility::SetOfIntervals{
+            {{lower - column.begin(), upper - column.begin()}},
+            context->size()});
       }
       checkCancellation(context);
     }
     return ::ranges::accumulate(resultSetOfIntervals,
-                                ad_utility::SetOfIntervals{},
+                                ad_utility::SetOfIntervals{{}, context->size()},
                                 ad_utility::SetOfIntervals::Union{});
   }
 
@@ -248,15 +282,7 @@ ExpressionResult PrefixRegexExpression::evaluate(
   VectorWithMemoryLimit<Id> result{context->_allocator};
   result.reserve(resultSize);
   for (auto id : detail::makeGenerator(variable_, resultSize, context)) {
-    if (id.isUndefined()) {
-      result.push_back(Id::makeUndefined());
-    } else {
-      result.push_back(Id::makeFromBool(
-          ql::ranges::any_of(lowerAndUpperIds, [&](const auto& lowerUpper) {
-            return !valueIdComparators::compareByBits(id, lowerUpper.first) &&
-                   valueIdComparators::compareByBits(id, lowerUpper.second);
-          })));
-    }
+    result.push_back(matchesPrefix(id));
     checkCancellation(context);
   }
   return result;
@@ -288,6 +314,7 @@ void PrefixRegexExpression::checkCancellation(
 // _____________________________________________________________________________
 std::vector<PrefilterExprVariablePair>
 PrefixRegexExpression::getPrefilterExpressionForMetadata(
+    [[maybe_unused]] const LocalVocabContext& context,
     [[maybe_unused]] bool isNegated) const {
   // It is currently not possible to prefilter PREFIX expressions involving
   // STR(?var), since we not only have to match "Bob", but also "Bob"@en,
@@ -299,8 +326,7 @@ PrefixRegexExpression::getPrefilterExpressionForMetadata(
   std::vector<PrefilterExprVariablePair> prefilterVec;
   prefilterVec.emplace_back(
       std::make_unique<prefilterExpressions::PrefixRegexExpression>(
-          TripleComponent::Literal::literalWithNormalizedContent(
-              asNormalizedStringViewUnsafe(prefixRegex_))),
+          TripleComponent::Literal::literalWithNormalizedContent(prefixRegex_)),
       variable_);
   return prefilterVec;
 }
@@ -322,8 +348,8 @@ PrefixRegexExpression::makePrefixRegexExpressionIfPossible(
   }
   const auto& stringLiteral = stringLiteralExpression->value();
   detail::ensureIsSimpleLiteral(stringLiteral);
-  if (std::optional<std::string> prefixRegex = getPrefixRegex(
-          std::string{asStringViewUnsafe(stringLiteral.getContent())})) {
+  if (std::optional<std::string> prefixRegex =
+          getPrefixRegex(std::string{stringLiteral.getContent()})) {
     return PrefixRegexExpression{std::move(string),
                                  std::move(prefixRegex.value()),
                                  variableExpression->value()};
@@ -354,6 +380,30 @@ SparqlExpression::Ptr makeRegexExpression(SparqlExpression::Ptr string,
   }
   return std::make_unique<detail::RegexExpression>(std::move(string),
                                                    std::move(regex));
+}
+
+// _____________________________________________________________________________
+SparqlExpression::Ptr makePrefixMatchExpression(
+    SparqlExpression::Ptr string, const SparqlExpression::Ptr& prefix) {
+  const auto* variableExpression = dynamic_cast<const VariableExpression*>(
+      string->isStrExpression() ? string->children()[0].get() : string.get());
+  if (!variableExpression) {
+    throw std::runtime_error{
+        "ql:prefix-match does only support STR(?var) or ?var as the first "
+        "argument"};
+  }
+  auto stringLiteralExpression =
+      dynamic_cast<const StringLiteralExpression*>(&*prefix);
+  if (!stringLiteralExpression) {
+    throw std::runtime_error{
+        "ql:prefix-match does only support static string literals as the "
+        "second argument"};
+  }
+  const auto& stringLiteral = stringLiteralExpression->value();
+  detail::ensureIsSimpleLiteral(stringLiteral);
+  return std::make_unique<PrefixRegexExpression>(
+      std::move(string), std::string{stringLiteral.getContent()},
+      variableExpression->value());
 }
 
 }  // namespace sparqlExpression

@@ -18,8 +18,7 @@ using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 
 inline constexpr auto fromLiteral = [](std::string_view str) {
   return LiteralOrIri{
-      ad_utility::triple_component::Literal::literalWithNormalizedContent(
-          asNormalizedStringViewUnsafe(str))};
+      ad_utility::triple_component::Literal::literalWithNormalizedContent(str)};
 };
 
 inline constexpr auto fromIri = [](std::string_view str) {
@@ -47,18 +46,25 @@ class UuidExpressionImpl : public SparqlExpression {
 
  public:
   ExpressionResult evaluate(EvaluationContext* context) const override {
-    VectorWithMemoryLimit<IdOrLiteralOrIri> result{context->_allocator};
+    VectorWithMemoryLimit<IdOrLocalVocabEntry> result{context->_allocator};
     const size_t numElements = context->_endIndex - context->_beginIndex;
     result.reserve(numElements);
     ad_utility::UuidGenerator uuidGen;
 
-    if (context->_isPartOfGroupBy) {
-      return FuncConv(uuidGen());
+    // As part of a GROUP BY (and outside of an aggregate) we only return one
+    // value per group. Inside an aggregate we must still produce one value per
+    // row, so that e.g. `COUNT(STRUUID())` counts the rows in the group.
+    if (worksOnAggregatedData(context)) {
+      return toIdOrLocalVocabEntry(FuncConv(uuidGen()),
+                                   context->getLocalVocabContext());
     }
 
     ad_utility::chunkedForLoop<1000>(
         0, numElements,
-        [&result, &uuidGen](size_t) { result.push_back(FuncConv(uuidGen())); },
+        [&result, &uuidGen, context](size_t) {
+          result.push_back(toIdOrLocalVocabEntry(
+              FuncConv(uuidGen()), context->getLocalVocabContext()));
+        },
         [context]() { context->cancellationHandle_->throwIfCancelled(); });
     return result;
   }
@@ -66,6 +72,14 @@ class UuidExpressionImpl : public SparqlExpression {
   std::string getCacheKey(
       [[maybe_unused]] const VariableToColumnMap& varColMap) const override {
     return FuncKey(randId_);
+  }
+
+  // UUID() / STRUUID() generate a fresh UUID on every invocation.
+  bool isDeterministic() const override { return false; }
+
+  // The result of `UUID`/`STRUUID` is always a defined value.
+  bool isResultAlwaysDefined(const VariableToColumnMap&) const override {
+    return true;
   }
 
  private:

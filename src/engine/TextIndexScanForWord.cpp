@@ -34,7 +34,7 @@ Result TextIndexScanForWord::computeResult(
   oss << config_;
   runtimeInfo().addDetail("text-index-scan-for-word-config", oss.str());
   IdTable idTable = getExecutionContext()->getIndex().getWordPostingsForTerm(
-      config_.word_, getExecutionContext()->getAllocator());
+      config_.word_, getExecutionContext()->getAllocator(), sortConfig());
 
   // This filters out the word column. When the searchword is a prefix this
   // column shows the word the prefix got extended to
@@ -102,8 +102,8 @@ uint64_t TextIndexScanForWord::getSizeEstimateBeforeLimit() {
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> TextIndexScanForWord::resultSortedOn() const {
-  return {ColumnIndex(0)};
+qlm::vector<ColumnIndex> TextIndexScanForWord::resultSortedOn() const {
+  return {{ColumnIndex(0)}, allocator()};
 }
 
 // _____________________________________________________________________________
@@ -115,8 +115,7 @@ std::string TextIndexScanForWord::getDescriptor() const {
 // _____________________________________________________________________________
 std::string TextIndexScanForWord::getCacheKeyImpl() const {
   std::ostringstream os;
-  os << "WORD INDEX SCAN: "
-     << " with word: \"" << config_.word_
+  os << "WORD INDEX SCAN: " << " with word: \"" << config_.word_
      << "\", has variable: " << config_.scoreVar_.has_value();
   return std::move(os).str();
 }

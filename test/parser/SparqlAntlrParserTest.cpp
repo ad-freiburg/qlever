@@ -12,8 +12,8 @@
 
 #include "../QueryPlannerTestHelpers.h"
 #include "../SparqlExpressionTestHelpers.h"
-#include "../util/AllocatorTestHelpers.h"
-#include "../util/GTestHelpers.h"
+#include "../util/IndexTestHelpers.h"
+#include "../util/ParsedQueryTestHelpers.h"
 #include "../util/RuntimeParametersTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
 #include "SparqlAntlrParserTestHelpers.h"
@@ -22,27 +22,19 @@
 #include "parser/ConstructClause.h"
 #include "parser/SparqlParserHelpers.h"
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
-#include "rdfTypes/Iri.h"
 #include "util/SourceLocation.h"
 
 namespace {
 using namespace sparqlParserTestHelpers;
+using ad_utility::testing::encodedIriManager;
 using std::string;
 
 auto iri = ad_utility::testing::iri;
-
 auto lit = ad_utility::testing::tripleComponentLiteral;
 
-PropertyPath PathIri(std::string_view iri) {
-  return PropertyPath::fromIri(
-      ad_utility::triple_component::Iri::fromIriref(iri));
+PropertyPath PathIri(std::string_view iriref) {
+  return PropertyPath::fromIri(ad_utility::testing::iri(iriref));
 }
-
-const EncodedIriManager* encodedIriManager() {
-  static EncodedIriManager encodedIriManager_;
-  return &encodedIriManager_;
-}
-
 using GVB = parsedQuery::GroupGraphPattern::GraphVariableBehaviour;
 }  // namespace
 
@@ -68,6 +60,19 @@ TEST(SparqlParser, NumericLiterals) {
   expectNumericLiteralFails("-99999999999999999999");
   expectNumericLiteralFails("12E400");
   expectNumericLiteralFails("-4.2E550");
+}
+
+// _____________________________________________________________________________
+TEST(SparqlParser, BooleanLiterals) {
+  auto expectBooleanLiteral = ExpectCompleteParse<&Parser::booleanLiteral>{};
+  expectBooleanLiteral("true", true);
+  expectBooleanLiteral("TRUE", true);
+  expectBooleanLiteral("True", true);
+  expectBooleanLiteral("tRuE", true);
+  expectBooleanLiteral("false", false);
+  expectBooleanLiteral("FALSE", false);
+  expectBooleanLiteral("False", false);
+  expectBooleanLiteral("fAlSe", false);
 }
 
 TEST(SparqlParser, Prefix) {
@@ -119,11 +124,10 @@ TEST(SparqlExpressionParser, First) {
   sparqlExpression::EvaluationContext input{
       *ad_utility::testing::getQec(),
       map,
-      table,
+      table.asStaticView<0>(),
       alloc,
       localVocab,
-      std::make_shared<ad_utility::CancellationHandle<>>(),
-      sparqlExpression::EvaluationContext::TimePoint::max()};
+      std::make_shared<ad_utility::CancellationHandle<>>()};
   auto result = resultAsExpression->evaluate(&input);
   AD_CONTRACT_CHECK(std::holds_alternative<Id>(result));
   ASSERT_EQ(std::get<Id>(result).getDatatype(), Datatype::Int);
@@ -141,19 +145,19 @@ TEST(SparqlParser, ComplexConstructTemplate) {
       parse<&Parser::constructTemplate>(input),
       m::ConstructClause(
           {{Blank("0"), Var("?a"), Blank("3")},
-           {Blank("2"), Iri(first), Blank("1")},
-           {Blank("2"), Iri(rest), Iri(nil)},
-           {Blank("1"), Iri(first), Var("?c")},
-           {Blank("1"), Iri(rest), Iri(nil)},
-           {Blank("3"), Iri(first), Var("?b")},
-           {Blank("3"), Iri(rest), Blank("2")},
+           {Blank("2"), iri(first), Blank("1")},
+           {Blank("2"), iri(rest), iri(nil)},
+           {Blank("1"), iri(first), Var("?c")},
+           {Blank("1"), iri(rest), iri(nil)},
+           {Blank("3"), iri(first), Var("?b")},
+           {Blank("3"), iri(rest), Blank("2")},
            {Blank("0"), Var("?d"), Blank("4")},
            {Blank("4"), Var("?e"), Blank("5")},
            {Blank("5"), Var("?f"), Var("?g")},
-           {Iri("<http://wallscope.co.uk/resource/olympics/medal/"
+           {iri("<http://wallscope.co.uk/resource/olympics/medal/"
                 "#something>"),
-            Iri(type),
-            Iri("<http://wallscope.co.uk/resource/olympics/medal/"
+            iri(type),
+            iri("<http://wallscope.co.uk/resource/olympics/medal/"
                 "#somethingelse>")}}));
 }
 
@@ -421,7 +425,6 @@ TEST(SparqlParser, VarOrTermGraphTerm) {
 }
 
 TEST(SparqlParser, Iri) {
-  auto iri = &TripleComponent::Iri::fromIriref;
   auto expectIri = ExpectCompleteParse<&Parser::iri>{};
   expectIri("rdfs:label", iri("<http://www.w3.org/2000/01/rdf-schema#label>"),
             {{"rdfs", "<http://www.w3.org/2000/01/rdf-schema#>"}});
@@ -459,6 +462,62 @@ TEST(SparqlParser, Bind) {
   auto expectBind = ExpectCompleteParse<&Parser::bind>{{}, noChecks};
   expectBind("BIND (10 - 5 as ?a)", m::Bind(Var{"?a"}, "10 - 5"));
   expectBind("bInD (?age - 10 As ?s)", m::Bind(Var{"?s"}, "?age - 10"));
+}
+
+// Aggregate functions may only be used in SELECT, HAVING, and ORDER BY clauses
+// (see section 11.1 of the SPARQL 1.1 standard), in particular not in a BIND.
+// The same test for FILTER is `FilterWithAggregateIsRejected` below.
+TEST(SparqlParser, BindWithAggregateIsRejected) {
+  auto noChecks = SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::True;
+  auto expectBindFails = ExpectParseFails<&Parser::bind>{{}, noChecks};
+  auto messageMatcher = ::testing::HasSubstr(
+      "Aggregate functions are not allowed in a BIND clause");
+  expectBindFails("BIND(SAMPLE(?human) AS ?a)", messageMatcher);
+  expectBindFails("BIND(COUNT(?x) AS ?a)", messageMatcher);
+  // The aggregate is nested inside another expression.
+  expectBindFails("BIND(1 + SUM(?x) AS ?a)", messageMatcher);
+  // An aggregate inside the body of an `EXISTS` has its own scope and is
+  // therefore fine.
+  auto expectBind = ExpectCompleteParse<&Parser::bind>{{}, noChecks};
+  expectBind(
+      "BIND(EXISTS { SELECT (COUNT(?x) AS ?c) WHERE { ?x ?y ?z } } AS ?a)",
+      m::Bind(Var{"?a"},
+              "EXISTS { SELECT (COUNT(?x) AS ?c) WHERE { ?x ?y ?z } }"));
+}
+
+// Same as `BindWithAggregateIsRejected` above, but for FILTER. Note that the
+// correct way to filter on the value of an aggregate is a HAVING clause.
+TEST(SparqlParser, FilterWithAggregateIsRejected) {
+  auto noChecks = SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::True;
+  auto expectFilterFails = ExpectParseFails<&Parser::filterR>{{}, noChecks};
+  auto messageMatcher = ::testing::HasSubstr(
+      "Aggregate functions are not allowed in a FILTER clause");
+  expectFilterFails("FILTER(COUNT(?x) > 1)", messageMatcher);
+  expectFilterFails("FILTER(SAMPLE(?human) = ?x)", messageMatcher);
+  // The aggregate is nested inside another expression.
+  expectFilterFails("FILTER(1 + SUM(?x) > 0)", messageMatcher);
+  // An aggregate inside the body of an `EXISTS` has its own scope and is
+  // therefore fine.
+  auto expectFilter = ExpectCompleteParse<&Parser::filterR>{{}, noChecks};
+  expectFilter("FILTER(EXISTS { SELECT (COUNT(?x) AS ?c) WHERE { ?x ?y ?z } })",
+               m::stringMatchesFilter(
+                   "(EXISTS { SELECT (COUNT(?x) AS ?c) WHERE { ?x ?y ?z } })"));
+}
+
+// Same as `BindWithAggregateIsRejected` above, but for the expressions of a
+// GROUP BY clause.
+TEST(SparqlParser, GroupByWithAggregateIsRejected) {
+  auto expectGroupConditionFails = ExpectParseFails<&Parser::groupCondition>{};
+  auto messageMatcher = ::testing::HasSubstr(
+      "Aggregate functions are not allowed in a GROUP BY clause");
+  expectGroupConditionFails("COUNT(?x)", messageMatcher);
+  expectGroupConditionFails("(SAMPLE(?x))", messageMatcher);
+  expectGroupConditionFails("(1 + SUM(?x) AS ?y)", messageMatcher);
+  auto expectGroupCondition = ExpectCompleteParse<&Parser::groupCondition>{};
+  expectGroupCondition(
+      "(EXISTS { SELECT (COUNT(?x) AS ?c) WHERE { ?x ?y ?z } })",
+      m::ExpressionGroupKey(
+          "EXISTS { SELECT (COUNT(?x) AS ?c) WHERE { ?x ?y ?z } }"));
 }
 
 TEST(SparqlParser, Integer) {
@@ -536,7 +595,7 @@ TEST(SparqlParser, GroupCondition) {
   expectGroupCondition("(?test AS ?mehr)",
                        m::AliasGroupKey("?test", Var{"?mehr"}));
   // builtInCall
-  expectGroupCondition("COUNT(?test)", m::ExpressionGroupKey("COUNT(?test)"));
+  expectGroupCondition("STR(?test)", m::ExpressionGroupKey("STR(?test)"));
   // functionCall
   expectGroupCondition(
       "<http://www.opengis.net/def/function/geosparql/latitude>(?test)",
@@ -547,9 +606,9 @@ TEST(SparqlParser, GroupCondition) {
 TEST(SparqlParser, GroupClause) {
   expectCompleteParse(
       parse<&Parser::groupClause>(
-          "GROUP BY ?test (?foo - 10 as ?bar) COUNT(?baz)"),
+          "GROUP BY ?test (?foo - 10 as ?bar) STR(?baz)"),
       m::GroupKeys(
-          {Var{"?test"}, std::pair{"?foo - 10", Var{"?bar"}}, "COUNT(?baz)"}));
+          {Var{"?test"}, std::pair{"?foo - 10", Var{"?bar"}}, "STR(?baz)"}));
 }
 
 TEST(SparqlParser, SolutionModifier) {
@@ -617,6 +676,31 @@ TEST(SparqlParser, DataBlock) {
                                              {1, lit("\"f\"")}}));
   // TODO<joka921/qup42> implement
   expectDataBlockFails(R"(( ) { (<foo>) })");
+
+  // String literals in every syntactic form (both quote styles, long strings,
+  // language tag, datatype, escape sequences, multiple lines) are parsed to
+  // the expected `TripleComponent`.
+  auto expectLiteral = [&](std::string_view literal, TripleComponent expected,
+                           ad_utility::source_location l =
+                               AD_CURRENT_SOURCE_LOC()) {
+    expectDataBlock(absl::StrCat("?a { ", literal, " }"),
+                    m::Values({Var{"?a"}}, {{std::move(expected)}}), l);
+  };
+  expectLiteral(R"("foo")", lit("\"foo\""));
+  expectLiteral(R"('foo')", lit("\"foo\""));
+  expectLiteral(R"("")", lit("\"\""));
+  expectLiteral(R"('''a'b''c''')", lit("\"a'b''c\""));
+  expectLiteral(R"("foo"@en-US)", lit("\"foo\"", "@en-US"));
+  expectLiteral(R"("foo"^^<http://www.w3.org/2001/XMLSchema#string>)",
+                lit("\"foo\"", "^^<http://www.w3.org/2001/XMLSchema#string>"));
+  expectLiteral(R"("42"^^<http://www.w3.org/2001/XMLSchema#integer>)", 42);
+  expectLiteral(R"("foo"^^<http://example.org/dt>)",
+                lit("\"foo\"", "^^<http://example.org/dt>"));
+  expectLiteral(R"("a\"b\\c\nz")", lit(R"("a\"b\\c\nz")"));
+  expectLiteral(R"("ä\U0001F600")", lit("\"ä😀\""));
+  expectLiteral(R"("""multi
+"line" ""string""")",
+                lit(R"("multi\n\"line\" \"\"string")"));
 }
 
 TEST(SparqlParser, InlineData) {
@@ -688,6 +772,26 @@ TEST(SparqlParser, propertyPaths) {
                   {{"a", "<http://www.example.com/>"}});
   expectPathOrVar("a:a*", WithLength(Iri("<http://www.example.com/a>"), 0, max),
                   {{"a", "<http://www.example.com/>"}});
+  expectPathOrVar("a:a{1,3}",
+                  WithLength(Iri("<http://www.example.com/a>"), 1, 3),
+                  {{"a", "<http://www.example.com/>"}});
+  expectPathOrVar("a:a{3}", WithLength(Iri("<http://www.example.com/a>"), 3, 3),
+                  {{"a", "<http://www.example.com/>"}});
+  expectPathOrVar("a:a{1,}",
+                  WithLength(Iri("<http://www.example.com/a>"), 1, max),
+                  {{"a", "<http://www.example.com/>"}});
+  expectPathOrVar("a:a{,3}",
+                  WithLength(Iri("<http://www.example.com/a>"), 0, 3),
+                  {{"a", "<http://www.example.com/>"}});
+  // Zero bounds round-trip correctly through `WithLength`.
+  expectPathOrVar("a:a{0}", WithLength(Iri("<http://www.example.com/a>"), 0, 0),
+                  {{"a", "<http://www.example.com/>"}});
+  expectPathOrVar("a:a{0,0}",
+                  WithLength(Iri("<http://www.example.com/a>"), 0, 0),
+                  {{"a", "<http://www.example.com/>"}});
+  expectPathOrVar("a:a{0,5}",
+                  WithLength(Iri("<http://www.example.com/a>"), 0, 5),
+                  {{"a", "<http://www.example.com/>"}});
   // Test a bigger example that contains everything.
   {
     PropertyPath expected = Alternative(
@@ -700,15 +804,26 @@ TEST(SparqlParser, propertyPaths) {
              Sequence({Iri("<http://www.example.com/a/a>"),
                        Iri("<http://www.example.com/b/b>"), Iri("<a/b/c>")}),
              1, max),
+         Sequence({WithLength(Sequence({Iri("<http://www.example.com/a/a>"),
+                                        Iri("<http://www.example.com/b/b>"),
+                                        Iri("<a/b/c>")}),
+                              1, 4),
+                   WithLength(Sequence({Iri("<http://www.example.com/a/a>"),
+                                        Iri("<http://www.example.com/b/b>"),
+                                        Iri("<a/b/c>")}),
+                              3, 3)}),
          Negated({Iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>")}),
          Negated(
              {Inverse(Iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>")),
               Iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"),
               Inverse(Iri("<http://www.example.com/a/a>"))})});
-    expectPathOrVar("a:a/b:b*|c:c|(a:a/b:b/<a/b/c>)+|!a|!(^a|a|^a:a)", expected,
-                    {{"a", "<http://www.example.com/a/>"},
-                     {"b", "<http://www.example.com/b/>"},
-                     {"c", "<http://www.example.com/c/>"}});
+    expectPathOrVar(
+        "a:a/b:b*|c:c|(a:a/b:b/<a/b/c>)+|(a:a/b:b/<a/b/c>){1,4}/(a:a/b:b/<a/b/"
+        "c>){3}|!a|!(^a|a|^a:a)",
+        expected,
+        {{"a", "<http://www.example.com/a/>"},
+         {"b", "<http://www.example.com/b/>"},
+         {"c", "<http://www.example.com/c/>"}});
   }
 }
 
@@ -763,8 +878,8 @@ TEST(SparqlParser, triplesSameSubjectPath) {
                  {Var{"?foo"}, PathIri("<mehr>"), Var{"?t"}},
                  {Var{"?foo"}, PathIri("<mehr>"), Var{"?d"}}});
   expectTriples("<foo> <bar> ?baz ; ?mehr \"a\"",
-                {{Iri("<foo>"), PathIri("<bar>"), Var{"?baz"}},
-                 {Iri("<foo>"), Var("?mehr"), Literal("\"a\"")}});
+                {{iri("<foo>"), PathIri("<bar>"), Var{"?baz"}},
+                 {iri("<foo>"), Var("?mehr"), Literal("\"a\"")}});
   auto expectTriplesConstruct =
       ExpectCompleteParse<&Parser::triplesSameSubjectPath, true>{};
   expectTriplesConstruct("_:1 <bar> ?baz", {{BlankNode(false, "1"),
@@ -779,7 +894,7 @@ TEST(SparqlParser, triplesSameSubjectPath) {
       "<foo> "
       "<http://qlever.cs.uni-freiburg.de/builtin-functions/contains-word> "
       "\"Berlin Freiburg\"",
-      {{Iri("<foo>"),
+      {{iri("<foo>"),
         PathIri("<http://qlever.cs.uni-freiburg.de/builtin-functions/"
                 "contains-word>"),
         Literal("\"Berlin Freiburg\"")}});
@@ -826,6 +941,9 @@ TEST(SparqlParser, HavingCondition) {
                         m::stringMatchesFilter("(?predicate < \"<Z\")"));
   expectHavingCondition("(LANG(?x) = \"en\")",
                         m::stringMatchesFilter("(LANG(?x) = \"en\")"));
+  // In contrast to BIND and FILTER, aggregates are allowed here.
+  expectHavingCondition("(COUNT(?x) > 1)",
+                        m::stringMatchesFilter("(COUNT(?x) > 1)"));
 }
 
 TEST(SparqlParser, GroupGraphPattern) {
@@ -862,6 +980,28 @@ TEST(SparqlParser, GroupGraphPattern) {
   expectGraphPattern("{ MINUS { ?a <foo> <bar> } }",
                      m::GraphPattern(m::MinusGraphPattern(m::Triples(
                          {{Var{"?a"}, iri("<foo>"), iri("<bar>")}}))));
+  // A MINUS clause stores the variables that are in scope in it and in the
+  // patterns before it in the same group. The variables of a nested MINUS, and
+  // the non-target variables of a BIND, are not in scope, but the variable of a
+  // GRAPH clause is.
+  expectGraphPattern(
+      "{ ?a <p> ?b . { ?c <p> ?d } MINUS { ?a <q> ?e MINUS { ?f <r> ?g } } "
+      "BIND(?i AS ?j) MINUS { GRAPH ?k { ?l <s> ?m } } }",
+      m::GraphPattern(
+          ::testing::_, ::testing::_,
+          m::MinusWithVisibleVariables(
+              {Var{"?a"}, Var{"?e"}},
+              {Var{"?a"}, Var{"?b"}, Var{"?c"}, Var{"?d"}}),
+          ::testing::_,
+          m::MinusWithVisibleVariables(
+              {Var{"?k"}, Var{"?l"}, Var{"?m"}},
+              {Var{"?a"}, Var{"?b"}, Var{"?c"}, Var{"?d"}, Var{"?j"}})));
+  // The variables before a MINUS clause in an enclosing group are not in scope.
+  expectGraphPattern(
+      "{ ?a <p> ?b { MINUS { ?a <q> ?c } } }",
+      m::GraphPattern(::testing::_,
+                      m::GroupGraphPattern(m::MinusWithVisibleVariables(
+                          {Var{"?a"}, Var{"?c"}}, {}))));
   expectGraphPattern(
       "{ FILTER (?a = 10) . ?x ?y ?z }",
       m::GraphPattern(false, {"(?a = 10)"}, DummyTriplesMatcher));
@@ -937,27 +1077,47 @@ TEST(SparqlParser, GroupGraphPattern) {
       m::GraphPattern(m::Triples({{Var{"?x"}, iri("<is-a>"), iri("<Actor>")}}),
                       m::OptionalGraphPattern(m::Triples(
                           {{Var{"?x"}, iri("<foo>"), iri("<bar>")}}))));
+  // The trailing `VALUES` clause of a subquery belongs to the subquery, and its
+  // variables are selected by `SELECT *`. Without `GROUP BY`, it is joined with
+  // the (separately grouped) `WHERE` clause.
   expectGraphPattern(
       "{ SELECT *  WHERE { ?x ?y ?z } VALUES ?a { <a> <b> } }",
-      m::GraphPattern(
-          m::SubSelect(m::AsteriskSelect(false, false),
-                       m::GraphPattern(DummyTriplesMatcher)),
-          m::InlineData({Var{"?a"}}, {{iri("<a>")}, {iri("<b>")}})));
+      m::GraphPattern(::testing::AllOf(
+          m::SubSelect(
+              m::AsteriskSelect(false, false),
+              m::GraphPattern(
+                  m::GroupGraphPattern(DummyTriplesMatcher),
+                  m::InlineData({Var{"?a"}}, {{iri("<a>")}, {iri("<b>")}}))),
+          ::testing::VariantWith<parsedQuery::Subquery>(AD_PROPERTY(
+              parsedQuery::Subquery, get,
+              ::testing::AllOf(AD_FIELD(ParsedQuery, postQueryValuesClause_,
+                                        ::testing::Eq(std::nullopt)),
+                               AD_PROPERTY(ParsedQuery, getVisibleVariables,
+                                           ::testing::ElementsAre(
+                                               Var{"?x"}, Var{"?y"}, Var{"?z"},
+                                               Var{"?a"}))))))));
+  // With `GROUP BY`, it is joined after the grouping by the `QueryPlanner`.
+  expectGraphPattern(
+      "{ SELECT ?x WHERE { ?x ?y ?z } GROUP BY ?x VALUES ?a { <a> } }",
+      m::GraphPattern(::testing::VariantWith<parsedQuery::Subquery>(AD_PROPERTY(
+          parsedQuery::Subquery, get,
+          AD_FIELD(
+              ParsedQuery, postQueryValuesClause_,
+              ::testing::Optional(m::Values({Var{"?a"}}, {{iri("<a>")}})))))));
   expectGraphPattern("{ SERVICE <endpoint> { ?s ?p ?o } }",
                      m::GraphPattern(m::Service(
-                         TripleComponent::Iri::fromIriref("<endpoint>"),
-                         {Var{"?s"}, Var{"?p"}, Var{"?o"}}, "{ ?s ?p ?o }")));
+                         iri("<endpoint>"), {Var{"?s"}, Var{"?p"}, Var{"?o"}},
+                         "{ ?s ?p ?o }")));
   expectGraphPattern(
       "{ SERVICE <ep> { { SELECT ?s ?o WHERE { ?s ?p ?o } } } }",
-      m::GraphPattern(m::Service(TripleComponent::Iri::fromIriref("<ep>"),
-                                 {Var{"?s"}, Var{"?o"}},
+      m::GraphPattern(m::Service(iri("<ep>"), {Var{"?s"}, Var{"?o"}},
                                  "{ { SELECT ?s ?o WHERE { ?s ?p ?o } } }")));
 
   expectGraphPattern(
       "{ SERVICE SILENT <ep> { { SELECT ?s ?o WHERE { ?s ?p ?o } } } }",
-      m::GraphPattern(m::Service(
-          TripleComponent::Iri::fromIriref("<ep>"), {Var{"?s"}, Var{"?o"}},
-          "{ { SELECT ?s ?o WHERE { ?s ?p ?o } } }", "", true)));
+      m::GraphPattern(m::Service(iri("<ep>"), {Var{"?s"}, Var{"?o"}},
+                                 "{ { SELECT ?s ?o WHERE { ?s ?p ?o } } }", "",
+                                 true)));
 
   // SERVICE with a variable endpoint is not yet supported.
   expectGroupGraphPatternFails("{ SERVICE ?endpoint { ?s ?p ?o } }");
@@ -1014,8 +1174,7 @@ TEST(SparqlParser, SelectQuery) {
 
   expectSelectQuery(
       "SELECT * FROM <x> FROM NAMED <y> WHERE { ?a <bar> ?foo }",
-      selectABarFooMatcher(m::Graphs{TripleComponent::Iri::fromIriref("<x>")},
-                           m::Graphs{TripleComponent::Iri::fromIriref("<y>")}));
+      selectABarFooMatcher(m::Graphs{iri("<x>")}, m::Graphs{iri("<y>")}));
 
   expectSelectQuery(
       "SELECT * WHERE { ?x ?y ?z }",
@@ -1126,10 +1285,88 @@ TEST(SparqlParser, SelectQuery) {
       contains(
           "The target ?x of an AS clause was already used in the query body."));
 
-  // HAVING is not allowed without GROUP BY
-  expectSelectQueryFails(
+  // Without GROUP BY and without aggregates, HAVING is equivalent to a FILTER
+  // on the WHERE clause, which then gets its own group. This is valid, but
+  // yields a warning.
+  expectSelectQuery(
       "SELECT ?x WHERE { ?x ?y ?z } HAVING (?x < 3)",
-      contains("HAVING clause is only supported in queries with GROUP BY"));
+      testing::AllOf(
+          m::SelectQuery(
+              m::Select({Var{"?x"}}),
+              m::GraphPattern(m::Group(m::GraphPattern(
+                  false, {"(?x < 3)"},
+                  m::Triples({{Var{"?x"}, Var{"?y"}, Var{"?z"}}}))))),
+          m::WarningsOfParsedQuery({"HAVING clause without GROUP BY"})));
+
+  // The aliases of the SELECT clause are computed after the HAVING clause, so
+  // they are not visible inside of it.
+  expectSelectQuery(
+      "SELECT (?x AS ?a) WHERE { ?x ?y ?z } HAVING (?a < 3)",
+      testing::AllOf(
+          m::SelectQuery(
+              m::Select({Var{"?a"}}),
+              m::GraphPattern(
+                  m::Group(m::GraphPattern(
+                      false, {"(?a < 3)"},
+                      m::Triples({{Var{"?x"}, Var{"?y"}, Var{"?z"}}}))),
+                  m::Bind(Var{"?a"}, "?x"))),
+          m::WarningsOfParsedQuery(
+              {"HAVING clause without GROUP BY",
+               "?a was used by HAVING in expression \"(?a < 3)\", but is not "
+               "defined in the query body. It is bound in the SELECT clause, "
+               "which is evaluated after the HAVING clause."})));
+
+  // An aggregate in the HAVING or ORDER BY clause implies a GROUP BY (with a
+  // single group), also if the SELECT clause has no aggregate.
+  auto isAggregating =
+      AD_PROPERTY(ParsedQuery, isAggregatingQuery, testing::IsTrue());
+  expectSelectQuery(
+      "SELECT (42 AS ?v) WHERE { ?x ?y ?z } HAVING (COUNT(?x) > 3)",
+      testing::AllOf(
+          m::SelectQuery(
+              m::Select({std::pair{"42", Var{"?v"}}}, false, false,
+                        {std::pair{"(COUNT(?x) > 3)",
+                                   Var{"?_QLever_internal_variable_0"}}}),
+              DummyGraphPatternMatcher),
+          m::pq::GroupKeys({}), m::pq::Having({"?_QLever_internal_variable_0"}),
+          isAggregating, m::WarningsOfParsedQuery({})));
+  expectSelectQuery(
+      "SELECT (42 AS ?v) WHERE { ?x ?y ?z } ORDER BY COUNT(?x)",
+      testing::AllOf(
+          m::SelectQuery(
+              m::Select({std::pair{"42", Var{"?v"}}}, false, false,
+                        {std::pair{"COUNT(?x)",
+                                   Var{"?_QLever_internal_variable_0"}}}),
+              DummyGraphPatternMatcher),
+          m::pq::GroupKeys({}),
+          m::pq::OrderKeys({{Var{"?_QLever_internal_variable_0"}, false}}),
+          isAggregating,
+          m::WarningsOfParsedQuery(
+              {"The ORDER BY clause has no effect, because the query has an "
+               "implicit GROUP BY with a single group and therefore returns at "
+               "most one row. Note: The GROUP BY is implicit only because of "
+               "the aggregate in the ORDER BY clause. Is a GROUP BY clause "
+               "missing?"})));
+  // With the implicit GROUP BY, the variables of the WHERE clause can only be
+  // used inside of aggregates.
+  expectSelectQueryFails(
+      "SELECT ?x WHERE { ?x ?y ?z } HAVING (COUNT(?x) > 3)",
+      contains("Variable ?x is selected but not aggregated. All "
+               "non-aggregated variables must be part of the GROUP BY clause. "
+               "Note: The GROUP BY in this query is implicit because an "
+               "aggregate expression was used in the SELECT, HAVING, or ORDER "
+               "BY clause"));
+  expectSelectQueryFails(
+      "SELECT ?x WHERE { ?x ?y ?z } ORDER BY COUNT(?x)",
+      contains("Variable ?x is selected but not aggregated"));
+  expectSelectQueryFails(
+      "SELECT * WHERE { ?x ?y ?z } GROUP BY ?x HAVING (COUNT(?y) > 3)",
+      contains("GROUP BY is not allowed when all variables are selected via "
+               "SELECT *"));
+  expectSelectQueryFails("SELECT * WHERE { ?x ?y ?z } HAVING (COUNT(?x) > 3)",
+                         contains("GROUP BY is not allowed when all variables "
+                                  "are selected via SELECT *. Note: The GROUP "
+                                  "BY in this query is implicit"));
 
   // The target of the alias (`?y`) is already bound in the WHERE clause. This
   // is forbidden by the SPARQL standard.
@@ -1150,21 +1387,21 @@ TEST(SparqlParser, ConstructQuery) {
   expectConstructQuery(
       "CONSTRUCT { ?a <foo> ?c . } WHERE { ?a ?b ?c }",
       testing::AllOf(m::ConstructQuery(
-          {{Var{"?a"}, Iri{"<foo>"}, Var{"?c"}}},
+          {{Var{"?a"}, iri("<foo>"), Var{"?c"}}},
           m::GraphPattern(m::Triples({{Var{"?a"}, Var{"?b"}, Var{"?c"}}})))));
   expectConstructQuery(
       "CONSTRUCT { ?a <foo> ?c . <bar> ?b <baz> } WHERE { ?a ?b ?c . FILTER(?a "
       "> 0) .}",
       m::ConstructQuery(
-          {{Var{"?a"}, Iri{"<foo>"}, Var{"?c"}},
-           {Iri{"<bar>"}, Var{"?b"}, Iri{"<baz>"}}},
+          {{Var{"?a"}, iri("<foo>"), Var{"?c"}},
+           {iri("<bar>"), Var{"?b"}, iri("<baz>")}},
           m::GraphPattern(false, {"(?a > 0)"},
                           m::Triples({{Var{"?a"}, Var{"?b"}, Var{"?c"}}}))));
   expectConstructQuery(
       "CONSTRUCT { ?a <foo> ?c . } WHERE { ?a ?b ?c } ORDER BY ?a LIMIT 10",
       testing::AllOf(
           m::ConstructQuery(
-              {{Var{"?a"}, Iri{"<foo>"}, Var{"?c"}}},
+              {{Var{"?a"}, iri("<foo>"), Var{"?c"}}},
               m::GraphPattern(m::Triples({{Var{"?a"}, Var{"?b"}, Var{"?c"}}}))),
           m::pq::LimitOffset({10}), m::pq::OrderKeys({{Var{"?a"}, false}})));
   // This case of the grammar is not useful without Datasets, but we still
@@ -1172,14 +1409,14 @@ TEST(SparqlParser, ConstructQuery) {
   expectConstructQuery(
       "CONSTRUCT WHERE { ?a <foo> ?b }",
       m::ConstructQuery(
-          {{Var{"?a"}, Iri{"<foo>"}, Var{"?b"}}},
+          {{Var{"?a"}, iri("<foo>"), Var{"?b"}}},
           m::GraphPattern(m::Triples({{Var{"?a"}, iri("<foo>"), Var{"?b"}}}))));
 
   // Blank nodes turn into variables inside WHERE.
   expectConstructQuery(
       "CONSTRUCT WHERE { [] <foo> ?b }",
       m::ConstructQuery(
-          {{BlankNode{true, "0"}, Iri{"<foo>"}, Var{"?b"}}},
+          {{BlankNode{true, "0"}, iri("<foo>"), Var{"?b"}}},
           m::GraphPattern(m::Triples(
               {{Var{absl::StrCat(QLEVER_INTERNAL_BLANKNODE_VARIABLE_PREFIX,
                                  "g_0")},
@@ -1189,7 +1426,7 @@ TEST(SparqlParser, ConstructQuery) {
   expectConstructQuery(
       "CONSTRUCT WHERE { <bar> ?foo \"Abc\"@en }",
       m::ConstructQuery(
-          {{Iri{"<bar>"}, Var{"?foo"}, Literal{"\"Abc\"@en"}}},
+          {{iri("<bar>"), Var{"?foo"}, Literal{"\"Abc\"@en"}}},
           m::GraphPattern(m::Triples(
               {{iri("<bar>"), Var{"?foo"}, lit("\"Abc\"", "@en")}}))));
   // CONSTRUCT with datasets.
@@ -1197,6 +1434,23 @@ TEST(SparqlParser, ConstructQuery) {
       "CONSTRUCT { } FROM <foo> FROM NAMED <foo2> FROM NAMED <foo3> WHERE { }",
       m::ConstructQuery({}, m::GraphPattern(), m::Graphs{iri("<foo>")},
                         m::Graphs{iri("<foo2>"), iri("<foo3>")}));
+
+  // An aggregate in HAVING or ORDER BY implies a GROUP BY (with a single
+  // group), so the variables of the WHERE clause can't be used in the template.
+  expectConstructQuery(
+      "CONSTRUCT { <a> <b> <c> } WHERE { ?a ?b ?c } HAVING (COUNT(?a) > 3)",
+      testing::AllOf(
+          m::ConstructQuery(
+              {{iri("<a>"), iri("<b>"), iri("<c>")}},
+              m::GraphPattern(m::Triples({{Var{"?a"}, Var{"?b"}, Var{"?c"}}}))),
+          m::pq::Having({"?_QLever_internal_variable_0"}),
+          AD_PROPERTY(ParsedQuery, isAggregatingQuery, testing::IsTrue())));
+  expectConstructQueryFails(
+      "CONSTRUCT { ?a <b> <c> } WHERE { ?a ?b ?c } HAVING (COUNT(?a) > 3)",
+      testing::HasSubstr("Variable ?a is used but not aggregated"));
+  expectConstructQueryFails(
+      "CONSTRUCT { ?a <b> <c> } WHERE { ?a ?b ?c } ORDER BY COUNT(?a)",
+      testing::HasSubstr("Variable ?a is used but not aggregated"));
 }
 
 // _____________________________________________________________________________
@@ -1216,7 +1470,6 @@ TEST(SparqlParser, ensureExceptionOnInvalidGraphTerm) {
 // Test that ASK queries are parsed as they should.
 TEST(SparqlParser, AskQuery) {
   // Some helper functions and abbreviations.
-  auto contains = [](const std::string& s) { return ::testing::HasSubstr(s); };
   auto expectAskQuery =
       ExpectCompleteParse<&Parser::askQuery>{defaultPrefixMap};
   auto expectAskQueryFails = ExpectParseFails<&Parser::askQuery>{};
@@ -1239,9 +1492,9 @@ TEST(SparqlParser, AskQuery) {
 
   // ASK query with both a FROM and a FROM NAMED clause.
   Graphs defaultGraphs;
-  defaultGraphs.insert(TripleComponent::Iri::fromIriref("<x>"));
+  defaultGraphs.insert(iri("<x>"));
   Graphs namedGraphs;
-  namedGraphs.insert(TripleComponent::Iri::fromIriref("<y>"));
+  namedGraphs.insert(iri("<y>"));
   expectAskQuery(
       "ASK FROM <x> FROM NAMED <y> WHERE { ?a <bar> ?foo }",
       selectABarFooMatcher(std::move(defaultGraphs), std::move(namedGraphs)));
@@ -1269,10 +1522,42 @@ TEST(SparqlParser, AskQuery) {
                  testing::AllOf(m::AskQuery(DummyGraphPatternMatcher),
                                 m::pq::GroupKeys({Var{"?x"}})));
 
-  // HAVING is not allowed without GROUP BY
-  expectAskQueryFails(
+  // HAVING without GROUP BY is equivalent to a FILTER (with a warning).
+  expectAskQuery(
       "ASK { ?x ?y ?z } HAVING (?x < 3)",
-      contains("HAVING clause is only supported in queries with GROUP BY"));
+      testing::AllOf(
+          m::AskQuery(m::GraphPattern(m::Group(m::GraphPattern(
+              false, {"(?x < 3)"},
+              m::Triples({{Var{"?x"}, Var{"?y"}, Var{"?z"}}}))))),
+          m::WarningsOfParsedQuery({"HAVING clause without GROUP BY"})));
+  // An aggregate in HAVING or ORDER BY implies a GROUP BY (with a single
+  // group). The aliases are internal, as there is no SELECT clause.
+  auto aggregatingWithAliases = [](std::vector<std::string> descriptors) {
+    return testing::AllOf(
+        AD_PROPERTY(ParsedQuery, isAggregatingQuery, testing::IsTrue()),
+        AD_PROPERTY(ParsedQuery, getAliases,
+                    testing::ElementsAreArray(ad_utility::transform(
+                        descriptors, [](const std::string& descriptor) {
+                          return AD_FIELD(
+                              Alias, _expression,
+                              AD_PROPERTY(
+                                  sparqlExpression::SparqlExpressionPimpl,
+                                  getDescriptor, testing::Eq(descriptor)));
+                        }))));
+  };
+  expectAskQuery("ASK { ?x ?y ?z } HAVING (COUNT(?x) > 3)",
+                 testing::AllOf(m::AskQuery(DummyGraphPatternMatcher),
+                                m::pq::GroupKeys({}),
+                                m::pq::Having({"?_QLever_internal_variable_0"}),
+                                aggregatingWithAliases({"(COUNT(?x) > 3)"}),
+                                m::WarningsOfParsedQuery({})));
+  expectAskQuery(
+      "ASK { ?x ?y ?z } GROUP BY ?x HAVING (COUNT(?y) > 3) ORDER BY SUM(?z)",
+      testing::AllOf(
+          m::AskQuery(DummyGraphPatternMatcher), m::pq::GroupKeys({Var{"?x"}}),
+          m::pq::Having({"?_QLever_internal_variable_0"}),
+          m::pq::OrderKeys({{Var{"?_QLever_internal_variable_1"}, false}}),
+          aggregatingWithAliases({"(COUNT(?y) > 3)", "SUM(?z)"})));
 }
 
 // Tests for additional features of the SPARQL parser.
@@ -1305,14 +1590,14 @@ TEST(SparqlParser, Query) {
       "CONSTRUCT { ?a <foo> ?c . } WHERE { ?a ?b ?c }",
       testing::AllOf(
           m::ConstructQuery(
-              {{Var{"?a"}, Iri{"<foo>"}, Var{"?c"}}},
+              {{Var{"?a"}, iri("<foo>"), Var{"?c"}}},
               m::GraphPattern(m::Triples({{Var{"?a"}, Var{"?b"}, Var{"?c"}}}))),
           m::VisibleVariables({Var{"?a"}, Var{"?b"}, Var{"?c"}})));
   expectQuery(
       "CONSTRUCT { ?x <foo> <bar> } WHERE { ?x ?y ?z } LIMIT 10",
       testing::AllOf(
           m::ConstructQuery(
-              {{Var{"?x"}, Iri{"<foo>"}, Iri{"<bar>"}}},
+              {{Var{"?x"}, iri("<foo>"), iri("<bar>")}},
               m::GraphPattern(m::Triples({{Var{"?x"}, Var{"?y"}, Var{"?z"}}}))),
           m::pq::OriginalString(
               "CONSTRUCT { ?x <foo> <bar> } WHERE { ?x ?y ?z } LIMIT 10"),
@@ -1324,7 +1609,7 @@ TEST(SparqlParser, Query) {
       "CONSTRUCT { ?x <foo> <bar> } WHERE { ?x ?y ?z } GROUP BY ?x",
       testing::AllOf(
           m::ConstructQuery(
-              {{Var{"?x"}, Iri{"<foo>"}, Iri{"<bar>"}}},
+              {{Var{"?x"}, iri("<foo>"), iri("<bar>")}},
               m::GraphPattern(m::Triples({{Var{"?x"}, Var{"?y"}, Var{"?z"}}}))),
           m::pq::OriginalString(
               "CONSTRUCT { ?x <foo> <bar> } WHERE { ?x ?y ?z } GROUP BY ?x"),
@@ -1352,17 +1637,14 @@ TEST(SparqlParser, Query) {
       "SELECT * WHERE { SERVICE <endpoint> { ?s ?p ?o } }",
       m::SelectQuery(m::AsteriskSelect(),
                      m::GraphPattern(m::Service(
-                         TripleComponent::Iri::fromIriref("<endpoint>"),
-                         {Var{"?s"}, Var{"?p"}, Var{"?o"}}, "{ ?s ?p ?o }",
-                         "PREFIX doof: <http://doof.org/>"))));
+                         iri("<endpoint>"), {Var{"?s"}, Var{"?p"}, Var{"?o"}},
+                         "{ ?s ?p ?o }", "PREFIX doof: <http://doof.org/>"))));
 
   // Tests around DESCRIBE.
   {
     // The tested DESCRIBE queries all describe `<x>`, `?y`, and `<z>`.
     using Resources = std::vector<parsedQuery::Describe::VarOrIri>;
-    auto Iri = [](const auto& x) {
-      return TripleComponent::Iri::fromIriref(x);
-    };
+    auto Iri = [](const auto& x) { return iri(x); };
     Resources xyz{Iri("<x>"), Var{"?y"}, Iri("<z>")};
 
     // A matcher for `?y <is-a> ?v`.
@@ -1384,6 +1666,42 @@ TEST(SparqlParser, Query) {
     Resources yv{Var{"?y"}, Var{"?v"}};
     expectQuery("DESCRIBE * { ?y <is-a> ?v }",
                 m::DescribeQuery(m::Describe(yv, {}, selectQueryMatcher2)));
+
+    // A trailing `VALUES` clause belongs to the WHERE clause of the DESCRIBE,
+    // and for `DESCRIBE *` its variables are also described.
+    expectQuery(
+        "DESCRIBE * { ?y <is-a> ?v } VALUES ?w { <a> }",
+        m::DescribeQuery(m::Describe(
+            Resources{Var{"?y"}, Var{"?v"}, Var{"?w"}}, {},
+            m::SelectQuery(
+                m::Select({Var{"?y"}, Var{"?v"}, Var{"?w"}}),
+                m::GraphPattern(m::GroupGraphPattern(m::Triples(
+                                    {{Var{"?y"}, iri("<is-a>"), Var{"?v"}}})),
+                                m::InlineData({Var{"?w"}}, {{iri("<a>")}}))))));
+
+    // The solution modifiers belong to the WHERE clause of the DESCRIBE, not to
+    // the CONSTRUCT query that computes the description.
+    expectQuery(
+        "DESCRIBE <x> ?y <z> { ?y <is-a> ?v } ORDER BY ?v LIMIT 2 OFFSET 1",
+        ::testing::AllOf(
+            m::DescribeQuery(m::Describe(
+                xyz, {},
+                ::testing::AllOf(selectQueryMatcher1,
+                                 m::pq::OrderKeys({{Var{"?v"}, false}}),
+                                 m::pq::LimitOffset({2, 1})))),
+            m::pq::OrderKeys({}), m::pq::LimitOffset({})));
+
+    // With a `GROUP BY`, the described variables must be grouped, like the
+    // selected variables of a `SELECT` query, and `DESCRIBE *` is an error.
+    expectQuery("DESCRIBE ?y { ?y <is-a> ?v } GROUP BY ?y",
+                m::DescribeQuery(m::Describe(
+                    Resources{Var{"?y"}}, {},
+                    ::testing::AllOf(selectQueryMatcher1,
+                                     m::pq::GroupKeys({Var{"?y"}})))));
+    expectQueryFails("DESCRIBE ?v { ?y <is-a> ?v } GROUP BY ?y",
+                     contains("?v is selected but not aggregated"));
+    expectQueryFails("DESCRIBE * { ?y <is-a> ?v } GROUP BY ?y",
+                     contains("GROUP BY is not allowed"));
 
     // DESCRIBE with FROM and FROM NAMED clauses.
     //
@@ -1411,6 +1729,85 @@ TEST(SparqlParser, Query) {
                   {"?a was used in the expression of a BIND clause"}));
   expectQuery("SELECT * { } ORDER BY ?s",
               m::WarningsOfParsedQuery({"?s was used by ORDER BY"}));
+  expectQuery("SELECT (STDEV(?x) AS ?s) { ?x <p> ?y }",
+              m::WarningsOfParsedQuery({"STDEV aggregate is deprecated"}));
+  // The deprecation warning is given once per query.
+  expectQuery("SELECT (STDEV(?x) AS ?s) (STDEV(?y) AS ?t) { ?x <p> ?y }",
+              m::WarningsOfParsedQuery({"STDEV aggregate is deprecated"}));
+
+  // The variables of a trailing `VALUES` clause are visible in `ORDER BY` and
+  // the `SELECT` clause (also with `GROUP BY`), but not in `GROUP BY` itself.
+  expectQuery(
+      "SELECT ?x (STR(?x) AS ?y) {} ORDER BY ?x STR(?x) VALUES ?x { 1 }",
+      m::WarningsOfParsedQuery({}));
+  expectQuery("SELECT ?p { ?s ?p ?o } GROUP BY ?p ORDER BY ?v VALUES ?v { 1 }",
+              m::WarningsOfParsedQuery({}));
+  expectQuery("SELECT ?p { ?s ?p ?o } GROUP BY ?p ORDER BY ?s VALUES ?v { 1 }",
+              m::WarningsOfParsedQuery({"?s was used in an ORDER BY clause"}));
+  expectQuery(
+      "SELECT ?p ?v (STR(?v) AS ?w) { ?s ?p ?o } GROUP BY ?p "
+      "VALUES ?v { 1 }",
+      m::WarningsOfParsedQuery({}));
+  expectQuery("CONSTRUCT { ?p ?p ?v } { ?s ?p ?o } GROUP BY ?p VALUES ?v { 1 }",
+              m::WarningsOfParsedQuery({}));
+  expectQueryFails(
+      "SELECT ?p (?o + ?v AS ?x) { ?s ?p ?o } GROUP BY ?p VALUES ?v { 1 }",
+      contains("does not aggregate ?o"));
+  expectQueryFails("SELECT ?o { ?s ?p ?o } GROUP BY ?p VALUES ?v { 1 }",
+                   contains("?o is selected but not aggregated"));
+  expectQuery("SELECT ?v { ?s ?p ?o } GROUP BY ?v VALUES ?v { 1 }",
+              m::WarningsOfParsedQuery({"?v was used by GROUP BY"}));
+  expectQueryFails("SELECT (1 AS ?x) {} VALUES ?x { 2 }",
+                   contains("?x of an AS clause was already used"));
+  expectQueryFails(
+      "SELECT (COUNT(?s) AS ?x) { ?s ?p ?o } GROUP BY ?p VALUES ?x { 2 }",
+      contains("?x of an AS clause was already used"));
+
+  // Without GROUP BY, a trailing `VALUES` clause is joined after the HAVING
+  // clause, so its variables are not visible inside of it.
+  expectQuery(
+      "SELECT ?o ?v { ?s ?p ?o } HAVING (?v = 1 && ?o = 2) VALUES ?v { 1 }",
+      m::WarningsOfParsedQuery(
+          {"HAVING clause without GROUP BY",
+           "?v was used by HAVING in expression \"(?v = 1 && ?o = 2)\", but "
+           "is not defined in the query body. It is bound by the VALUES "
+           "clause at the end of the query, which is joined after the HAVING "
+           "clause."}));
+  // Other variables that are not visible get the usual warning.
+  expectQuery("SELECT ?o { ?s ?p ?o } HAVING (?unbound = 1)",
+              m::WarningsOfParsedQuery({"HAVING clause without GROUP BY",
+                                        "?unbound was used by HAVING"}));
+
+  // With an implicit GROUP BY, the result has at most one row, so an ORDER BY
+  // has no effect, unless a trailing `VALUES` clause adds more rows.
+  expectQuery(
+      "SELECT (COUNT(?s) AS ?c) { ?s ?p ?o } ORDER BY ?c",
+      m::WarningsOfParsedQuery(
+          {"The ORDER BY clause has no effect, because the query has an "
+           "implicit GROUP BY with a single group and therefore returns at "
+           "most one row. Note: The GROUP BY in this query is implicit "
+           "because an aggregate expression was used in the SELECT, HAVING, "
+           "or ORDER BY clause"}));
+  expectQuery("ASK { ?s ?p ?o } HAVING (COUNT(?s) > 1) ORDER BY COUNT(?o)",
+              m::WarningsOfParsedQuery({"ORDER BY clause has no effect"}));
+  expectQuery(
+      "SELECT (COUNT(?s) AS ?c) ?v { ?s ?p ?o } ORDER BY ?v "
+      "VALUES ?v { 1 2 }",
+      m::WarningsOfParsedQuery({}));
+  expectQuery("SELECT (COUNT(?s) AS ?c) { ?s ?p ?o } GROUP BY ?p ORDER BY ?c",
+              m::WarningsOfParsedQuery({}));
+
+  // An `EXISTS` introduces its own scope: variables that occur only inside its
+  // body (here `?x`) must not trigger an "unbound variable" warning, neither in
+  // a `SELECT` alias nor in a `BIND`.
+  expectQuery("SELECT (EXISTS { ?a <p> ?x } AS ?e) { ?a <q> ?b }",
+              m::WarningsOfParsedQuery({}));
+  expectQuery("SELECT * { ?a <q> ?b BIND(EXISTS { ?a <p> ?x } AS ?e) }",
+              m::WarningsOfParsedQuery({}));
+  // Variables used directly (i.e. outside an `EXISTS`) are still checked: here
+  // `?unbound` is reported, but the `EXISTS`-internal `?x` is not.
+  expectQuery("SELECT (EXISTS { ?a <p> ?x } || ?unbound AS ?e) { ?a <q> ?b }",
+              m::WarningsOfParsedQuery({"?unbound was used by SELECT"}));
 
   // Now test the same queries with exceptions instead of warnings.
   auto cleanup =
@@ -1422,6 +1819,16 @@ TEST(SparqlParser, Query) {
                    contains("?a was used in the expression of a BIND clause"));
   expectQueryFails("SELECT * { } ORDER BY ?s",
                    contains("?s was used by ORDER BY"));
+  expectQueryFails("SELECT ?p { ?s ?p ?o } GROUP BY ?p ORDER BY ?o",
+                   contains("?o was used in an ORDER BY clause, but is "
+                            "neither grouped nor created as an alias"));
+  // An `EXISTS`-internal variable must not throw either, but a variable used
+  // directly outside the `EXISTS` still does.
+  expectQuery("SELECT (EXISTS { ?a <p> ?x } AS ?e) { ?a <q> ?b }",
+              m::WarningsOfParsedQuery({}));
+  expectQueryFails(
+      "SELECT (EXISTS { ?a <p> ?x } || ?unbound AS ?e) { ?a <q> ?b }",
+      contains("?unbound was used by SELECT"));
 }
 
 // _____________________________________________________________________________
@@ -1506,32 +1913,28 @@ TEST(SparqlParser, Exists) {
 TEST(SparqlParser, Quads) {
   auto expectQuads = ExpectCompleteParse<&Parser::quads>{defaultPrefixMap};
   auto expectQuadsFails = ExpectParseFails<&Parser::quads>{};
-  auto Iri = [](std::string_view stringWithBrackets) {
-    return TripleComponent::Iri::fromIriref(stringWithBrackets);
-  };
 
   expectQuads("?a <b> <c>",
-              m::Quads({{Var("?a"), ::Iri("<b>"), ::Iri("<c>")}}, {}));
-  expectQuads("GRAPH <foo> { ?a <b> <c> }",
-              m::Quads({}, {{Iri("<foo>"),
-                             {{Var("?a"), ::Iri("<b>"), ::Iri("<c>")}}}}));
+              m::Quads({{Var("?a"), iri("<b>"), iri("<c>")}}, {}));
+  expectQuads(
+      "GRAPH <foo> { ?a <b> <c> }",
+      m::Quads({}, {{iri("<foo>"), {{Var("?a"), iri("<b>"), iri("<c>")}}}}));
   expectQuads(
       "GRAPH <foo> { ?a <b> <c> } GRAPH <bar> { <d> <e> ?f }",
-      m::Quads({},
-               {{Iri("<foo>"), {{Var("?a"), ::Iri("<b>"), ::Iri("<c>")}}},
-                {Iri("<bar>"), {{::Iri("<d>"), ::Iri("<e>"), Var("?f")}}}}));
+      m::Quads({}, {{iri("<foo>"), {{Var("?a"), iri("<b>"), iri("<c>")}}},
+                    {iri("<bar>"), {{iri("<d>"), iri("<e>"), Var("?f")}}}}));
   expectQuads(
       "GRAPH <foo> { ?a <b> <c> } . <d> <e> <f> . <g> <h> <i> ",
-      m::Quads({{::Iri("<d>"), ::Iri("<e>"), ::Iri("<f>")},
-                {::Iri("<g>"), ::Iri("<h>"), ::Iri("<i>")}},
-               {{Iri("<foo>"), {{Var("?a"), ::Iri("<b>"), ::Iri("<c>")}}}}));
+      m::Quads({{iri("<d>"), iri("<e>"), iri("<f>")},
+                {iri("<g>"), iri("<h>"), iri("<i>")}},
+               {{iri("<foo>"), {{Var("?a"), iri("<b>"), iri("<c>")}}}}));
   expectQuads(
       "GRAPH <foo> { ?a <b> <c> } . <d> <e> <f> . <g> <h> <i> GRAPH <bar> { "
       "<j> <k> <l> }",
-      m::Quads({{::Iri("<d>"), ::Iri("<e>"), ::Iri("<f>")},
-                {::Iri("<g>"), ::Iri("<h>"), ::Iri("<i>")}},
-               {{Iri("<foo>"), {{Var("?a"), ::Iri("<b>"), ::Iri("<c>")}}},
-                {Iri("<bar>"), {{::Iri("<j>"), ::Iri("<k>"), ::Iri("<l>")}}}}));
+      m::Quads({{iri("<d>"), iri("<e>"), iri("<f>")},
+                {iri("<g>"), iri("<h>"), iri("<i>")}},
+               {{iri("<foo>"), {{Var("?a"), iri("<b>"), iri("<c>")}}},
+                {iri("<bar>"), {{iri("<j>"), iri("<k>"), iri("<l>")}}}}));
 }
 
 TEST(SparqlParser, QuadData) {
@@ -1540,7 +1943,7 @@ TEST(SparqlParser, QuadData) {
   auto expectQuadDataFails = ExpectParseFails<&Parser::quadData>{};
 
   expectQuadData("{ <a> <b> <c> }",
-                 Quads{{{Iri("<a>"), Iri("<b>"), Iri("<c>")}}, {}});
+                 Quads{{{iri("<a>"), iri("<b>"), iri("<c>")}}, {}});
   expectQuadDataFails("{ <a> <b> ?c }");
   expectQuadDataFails("{ <a> <b> <c> . GRAPH <foo> { <d> ?e <f> } }");
   expectQuadDataFails("{ <a> <b> <c> . ?d <e> <f> } }");
@@ -1596,7 +1999,6 @@ TEST(SparqlParser, QuadsNotTriples) {
       ExpectCompleteParse<&Parser::quadsNotTriples>{defaultPrefixMap};
   auto expectQuadsNotTriplesFails =
       ExpectParseFails<&Parser::quadsNotTriples>{};
-  const auto Iri = TripleComponent::Iri::fromIriref;
   auto GraphBlock = [](const ad_utility::sparql_types::VarOrIri& graph,
                        const ad_utility::sparql_types::Triples& triples)
       -> testing::Matcher<const Quads::GraphBlock&> {
@@ -1606,10 +2008,10 @@ TEST(SparqlParser, QuadsNotTriples) {
 
   expectQuadsNotTriples(
       "GRAPH <foo> { <a> <b> <c> }",
-      GraphBlock(Iri("<foo>"), {{::Iri("<a>"), ::Iri("<b>"), ::Iri("<c>")}}));
+      GraphBlock(iri("<foo>"), {{iri("<a>"), iri("<b>"), iri("<c>")}}));
   expectQuadsNotTriples(
       "GRAPH ?f { <a> <b> <c> }",
-      GraphBlock(Var("?f"), {{::Iri("<a>"), ::Iri("<b>"), ::Iri("<c>")}}));
+      GraphBlock(Var("?f"), {{iri("<a>"), iri("<b>"), iri("<c>")}}));
   expectQuadsNotTriplesFails("GRAPH \"foo\" { <a> <b> <c> }");
   expectQuadsNotTriplesFails("GRAPH _:blankNode { <a> <b> <c> }");
 }
@@ -1671,7 +2073,7 @@ TEST(SparqlParser, Datasets) {
   auto expectDescribe =
       ExpectCompleteParse<&Parser::describeQuery>{defaultPrefixMap};
   auto Iri = [](std::string_view stringWithBrackets) {
-    return TripleComponent::Iri::fromIriref(stringWithBrackets);
+    return iri(stringWithBrackets);
   };
   auto noGraph = std::monostate{};
   auto noGraphs = m::Graphs{};
@@ -1697,7 +2099,7 @@ TEST(SparqlParser, Datasets) {
   expectConstruct(
       "CONSTRUCT {<a> <b> <c>} FROM <g> { ?x ?y ?z FILTER EXISTS {?a ?b?c}}",
       m::ConstructQuery(
-          {std::array<GraphTerm, 3>{::Iri("<a>"), ::Iri("<b>"), ::Iri("<c>")}},
+          {std::array<GraphTerm, 3>{iri("<a>"), iri("<b>"), iri("<c>")}},
           filterGraphPattern, datasets, noGraphs));
   // See comment in visit function for `DescribeQueryContext`.
   expectDescribe(
@@ -1725,8 +2127,7 @@ TEST(SparqlParser, EncodedIriManagerUsage) {
 
   auto encoded123 = TripleComponent{
       encodedIriManager->encode("<http://example.org/123>").value()};
-  auto unencoded456 = PropertyPath::fromIri(
-      TripleComponent::Iri::fromIriref("<http://example.org/456>"));
+  auto unencoded456 = PropertyPath::fromIri(iri("<http://example.org/456>"));
   auto encoded789 = TripleComponent{
       encodedIriManager->encode("<http://test.com/id/789>").value()};
 
@@ -1759,9 +2160,186 @@ TEST(SparqlParser, EncodedIriManagerUsage) {
     EXPECT_THAT(
         result.resultOfParse_,
         m::ConstructQuery(
-            {{Iri{"<http://example.org/123>"}, Iri{"<http://example.org/456>"},
-              Iri{"<http://test.com/id/789>"}}},
+            {{iri("<http://example.org/123>"), iri("<http://example.org/456>"),
+              iri("<http://test.com/id/789>")}},
             m::GraphPattern(m::OrderedTriples(
                 {{{encoded123, unencoded456, encoded789}}}))));
   }
+}
+
+// _____________________________________________________________________________
+// According to the SPARQL 1.1 standard (section 5.1.1), a blank node label
+// "can be used in only a single basic graph pattern in any query". The tests
+// below are modeled after the `syn-blabel-cross-*` syntax conformance tests
+// from the W3C SPARQL test suite.
+TEST(SparqlParser, blankNodeLabelsAreScopedToASingleBasicGraphPattern) {
+  auto expectQuery = ExpectCompleteParse<&Parser::query>{};
+  auto expectQueryFails = ExpectParseFails<&Parser::query>{};
+  auto expectUpdate = ExpectCompleteParse<&Parser::update>{};
+  auto expectUpdateFails = ExpectParseFails<&Parser::update>{};
+  auto reusedLabel = ::testing::HasSubstr(
+      "The blank node label \"_:who\" may not be used in more than one basic "
+      "graph pattern");
+  auto bn = [](std::string_view label) {
+    return Var{absl::StrCat(QLEVER_INTERNAL_BLANKNODE_VARIABLE_PREFIX, label)};
+  };
+
+  // A `FILTER` does not end a basic graph pattern (conformance test
+  // `syn-blabel-cross-filter`).
+  expectQuery(
+      "ASK { _:who <homepage> ?homepage FILTER(?homepage > 3) "
+      "_:who <schoolHomepage> ?schoolPage }",
+      m::AskQuery(m::GraphPattern(
+          false, {"(?homepage > 3)"},
+          m::OrderedTriples(
+              {{bn("who"), iri("<homepage>"), Var{"?homepage"}},
+               {bn("who"), iri("<schoolHomepage>"), Var{"?schoolPage"}}}))));
+
+  // Also not when the `FILTER` contains an `EXISTS`, whose argument is parsed
+  // in a fresh context.
+  expectQuery("ASK { _:who <p> ?x FILTER EXISTS { ?y <q> ?z } _:who <r> ?w }",
+              m::AskQuery(m::GraphPattern(
+                  false, {"EXISTS { ?y <q> ?z }"},
+                  m::OrderedTriples({{bn("who"), iri("<p>"), Var{"?x"}},
+                                     {bn("who"), iri("<r>"), Var{"?w"}}}))));
+
+  expectQuery("ASK { _:who <p> _:who . _:who <q> ?x }",
+              m::AskQuery(m::GraphPattern(
+                  m::OrderedTriples({{bn("who"), iri("<p>"), bn("who")},
+                                     {bn("who"), iri("<q>"), Var{"?x"}}}))));
+
+  // The conformance tests `syn-blabel-cross-{graph,optional,union}-bad`.
+  expectQueryFails(
+      "ASK { _:who <homepage> ?homepage GRAPH ?g { ?someone <made> ?homepage } "
+      "_:who <schoolHomepage> ?schoolPage }",
+      reusedLabel);
+  expectQueryFails(
+      "ASK { _:who <homepage> ?homepage OPTIONAL { ?someone <made> ?homepage } "
+      "_:who <schoolHomepage> ?schoolPage }",
+      reusedLabel);
+  expectQueryFails(
+      "ASK { _:who <homepage> ?homepage { ?someone <made> ?homepage } UNION "
+      "{ ?homepage <maker> ?someone } _:who <schoolHomepage> ?schoolPage }",
+      reusedLabel);
+
+  expectQueryFails("ASK { _:who <p> ?x MINUS { ?x <q> ?y } _:who <r> ?y }",
+                   reusedLabel);
+  expectQueryFails("ASK { _:who <p> ?x BIND(3 AS ?y) _:who <q> ?y }",
+                   reusedLabel);
+  expectQueryFails("ASK { _:who <p> ?x VALUES ?y { 3 } _:who <q> ?y }",
+                   reusedLabel);
+  expectQueryFails("ASK { _:who <p> ?x { ?x <q> ?y } _:who <r> ?y }",
+                   reusedLabel);
+  expectQueryFails("ASK { _:who <p> ?x OPTIONAL { _:who <q> ?y } }",
+                   reusedLabel);
+  expectQueryFails("ASK { { _:who <p> ?x } UNION { _:who <q> ?y } }",
+                   reusedLabel);
+  expectQueryFails("ASK { _:who <p> ?x FILTER EXISTS { _:who <q> ?y } }",
+                   reusedLabel);
+  expectQueryFails("SELECT * { _:who <p> ?x { SELECT * { _:who <q> ?y } } }",
+                   reusedLabel);
+
+  expectQuery("ASK { _:who <p> ?x OPTIONAL { _:someone <q> ?y } }",
+              m::AskQuery(m::GraphPattern(
+                  m::Triples({{bn("who"), iri("<p>"), Var{"?x"}}}),
+                  m::OptionalGraphPattern(
+                      m::Triples({{bn("someone"), iri("<q>"), Var{"?y"}}})))));
+
+  // Blank nodes in a CONSTRUCT template are real blank nodes, so repeating a
+  // label there is allowed and denotes the same blank node.
+  expectQuery(
+      "CONSTRUCT { _:who <p> ?x . _:who <q> ?x } WHERE { ?s <p> ?x }",
+      m::ConstructQuery(
+          {{BlankNode(false, "who"), iri("<p>"), Var{"?x"}},
+           {BlankNode(false, "who"), iri("<q>"), Var{"?x"}}},
+          m::GraphPattern(m::Triples({{Var{"?s"}, iri("<p>"), Var{"?x"}}}))));
+
+  expectUpdateFails(
+      "INSERT { <a> <b> <c> } WHERE { _:who <p> ?x OPTIONAL { _:who <q> ?y } }",
+      reusedLabel);
+  // The operations of a request with multiple updates are independent.
+  expectUpdate(
+      "INSERT { <a> <b> ?x } WHERE { _:who <p> ?x } ; "
+      "INSERT { <a> <b> ?x } WHERE { _:who <p> ?x }",
+      ::testing::SizeIs(2));
+}
+
+// Test that with the runtime parameter `throw-on-invalid-wkt`, an invalid WKT
+// literal given inline to a geo function is a parse error.
+TEST(SparqlParser, strictInlineWktForGeoFunctions) {
+  auto parse = [](std::string_view body) {
+    EncodedIriManager encodedIriManager;
+    return SparqlParser::parseQuery(
+        &encodedIriManager,
+        absl::StrCat("PREFIX geo: <http://www.opengis.net/ont/geosparql#> "
+                     "PREFIX geof: <http://www.opengis.net/def/function/"
+                     "geosparql/> PREFIX ql: <",
+                     QLEVER_INTERNAL_PREFIX_URL,
+                     "> SELECT * { ?s geo:asWKT ?g ", body, " }"));
+  };
+  auto valid = "\"LINESTRING(1 2, 3 4)\"^^geo:wktLiteral"s;
+  auto empty = "\"LINESTRING EMPTY\"^^geo:wktLiteral"s;
+  auto invalid = "\"LINESTRING(1 2, 3 a)\"^^geo:wktLiteral"s;
+  auto invalidPoint = "\"POINT(1 a)\"^^geo:wktLiteral"s;
+  auto fails = ::testing::HasSubstr("Invalid WKT literal");
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::throwOnInvalidWkt_>(true);
+
+  // With `throw-on-invalid-wkt`, inline WKT literals passed to a geo function
+  // directly or via `VALUES` in the same group are parsed strictly.
+  for (const auto& wkt : {valid, empty}) {
+    EXPECT_NO_THROW(
+        parse(absl::StrCat("FILTER geof:sfIntersects(?g, ", wkt, ")")));
+    EXPECT_NO_THROW(parse(absl::StrCat("VALUES ?p { ", wkt,
+                                       " } FILTER geof:sfIntersects(?g, ?p)")));
+  }
+  for (const auto& wkt : {invalid, invalidPoint}) {
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        parse(absl::StrCat("FILTER geof:sfIntersects(?g, ", wkt, ")")), fails);
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        parse(absl::StrCat("BIND(geof:metricArea(", wkt, ") AS ?a)")), fails);
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        parse(absl::StrCat("BIND(ql:simplifyGeometry(", wkt, ", 1) AS ?a)")),
+        fails);
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        parse(absl::StrCat("BIND(ql:envelopeLowerLeft(", wkt, ") AS ?a)")),
+        fails);
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        parse(absl::StrCat("VALUES ?p { ", wkt,
+                           " } FILTER geof:sfIntersects(?g, ?p)")),
+        fails);
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        parse(absl::StrCat("VALUES (?x ?p) { (1 ", wkt,
+                           ") } BIND(geof:distance(?g, ?p) AS ?d)")),
+        fails);
+
+    // Invalid WKT literals that are not passed to a geo function are allowed.
+    EXPECT_NO_THROW(parse(absl::StrCat("BIND(", wkt, " AS ?p)")));
+    EXPECT_NO_THROW(parse(absl::StrCat("BIND(STR(", wkt, ") AS ?p)")));
+    EXPECT_NO_THROW(parse(absl::StrCat("VALUES ?p { ", wkt, " }")));
+    EXPECT_NO_THROW(parse(absl::StrCat("VALUES ?p { ", wkt,
+                                       " } FILTER geof:sfIntersects(?g, ?q)")));
+    // The `VALUES` must be in the same group as the geo function.
+    EXPECT_NO_THROW(parse(absl::StrCat(
+        "{ VALUES ?p { ", wkt, " } } FILTER geof:sfIntersects(?g, ?p)")));
+  }
+
+  // Arguments that are not WKT literals (a plain string, a literal of another
+  // datatype, a nested expression, `UNDEF` or an IRI in a `VALUES` clause) are
+  // not checked.
+  EXPECT_NO_THROW(parse("FILTER geof:sfIntersects(?g, \"not wkt\")"));
+  EXPECT_NO_THROW(parse(
+      "FILTER geof:sfIntersects(?g, \"not wkt\"^^<http://example.org/dt>)"));
+  EXPECT_NO_THROW(parse("BIND(geof:metricLength(geof:envelope(?g)) AS ?a)"));
+  EXPECT_NO_THROW(
+      parse("VALUES ?p { UNDEF <x> } FILTER geof:sfIntersects(?g, ?p)"));
+
+  // Without `throw-on-invalid-wkt` (the default), invalid inline WKT literals
+  // are no error during parsing (the geo functions evaluate to UNDEF instead).
+  auto cleanupOff =
+      setRuntimeParameterForTest<&RuntimeParameters::throwOnInvalidWkt_>(false);
+  EXPECT_NO_THROW(
+      parse(absl::StrCat("FILTER geof:sfIntersects(?g, ", invalid, ")")));
+  EXPECT_NO_THROW(parse(absl::StrCat("VALUES ?p { ", invalid,
+                                     " } FILTER geof:sfIntersects(?g, ?p)")));
 }

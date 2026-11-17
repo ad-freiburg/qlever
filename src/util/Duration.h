@@ -75,12 +75,12 @@ class DayTimeDuration {
   static constexpr int dayMultiplier = 24 * hourMultiplier;
 
   // The maxDays value of 1048575 corresponds to approximately 2870 years.
-  static constexpr unsigned long maxDays = 1048575;
+  static constexpr uint64_t maxDays = 1048575;
 
   // With the given specifications above, the total number of milliseconds we
   // have to store at the limit (days -> milliseconds) + (hours -> milliseconds)
   // + (minutes -> silliseconds) + (seconds -> milliseconds).
-  static constexpr unsigned long boundTotalMilliseconds =
+  static constexpr uint64_t boundTotalMilliseconds =
       (maxDays + 1) * dayMultiplier;
 
   // The number of bits reserved to store the total number of milliseconds.
@@ -108,13 +108,13 @@ class DayTimeDuration {
   //
   // To retrieve the initial number of milliseconds, we just subtract
   // boundTotalMilliseconds from totalMilliSeconds_. (line 181-182)
-  uint64_t totalMilliseconds_ : numMillisecondBits = 0;
+  uint64_t totalMilliseconds_ : numMillisecondBits;
 
   // The value of unusedBits_ is relevant w.r.t. to the DateYearOrDuration class
   // for properly shifting a given input value of type dayTimeDuration and
   // thus make it convertible to an intern Id (ValueId) -> The underlying
   // DayTimeDuration and corresponding values can be extracted again.
-  uint64_t unusedBits_ : numUnusedBits = 0;
+  uint64_t unusedBits_ : numUnusedBits;
 
  public:
   // `DurationValue` is used to return all xsd:dayTimeDuration components over
@@ -140,8 +140,32 @@ class DayTimeDuration {
   // duration: `P0DT0H0M0S` (as xsd:dayTimeDuration string).
   constexpr DayTimeDuration(Type signType = Type::Positive, int days = 0,
                             int hours = 0, int minutes = 0,
-                            double seconds = 0.00) {
+                            double seconds = 0.00)
+      // Note: The bit-fields have to be initialized here, because default
+      // member initializers for bit-fields are only allowed since C++20.
+      : totalMilliseconds_(0), unusedBits_(0) {
     setValues(days, hours, minutes, seconds, signType);
+  }
+
+  // Safely construct a `DayTimeDuration` without running into an overflow
+  // error.
+  static std::optional<DayTimeDuration> makeWithBoundsCheck(
+      Type signType = Type::Positive, int days = 0, int hours = 0,
+      int minutes = 0, double seconds = 0.00) {
+    AD_CONTRACT_CHECK(days >= 0 && hours >= 0 && minutes >= 0 &&
+                      seconds >= 0.00);
+    auto totalMilliseconds =
+        static_cast<long long>(days) * dayMultiplier +
+        static_cast<long long>(hours) * hourMultiplier +
+        static_cast<long long>(minutes) * minuteMultiplier +
+        static_cast<long long>(std::round(seconds * secondMultiplier));
+    // Overflow.
+    if (totalMilliseconds >= static_cast<long long>(boundTotalMilliseconds)) {
+      return std::nullopt;
+    } else {
+      // `DayTimeDuration` can be constructed normally.
+      return DayTimeDuration{signType, days, hours, minutes, seconds};
+    }
   }
 
   // ___________________________________________________________________________
@@ -199,6 +223,12 @@ class DayTimeDuration {
   }
 
   //____________________________________________________________________________
+  [[nodiscard]] constexpr long long getTotalMilliseconds() const {
+    return static_cast<long long>(totalMilliseconds_) -
+           static_cast<long long>(boundTotalMilliseconds);
+  }
+
+  //____________________________________________________________________________
   // Converts the underlying `dayTimeDuration` representation to a compact
   // bit representation (necessary for the == and <=> implementation).
   [[nodiscard]] QL_CONSTEXPR uint64_t toBits() const {
@@ -222,6 +252,16 @@ class DayTimeDuration {
     return ql::compareThreeWay(toBits(), rhs.toBits());
   }
   [[nodiscard]] QL_DEFINE_CUSTOM_THREEWAY_OPERATOR_LOCAL(DayTimeDuration);
+
+  //____________________________________________________________________________
+  // Subtraction of two `DayTimeDuration` objects.
+  [[nodiscard]] std::optional<DayTimeDuration> operator-(
+      const DayTimeDuration& rhs) const;
+
+  //____________________________________________________________________________
+  // Addition of two `DayTimeDuration` objects.
+  [[nodiscard]] std::optional<DayTimeDuration> operator+(
+      const DayTimeDuration& rhs) const;
 
   //____________________________________________________________________________
   template <typename H>

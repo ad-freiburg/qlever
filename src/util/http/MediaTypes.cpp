@@ -6,11 +6,13 @@
 
 #include "util/http/MediaTypes.h"
 
+#include <absl/strings/str_cat.h>
+
 #include "util/Algorithm.h"
 #include "util/StringUtils.h"
 #include "util/antlr/ANTLRErrorHandling.h"
-#include "util/http/HttpParser/AcceptHeaderQleverVisitor.h"
-#include "util/http/HttpParser/generated/AcceptHeaderLexer.h"
+#include "util/http/httpParser/AcceptHeaderQleverVisitor.h"
+#include "util/http/httpParser/generated/AcceptHeaderLexer.h"
 
 using std::string;
 namespace ad_utility {
@@ -21,8 +23,8 @@ using enum MediaType;
 // specified in the request. It's "application/sparql-results+json", as
 // required by the SPARQL standard.
 constexpr std::array SUPPORTED_MEDIA_TYPES{
-    sparqlJson, sparqlXml,   qleverJson,        tsv, csv, turtle,
-    ntriples,   octetStream, binaryQleverExport};
+    sparqlJson, sparqlXml,   qleverJson,         tsv,   csv, turtle,
+    ntriples,   octetStream, binaryQleverExport, nquads};
 
 // _____________________________________________________________
 const ad_utility::HashMap<MediaType, MediaTypeImpl>& getAllMediaTypes() {
@@ -45,8 +47,10 @@ const ad_utility::HashMap<MediaType, MediaTypeImpl>& getAllMediaTypes() {
     add(qleverJson, "application", "qlever-results+json", {});
     add(turtle, "text", "turtle", {".ttl"});
     add(ntriples, "application", "n-triples", {".nt"});
+    add(nquads, "application", "n-quads", {".nq"});
     add(octetStream, "application", "octet-stream", {});
-    add(binaryQleverExport, "application", "qlever-export+octet-stream", {});
+    add(binaryQleverExport, "application",
+        absl::StrCat("vnd.qlever.results.v", binaryQleverExportVersion), {});
     return t;
   }();
   return types;

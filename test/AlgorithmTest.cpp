@@ -9,10 +9,14 @@
 
 #include <algorithm>
 #include <map>
+#include <numeric>
+#include <vector>
 
 #include "util/Algorithm.h"
+#include "util/GTestHelpers.h"
 #include "util/HashMap.h"
 #include "util/Random.h"
+#include "util/TransparentFunctors.h"
 
 using namespace ad_utility;
 
@@ -243,4 +247,123 @@ TEST(AlgorithmTest, lowerUpperBoundIterator) {
                                                value, compForUpperBound),
               ql::ranges::upper_bound(input, value));
   }
+}
+
+// ____________________________________________________________________________
+TEST(AlgorithmTest, SetDifference) {
+  using Vec = std::vector<int>;
+
+  // Helper: run setDifference in-place (output = begin(r1)) and check result.
+  auto testInplace = [](Vec r1, Vec r2, const Vec& expected,
+                        source_location loc = AD_CURRENT_SOURCE_LOC()) {
+    auto t = generateLocationTrace(loc);
+    auto newEnd = inplace_set_difference(r1, r2);
+    r1.erase(newEnd, r1.end());
+    EXPECT_EQ(r1, expected);
+  };
+
+  testInplace({}, {}, {});
+  testInplace({}, {1, 2, 3}, {});
+  testInplace({1, 2, 3}, {}, {1, 2, 3});
+  testInplace({1, 2, 3}, {1, 2, 3}, {});
+  testInplace({1, 2, 3}, {2}, {1, 3});
+  testInplace({1, 2, 3}, {1}, {2, 3});
+  testInplace({1, 2, 3}, {3}, {1, 2});
+  testInplace({1, 2, 3}, {1, 3}, {2});
+  testInplace({2, 3}, {1, 3}, {2});
+  testInplace({1, 2}, {1, 4}, {2});
+  testInplace({2, 3, 4}, {1, 3, 5}, {2, 4});
+  testInplace({2, 3, 4}, {1, 3, 3, 3, 5}, {2, 4});
+  testInplace({2, 3, 4}, {1, 5}, {2, 3, 4});
+  testInplace({1, 2, 3, 4, 5}, {1}, {2, 3, 4, 5});
+  testInplace({1, 2, 3, 4, 5}, {2, 3}, {1, 4, 5});
+  // Duplicates in `r1`: `std::set_difference` semantics, each `r2` element
+  // cancels one equivalent `r1` element.
+  testInplace({1, 1, 2}, {1}, {1, 2});
+  testInplace({1, 1, 2}, {1, 1}, {2});
+
+  if (areExpensiveChecksEnabled) {
+    auto assertionFailed = [](const std::string& assertion) {
+      return ::testing::HasSubstr("Assertion `" + assertion + "` failed");
+    };
+    // r1 unsorted triggers the first AD_EXPENSIVE_CHECK.
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        inplace_set_difference(Vec{3, 1, 2}, Vec{1}),
+        assertionFailed("ql::ranges::is_sorted(r1, comp, proj1)"));
+    // r2 unsorted triggers the second AD_EXPENSIVE_CHECK.
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        inplace_set_difference(Vec{1, 2, 3}, Vec{3, 1}),
+        assertionFailed("ql::ranges::is_sorted(r2, comp, proj2)"));
+  }
+
+  // With projection: compare only the first element of pairs.
+  using Pair = std::pair<int, int>;
+  using PVec = std::vector<Pair>;
+  using Proj = MemberProjection<&Pair::first>;
+
+  auto testProj = [&](PVec r1, PVec r2, const PVec& expected,
+                      source_location loc = AD_CURRENT_SOURCE_LOC()) {
+    auto t = generateLocationTrace(loc);
+    auto newEnd = inplace_set_difference(r1, r2, std::less{}, Proj{}, Proj{});
+    r1.erase(newEnd, r1.end());
+    EXPECT_EQ(r1, expected);
+  };
+
+  testProj({{1, 0}, {2, 0}, {3, 0}}, {}, {{1, 0}, {2, 0}, {3, 0}});
+  testProj({{1, 0}, {2, 0}, {3, 0}}, {{2, 9}}, {{1, 0}, {3, 0}});
+  testProj({{1, 0}, {2, 0}, {3, 0}}, {{1, 9}, {2, 9}, {3, 9}}, {});
+  // Output contains only elements from `r1`, never from `r2`. Each `r2` element
+  // cancels one equivalent `r1` element.
+  testProj({{9, 1}, {9, 2}}, {}, {{9, 1}, {9, 2}});
+  testProj({{9, 1}, {9, 2}}, {{9, 3}}, {{9, 2}});
+  testProj({{9, 1}, {9, 2}}, {{9, 3}, {9, 4}}, {});
+}
+
+// _____________________________________________________________________________
+TEST(AlgorithmTest, gallopingPartitionPoint) {
+  // Compare against `std::partition_point` for all the partition points of
+  // ranges of different sizes (the sizes cover all the cases in which the
+  // galloping steps exactly hit or overshoot the end of the range).
+  for (size_t size = 0; size < 70; ++size) {
+    for (size_t partitionPoint = 0; partitionPoint <= size; ++partitionPoint) {
+      std::vector<size_t> values(size);
+      std::iota(values.begin(), values.end(), 0);
+      auto pred = [partitionPoint](size_t value) {
+        return value < partitionPoint;
+      };
+      auto it = gallopingPartitionPoint(values.begin(), values.end(), pred);
+      EXPECT_EQ(it - values.begin(), static_cast<ptrdiff_t>(partitionPoint))
+          << "size: " << size << ", partitionPoint: " << partitionPoint;
+      EXPECT_EQ(it, std::partition_point(values.begin(), values.end(), pred));
+    }
+  }
+
+  // A partition point close to the beginning of a large range is found with
+  // only a few calls to the predicate.
+  std::vector<int> large(1'000'000, 1);
+  large.at(0) = 0;
+  large.at(1) = 0;
+  size_t numCalls = 0;
+  auto isZero = [&numCalls](int value) {
+    ++numCalls;
+    return value == 0;
+  };
+  auto it = gallopingPartitionPoint(large.begin(), large.end(), isZero);
+  EXPECT_EQ(it - large.begin(), 2);
+  EXPECT_LE(numCalls, 4u);
+
+  // A partition point at the end of a large range only needs a logarithmic
+  // number of calls.
+  ql::ranges::fill(large, 0);
+  numCalls = 0;
+  it = gallopingPartitionPoint(large.begin(), large.end(), isZero);
+  EXPECT_EQ(it, large.end());
+  EXPECT_LE(numCalls, 45u);
+
+  // The predicate is also applied correctly if it is a member pointer.
+  std::vector<std::pair<bool, int>> pairs{{true, 0}, {true, 1}, {false, 2}};
+  EXPECT_EQ(gallopingPartitionPoint(pairs.begin(), pairs.end(),
+                                    &std::pair<bool, int>::first) -
+                pairs.begin(),
+            2);
 }

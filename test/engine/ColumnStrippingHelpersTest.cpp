@@ -1,0 +1,157 @@
+// Copyright 2026 The QLever Authors, in particular:
+//
+// 2026 Anna Kaiser <anna.kaiser@uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
+
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
+
+#include "../util/ColumnStrippingTestHelpers.h"
+#include "../util/IdTableHelpers.h"
+#include "../util/IndexTestHelpers.h"
+#include "../util/TripleComponentTestHelpers.h"
+#include "./ValuesForTesting.h"
+#include "engine/ColumnStrippingHelpers.h"
+#include "engine/Distinct.h"
+#include "engine/StripColumns.h"
+#include "engine/sparqlExpressions/CountStarExpression.h"
+#include "engine/sparqlExpressions/ExistsExpression.h"
+#include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
+
+using namespace columnStrippingHelpers;
+using ::testing::ElementsAre;
+using ::testing::Key;
+using ::testing::SizeIs;
+using ::testing::UnorderedElementsAre;
+using V = Variable;
+
+// Test that `VarsRequiredFromSubtree` returns the original set as long as only
+// contained variables are added, and a copy with the added variables otherwise.
+TEST(ColumnStrippingHelpers, VarsRequiredFromSubtree) {
+  // An empty set and a set with two variables.
+  std::set<V> empty;
+  std::set<V> vars{V{"?a"}, V{"?b"}};
+
+  // Without any `add`, `get` returns the original set itself.
+  VarsRequiredFromSubtree emptyHelper{&empty};
+  EXPECT_EQ(&emptyHelper.get(), &empty);
+  VarsRequiredFromSubtree helper{&vars};
+  EXPECT_EQ(&helper.get(), &vars);
+
+  // Adding a contained variable still returns the original set.
+  helper.add(V{"?a"});
+  EXPECT_EQ(&helper.get(), &vars);
+
+  // Adding a new variable returns a copy with that variable, the original set
+  // is unchanged.
+  helper.add(V{"?c"});
+  EXPECT_NE(&helper.get(), &vars);
+  EXPECT_THAT(helper.get(), ElementsAre(V{"?a"}, V{"?b"}, V{"?c"}));
+  EXPECT_THAT(vars, ElementsAre(V{"?a"}, V{"?b"}));
+
+  // Further additions work on the copy.
+  helper.add(V{"?b"});
+  helper.add(V{"?d"});
+  EXPECT_THAT(helper.get(), ElementsAre(V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}));
+}
+
+// Test that `addVarsFromExpression` collects the variables of an expression
+// (also the result variable of an `EXISTS` expression) and that it adds nothing
+// and returns `NeedAllVarsFromSubtree` for an expression that reads all columns
+// (`COUNT(DISTINCT *)`).
+TEST(ColumnStrippingHelpers, addVarsFromExpression) {
+  using AddVarsResult =
+      columnStrippingHelpers::VarsRequiredFromSubtree::AddVarsResult;
+  using column_stripping_test_helpers::makeExistsExpression;
+  std::set<V> vars{V{"?a"}};
+  VarsRequiredFromSubtree helper{&vars};
+
+  auto expression =
+      sparqlExpression::SparqlExpressionPimpl::makeVariableExpression(V{"?b"});
+  EXPECT_EQ(helper.addVarsFromExpression(expression), AddVarsResult::Success);
+  EXPECT_THAT(helper.get(), ElementsAre(V{"?a"}, V{"?b"}));
+
+  sparqlExpression::SparqlExpressionPimpl countDistinctStar{
+      std::shared_ptr<sparqlExpression::SparqlExpression>{
+          sparqlExpression::makeCountStarExpression(true)},
+      "COUNT(DISTINCT *)"};
+  EXPECT_EQ(helper.addVarsFromExpression(countDistinctStar),
+            AddVarsResult::NeedAllVarsFromSubtree);
+  EXPECT_THAT(helper.get(), ElementsAre(V{"?a"}, V{"?b"}));
+
+  // `EXISTS`: the result variable of each `EXISTS` (the column that the
+  // `ExistsJoin` adds to the subtree) must be required from the subtree, so
+  // that it survives the stripping.
+  auto [exists1, existsVar1] = makeExistsExpression("<p>");
+  auto [exists2, existsVar2] = makeExistsExpression("<q>");
+  ASSERT_NE(existsVar1, existsVar2);
+
+  // One `EXISTS`: its result variable is added, the other one is not. We use
+  // `Contains` because the selected variables of the `EXISTS` body (`?a`) may
+  // also be added.
+  EXPECT_EQ(helper.addVarsFromExpression(exists1), AddVarsResult::Success);
+  EXPECT_THAT(helper.get(), ::testing::Contains(existsVar1));
+  EXPECT_THAT(helper.get(), ::testing::Not(::testing::Contains(existsVar2)));
+  EXPECT_THAT(helper.get(), ::testing::IsSupersetOf({V{"?a"}, V{"?b"}}));
+
+  // A second `EXISTS`: both result variables are required.
+  EXPECT_EQ(helper.addVarsFromExpression(exists2), AddVarsResult::Success);
+  EXPECT_THAT(helper.get(), ::testing::IsSupersetOf(
+                                {V{"?a"}, V{"?b"}, existsVar1, existsVar2}));
+}
+
+// Test that `allVariablesAreRequired` is true iff the requested variables are a
+// superset of the variables of the tree.
+TEST(ColumnStrippingHelpers, allVariablesAreRequired) {
+  auto qec = ad_utility::testing::getQec();
+  auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{1, 2}}),
+      std::vector<std::optional<V>>{V{"?a"}, V{"?b"}});
+  EXPECT_TRUE(allVariablesAreRequired(*values, {V{"?a"}, V{"?b"}}));
+  EXPECT_TRUE(allVariablesAreRequired(*values, {V{"?a"}, V{"?b"}, V{"?c"}}));
+  EXPECT_FALSE(allVariablesAreRequired(*values, {V{"?a"}}));
+  EXPECT_FALSE(allVariablesAreRequired(*values, {}));
+}
+
+// Test that `makeTreeWithOptionalStripOperation` adds a `StripColumns` on top
+// of the new operation exactly if the operation exports variables that the
+// parent did not request.
+TEST(ColumnStrippingHelpers, makeTreeWithOptionalStripOperation) {
+  // A subtree with the variables `?a`, `?b`, `?c`. The new root is a `Distinct`
+  // on `?b`, which exports all three variables.
+  auto qec = ad_utility::testing::getQec();
+  auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{1, 2, 3}}),
+      std::vector<std::optional<V>>{V{"?a"}, V{"?b"}, V{"?c"}});
+
+  // All exported variables are requested, the `Distinct` is the root.
+  {
+    auto tree = makeTreeWithOptionalStripOperation<Distinct>(
+        qec, std::set<V>{V{"?a"}, V{"?b"}, V{"?c"}}, values,
+        std::vector<ColumnIndex>{1});
+    ASSERT_TRUE(tree.has_value());
+    EXPECT_TRUE(
+        std::dynamic_pointer_cast<Distinct>((*tree)->getRootOperation()));
+    EXPECT_THAT((*tree)->getVariableColumns(), SizeIs(3));
+  }
+
+  // Only `?a` is requested, a `StripColumns` to `?a` is added on top of the
+  // `Distinct`.
+  {
+    auto tree = makeTreeWithOptionalStripOperation<Distinct>(
+        qec, std::set<V>{V{"?a"}}, values, std::vector<ColumnIndex>{1});
+    ASSERT_TRUE(tree.has_value());
+    auto strip =
+        std::dynamic_pointer_cast<StripColumns>((*tree)->getRootOperation());
+    ASSERT_TRUE(strip);
+    EXPECT_THAT((*tree)->getVariableColumns(),
+                UnorderedElementsAre(Key(V{"?a"})));
+    const auto* child = strip->getChildren().at(0);
+    EXPECT_TRUE(std::dynamic_pointer_cast<Distinct>(child->getRootOperation()));
+    EXPECT_THAT(child->getVariableColumns(), SizeIs(3));
+  }
+}

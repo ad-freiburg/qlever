@@ -6,22 +6,30 @@
 #ifndef QLEVER_TEST_VALUEGETTERTESTHELPERS_H
 #define QLEVER_TEST_VALUEGETTERTESTHELPERS_H
 
+#include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 
 #include <optional>
+#include <string>
+#include <vector>
 
 #include "./GeometryInfoTestHelpers.h"
 #include "./SparqlExpressionTestHelpers.h"
-#include "engine/LocalVocab.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "global/Constants.h"
+#include "index/IndexImpl.h"
+#include "index/LocalVocab.h"
 #include "index/LocalVocabEntry.h"
+#include "index/vocabulary/SecondaryVocabulary.h"
 #include "index/vocabulary/VocabularyType.h"
 #include "parser/LiteralOrIri.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/Literal.h"
 #include "util/GTestHelpers.h"
+#include "util/LocalVocabEntryTestHelpers.h"
 #include "util/TypeTraits.h"
+
+using ad_utility::testing::localVocabEntryFromStringRepresentation;
 
 namespace valueGetterTestHelpers {
 
@@ -32,27 +40,36 @@ PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
         "noType".
   )";
 struct TestContextWithGivenTTl {
-  std::string turtleInput;
-  std::optional<ad_utility::VocabularyType> vocabularyType = std::nullopt;
-  QueryExecutionContext* qec =
-      ad_utility::testing::getQec(turtleInput, vocabularyType);
+  ad_utility::testing::TestIndexConfig config;
+  QueryExecutionContext* qec = ad_utility::testing::getQec(config);
   VariableToColumnMap varToColMap;
   LocalVocab localVocab;
   IdTable table{qec->getAllocator()};
   sparqlExpression::EvaluationContext context{
       *qec,
       varToColMap,
-      table,
+      table.asStaticView<0>(),
       qec->getAllocator(),
       localVocab,
-      std::make_shared<ad_utility::CancellationHandle<>>(),
-      sparqlExpression::EvaluationContext::TimePoint::max()};
+      std::make_shared<ad_utility::CancellationHandle<>>()};
   std::function<Id(const std::string&)> getId =
       ad_utility::testing::makeGetId(qec->getIndex());
+
+  // Create a context for an index that is built from the given `config`. Use
+  // this overload if the index needs more than a knowledge graph, for example a
+  // text index.
+  explicit TestContextWithGivenTTl(ad_utility::testing::TestIndexConfig config)
+      : config{std::move(config)} {}
+
+  // Create a context for an index that is built from the given knowledge graph.
   TestContextWithGivenTTl(
       std::string turtle,
       std::optional<ad_utility::VocabularyType> vocabularyType = std::nullopt)
-      : turtleInput{std::move(turtle)}, vocabularyType{vocabularyType} {}
+      : TestContextWithGivenTTl{[&turtle, &vocabularyType]() {
+          ad_utility::testing::TestIndexConfig config{std::move(turtle)};
+          config.vocabularyType = vocabularyType;
+          return config;
+        }()} {}
 };
 
 // Helper function to check literal value and datatype
@@ -74,24 +91,34 @@ inline void checkLiteralContentAndDatatype(
   ASSERT_EQ(literal.value(), expected);
 };
 
+// The two `LiteralValueGetter`s, either of which the helpers below accept.
+using LiteralValueGetterVariant = std::variant<
+    sparqlExpression::detail::LiteralValueGetterWithStrFunction,
+    sparqlExpression::detail::LiteralValueGetterWithoutStrFunction>;
+
+// Apply `getter` to `id` in the given context, then check the content and the
+// datatype of the resulting literal, see `checkLiteralContentAndDatatype`.
+inline void checkLiteralContentAndDatatypeForId(
+    TestContextWithGivenTTl& testContext, Id id,
+    const std::optional<std::string>& expectedContent,
+    const std::optional<std::string>& expectedDatatype,
+    LiteralValueGetterVariant getter) {
+  auto literal =
+      std::visit([&](auto&& g) { return g(id, &testContext.context); }, getter);
+  checkLiteralContentAndDatatype(literal, expectedContent, expectedDatatype);
+}
+
 // Helper function to get literal from Id and then check its content and
 // datatype
 inline void checkLiteralContentAndDatatypeFromId(
     const std::string& literalString,
     const std::optional<std::string>& expectedContent,
     const std::optional<std::string>& expectedDatatype,
-    std::variant<sparqlExpression::detail::LiteralValueGetterWithStrFunction,
-                 sparqlExpression::detail::LiteralValueGetterWithoutStrFunction>
-        getter) {
+    LiteralValueGetterVariant getter) {
   TestContextWithGivenTTl testContext{ttl};
-  auto literal = std::visit(
-      [&](auto&& g) {
-        return g(testContext.getId(literalString), &testContext.context);
-      },
-      getter);
-
-  return checkLiteralContentAndDatatype(literal, expectedContent,
-                                        expectedDatatype);
+  checkLiteralContentAndDatatypeForId(
+      testContext, testContext.getId(literalString), expectedContent,
+      expectedDatatype, std::move(getter));
 };
 
 // Helper function to get literal from LiteralOrIri and then check its content
@@ -101,9 +128,7 @@ inline void checkLiteralContentAndDatatypeFromLiteralOrIri(
     const std::optional<ad_utility::triple_component::Iri>& literalDescriptor,
     const bool isIri, const std::optional<std::string>& expectedContent,
     const std::optional<std::string>& expectedDatatype,
-    std::variant<sparqlExpression::detail::LiteralValueGetterWithStrFunction,
-                 sparqlExpression::detail::LiteralValueGetterWithoutStrFunction>
-        getter) {
+    LiteralValueGetterVariant getter) {
   using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
   using Literal = ad_utility::triple_component::Literal;
   TestContextWithGivenTTl testContext{ttl};
@@ -113,8 +138,8 @@ inline void checkLiteralContentAndDatatypeFromLiteralOrIri(
     if (isIri) {
       return LiteralOrIri::iriref(std::string(content));
     } else {
-      return LiteralOrIri{Literal::literalWithNormalizedContent(
-          asNormalizedStringViewUnsafe(content), descriptor)};
+      return LiteralOrIri{
+          Literal::literalWithNormalizedContent(content, descriptor)};
     }
   };
   LiteralOrIri literalOrIri =
@@ -125,11 +150,121 @@ inline void checkLiteralContentAndDatatypeFromLiteralOrIri(
                                         expectedDatatype);
 };
 
+// The words of the secondary vocabulary of the index of
+// `AllDatatypesTestContext` (see `index/vocabulary/SecondaryVocabulary.h`),
+// sorted (bytewise), as a `SecondaryVocabulary` requires the words of a
+// segment to be (see `SecondaryVocabulary::appendSegment`).
+inline const std::vector<std::string> secondaryVocabWords{
+    "\"\"",
+    "\"LINESTRING(6 6, 8 8)\""
+    "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+    "\"noSecondaryType\"",
+    "\"someSecondaryType\"^^<someType>",
+    "\"withSecondaryLang\"@en",
+    "<http://qudt.org/vocab/unit/M>",
+    "<http://www.opengis.net/def/crs/EPSG/0/4326>",
+    "<https://example.com/secondary>"};
+
+// Names for the words of `secondaryVocabWords`, to be used with the helpers
+// below.
+inline const std::string secondaryEmptyLiteral = secondaryVocabWords.at(0);
+inline const std::string secondaryWktLiteral = secondaryVocabWords.at(1);
+inline const std::string secondaryPlainLiteral = secondaryVocabWords.at(2);
+inline const std::string secondaryTypedLiteral = secondaryVocabWords.at(3);
+inline const std::string secondaryLangLiteral = secondaryVocabWords.at(4);
+inline const std::string secondaryUnitIri = secondaryVocabWords.at(5);
+inline const std::string secondaryCrsIri = secondaryVocabWords.at(6);
+inline const std::string secondaryIri = secondaryVocabWords.at(7);
+
+// The words of the vocabulary of the index of `AllDatatypesTestContext`, one
+// per kind of literal and IRI that the value getters distinguish. They are
+// deliberately disjoint from `secondaryVocabWords`, because the two
+// vocabularies are.
+inline const std::string vocabPlainLiteral = "\"noVocabType\"";
+inline const std::string vocabTypedLiteral = "\"someVocabType\"^^<someType>";
+inline const std::string vocabLangLiteral = "\"withVocabLang\"@en";
+inline const std::string vocabWktLiteral =
+    "\"LINESTRING(2 2, 4 4)\""
+    "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+inline const std::string vocabIri = "<https://example.com/vocab>";
+
+// The prefix of the IRIs that the index of `AllDatatypesTestContext` encodes
+// directly in the `Id`, and an IRI that has that prefix.
+inline const std::string encodedIriPrefix = "https://encoded.example.com/";
+inline const std::string encodedIri = "<https://encoded.example.com/123>";
+
+// A test context whose index is built such that an `Id` of every `Datatype`
+// can be created for it (see the fixture in `ValueGetterTest.cpp`): its
+// knowledge graph holds the `vocab...` words above, its secondary vocabulary
+// holds `secondaryVocabWords`, its index encodes the IRIs that start with
+// `encodedIriPrefix` directly in the `Id`, and it has a text index, which makes
+// the `Id`s of the datatypes `WordVocabIndex` and `TextRecordIndex` resolvable.
+//
+// NOTE: The knowledge graph deliberately contains none of the
+// `secondaryVocabWords`, because a secondary vocabulary is disjoint from the
+// vocabulary of the main index.
+struct AllDatatypesTestContext : TestContextWithGivenTTl {
+  AllDatatypesTestContext() : TestContextWithGivenTTl{makeConfig()} {}
+
+  // The `Id` of the given word of the secondary vocabulary. The word has to be
+  // one of `secondaryVocabWords`.
+  Id secondaryVocabId(const std::string& word) const {
+    auto index = qec->getIndex().getImpl().secondaryVocab()->getId(word);
+    AD_CONTRACT_CHECK(index.has_value(),
+                      "The given word is not one of `secondaryVocabWords`");
+    return Id::makeFromSecondaryVocabIndex(index.value());
+  }
+
+  // The `Id` of `encodedIri`, which the index encodes directly in the `Id`.
+  Id encodedIriId() const {
+    auto id = qec->getIndex().encodedIriManager().encode(encodedIri);
+    AD_CONTRACT_CHECK(id.has_value(), "The IRI could not be encoded");
+    return id.value();
+  }
+
+  // The `Id` of `word` in the local vocabulary of this context. The word has to
+  // be contained in neither the knowledge graph nor one of the vocabularies of
+  // the index, else it would not be stored in a local vocabulary in the first
+  // place.
+  Id localVocabId(const std::string& word) {
+    return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
+        localVocabEntryFromStringRepresentation(word,
+                                                qec->getLocalVocabContext())));
+  }
+
+ private:
+  // The configuration of the index, see the class comment.
+  static ad_utility::testing::TestIndexConfig makeConfig() {
+    ad_utility::testing::TestIndexConfig config{absl::StrCat(
+        "<x> <y> ", vocabPlainLiteral, " , ", vocabTypedLiteral, " , ",
+        vocabLangLiteral, " , ", vocabWktLiteral, " , ", vocabIri, " .\n")};
+    config.encodedPrefixesWithoutAngleBrackets =
+        std::vector<std::string>{encodedIriPrefix};
+    config.secondaryVocabWords = secondaryVocabWords;
+    config.createTextIndex = true;
+    return config;
+  }
+};
+
+// Helper function to get a literal from the `Id` of a word of the secondary
+// vocabulary and then check its content and datatype. This mirrors
+// `checkLiteralContentAndDatatypeFromId` above.
+inline void checkLiteralContentAndDatatypeFromSecondaryVocabId(
+    const std::string& word, const std::optional<std::string>& expectedContent,
+    const std::optional<std::string>& expectedDatatype,
+    LiteralValueGetterVariant getter) {
+  AllDatatypesTestContext testContext;
+  checkLiteralContentAndDatatypeForId(
+      testContext, testContext.secondaryVocabId(word), expectedContent,
+      expectedDatatype, std::move(getter));
+};
+
 }  // namespace valueGetterTestHelpers
 
-namespace unitVGTestHelpers {
+namespace enumVGTestHelpers {
 
 using namespace valueGetterTestHelpers;
+using Loc = ad_utility::source_location;
 
 // Test turtle for
 const std::string unitTtl = R"(
@@ -146,30 +281,89 @@ PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
         "1.5"^^<http://example.com>, 
         "x".
   )";
+const std::string crsTtl = R"(
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+<x> <y> "http://www.opengis.net/def/crs/OGC/1.3/CRS84"^^xsd:anyURI, 
+        "http://www.opengis.net/def/crs/EPSG/0/4326"^^xsd:anyURI, 
+        "http://www.opengis.net/def/crs/EPSG/0/3857"^^xsd:anyURI, 
+        "http://www.opengis.net/def/crs/EPSG/0/unsupported"^^xsd:anyURI, 
+        <http://www.opengis.net/def/crs/OGC/1.3/CRS84>, 
+        <http://www.opengis.net/def/crs/EPSG/0/4326>, 
+        <http://www.opengis.net/def/crs/EPSG/0/3857>,
+        <http://www.opengis.net/def/crs/EPSG/0/unsupported>,
+        "1.5"^^<http://example.com>, 
+        "x".
+  )";
 
-// Helper to test UnitOfMeasurementValueGetter using ValueId input
-inline void checkUnitValueGetterFromId(
-    const std::string& fullLiteralOrIri, UnitOfMeasurement expectedResult,
-    sparqlExpression::detail::UnitOfMeasurementValueGetter getter) {
-  TestContextWithGivenTTl testContext{unitTtl};
-  auto actualResult =
-      getter(testContext.getId(fullLiteralOrIri), &testContext.context);
-  ASSERT_EQ(actualResult, expectedResult);
-};
-
-// Helper to test UnitOfMeasurementValueGetter using ValueId input where the
-// ValueId represents an encoded value
-inline void checkUnitValueGetterFromIdEncodedValue(
-    ValueId id, sparqlExpression::detail::UnitOfMeasurementValueGetter getter) {
-  TestContextWithGivenTTl testContext{unitTtl};
-  ASSERT_EQ(getter(id, &testContext.context), UnitOfMeasurement::UNKNOWN);
+// Returns the appropriate test context depending on the enum type.
+template <typename EnumT>
+inline TestContextWithGivenTTl getContext() {
+  if constexpr (std::is_same_v<EnumT, UnitOfMeasurement>) {
+    return TestContextWithGivenTTl{unitTtl};
+  } else if constexpr (std::is_same_v<EnumT, ::util::geo::CRSType>) {
+    return TestContextWithGivenTTl{crsTtl};
+  } else {
+    static_assert(ad_utility::alwaysFalse<EnumT>);
+  }
 }
 
-// Helper to test UnitOfMeasurementValueGetter using ValueId input
-inline void checkUnitValueGetterFromLiteralOrIri(
-    const std::string& unitIriWithoutBrackets, UnitOfMeasurement expectedResult,
-    sparqlExpression::detail::UnitOfMeasurementValueGetter getter) {
-  TestContextWithGivenTTl testContext{unitTtl};
+// Apply `getter` to `id` in the given context and check the result.
+template <auto iriToValue, auto undefined>
+inline void checkEnumValueGetterForId(
+    TestContextWithGivenTTl& testContext, Id id,
+    decltype(undefined) expectedResult,
+    sparqlExpression::detail::EnumValueGetter<iriToValue, undefined> getter,
+    Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(sourceLocation);
+  EXPECT_EQ(getter(id, &testContext.context), expectedResult);
+}
+
+// Helper to test EnumValueGetter using ValueId input
+template <auto iriToValue, auto undefined>
+inline void checkEnumValueGetterFromId(
+    const std::string& fullLiteralOrIri, decltype(undefined) expectedResult,
+    sparqlExpression::detail::EnumValueGetter<iriToValue, undefined> getter,
+    Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(sourceLocation);
+  TestContextWithGivenTTl testContext = getContext<decltype(undefined)>();
+  checkEnumValueGetterForId(testContext, testContext.getId(fullLiteralOrIri),
+                            expectedResult, getter);
+};
+
+// Helper to test EnumValueGetter using ValueId input where the
+// ValueId represents an encoded value
+template <auto iriToValue, auto undefined>
+inline void checkEnumValueGetterFromIdEncodedValue(
+    ValueId id,
+    sparqlExpression::detail::EnumValueGetter<iriToValue, undefined> getter,
+    Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(sourceLocation);
+  TestContextWithGivenTTl testContext = getContext<decltype(undefined)>();
+  checkEnumValueGetterForId(testContext, id, undefined, getter);
+}
+
+// Helper to test `EnumValueGetter` on the given word of a
+// secondary vocabulary, see `checkEnumValueGetterFromId` above. The word has to
+// be one of `secondaryVocabWords`.
+template <auto iriToValue, auto undefined>
+inline void checkEnumValueGetterFromSecondaryVocabId(
+    const std::string& word, decltype(undefined) expectedResult,
+    sparqlExpression::detail::EnumValueGetter<iriToValue, undefined> getter,
+    Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(sourceLocation);
+  AllDatatypesTestContext testContext;
+  checkEnumValueGetterForId(testContext, testContext.secondaryVocabId(word),
+                            expectedResult, getter);
+}
+
+// Helper to test EnumValueGetter using ValueId input
+template <auto iriToValue, auto undefined>
+inline void checkEnumValueGetterFromLiteralOrIri(
+    const std::string& iriWithoutBrackets, decltype(undefined) expectedResult,
+    sparqlExpression::detail::EnumValueGetter<iriToValue, undefined> getter,
+    Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(sourceLocation);
+  TestContextWithGivenTTl testContext = getContext<decltype(undefined)>();
 
   using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
   using Iri = ad_utility::triple_component::Iri;
@@ -177,8 +371,7 @@ inline void checkUnitValueGetterFromLiteralOrIri(
   auto doTest = [&](const ad_utility::triple_component::LiteralOrIri& litOrIri,
                     bool expectSuccess) {
     auto actualResult = getter(litOrIri, &testContext.context);
-    ASSERT_EQ(actualResult,
-              expectSuccess ? expectedResult : UnitOfMeasurement::UNKNOWN);
+    EXPECT_EQ(actualResult, expectSuccess ? expectedResult : undefined);
   };
 
   // Test xsd:anyURI literal method
@@ -188,19 +381,19 @@ inline void checkUnitValueGetterFromLiteralOrIri(
   };
 
   litTest(
-      unitIriWithoutBrackets,
+      iriWithoutBrackets,
       Iri::fromIrirefWithoutBrackets("http://www.w3.org/2001/XMLSchema#anyURI"),
       true);
-  litTest(unitIriWithoutBrackets, std::nullopt, false);
-  litTest(unitIriWithoutBrackets,
+  litTest(iriWithoutBrackets, std::nullopt, false);
+  litTest(iriWithoutBrackets,
           Iri::fromIrirefWithoutBrackets("http://example.com/"), false);
 
   // Test IRI method
-  doTest(LiteralOrIri{Iri::fromIrirefWithoutBrackets(unitIriWithoutBrackets)},
+  doTest(LiteralOrIri{Iri::fromIrirefWithoutBrackets(iriWithoutBrackets)},
          true);
 };
 
-}  // namespace unitVGTestHelpers
+}  // namespace enumVGTestHelpers
 
 namespace geoInfoVGTestHelpers {
 
@@ -219,6 +412,8 @@ class ValueGetterTester {
       " \"noType\" ,"
       " \"LINESTRING(2 2, 4 4)\""
       "^^<http://www.opengis.net/ont/geosparql#wktLiteral>,\n"
+      "\"<http://www.opengis.net/def/crs/EPSG/0/4326> LINESTRING(2 3, 4 5)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>,\n"
       " \"POLYGON((2 4, 4 4, 4 2, 2 2))\""
       "^^<http://www.opengis.net/ont/geosparql#wktLiteral>.\n";
 
@@ -229,19 +424,14 @@ class ValueGetterTester {
       std::string literal,
       ::testing::Matcher<std::optional<ReturnType>> expected,
       Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
-    auto l = generateLocationTrace(sourceLocation);
-    ValueGetter getter;
+    auto trace = generateLocationTrace(sourceLocation);
     // Empty knowledge graph, so everything needs to be in the local vocab.
     TestContextWithGivenTTl testContext{""};
     LocalVocab localVocab;
-    auto litOrIri =
-        ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
-            literal);
-    auto idx =
-        localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{litOrIri});
-    auto id = ValueId::makeFromLocalVocabIndex(idx);
-    auto res = getter(id, &testContext.context);
-    EXPECT_THAT(res, expected);
+    auto idx = localVocab.getIndexAndAddIfNotContained(
+        localVocabEntryFromStringRepresentation(
+            std::move(literal), testContext.qec->getLocalVocabContext()));
+    checkImpl(testContext, ValueId::makeFromLocalVocabIndex(idx), expected);
   }
 
   // Helper that tests the `ValueGetter` using the `ValueId` of a
@@ -249,26 +439,46 @@ class ValueGetterTester {
   void checkFromVocab(std::string literal,
                       ::testing::Matcher<std::optional<ReturnType>> expected,
                       Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
-    auto l = generateLocationTrace(sourceLocation);
-    ValueGetter getter;
+    auto trace = generateLocationTrace(sourceLocation);
     TestContextWithGivenTTl testContext{testTtl_};
     VocabIndex idx;
     ASSERT_TRUE(testContext.qec->getIndex().getVocab().getId(literal, &idx))
         << "Given test literal is not contained in test dataset";
-    auto id = ValueId::makeFromVocabIndex(idx);
-    auto res = getter(id, &testContext.context);
-    EXPECT_THAT(res, expected);
+    checkImpl(testContext, ValueId::makeFromVocabIndex(idx), expected);
   }
 
   // Helper that tests the `ValueGetter` for any custom `ValueId`
   void checkFromValueId(ValueId input,
                         ::testing::Matcher<std::optional<ReturnType>> expected,
                         Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
-    auto l = generateLocationTrace(sourceLocation);
-    ValueGetter getter;
+    auto trace = generateLocationTrace(sourceLocation);
     TestContextWithGivenTTl testContext{testTtl_};
-    auto res = getter(input, &testContext.context);
-    EXPECT_THAT(res, expected);
+    checkImpl(testContext, input, expected);
+  }
+
+  // Helper that tests the `ValueGetter` using the `ValueId` of the given word
+  // of the secondary vocabulary of the index, see `AllDatatypesTestContext`.
+  // The word has to be one of `secondaryVocabWords`.
+  void checkFromSecondaryVocab(
+      const std::string& word,
+      ::testing::Matcher<std::optional<ReturnType>> expected,
+      Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(sourceLocation);
+    AllDatatypesTestContext testContext;
+    checkImpl(testContext, testContext.secondaryVocabId(word), expected);
+  }
+
+  // Same as `checkFromSecondaryVocab` above, but for every word of
+  // `secondaryVocabWords`. Use this for a `ValueGetter` whose result is the
+  // same for all of them.
+  void checkFromAllSecondaryVocabWords(
+      ::testing::Matcher<std::optional<ReturnType>> expected,
+      Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(sourceLocation);
+    for (const auto& word : secondaryVocabWords) {
+      SCOPED_TRACE(word);
+      checkFromSecondaryVocab(word, expected);
+    }
   }
 
   // Helper that tests the `ValueGetter` for any literal (or IRI) directly
@@ -276,14 +486,13 @@ class ValueGetterTester {
   void checkFromLiteral(std::string literal,
                         ::testing::Matcher<std::optional<ReturnType>> expected,
                         Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
-    auto l = generateLocationTrace(sourceLocation);
-    ValueGetter getter;
+    auto trace = generateLocationTrace(sourceLocation);
     TestContextWithGivenTTl testContext{testTtl_};
-    auto litOrIri =
+    checkImpl(
+        testContext,
         ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
-            literal);
-    auto res = getter(litOrIri, &testContext.context);
-    EXPECT_THAT(res, expected);
+            literal),
+        expected);
   }
 
   // Run the same test case on vocab, local vocab and literal
@@ -291,10 +500,21 @@ class ValueGetterTester {
       std::string wktInput,
       ::testing::Matcher<std::optional<ReturnType>> expected,
       Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
-    auto l = generateLocationTrace(sourceLocation);
+    auto trace = generateLocationTrace(sourceLocation);
     checkFromVocab(wktInput, expected);
     checkFromLocalVocab(wktInput, expected);
     checkFromLiteral(wktInput, expected);
+  }
+
+ private:
+  // Apply the `ValueGetter` to `input` (a `ValueId` or a `LiteralOrIri`) in the
+  // given context and check the result. All the public helpers above funnel
+  // into this.
+  template <typename Input>
+  void checkImpl(
+      TestContextWithGivenTTl& testContext, const Input& input,
+      const ::testing::Matcher<std::optional<ReturnType>>& expected) {
+    EXPECT_THAT(ValueGetter{}(input, &testContext.context), expected);
   }
 };
 
@@ -306,10 +526,13 @@ using GeoPointOrWktTester =
                       GeoPointOrWkt>;
 using IntValueGetterTester =
     ValueGetterTester<sparqlExpression::detail::IntValueGetter, int64_t>;
+using NumericOrDateValueGetterTester =
+    ValueGetterTester<sparqlExpression::detail::NumericOrDateValueGetter,
+                      sparqlExpression::detail::NumericOrDateValue>;
 // _____________________________________________________________________________
 inline void checkGeoPointOrWktFromLocalAndNormalVocabAndLiteralForValid(
     std::string wktInput, Loc sourceLocation = AD_CURRENT_SOURCE_LOC()) {
-  auto l = generateLocationTrace(sourceLocation);
+  auto trace = generateLocationTrace(sourceLocation);
   // We input `wktInput` twice because we expect the value getter to return the
   // wkt string if it is given a plain wkt string.
   GeoPointOrWktTester{}.checkFromLocalAndNormalVocabAndLiteral(

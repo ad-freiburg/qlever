@@ -9,6 +9,7 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "global/ValueIdComparators.h"
 #include "util/IndexTestHelpers.h"
+#include "util/LocalVocabEntryTestHelpers.h"
 
 namespace sparqlExpression {
 
@@ -45,11 +46,10 @@ struct TestContext {
   sparqlExpression::EvaluationContext context{
       *qec,
       varToColMap,
-      table,
+      table.asStaticView<0>(),
       qec->getAllocator(),
       localVocab,
-      std::make_shared<ad_utility::CancellationHandle<>>(),
-      EvaluationContext::TimePoint::max()};
+      std::make_shared<ad_utility::CancellationHandle<>>()};
   std::function<Id(const std::string&)> getId =
       ad_utility::testing::makeGetId(qec->getIndex());
   // IDs of literals and entities in the vocabulary of the index.
@@ -69,17 +69,17 @@ struct TestContext {
     zz = getId("\"zz\"@en");
     blank = Id::makeFromBlankNodeIndex(BlankNodeIndex::make(0));
 
-    auto addLocalLiteral = [this](std::string_view s) {
+    const auto& localVocabContext = qec->getLocalVocabContext();
+    auto addLocalLiteral = [this, &localVocabContext](std::string_view s) {
       return Id::makeFromLocalVocabIndex(
           this->localVocab.getIndexAndAddIfNotContained(
-              ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(
-                  s)));
+              LocalVocabEntry ::literalWithoutQuotes(s, localVocabContext)));
     };
 
-    auto addLocalIri = [this](const std::string& s) {
+    auto addLocalIri = [this, &localVocabContext](std::string_view s) {
       return Id::makeFromLocalVocabIndex(
           this->localVocab.getIndexAndAddIfNotContained(
-              ad_utility::triple_component::LiteralOrIri::iriref(s)));
+              ad_utility::testing::iriLocalVocabEntry(s, localVocabContext)));
     };
 
     notInVocabA = addLocalLiteral("notInVocabA");
@@ -107,6 +107,9 @@ struct TestContext {
     table.push_back({IntId(-1), DoubleId(2.8), DoubleId(3.4), aelpha, x,
                      notInVocabD, Id::makeUndefined()});
 
+    // Refresh the view: `table` was modified after `context` was initialized,
+    // so the spans stored in `_inputTable` are stale.
+    context._inputTable = table.asStaticView<0>();
     context._beginIndex = 0;
     context._endIndex = table.size();
     // Define the mapping from variable names to column indices.
@@ -142,6 +145,7 @@ inline void PrintTo(const SetOfIntervals& set, std::ostream* os) {
   for (auto [first, second] : set._intervals) {
     *os << '{' << first << ", " << second << '}';
   }
+  *os << " of size " << set.size();
 }
 }  // namespace ad_utility
 

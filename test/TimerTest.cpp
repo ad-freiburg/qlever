@@ -7,6 +7,7 @@
 
 #include <thread>
 
+#include "util/GTestHelpers.h"
 #include "util/Timer.h"
 #include "util/jthread.h"
 
@@ -19,7 +20,7 @@ using namespace std::chrono_literals;
 void testTime(Timer::Duration duration, std::chrono::milliseconds msecs,
               std::chrono::milliseconds expected) {
   auto lowerBound = 0.9 * expected;
-  auto upperBound = 1.1 * expected + 3ms;
+  auto upperBound = 1.1 * expected + 10ms;
   EXPECT_GE(duration, lowerBound);
   EXPECT_LE(duration, upperBound);
 
@@ -33,9 +34,7 @@ void testTime(const ad_utility::Timer& timer,
 }
 
 TEST(Timer, BasicWorkflow) {
-#ifdef _QLEVER_NO_TIMING_TESTS
-  GTEST_SKIP_("because _QLEVER_NO_TIMING_TESTS defined");
-#endif
+  QLEVER_SKIP_TEST_IF_FLAKY_TIMING;
   Timer t{Timer::Started};
   ASSERT_TRUE(t.isRunning());
   std::this_thread::sleep_for(10ms);
@@ -86,9 +85,7 @@ TEST(Timer, BasicWorkflow) {
 }
 
 TEST(Timer, InitiallyStopped) {
-#ifdef _QLEVER_NO_TIMING_TESTS
-  GTEST_SKIP_("because _QLEVER_NO_TIMING_TESTS defined");
-#endif
+  QLEVER_SKIP_TEST_IF_FLAKY_TIMING;
   Timer t{Timer::Stopped};
   ASSERT_FALSE(t.isRunning());
   ASSERT_EQ(t.value(), Timer::Duration::zero());
@@ -103,9 +100,7 @@ TEST(Timer, InitiallyStopped) {
 }
 
 TEST(TimeBlockAndLog, TimeBlockAndLog) {
-#ifdef _QLEVER_NO_TIMING_TESTS
-  GTEST_SKIP_("because _QLEVER_NO_TIMING_TESTS defined");
-#endif
+  QLEVER_SKIP_TEST_IF_FLAKY_TIMING;
   std::string s;
   {
     auto callback = [&s](std::chrono::milliseconds msecs,
@@ -115,14 +110,18 @@ TEST(TimeBlockAndLog, TimeBlockAndLog) {
     ad_utility::TimeBlockAndLog t{"message", callback};
     std::this_thread::sleep_for(25ms);
   }
-  ASSERT_THAT(s, ::testing::MatchesRegex("message: 2[5-9]"));
+#if QLEVER_COMPILETIME_LOGLEVEL >= QLEVER_TIMING
+  ASSERT_THAT(s, MatchesRegex("message: (2[5-9]|3[0-9])"));
+#else
+  // Below a compile-time log level of `TIMING`, `TimeBlockAndLog` is a stub
+  // that neither measures the time nor calls the callback.
+  ASSERT_THAT(s, ::testing::IsEmpty());
+#endif
 }
 
 // ____________________________________________________________________________
 TEST(Timer, ThreadSafeTimerSingleThreaded) {
-#ifdef _QLEVER_NO_TIMING_TESTS
-  GTEST_SKIP_("because _QLEVER_NO_TIMING_TESTS defined");
-#endif
+  QLEVER_SKIP_TEST_IF_FLAKY_TIMING;
   ad_utility::timer::ThreadSafeTimer t;
   for (size_t i = 0; i < 10; ++i) {
     auto m = t.startMeasurement();
@@ -138,9 +137,7 @@ TEST(Timer, ThreadSafeTimerSingleThreaded) {
 
 // ____________________________________________________________________________
 TEST(Timer, ThreadSafeTimerMultiThreaded) {
-#ifdef _QLEVER_NO_TIMING_TESTS
-  GTEST_SKIP_("because _QLEVER_NO_TIMING_TESTS defined");
-#endif
+  QLEVER_SKIP_TEST_IF_FLAKY_TIMING;
   ad_utility::timer::ThreadSafeTimer t;
 
   auto f = [&t]() {

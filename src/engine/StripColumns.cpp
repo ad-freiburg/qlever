@@ -11,6 +11,7 @@
 #include "engine/StripColumns.h"
 
 #include "engine/QueryExecutionTree.h"
+#include "parser/GraphPatternOperation.h"
 
 // _____________________________________________________________________________
 StripColumns::StripColumns(QueryExecutionContext* ctx,
@@ -43,11 +44,11 @@ StripColumns::StripColumns(QueryExecutionContext* ctx,
     : Operation{ctx},
       child_{std::move(child)},
       subset_{std::move(subset)},
-      varToCol_{std::move(varToCol)} {};
+      varToCol_{std::move(varToCol)} {}
 
 // _____________________________________________________________________________
-std::vector<QueryExecutionTree*> StripColumns::getChildren() {
-  return {child_.get()};
+qlm::vector<QueryExecutionTree*> StripColumns::getChildrenImpl() const {
+  return {{child_.get()}, allocator()};
 }
 
 // _____________________________________________________________________________
@@ -85,8 +86,27 @@ std::unique_ptr<Operation> StripColumns::cloneImpl() const {
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> StripColumns::resultSortedOn() const {
-  std::vector<ColumnIndex> sortedOn;
+std::optional<std::shared_ptr<QueryExecutionTree>>
+StripColumns::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
+  // Push `bind` down to the child. If successful, create a new `StripColumns`
+  // that also keeps the bound target variable.
+  auto newChild = child_->makeTreeWithBindColumn(bind);
+  if (!newChild) {
+    return std::nullopt;
+  }
+
+  // Add the bind target to the variables to keep.
+  auto view = varToCol_ | ql::ranges::views::keys;
+  std::set<Variable> keepVars{view.begin(), view.end()};
+  keepVars.insert(bind._target);
+
+  return ad_utility::makeExecutionTree<StripColumns>(
+      getExecutionContext(), std::move(*newChild), keepVars);
+}
+
+// _____________________________________________________________________________
+qlm::vector<ColumnIndex> StripColumns::resultSortedOn() const {
+  qlm::vector<ColumnIndex> sortedOn{allocator()};
   const auto& fromChild = child_->resultSortedOn();
   // Find the largest prefix of `fromChild` that is part of the `subset` and
   // return it with the columns mapped accordingly. In particular, if the child
@@ -112,7 +132,7 @@ Result StripColumns::computeResult(bool requestLaziness) {
     // implement moving the tables from materialized results that are too big
     // for the cache or having a `shared_ptr<IdTable+SubsetView>` type in the
     // result.
-    auto table = res->idTable().asColumnSubsetView(subset_).clone();
+    auto table = res->idTableView().asColumnSubsetView(subset_).clone();
     return {std::move(table), resultSortedOn(), res->getSharedLocalVocab()};
   } else {
     return {Result::LazyResult{ad_utility::CachingTransformInputRange(

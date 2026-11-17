@@ -14,6 +14,7 @@
 #include <set>
 
 #include "engine/Operation.h"
+#include "util/ContainersWithAllocator.h"
 
 // An Operation that returns the result of its only child operation when being
 // evaluated, with only a subset of the child's variables.
@@ -41,12 +42,14 @@ class StripColumns : public Operation {
 
   // Member functions inherited from `Operation` that have to be implemented by
   // each child class.
-  std::vector<QueryExecutionTree*> getChildren() override;
   std::string getCacheKeyImpl() const override;
   std::string getDescriptor() const override;
   size_t getResultWidth() const override;
 
   size_t getCostEstimate() override;
+
+  std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
+      const parsedQuery::Bind& bind) const override;
 
  private:
   uint64_t getSizeEstimateBeforeLimit() override;
@@ -56,8 +59,10 @@ class StripColumns : public Operation {
   bool knownEmptyResult() override;
 
  private:
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override;
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
   std::unique_ptr<Operation> cloneImpl() const override;
-  [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override;
+  [[nodiscard]] qlm::vector<ColumnIndex> resultSortedOn() const override;
   Result computeResult(bool requestLaziness) override;
   VariableToColumnMap computeVariableToColumnMap() const override;
 };

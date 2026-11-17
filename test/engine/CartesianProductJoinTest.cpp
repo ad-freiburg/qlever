@@ -16,6 +16,8 @@
 #include "../util/IndexTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
 #include "engine/CartesianProductJoin.h"
+#include "engine/Distinct.h"
+#include "engine/IndexScan.h"
 #include "engine/QueryExecutionTree.h"
 
 using namespace ad_utility::testing;
@@ -26,14 +28,14 @@ using O = std::optional<size_t>;
 // Create a `CartesianProductJoin` the children of which are `ValuesForTesting`
 // with results create from the `inputs`. The children will have disjoint sets
 // of variable as required by the `CartesianProductJoin`. If
-// `useLimitInSuboperations` is true, then the `ValuesForTesting` support the
-// LIMIT operation directly (this makes a difference in the `computeResult`
-// method of `CartesianProductJoin`).
+// `useLimitInSuboperations` is true, then the `ValuesForTesting` handles
+// `LIMIT` directly (this makes a difference in the `computeResult` method of
+// `CartesianProductJoin`).
 CartesianProductJoin makeJoin(const std::vector<VectorTable>& inputs,
                               bool useLimitInSuboperations = false) {
   auto qec =
       ad_utility::testing::getQec("<only> <for> <cartesianProductJoinTests>");
-  std::vector<std::shared_ptr<QueryExecutionTree>> valueOperations;
+  CartesianProductJoin::Children valueOperations{qec->getAllocator()};
   size_t i = 0;
   auto v = [&i]() mutable { return Variable{"?" + std::to_string(i++)}; };
   for (const auto& input : inputs) {
@@ -71,27 +73,27 @@ void testCartesianProductImpl(VectorTable expected,
   {
     auto join = makeJoin(inputs, useLimitInSuboperations);
     EXPECT_EQ(makeIdTableFromVector(expected),
-              join.computeResultOnlyForTesting().idTable());
+              join.computeResultOnlyForTesting().idTableView());
   }
 
   for (size_t limit = 0; limit < expected.size(); ++limit) {
     for (size_t offset = 0; offset < expected.size(); ++offset) {
       LimitOffsetClause limitClause{limit, 0, offset};
       auto join = makeJoin(inputs, useLimitInSuboperations);
-      join.applyLimitOffset(limitClause);
+      join.applyLimitOffset(limitClause, false);
       VectorTable partialResult;
       std::copy(expected.begin() + limitClause.actualOffset(expected.size()),
                 expected.begin() + limitClause.upperBound(expected.size()),
                 std::back_inserter(partialResult));
       EXPECT_EQ(makeIdTableFromVector(partialResult),
-                join.computeResultOnlyForTesting().idTable())
+                join.computeResultOnlyForTesting().idTableView())
           << "failed at offset " << offset << " and limit " << limit;
     }
   }
 }
 // Test that a Cartesian product between the `inputs` yields the `expected`
-// result. Perform the test for children that directly support the LIMIT
-// operation as well for children that don't (see `makeJoin` above for details).
+// result. Perform the test for children that directly handle `LIMIT` as well
+// as for children that don't (see `makeJoin` above for details).
 void testCartesianProduct(VectorTable expected, std::vector<VectorTable> inputs,
                           source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto t = generateLocationTrace(l);
@@ -123,7 +125,9 @@ TEST(CartesianProductJoin, computeResult) {
   EXPECT_ANY_THROW(makeJoin({}));
 
   // Fails because of the nullptrs.
-  EXPECT_ANY_THROW(CartesianProductJoin(getQec(), {nullptr, nullptr}));
+  EXPECT_ANY_THROW(CartesianProductJoin(
+      getQec(), CartesianProductJoin::Children{{nullptr, nullptr},
+                                               getQec()->getAllocator()}));
 
   // Join with a single result.
   VectorTable v2{{1, 2, 3, 7}, {4, 5, 6, 7}, {7, 8, 9, 7}};
@@ -213,7 +217,7 @@ TEST(CartesianProductJoin, basicMemberFunctions) {
 // present).
 TEST(CartesianProductJoin, variableColumnMap) {
   auto qec = getQec();
-  std::vector<std::shared_ptr<QueryExecutionTree>> subtrees;
+  CartesianProductJoin::Children subtrees{qec->getAllocator()};
   using Vars = std::vector<std::optional<Variable>>;
   subtrees.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{3, 4}, {4, 7}}),
@@ -279,7 +283,7 @@ class CartesianProductJoinLazyTest
     AD_CONTRACT_CHECK(tables.size() >= 2);
     auto* qec = ad_utility::testing::getQec();
     size_t counter = 0;
-    CartesianProductJoin::Children children{};
+    CartesianProductJoin::Children children{qec->getAllocator()};
     for (IdTable& table : ql::span{tables}.subspan(0, tables.size() - 1)) {
       children.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
           qec, table.clone(), makeUniqueVariables(table)));
@@ -304,7 +308,7 @@ class CartesianProductJoinLazyTest
         ->sizeEstimate() = counter;
     CartesianProductJoin join{qec, std::move(children), CHUNK_SIZE};
     join.applyLimitOffset(
-        LimitOffsetClause{std::get<2>(GetParam()), getOffset()});
+        LimitOffsetClause{std::get<2>(GetParam()), getOffset()}, false);
     return join;
   }
 
@@ -386,7 +390,7 @@ class CartesianProductJoinLazyTest
     join.getExecutionContext()->getQueryTreeCache().clearAll();
     Result result = join.computeResultOnlyForTesting(true);
     ASSERT_FALSE(result.isFullyMaterialized());
-    std::vector<std::unordered_map<uint64_t, size_t>> counter{
+    std::vector<std::unordered_map<Id::T, size_t>> counter{
         occurenceCounts.size()};
     size_t elementCounter = 0;
     for (auto& [idTable, localVocab] : result.idTables()) {
@@ -585,7 +589,7 @@ TEST(CartesianProductJoinLazy, lazyTableTurnsOutEmpty) {
   auto* qec = ad_utility::testing::getQec();
   IdTable nonEmpty = makeIdTableFromVector({{1}});
   IdTable empty{1, ad_utility::testing::makeAllocator()};
-  CartesianProductJoin::Children children{};
+  CartesianProductJoin::Children children{qec->getAllocator()};
   children.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, std::move(nonEmpty),
       std::vector<std::optional<Variable>>{{Variable{"?a"}}}));
@@ -608,7 +612,7 @@ TEST(CartesianProductJoinLazy, lazyTableTurnsOutEmptyWithEmptyGenerator) {
   auto* qec = ad_utility::testing::getQec();
   IdTable nonEmpty = makeIdTableFromVector({{1}});
   IdTable empty{1, ad_utility::testing::makeAllocator()};
-  CartesianProductJoin::Children children{};
+  CartesianProductJoin::Children children{qec->getAllocator()};
   children.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, std::move(nonEmpty),
       std::vector<std::optional<Variable>>{{Variable{"?a"}}}));
@@ -673,7 +677,7 @@ TEST(CartesianProductJoin, createLazyConsumerKeepsChildResultsAlive) {
   //
   // NOTE: The `CartesianProductJoin` sorts its children by size estimate,
   // and consumes only the child with the largest size estimate lazily.
-  CartesianProductJoin::Children children;
+  CartesianProductJoin::Children children{qec->getAllocator()};
   IdTable materializedInput = makeIdTableFromVector({{1}, {2}, {3}});
   children.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, materializedInput.clone(), Vars{Variable{"?a"}}));
@@ -714,7 +718,7 @@ TEST(CartesianProductJoin, createLazyConsumerKeepsChildResultsAlive) {
 // _____________________________________________________________________________
 TEST(CartesianProductJoin, clone) {
   auto qec = getQec();
-  std::vector<std::shared_ptr<QueryExecutionTree>> subtrees;
+  CartesianProductJoin::Children subtrees{qec->getAllocator()};
   using Vars = std::vector<std::optional<Variable>>;
   subtrees.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{3, 4}}),
@@ -732,7 +736,7 @@ TEST(CartesianProductJoin, childrenAreOrdered) {
   auto* qec = getQec();
   std::mt19937 rng{std::random_device{}()};
   for (size_t i = 0; i < 100; i++) {
-    std::vector<std::shared_ptr<QueryExecutionTree>> children;
+    CartesianProductJoin::Children children{qec->getAllocator()};
     for (size_t j = 0; j < 10; j++) {
       IdTable idTable{1, qec->getAllocator()};
       idTable.resize(j);
@@ -757,9 +761,9 @@ TEST(CartesianProductJoin, childrenAreOrdered) {
 TEST(CartesianProductJoin, recomputationIsPreventedAfterApplyingLimit) {
   using Vars = std::vector<std::optional<Variable>>;
   auto* qec = getQec();
-  // Without supported limit it should always work
+  // When the child does not handle the limit, it should always work
   {
-    std::vector<std::shared_ptr<QueryExecutionTree>> subtrees;
+    CartesianProductJoin::Children subtrees{qec->getAllocator()};
     subtrees.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, makeIdTableFromVector({{3, 4}}),
         Vars{Variable{"?x"}, std::nullopt}));
@@ -773,7 +777,7 @@ TEST(CartesianProductJoin, recomputationIsPreventedAfterApplyingLimit) {
     EXPECT_NO_THROW(join.clone());
     EXPECT_NO_THROW(join.computeResultOnlyForTesting());
 
-    join.applyLimitOffset({1});
+    join.applyLimitOffset({1}, false);
 
     EXPECT_NO_THROW(join.clone());
     EXPECT_NO_THROW(join.computeResultOnlyForTesting());
@@ -781,9 +785,9 @@ TEST(CartesianProductJoin, recomputationIsPreventedAfterApplyingLimit) {
     EXPECT_NO_THROW(join.clone());
     EXPECT_NO_THROW(join.computeResultOnlyForTesting());
   }
-  // With supported limit it should stop working the second time
+  // When the child handles the limit, it should stop working the second time
   {
-    std::vector<std::shared_ptr<QueryExecutionTree>> subtrees;
+    CartesianProductJoin::Children subtrees{qec->getAllocator()};
     subtrees.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, makeIdTableFromVector({{3, 4}}),
         Vars{Variable{"?x"}, std::nullopt}, true));
@@ -798,7 +802,7 @@ TEST(CartesianProductJoin, recomputationIsPreventedAfterApplyingLimit) {
     EXPECT_NO_THROW(join.computeResultOnlyForTesting());
 
     // Should not work with limit
-    join.applyLimitOffset({1});
+    join.applyLimitOffset({1}, false);
 
     EXPECT_NO_THROW(join.clone());
     EXPECT_NO_THROW(join.computeResultOnlyForTesting());
@@ -806,4 +810,103 @@ TEST(CartesianProductJoin, recomputationIsPreventedAfterApplyingLimit) {
     EXPECT_THROW(join.clone(), ad_utility::Exception);
     EXPECT_THROW(join.computeResultOnlyForTesting(), ad_utility::Exception);
   }
+}
+
+// _____________________________________________________________________________
+TEST(CartesianProductJoin, distinctIsPushedDownIntoChildren) {
+  using Vars = std::vector<std::optional<Variable>>;
+  using SC = std::vector<ColumnIndex>;
+  auto qec = getQec();
+
+  auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{0}, {0}, {1}}), Vars{Variable{"?a"}});
+  auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{5}, {5}}), Vars{Variable{"?b"}});
+  auto cartesian = ad_utility::makeExecutionTree<CartesianProductJoin>(
+      qec, CartesianProductJoin::Children{{left, right}, qec->getAllocator()});
+
+  // A `DISTINCT` over all columns is pushed into the children: the root stays a
+  // `CartesianProductJoin`, each child is made distinct, and no `Distinct` is
+  // added on top.
+  auto tree = QueryExecutionTree::createDistinctTree(cartesian, SC{0, 1});
+  ASSERT_TRUE(std::dynamic_pointer_cast<CartesianProductJoin>(
+      tree->getRootOperation()));
+  for (auto* child : tree->getRootOperation()->getChildren()) {
+    EXPECT_TRUE(std::dynamic_pointer_cast<Distinct>(child->getRootOperation()));
+  }
+
+  // `right` (size 2) sorts before `left` (size 3), so the result columns are
+  // `(?b, ?a)` with `?b` deduplicated to `5` and `?a` to `{0, 1}`.
+  EXPECT_EQ(tree->getResult(false)->idTableView(),
+            makeIdTableFromVector({{5, 0}, {5, 1}}));
+}
+
+// _____________________________________________________________________________
+TEST(CartesianProductJoin, distinctIsNoOpWhenChildrenAlreadyDistinct) {
+  using TC = TripleComponent;
+  using SC = std::vector<ColumnIndex>;
+  auto qec = getQec();
+
+  // Each full index scan is distinct over its own three columns, so the
+  // Cartesian product is distinct over all six columns.
+  auto left = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::Enum::PSO,
+      SparqlTripleSimple{TC{Variable{"?s"}}, TC{Variable{"?p"}},
+                         TC{Variable{"?o"}}});
+  auto right = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::Enum::PSO,
+      SparqlTripleSimple{TC{Variable{"?a"}}, TC{Variable{"?b"}},
+                         TC{Variable{"?c"}}});
+  auto cartesian = ad_utility::makeExecutionTree<CartesianProductJoin>(
+      qec, CartesianProductJoin::Children{{left, right}, qec->getAllocator()});
+  ASSERT_EQ(cartesian->getResultWidth(), 6u);
+
+  // `DISTINCT *` is a no-op and returns the tree unchanged.
+  EXPECT_EQ(
+      QueryExecutionTree::createDistinctTree(cartesian, SC{0, 1, 2, 3, 4, 5}),
+      cartesian);
+
+  // If only some columns are covered, the product is not distinct, so the
+  // `DISTINCT` is pushed down (the root stays a `CartesianProductJoin`).
+  auto tree = QueryExecutionTree::createDistinctTree(cartesian, SC{0, 1, 2});
+  EXPECT_NE(tree, cartesian);
+  EXPECT_TRUE(std::dynamic_pointer_cast<CartesianProductJoin>(
+      tree->getRootOperation()));
+}
+
+// _____________________________________________________________________________
+TEST(CartesianProductJoin, distinctCollapsesChildWithoutSelectedColumn) {
+  using Vars = std::vector<std::optional<Variable>>;
+  using SC = std::vector<ColumnIndex>;
+  auto qec = getQec();
+
+  auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{0}, {0}, {1}}), Vars{Variable{"?a"}});
+  auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{5}, {6}}), Vars{Variable{"?b"}});
+  auto cartesian = ad_utility::makeExecutionTree<CartesianProductJoin>(
+      qec, CartesianProductJoin::Children{{left, right}, qec->getAllocator()});
+
+  // Only `?a` is selected, so the `?b` child contributes no column. It is
+  // collapsed to a single row via `LIMIT 1`, while the `?a` child is made
+  // distinct; no `Distinct` is added on top.
+  SC distinctIndices{cartesian->getVariableColumn(Variable{"?a"})};
+  auto tree =
+      QueryExecutionTree::createDistinctTree(cartesian, distinctIndices);
+  auto cpj =
+      std::dynamic_pointer_cast<CartesianProductJoin>(tree->getRootOperation());
+  ASSERT_TRUE(cpj);
+  for (auto* child : cpj->getChildren()) {
+    if (child->containsVariable(Variable{"?a"})) {
+      EXPECT_TRUE(
+          std::dynamic_pointer_cast<Distinct>(child->getRootOperation()));
+    } else {
+      EXPECT_EQ(child->getRootOperation()->getLimitOffset()._limit, 1u);
+    }
+  }
+
+  // `?b` is collapsed to its first row `5`; `?a` is deduplicated to `{0, 1}`.
+  // The collapsed child (size 1) sorts first, so the columns are `(?b, ?a)`.
+  EXPECT_EQ(tree->getResult(false)->idTableView(),
+            makeIdTableFromVector({{5, 0}, {5, 1}}));
 }

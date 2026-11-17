@@ -5,7 +5,10 @@
 #ifndef QLEVER_SRC_INDEX_VOCABULARYMERGERIMPL_H
 #define QLEVER_SRC_INDEX_VOCABULARYMERGERIMPL_H
 
-#include <future>
+#include <algorithm>
+#include <cstdint>
+#include <limits>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -13,355 +16,279 @@
 #include "backports/algorithm.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/VocabularyMerger.h"
+#include "index/vocabularyMerger/PartialVocabularyFile.h"
+#include "index/vocabularyMerger/SegmentPipeline.h"
+#include "util/Allocator.h"
 #include "util/Exception.h"
+#include "util/GlobalExecutor.h"
 #include "util/HashMap.h"
 #include "util/InputRangeUtils.h"
 #include "util/Log.h"
-#include "util/ParallelMultiwayMerge.h"
-#include "util/ProgressBar.h"
-#include "util/Serializer/ByteBufferSerializer.h"
-#include "util/Serializer/FileSerializer.h"
-#include "util/Serializer/SerializeString.h"
-#include "util/Timer.h"
+#include "util/Math.h"
+#include "util/Views.h"
+#include "util/parallelBlockMerge/InMemoryBlockStorage.h"
+#include "util/parallelBlockMerge/ParallelBlockMerge.h"
+#include "util/serializer/CompressedSerializer.h"
+#include "util/serializer/FileSerializer.h"
+#include "util/serializer/SerializeArrayOrTuple.h"
+#include "util/serializer/SerializeString.h"
+#include "util/serializer/SerializeVector.h"
 
 namespace ad_utility::vocabulary_merger {
-// _________________________________________________________________
-template <typename W, typename C>
-auto mergeVocabulary(const std::string& basename, size_t numFiles, W comparator,
-                     C& internalWordCallback,
-                     ad_utility::MemorySize memoryToUse)
-    -> CPP_ret(VocabularyMetaData)(
-        requires WordComparator<W>&& WordCallback<C>) {
-  VocabularyMerger merger;
-  return merger.mergeVocabulary(basename, numFiles, std::move(comparator),
-                                internalWordCallback, memoryToUse);
+
+// The options of the parallel block merge of the partial vocabularies, see
+// `mergeVocabulary` below. The merge runs on the global thread pool.
+//
+// The chunks are cut such that each of them merges about
+// `VOCAB_MERGER_INPUT_PER_CHUNK` of serialized input (see
+// `PartialVocabularyRunsInput::blockWeight`), and a chunk keeps its slot among
+// the chunks in flight until its output has been consumed (see
+// `VOCAB_MERGER_NUM_BUFFERED_BLOCKS_PER_CHUNK`). The memory of the merge is
+// therefore bounded by the chunks in flight: one decoded block per partial
+// vocabulary plus the output of the chunk for each of them, so their number is
+// capped such that this fits into the `memoryToUse`.
+inline parallelBlockMerge::MergeOptions vocabularyMergeOptions(
+    size_t numPartialVocabularies, size_t numInputBytes,
+    ad_utility::MemorySize memoryToUse) {
+  parallelBlockMerge::MergeOptions options;
+  // The blocks of merged words are cut into segments behind the merge, see
+  // `detail::buildSegment`.
+  options.outputBlockSize = parallelBlockMerge::OutputBlockSize::both(
+      VOCAB_MERGER_WORD_BATCH_SIZE, VOCAB_MERGER_WORD_BATCH_MEMORY_SIZE);
+  options.parallelismHint = ad_utility::globalExecutorNumThreads();
+  const size_t inputPerChunk = VOCAB_MERGER_INPUT_PER_CHUNK.getBytes();
+  const size_t numChunks =
+      std::max<size_t>(1, ad_utility::ceilDiv(numInputBytes, inputPerChunk));
+  options.targetChunksPerThread = std::max<size_t>(
+      1, ad_utility::ceilDiv(numChunks, options.parallelism()));
+  // The blocks in memory are larger than their serialized form: an input
+  // block has an `InputWord` per word next to its bytes, and the output of a
+  // chunk copies the words into `MergedBlock`s, which take less than three
+  // times the serialized size (see `VOCAB_MERGER_NUM_BUFFERED_BLOCKS_PER_CHUNK`
+  // in `index/ConstantsIndexBuilding.h`).
+  constexpr size_t decodedFactor = 3;
+  const uint64_t memoryPerChunk = (std::max<size_t>(numPartialVocabularies, 1) *
+                                       PARTIAL_VOCAB_BLOCK_SIZE.getBytes() +
+                                   inputPerChunk) *
+                                  decodedFactor;
+  // A chunk keeps its slot until the thread behind the merge has taken its
+  // output, and that thread takes the chunks in order. With exactly one slot
+  // per thread, one slow chunk therefore idles the whole pool: the chunks
+  // behind it are done, hold their slots, and no new chunk may start. Several
+  // slots per thread let the merge run ahead of a slow chunk, within the
+  // memory limit.
+  options.maxNumChunksInFlight = std::clamp<size_t>(
+      memoryToUse.getBytes() / memoryPerChunk, 1,
+      VOCAB_MERGER_CHUNKS_IN_FLIGHT_PER_THREAD * options.parallelism());
+  return options;
+}
+
+// The maximal number of segments (see `index/vocabularyMerger/Segment.h`)
+// that are being built or waiting to be committed at the same time: two per
+// thread, so that the pool is never starved. Their memory is bounded by the
+// memory budget of `detail::SegmentPipeline`, which also cuts them small
+// enough that this many of them fit.
+inline size_t maxNumSegmentsInFlight() {
+  return 2 * std::max<size_t>(1, globalExecutorNumThreads());
+}
+
+// Split the `memoryToUse` of the vocabulary merge into the memory of the
+// chunks of the parallel merge (first) and of the data behind the merge
+// (second), see `VOCAB_MERGER_MEMORY_SHARE_OF_CHUNKS`.
+inline std::pair<ad_utility::MemorySize, ad_utility::MemorySize>
+splitMemoryOfVocabularyMerge(ad_utility::MemorySize memoryToUse) {
+  auto forChunks = memoryToUse * VOCAB_MERGER_MEMORY_SHARE_OF_CHUNKS;
+  return {forChunks, memoryToUse - forChunks};
 }
 
 // _________________________________________________________________
-template <typename W, typename C>
-auto VocabularyMerger::mergeVocabulary(const std::string& basename,
-                                       size_t numFiles, W comparator,
-                                       C& wordCallback,
-                                       ad_utility::MemorySize memoryToUse)
-    -> CPP_ret(VocabularyMetaData)(
-        requires WordComparator<W>&& WordCallback<C>) {
-  // Return true iff p1 >= p2 according to the lexicographic order of the IRI
-  // or literal.
-  auto lessThan = [&comparator](const TripleComponentWithIndex& t1,
-                                const TripleComponentWithIndex& t2) {
-    return comparator(t1.iriOrLiteral_, t2.iriOrLiteral_);
+template <typename W>
+auto mergeVocabulary(const std::string& basename, size_t numPartialVocabularies,
+                     W comparator, ParallelWordWriterBase& writer,
+                     ad_utility::MemorySize memoryToUse,
+                     const ad_utility::RegexSet& blankNodeIriRegexes)
+    -> CPP_ret(VocabularyMetaData)(requires WordComparator<W>) {
+  using detail::InputWord;
+  using detail::MergedBlock;
+  // Return true iff `p1` is smaller than `p2` according to the order of the
+  // IRI or literal.
+  auto lessThan = [&comparator](const InputWord& p1, const InputWord& p2) {
+    return comparator(p1.iriOrLiteral(), p2.iriOrLiteral());
   };
-  auto lessThanForQueue = [&lessThan](const QueueWord& p1,
-                                      const QueueWord& p2) {
-    return lessThan(p1.entry_, p2.entry_);
-  };
+  // The index of the partial vocabulary that a merged word comes from is
+  // stored in 32 bits (see `detail::InputWord` and
+  // `detail::SegmentIdMapEntry`). NOTE: This check is done here (and not per
+  // merged word, which would be on the hot path of the merging), because
+  // `partialFileId_` is always one of the indices below.
+  AD_CORRECTNESS_CHECK(numPartialVocabularies <=
+                       std::numeric_limits<uint32_t>::max());
 
-  // Open and prepare all infiles and file-based output vectors.
-  auto makeWordRangeFromFile = [&basename](size_t fileIndex) {
-    ad_utility::serialization::FileReadSerializer infile{
-        absl::StrCat(basename, PARTIAL_VOCAB_WORDS_INFIX, fileIndex)};
-    uint64_t numWords;
-    infile >> numWords;
+  // Merge the partial vocabularies in parallel, see
+  // `util/parallelBlockMerge/ParallelBlockMerge.h`: the words are split into
+  // ranges by the block index of the partial vocabularies, each range is merged
+  // by a chunk of its own on the global thread pool, and this thread receives
+  // the merged blocks in the order of the vocabulary. The blocks stay in
+  // memory, and a chunk keeps its slot until this thread has taken its output,
+  // see `vocabularyMergeOptions`.
+  PartialVocabularyRunsInput input{basename, numPartialVocabularies};
+  const auto inputStatistics = input.statistics();
+  const auto [memoryForChunks, memoryForSegments] =
+      splitMemoryOfVocabularyMerge(memoryToUse);
+  auto options = vocabularyMergeOptions(
+      numPartialVocabularies, inputStatistics.numBytes_, memoryForChunks);
+  const size_t maxSegmentsInFlight = maxNumSegmentsInFlight();
+  AD_LOG_INFO << "Merging " << input.numRuns() << " partial vocabularies ("
+              << inputStatistics.numWords_ << " words in "
+              << inputStatistics.numBlocks_ << " blocks) in "
+              << options.targetNumChunks() << " chunks, using "
+              << options.parallelism() << " threads, up to "
+              << options.maxNumChunksInFlight << " chunks and up to "
+              << maxSegmentsInFlight << " segments in flight ..." << std::endl;
+  auto mergedWords = parallelBlockMerge::parallelBlockMergeToRange<true>(
+      ad_utility::globalExecutor(), std::move(input), lessThan,
+      parallelBlockMerge::makeInMemoryStorageFactory<MergedBlock>(
+          VOCAB_MERGER_NUM_BUFFERED_BLOCKS_PER_CHUNK,
+          /*releaseChunkOnConsumption=*/true),
+      std::move(options));
 
-    return ad_utility::CachingTransformInputRange{
-        ad_utility::integerRange(numWords),
-        [fileIndex, infile{std::move(infile)}](
-            [[maybe_unused]] const std::size_t i) mutable {
-          TripleComponentWithIndex val;
-          infile >> val;
-          return QueueWord{std::move(val), fileIndex};
-        }};
-  };
-  std::vector<decltype(makeWordRangeFromFile(0))> generators;
-  generators.reserve(numFiles);
-
-  for (std::size_t i : ad_utility::integerRange(numFiles)) {
-    generators.push_back(makeWordRangeFromFile(i));
-    idMaps_.emplace_back(absl::StrCat(basename, PARTIAL_VOCAB_IDMAP_INFIX, i));
-  }
-
-  std::vector<QueueWord> sortedBuffer;
-  sortedBuffer.reserve(bufferSize_);
-
-  std::future<void> writeFuture;
-
-  // Some memory (that is hard to measure exactly) is used for the writing of
-  // a batch of merged words, so we only give 80% of the total memory to the
-  // merging. This is very approximate and should be investigated in more
-  // detail.
-  auto mergedWords =
-      ad_utility::parallelMultiwayMerge<QueueWord, true,
-                                        decltype(sizeOfQueueWord)>(
-          0.8 * memoryToUse, std::move(generators), lessThanForQueue);
-  ad_utility::ProgressBar progressBar{metaData_.numWordsTotal(),
-                                      "Words merged: "};
-  for (QueueWord& currentWord : ql::views::join(mergedWords)) {
-    // Accumulate the globally ordered queue words in a buffer.
-    sortedBuffer.push_back(std::move(currentWord));
-
-    if (sortedBuffer.size() >= bufferSize_) {
-      // Wait for the (asynchronous) writing of the last batch of words, and
-      // trigger the (again asynchronous) writing of the next batch.
-      auto writeTask = [this, buffer = std::move(sortedBuffer), &wordCallback,
-                        &lessThan, &progressBar]() {
-        this->writeQueueWordsToIdMap(buffer, wordCallback, lessThan,
-                                     progressBar);
-      };
-      sortedBuffer.clear();
-      sortedBuffer.reserve(bufferSize_);
-      // wait for the last batch
-
-      AD_LOG_TIMING << "A new batch of words is ready" << std::endl;
-      // First wait for the last batch to finish, that way there will be no
-      // race conditions.
-      if (writeFuture.valid()) {
-        writeFuture.get();
-      }
-      writeFuture = std::async(writeTask);
-      // we have moved away our buffer, start over
+  // The stages behind the merge, see `detail::SegmentPipeline`.
+  detail::SegmentPipeline<W> pipeline{
+      writer,
+      partialVocabularyIdMapFilenames(basename, numPartialVocabularies),
+      numPartialVocabularies,
+      blankNodeIriRegexes,
+      comparator,
+      maxSegmentsInFlight,
+      memoryForSegments,
+      VOCAB_MERGER_SEGMENT_NUM_WORDS};
+  for (MergedBlock& block : mergedWords) {
+    // Stop merging as soon as one of the stages has failed, the exception is
+    // rethrown by `finish()` below.
+    if (pipeline.hasFailed()) {
+      break;
     }
+    pipeline.push(std::move(block));
   }
-
-  // wait for the active write tasks to finish
-  if (writeFuture.valid()) {
-    writeFuture.get();
-  }
-
-  // Handle remaining words in the buffer
-  if (!sortedBuffer.empty()) {
-    writeQueueWordsToIdMap(sortedBuffer, wordCallback, lessThan, progressBar);
-  }
-  AD_LOG_INFO << progressBar.getFinalProgressString() << std::flush;
-
-  auto metaData = std::move(metaData_);
-  // completely reset all the inner state
-  clear();
+  VocabularyMetaData metaData = pipeline.finish();
+  writer.finish();
   return metaData;
 }
 
-// ________________________________________________________________________________
-CPP_template_def(typename C, typename L)(
-    requires WordCallback<C> CPP_and_def
-        ranges::predicate<L, TripleComponentWithIndex,
-                          TripleComponentWithIndex>) void VocabularyMerger::
-    writeQueueWordsToIdMap(const std::vector<QueueWord>& buffer,
-                           C& wordCallback, const L& lessThan,
-                           ad_utility::ProgressBar& progressBar) {
-  AD_LOG_TIMING << "Start writing a batch of merged words\n";
-
-  // Smaller grained buffer for the actual inner write.
-  auto bufSize = bufferSize_ / 5;
-  std::future<void> writeFut;
-  std::vector<std::pair<size_t, std::pair<size_t, Id>>> writeBuffer;
-  writeBuffer.reserve(bufSize);
-
-  // Iterate (avoid duplicates).
-  for (auto& top : buffer) {
-    if (!lastTripleComponent_.has_value() ||
-        top.iriOrLiteral() != lastTripleComponent_.value().iriOrLiteral()) {
-      if (lastTripleComponent_.has_value() &&
-          !lessThan(lastTripleComponent_.value(), top.entry_)) {
-        AD_LOG_WARN << "Total vocabulary order violated for "
-                    << lastTripleComponent_->iriOrLiteral() << " and "
-                    << top.iriOrLiteral() << std::endl;
-      }
-      lastTripleComponent_ = TripleComponentWithIndex{
-          top.iriOrLiteral(), top.isExternal(), metaData_.numWordsTotal()};
-
-      // TODO<optimization> If we aim to further speed this up, we could
-      // order all the write requests to _outfile _externalOutfile and all the
-      // idVecs to have a more useful external access pattern.
-
-      // Write the new word to the vocabulary.
-      auto& nextWord = lastTripleComponent_.value();
-      if (nextWord.isBlankNode()) {
-        nextWord.index_ = metaData_.getNextBlankNodeIndex();
-      } else {
-        nextWord.index_ =
-            wordCallback(nextWord.iriOrLiteral(), nextWord.isExternal());
-        metaData_.addWord(top.iriOrLiteral(), nextWord.index_);
-      }
-      if (progressBar.update()) {
-        AD_LOG_INFO << progressBar.getProgressString() << std::flush;
-      }
-    } else {
-      // If a word appears with different values for `isExternal`, then we
-      // externalize it.
-      bool& external = lastTripleComponent_.value().isExternal();
-      external = external || top.isExternal();
-    }
-    const auto& word = lastTripleComponent_.value();
-    Id targetId =
-        word.isBlankNode()
-            ? Id::makeFromBlankNodeIndex(BlankNodeIndex::make(word.index_))
-            : Id::makeFromVocabIndex(VocabIndex::make(word.index_));
-    // Write pair of local and global ID to buffer.
-    writeBuffer.emplace_back(top.partialFileId_, std::pair{top.id(), targetId});
-
-    if (writeBuffer.size() >= bufSize) {
-      auto task = [this, buffer = std::move(writeBuffer)]() {
-        this->doActualWrite(buffer);
-      };
-      if (writeFut.valid()) {
-        writeFut.get();
-      }
-      writeFut = std::async(task);
-      writeBuffer.clear();
-      writeBuffer.reserve(bufSize);
-    }
-  }
-
-  if (writeFut.valid()) {
-    writeFut.get();
-  }
-
-  if (!writeBuffer.empty()) {
-    doActualWrite(writeBuffer);
-  }
-}
-
-// ____________________________________________________________________________
-inline void VocabularyMerger::doActualWrite(
-    const std::vector<std::pair<size_t, std::pair<size_t, Id>>>& buffer) {
-  for (const auto& [id, value] : buffer) {
-    idMaps_[id].push_back(
-        {Id::makeFromVocabIndex(VocabIndex::make(value.first)), value.second});
-  }
-}
-
 // ____________________________________________________________________________________________________________
-inline HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& els) {
+inline HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec& entries) {
   HashMap<uint64_t, uint64_t> res;
-  res.reserve(2 * els.size());
-  bool first = true;
-  std::string_view lastWord;
-  size_t nextWordId = 0;
-  for (auto& [word, idAndSplitVal] : els) {
-    auto& id = idAndSplitVal.id_;
-    if (!first && lastWord != word) {
+  res.reserve(entries.size());
+  std::optional<std::string_view> lastWord;
+  // This value will overflow on the first entry.
+  size_t nextWordId = -1;
+  for (auto& entry : entries) {
+    auto& indexAndFlag = entry.indexAndFlag_;
+    auto index = indexAndFlag.index();
+    if (lastWord != entry.word_) {
       nextWordId++;
-      lastWord = word;
+      lastWord = entry.word_;
     }
-    AD_CONTRACT_CHECK(!res.count(id));
-    res[id] = nextWordId;
-    id = nextWordId;
-    first = false;
+    auto inserted = res.try_emplace(index, nextWordId).second;
+    AD_CORRECTNESS_CHECK(inserted);
+    indexAndFlag = PartialVocabIndexWithExternalFlag{nextWordId,
+                                                     indexAndFlag.isExternal()};
   }
   return res;
 }
 
+// The serializer that is used to write the triples that were mapped using a
+// single partial vocabulary to disk (see `writeMappedIdsToFile` below).
+using TripleWriter = ad_utility::serialization::ZstdWriteSerializer<
+    ad_utility::serialization::FileWriteSerializer>;
+
+// The counterpart of `TripleWriter` that reads those triples back (see
+// `readMappedIdsFromFile` below).
+using TripleReader = ad_utility::serialization::ZstdReadSerializer<
+    ad_utility::serialization::FileReadSerializer>;
+
 // ________________________________________________________________________________________________________
-template <typename T>
-inline void writeMappedIdsToExtVec(
-    const T& input, const ad_utility::HashMap<uint64_t, uint64_t>& map,
-    std::unique_ptr<TripleVec>* writePtr) {
-  auto& vec = *(*writePtr);
-  for (const auto& curTriple : input) {
-    std::array<Id, NumColumnsIndexBuilding> mappedTriple;
-    // for all triple elements find their mapping from partial to global ids
-    for (size_t k = 0; k < NumColumnsIndexBuilding; ++k) {
-      if (curTriple[k].getDatatype() != Datatype::VocabIndex) {
-        mappedTriple[k] = curTriple[k];
+inline void writeMappedIdsToFile(
+    std::vector<std::array<Id, NumColumnsIndexBuilding>>& input,
+    const HashMap<uint64_t, uint64_t>& map, const std::string& filename) {
+  for (auto& curTriple : input) {
+    for (Id& id : curTriple) {
+      if (id.getDatatype() != Datatype::VocabIndex) {
         continue;
       }
-      auto iterator = map.find(curTriple[k].getVocabIndex().get());
-      if (iterator == map.end()) {
-        AD_LOG_ERROR << "not found in partial local vocabulary: "
-                     << curTriple[k] << std::endl;
-        AD_FAIL();
-      }
-      mappedTriple[k] =
-          Id::makeFromVocabIndex(VocabIndex::make(iterator->second));
+      // for all triple elements find their mapping from partial to global ids
+      auto iterator = map.find(id.getVocabIndex().get());
+      AD_CORRECTNESS_CHECK(iterator != map.end(), "VocabIndex ",
+                           id.getVocabIndex().get(),
+                           " not found in mapping for partial vocabulary");
+      id = Id::makeFromVocabIndex(VocabIndex::make(iterator->second));
     }
-    vec.push(mappedTriple);
   }
+  TripleWriter writer{ad_utility::serialization::FileWriteSerializer{filename}};
+  // Serialize the whole batch as a single vector. This prepends the number of
+  // triples, so that `readMappedIdsFromFile` can read back exactly this batch
+  // without any external bookkeeping.
+  writer << input;
+  // Flush the remaining buffered triples and close the file, so that it can be
+  // read back.
+  writer.close();
+}
+
+// ________________________________________________________________________________________________________
+inline IdTableStatic<NumColumnsIndexBuilding> readMappedIdsFromFile(
+    const std::string& filename) {
+  TripleReader reader{ad_utility::serialization::FileReadSerializer{filename}};
+  // The triples were written as a single vector, so their number precedes them
+  // (see `writeMappedIdsToFile` above).
+  //
+  // NOTE: We deliberately read the triples one by one instead of deserializing
+  // them into a `std::vector` (`reader >> triples`) and copying that into the
+  // `IdTable`. The vector and the table would be alive at the same time, which
+  // would double the memory footprint of this step.
+  size_t numTriples;
+  reader >> numTriples;
+  IdTableStatic<NumColumnsIndexBuilding> triples{
+      ad_utility::makeUnlimitedAllocator<Id>()};
+  triples.reserve(numTriples);
+  for ([[maybe_unused]] size_t idx : ad_utility::integerRange(numTriples)) {
+    std::array<Id, NumColumnsIndexBuilding> triple;
+    reader >> triple;
+    triples.push_back(triple);
+  }
+  return triples;
 }
 
 // _________________________________________________________________________________________________________
-inline void writePartialVocabularyToFile(const ItemVec& els,
+inline void writePartialVocabularyToFile(const ItemVec& entries,
                                          const std::string& fileName) {
   AD_LOG_DEBUG << "Writing partial vocabulary to: " << fileName << "\n";
-  ad_utility::serialization::ByteBufferWriteSerializer byteBuffer;
-  byteBuffer.reserve(1'000'000'000);
-  ad_utility::serialization::FileWriteSerializer serializer{fileName};
-  uint64_t size = els.size();  // really make sure that this has 64bits;
-  serializer << size;
-  for (const auto& [word, idAndSplitVal] : els) {
-    // When merging the vocabulary, we need the actual word, the (internal) id
-    // we have assigned to this word, and the information, whether this word
-    // belongs to the internal or external vocabulary.
-    const auto& [id, splitVal] = idAndSplitVal;
-    byteBuffer << word;
-    byteBuffer << splitVal.isExternalized_;
-    byteBuffer << id;
+  PartialVocabularyWriter writer{fileName};
+  for (const auto& entry : entries) {
+    writer(entry.word_, entry.indexAndFlag_);
   }
-  {
-    ad_utility::TimeBlockAndLog t{"performing the actual write"};
-    serializer.serializeBytes(byteBuffer.data().data(),
-                              byteBuffer.data().size());
-    serializer.close();
-  }
+  writer.finish();
   AD_LOG_DEBUG << "Done writing partial vocabulary\n";
 }
 
 // __________________________________________________________________________________________________
-inline ItemVec vocabMapsToVector(ItemMapArray& map) {
-  ItemVec els;
-  std::vector<size_t> offsets;
-  size_t totalEls =
-      std::accumulate(map.begin(), map.end(), 0,
-                      [&offsets](const auto& x, const auto& y) mutable {
-                        offsets.push_back(x);
-                        return x + y.map_.size();
-                      });
-  els.resize(totalEls);
-  std::vector<std::future<void>> futures;
-  size_t i = 0;
-  for (auto& singleMap : map) {
-    futures.push_back(
-        std::async(std::launch::async, [&singleMap, &els, &offsets, i] {
-          using T = ItemVec::value_type;
-          ql::ranges::transform(singleMap.map_, els.begin() + offsets[i],
-                                [](auto& el) -> T {
-                                  return {el.first, std::move(el.second)};
-                                });
-        }));
-    ++i;
-  }
-  for (auto& fut : futures) {
-    fut.get();
-  }
-
-  return els;
-}
-
-// _______________________________________________________________________________________________________________________
-template <class StringSortComparator>
-void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp,
-                     const bool doParallelSort) {
-  auto& els = *vecPtr;
-  if constexpr (USE_PARALLEL_SORT) {
-    if (doParallelSort) {
-      ad_utility::parallel_sort(ql::ranges::begin(els), ql::ranges::end(els),
-                                comp, ad_utility::parallel_tag(10));
-    } else {
-      ql::ranges::sort(els, comp);
-    }
-  } else {
-    ql::ranges::sort(els, comp);
-    (void)doParallelSort;  // avoid compiler warning for unused value.
-  }
+inline ItemVec vocabMapsToVector(const ItemMapAndBuffer& map) {
+  ItemVec entries;
+  entries.resize(map.map_.size());
+  using T = ItemVec::value_type;
+  ql::ranges::transform(map.map_, entries.begin(),
+                        [](auto& el) -> T { return {el.first, el.second}; });
+  return entries;
 }
 
 // _____________________________________________________________________
-inline ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(
+inline ad_utility::HashMap<VocabIndex, Id> IdMapFromPartialIdMapFile(
     const std::string& filename) {
-  ad_utility::HashMap<Id, Id> res;
   auto vec = getIdMapFromFile(filename);
-  for (const auto& [partialId, globalId] : vec) {
-    res[partialId] = globalId;
+  ad_utility::HashMap<VocabIndex, Id> map;
+  map.reserve(vec.size());
+  for (const auto& entry : vec) {
+    map.emplace(entry.localIndex_, entry.globalId_);
   }
-  return res;
+  return map;
 }
 }  // namespace ad_utility::vocabulary_merger
 

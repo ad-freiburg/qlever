@@ -7,6 +7,7 @@
 
 #include "backports/algorithm.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
+#include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 
 namespace sparqlExpression {
@@ -16,14 +17,15 @@ SparqlExpressionPimpl::SparqlExpressionPimpl(
     std::shared_ptr<SparqlExpression>&& pimpl, std::string descriptor)
     : _pimpl{std::move(pimpl)} {
   _pimpl->descriptor() = std::move(descriptor);
-};
+}
 
 // ___________________________________________________________________________
 SparqlExpressionPimpl::~SparqlExpressionPimpl() = default;
 
 // ___________________________________________________________________________
-std::vector<const Variable*> SparqlExpressionPimpl::containedVariables() const {
-  return _pimpl->containedVariables();
+std::vector<const Variable*> SparqlExpressionPimpl::containedVariables(
+    bool excludeExists) const {
+  return _pimpl->containedVariables(excludeExists);
 }
 
 // ____________________________________________________________________________
@@ -68,6 +70,38 @@ bool SparqlExpressionPimpl::isResultAlwaysDefined(
   return _pimpl->isResultAlwaysDefined(variableToColumnMap);
 }
 
+// ___________________________________________________________________________
+std::vector<SparqlExpressionPimpl> SparqlExpressionPimpl::splitConjunction()
+    const {
+  std::vector<SparqlExpressionPimpl> result;
+  auto split = [this, &result](SparqlExpression& expression,
+                               auto& self) -> void {
+    if (isAndExpression(expression)) {
+      for (auto& child : expression.children()) {
+        self(*child, self);
+      }
+      return;
+    }
+    // The aliasing constructor of `std::shared_ptr` keeps the complete tree
+    // alive as long as the conjunct is used.
+    result.push_back(SparqlExpressionPimpl{
+        std::shared_ptr<SparqlExpression>{_pimpl, &expression},
+        expression.descriptor()});
+  };
+  split(*_pimpl, split);
+  return result;
+}
+
+// ___________________________________________________________________________
+bool SparqlExpressionPimpl::isDeterministic() const {
+  return _pimpl->isDeterministic();
+}
+
+// ___________________________________________________________________________
+std::optional<TripleComponent> SparqlExpressionPimpl::getConstantValue() const {
+  return _pimpl->getConstantValue();
+}
+
 // ____________________________________________________________________________
 const std::string& SparqlExpressionPimpl::getDescriptor() const {
   return _pimpl->descriptor();
@@ -102,13 +136,19 @@ auto SparqlExpressionPimpl::getEstimatesForFilterExpression(
 
 //_____________________________________________________________________________
 std::vector<PrefilterExprVariablePair>
-SparqlExpressionPimpl::getPrefilterExpressionForMetadata() const {
-  return _pimpl->getPrefilterExpressionForMetadata();
+SparqlExpressionPimpl::getPrefilterExpressionForMetadata(
+    const LocalVocabContext& context) const {
+  return _pimpl->getPrefilterExpressionForMetadata(context);
 }
 
 // _____________________________________________________________________________
 bool SparqlExpressionPimpl::containsAggregate() const {
   return _pimpl->containsAggregate();
+}
+
+// _____________________________________________________________________________
+bool SparqlExpressionPimpl::readsAllVisibleColumns() const {
+  return _pimpl->readsAllVisibleColumns();
 }
 
 // ______________________________________________________________________________

@@ -10,7 +10,7 @@
 #include <util/geo/Geo.h>
 #include <util/log/Log.h>
 
-#include "global/ValueId.h"
+#include "global/Id.h"
 #include "index/Index.h"
 
 namespace ad_utility::detail::parallel_wkt_parser {
@@ -24,11 +24,13 @@ struct SpatialJoinParseJob {
   size_t line;
   bool side;
   std::string wkt;
+  std::optional<BoundingBox> boundingBox;
 };
 
 // Compare two `SpatialJoinParseJob` objects. The member attribute `wkt` is used
 // only as an internal buffer during processing and is otherwise empty,
-// therefore it is not compared here.
+// therefore it is not compared here. The `boundingBox` is used for internal
+// prefiltering and is therefore also not compared here.
 inline bool operator==(const SpatialJoinParseJob& a,
                        const SpatialJoinParseJob& b) {
   return a.line == b.line && a.valueId == b.valueId && a.side == b.side;
@@ -43,17 +45,28 @@ class WKTParser : public sj::WKTParserBase<SpatialJoinParseJob> {
             const std::optional<::util::geo::DBox>& prefilterLatLngBox,
             const Index& index);
 
+  // Stop the worker threads. The destructor of `WKTParserBase` does this as
+  // well, but only after the members of this class are destroyed, and the
+  // threads use them until they stop. This matters if the parsing ends
+  // without `done()`, for example because the query was cancelled.
+  ~WKTParser();
+
   // Enqueue a new row from the input table (given the `ValueId` of the
   // geometry: `GeoPoint` or `VocabIndex` or `LocalVocabIndex`, the `rowIndex`
   // in the input table `id` and whether the geometry should be assigned to the
-  // left or right `side` of the spatial join)
-  void addValueIdToQueue(ValueId valueId, size_t rowIndex, bool side);
+  // left or right `side` of the spatial join). If available as part of the
+  // `IdTable`, this function accepts a precomputed bounding box for
+  // prefiltering.
+  void addValueIdToQueue(ValueId valueId, size_t rowIndex, bool side,
+                         std::optional<BoundingBox> boundingBox);
 
   // Accumulate the counters across all threads. They count the number of
   // geometries skipped by bounding box prefilter and the number of parsed (that
   // is, not skipped) geometries respectively.
   size_t getPrefilterCounter();
   size_t getParseCounter();
+  // The number of parsed geometries that were skipped as invalid WKT is given
+  // by `getNumInvalid` of the base class.
 
  protected:
   void processQueue(size_t t) override;

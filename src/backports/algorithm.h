@@ -18,11 +18,13 @@
 // drop-in replacements for `ql::ranges` and `std::views`. In C++20 mode (when
 // the `QLEVER_CPP_17` macro is not used), these namespaces are simply aliases
 // for `ql::ranges` and `std::views`. In C++17 mode they contain the ranges and
-// views from Erice Niebler's `range-v3` library. NOTE: `ql::ranges::unique`
-// currently doesn't work, because the interface to this function is different
-// in both implementations. NOTE: There might be other caveats which we are
-// currently not aware of, because they only affect functions that we currently
-// don't use. For those, the following header can be expanded in the future.
+// views from Erice Niebler's `range-v3` library. NOTE: `ql::ranges::unique` and
+// `ql::ranges::partition` currently don't work, because the interface to these
+// functions is different in both implementations (`range-v3` returns an
+// iterator where `std::ranges` returns a `subrange`). NOTE: There might be
+// other caveats which we are currently not aware of, because they only affect
+// functions that we currently don't use. For those, the following header can be
+// expanded in the future.
 #ifndef QLEVER_CPP_17
 #include <ranges>
 #endif

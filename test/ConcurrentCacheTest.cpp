@@ -81,6 +81,45 @@ using SimpleConcurrentLruCache =
 
 namespace {
 auto returnTrue = [](const auto&) { return true; };
+
+// A very particular helper for the following tests.
+// On construction, it captures the number of references to
+// the `inProgressMap` of the `cache` at the `key`.
+// It then has a method to block until that use count changes,
+// which means that another thread is waiting for the same
+// result.
+struct UseCounter {
+  SimpleConcurrentLruCache& cache_;
+  int key_;
+  long useCount_;
+  explicit UseCounter(SimpleConcurrentLruCache& cache, int key = 0)
+      : cache_{cache},
+        key_{key},
+        useCount_{
+            cache.getStorage().wlock()->_inProgress[key].second.use_count()} {}
+  void waitForChange() {
+    while (cache_.getStorage().wlock()->_inProgress[key_].second.use_count() <=
+           useCount_) {
+      std::this_thread::sleep_for(1ms);
+    }
+  }
+};
+
+// Return a thread that lets the computation that waits for the
+// `mayFinishSignal_` of the `signal` finish as soon as another thread waits for
+// the result of that computation (which is in progress for the `key`). Simply
+// notifying the `signal` before starting the waiting computation would be a
+// race: if the first computation finishes (or fails) before the second one
+// starts, then the second one does not wait for the first one, but finds the
+// result in the cache or computes it itself.
+[[nodiscard]] ad_utility::JThread allowToFinishOnceWaitedFor(
+    SimpleConcurrentLruCache& cache, int key, StartStopSignal& signal) {
+  return ad_utility::JThread{
+      [useCounter = UseCounter{cache, key}, &signal]() mutable {
+        useCounter.waitForChange();
+        signal.mayFinishSignal_.notify();
+      }};
+}
 }  // namespace
 
 // _____________________________________________________________________________
@@ -107,7 +146,9 @@ TEST(ConcurrentCache, sequentialComputation) {
   ASSERT_EQ("3"s, *result2._resultPointer);
   ASSERT_EQ(result2._cacheStatus, ad_utility::CacheStatus::cachedNotPinned);
   ASSERT_EQ(result._resultPointer, result2._resultPointer);
+#ifndef _QLEVER_NO_TIMING_TESTS
   ASSERT_LE(t.msecs(), 5ms);
+#endif
   ASSERT_EQ(1ul, a.numNonPinnedEntries());
   ASSERT_EQ(0ul, a.numPinnedEntries());
   ASSERT_TRUE(a.getStorage().wlock()->_inProgress.empty());
@@ -138,7 +179,9 @@ TEST(ConcurrentCache, sequentialPinnedComputation) {
   ASSERT_EQ("3"s, *result2._resultPointer);
   ASSERT_EQ(result2._cacheStatus, ad_utility::CacheStatus::cachedPinned);
   ASSERT_EQ(result._resultPointer, result2._resultPointer);
+#ifndef _QLEVER_NO_TIMING_TESTS
   ASSERT_LE(t.msecs(), 5ms);
+#endif
   ASSERT_EQ(1ul, a.numPinnedEntries());
   ASSERT_EQ(0ul, a.numNonPinnedEntries());
   ASSERT_TRUE(a.getStorage().wlock()->_inProgress.empty());
@@ -170,7 +213,9 @@ TEST(ConcurrentCache, sequentialPinnedUpgradeComputation) {
   ASSERT_EQ("3"s, *result2._resultPointer);
   ASSERT_EQ(result2._cacheStatus, ad_utility::CacheStatus::cachedNotPinned);
   ASSERT_EQ(result._resultPointer, result2._resultPointer);
+#ifndef _QLEVER_NO_TIMING_TESTS
   ASSERT_LE(t.msecs(), 5ms);
+#endif
   ASSERT_EQ(1ul, a.numPinnedEntries());
   ASSERT_EQ(0ul, a.numNonPinnedEntries());
   ASSERT_TRUE(a.getStorage().wlock()->_inProgress.empty());
@@ -191,7 +236,7 @@ TEST(ConcurrentCache, concurrentComputation) {
   ASSERT_EQ(1ul, a.getStorage().wlock()->_inProgress.size());
   ASSERT_TRUE(a.getStorage().wlock()->_inProgress.contains(3));
 
-  signal.mayFinishSignal_.notify();
+  auto allowToFinish = allowToFinishOnceWaitedFor(a, 3, signal);
   // this call waits for the background task to compute, and then fetches the
   // result. After this call completes, nothing is in progress and the result
   // is cached.
@@ -220,7 +265,7 @@ TEST(ConcurrentCache, concurrentPinnedComputation) {
   ASSERT_EQ(1ul, a.getStorage().wlock()->_inProgress.size());
   ASSERT_TRUE(a.getStorage().wlock()->_inProgress.contains(3));
 
-  signal.mayFinishSignal_.notify();
+  auto allowToFinish = allowToFinishOnceWaitedFor(a, 3, signal);
 
   // this call waits for the background task to compute, and then fetches the
   // result. After this call completes, nothing is in progress and the result
@@ -251,7 +296,7 @@ TEST(ConcurrentCache, concurrentPinnedUpgradeComputation) {
   ASSERT_EQ(1ul, a.getStorage().wlock()->_inProgress.size());
   ASSERT_TRUE(a.getStorage().wlock()->_inProgress.contains(3));
 
-  signal.mayFinishSignal_.notify();
+  auto allowToFinish = allowToFinishOnceWaitedFor(a, 3, signal);
 
   // this call waits for the background task to compute, and then fetches the
   // result. After this call completes, nothing is in progress and the result
@@ -286,7 +331,7 @@ TEST(ConcurrentCache, abort) {
   ASSERT_EQ(1ul, a.getStorage().wlock()->_inProgress.size());
   ASSERT_TRUE(a.getStorage().wlock()->_inProgress.contains(3));
 
-  signal.mayFinishSignal_.notify();
+  auto allowToFinish = allowToFinishOnceWaitedFor(a, 3, signal);
   ASSERT_THROW(compute(), ad_utility::WaitedForResultWhichThenFailedException);
   ASSERT_EQ(0ul, a.numNonPinnedEntries());
   ASSERT_EQ(0ul, a.numPinnedEntries());
@@ -311,7 +356,7 @@ TEST(ConcurrentCache, abortPinned) {
   ASSERT_EQ(0ul, a.numPinnedEntries());
   ASSERT_EQ(1ul, a.getStorage().wlock()->_inProgress.size());
   ASSERT_TRUE(a.getStorage().wlock()->_inProgress.contains(3));
-  signal.mayFinishSignal_.notify();
+  auto allowToFinish = allowToFinishOnceWaitedFor(a, 3, signal);
   ASSERT_THROW(compute(), ad_utility::WaitedForResultWhichThenFailedException);
   ASSERT_EQ(0ul, a.numNonPinnedEntries());
   ASSERT_EQ(0ul, a.numPinnedEntries());
@@ -327,7 +372,7 @@ TEST(ConcurrentCache, cacheStatusToString) {
   EXPECT_EQ(toString(notInCacheAndNotComputed), "not_in_cache_not_computed");
 
   auto outOfBounds = static_cast<ad_utility::CacheStatus>(
-      static_cast<int>(notInCacheAndNotComputed) + 1);
+      qlever::enumSize<ad_utility::CacheStatus>);
   EXPECT_ANY_THROW(toString(outOfBounds));
 }
 
@@ -344,29 +389,6 @@ TEST(ConcurrentCache, isNotCachedIfUnsuitable) {
   EXPECT_EQ(cache.numPinnedEntries(), 0);
   EXPECT_THAT(result._resultPointer, Pointee("abc"s));
 }
-
-namespace {
-// A very particular helper for the following tests.
-// On construction, it captures the number of references to
-// the `inProgressMap` of the `cache` at the key `0`.
-// It then has a method to block until that use count changes,
-// which means that another thread is waiting for the same
-// result.
-struct UseCounter {
-  SimpleConcurrentLruCache& cache_;
-  long useCount_;
-  explicit UseCounter(SimpleConcurrentLruCache& cache)
-      : cache_{cache},
-        useCount_{
-            cache.getStorage().wlock()->_inProgress[0].second.use_count()} {}
-  void waitForChange() {
-    while (cache_.getStorage().wlock()->_inProgress[0].second.use_count() <=
-           useCount_) {
-      std::this_thread::sleep_for(1ms);
-    }
-  }
-};
-}  // namespace
 
 // _____________________________________________________________________________
 TEST(ConcurrentCache, isNotCachedIfUnsuitableWhenWaitingForPendingComputation) {
@@ -485,6 +507,88 @@ TEST(ConcurrentCache,
       ad_utility::Exception);
 }
 
+// Regression test for a race in `moveFromInProgressToCache`. A fresh
+// computation could end up inserting a key that a concurrent thread had already
+// inserted into the cache, which used to crash with "Trying to insert a cache
+// key which was already present". The deterministic interleaving is:
+//
+// 1. Thread `A` computes the key, but its result is unsuitable for caching, so
+//    it deregisters the key from `_inProgress` and signals
+//    `finish(nullptr)` without inserting anything into the cache.
+// 2. Thread `W` was waiting for `A`. Because `A` finished with a null result
+//    (rather than throwing, which would make `W` throw as well), `W` falls
+//    back to computing the result itself and inserts it into the cache via
+//    the guarded `tryInsertIfNotPresent`.
+// 3. Thread `C` starts a fresh computation of the same key in the window
+//    after `A` deregistered the key but before `W` inserted it. `C`
+//    becomes the "must compute" thread and eventually calls
+//    `moveFromInProgressToCache` with the key already present in the cache.
+//
+// Before the fix, step 3 crashed; now the insert is skipped.
+TEST(ConcurrentCache, moveFromInProgressToCacheSkipsAlreadyPresentKey) {
+  SimpleConcurrentLruCache cache{};
+  auto returnFalse = [](const auto&) { return false; };
+
+  // The three computations are gated by their own signals so that we can force
+  // the exact interleaving described above.
+  StartStopSignal signalA;
+  StartStopSignal signalW;
+  StartStopSignal signalC;
+
+  // Step 1: `A` registers the key in `_inProgress`, but its result is
+  // unsuitable for the cache.
+  auto futA = std::async(std::launch::async, [&]() {
+    return cache.computeOnce(0, waiting_function("a"s, 0, &signalA), false,
+                             returnFalse);
+  });
+  signalA.hasStartedSignal_.wait();
+
+  // Step 2: `W` starts and waits for `A`'s in-progress computation.
+  UseCounter useCounter{cache};
+  auto futW = std::async(std::launch::async, [&]() {
+    return cache.computeOnce(0, waiting_function("w"s, 0, &signalW), false,
+                             returnTrue);
+  });
+  useCounter.waitForChange();
+
+  // Let `A` finish. Because its result is unsuitable, it deregisters the key
+  // and signals `finish(nullptr)`, so `W` falls back to computing the result
+  // itself. `W`'s fallback computation then blocks on `signalW`, before it
+  // inserts.
+  signalA.mayFinishSignal_.notify();
+  signalW.hasStartedSignal_.wait();
+
+  // Step 3: `C` now starts a fresh computation. Since the key is no longer in
+  // `_inProgress` and not yet in the cache, `C` becomes the "must compute"
+  // thread. It blocks on `signalC`, before calling `moveFromInProgressToCache`.
+  auto futC = std::async(std::launch::async, [&]() {
+    return cache.computeOnce(0, waiting_function("c"s, 0, &signalC), false,
+                             returnTrue);
+  });
+  signalC.hasStartedSignal_.wait();
+
+  // Let `W` finish: it inserts the key into the cache.
+  signalW.mayFinishSignal_.notify();
+  auto resultW = futW.get();
+  EXPECT_THAT(resultW._resultPointer, Pointee("w"s));
+  EXPECT_TRUE(cache.cacheContains(0));
+
+  // Let `C` finish: `moveFromInProgressToCache` now finds the key already
+  // present. Before the fix this threw; now the insert is skipped.
+  signalC.mayFinishSignal_.notify();
+  EXPECT_NO_THROW(futC.get());
+
+  // `A`'s computation completed normally (its result was just not cached).
+  EXPECT_THAT(futA.get()._resultPointer, Pointee("a"s));
+
+  // The in-progress entry was properly removed and the cache holds `W`'s value.
+  EXPECT_TRUE(cache.getStorage().wlock()->_inProgress.empty());
+  EXPECT_EQ(cache.numNonPinnedEntries(), 1);
+  auto contained = cache.getIfContained(0);
+  ASSERT_TRUE(contained.has_value());
+  EXPECT_THAT(contained->_resultPointer, Pointee("w"s));
+}
+
 // _____________________________________________________________________________
 TEST(ConcurrentCache, testTryInsertIfNotPresentDoesWorkCorrectly) {
   auto hasValue = [](std::string value) {
@@ -540,8 +644,7 @@ TEST(ConcurrentCache, computeButDontStore) {
   // the cache.
   auto alwaysSuitable = [](auto&&) { return true; };
   // Store the element in the cache.
-  cache.computeOnce(
-      42, []() { return "42"; }, false, alwaysSuitable);
+  cache.computeOnce(42, []() { return "42"; }, false, alwaysSuitable);
 
   // The result is read from the cache, so we get "42", not "blubb".
   auto res = cache.computeButDontStore(

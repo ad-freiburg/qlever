@@ -7,15 +7,23 @@
 #include "../QueryPlannerTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/LocalVocabEntryTestHelpers.h"
+#include "../util/OperationTestHelpers.h"
 #include "engine/NamedResultCache.h"
+#include "index/LocalVocabEntry.h"
+
+using ad_utility::testing::colIndices;
+using ad_utility::testing::iriLocalVocabEntry;
 
 namespace {
 TEST(NamedResultCache, basicWorkflow) {
   NamedResultCache cache;
   EXPECT_EQ(cache.numEntries(), 0);
+  EXPECT_FALSE(cache.contains("query-1"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       cache.get("query-1"),
       ::testing::HasSubstr("is not contained in the named result cache"));
+  EXPECT_EQ(cache.getIfContained("query-1"), nullptr);
   auto table = makeIdTableFromVector({{3, 7}, {9, 11}});
   auto table2 = makeIdTableFromVector({{3, 8}, {16, 11}, {39, 14}});
   using V = Variable;
@@ -23,8 +31,9 @@ TEST(NamedResultCache, basicWorkflow) {
                                 {V{"?y"}, makeAlwaysDefinedColumn(1)}};
 
   LocalVocab localVocab;
+  auto* qec = ad_utility::testing::getQec();
   localVocab.getIndexAndAddIfNotContained(
-      ad_utility::triple_component::LiteralOrIri::iriref("<bliBlaBlubb>"));
+      iriLocalVocabEntry("<bliBlaBlubb>", qec->getLocalVocabContext()));
 
   // A matcher for the local vocab
   auto matchLocalVocab =
@@ -37,12 +46,11 @@ TEST(NamedResultCache, basicWorkflow) {
         get, UnorderedElementsAreArray(localVocab.getAllWordsForTesting()));
   };
 
-  auto qec = ad_utility::testing::getQec();
   auto getCacheValue = [&varColMap, &localVocab](const auto& table) {
     return NamedResultCache::Value{
         std::make_shared<const IdTable>(table.clone()),
         varColMap,
-        {1, 0},
+        colIndices({1, 0}),
         localVocab.clone(),
         "cache key",
         std::nullopt};
@@ -56,10 +64,12 @@ TEST(NamedResultCache, basicWorkflow) {
 
     const auto& [outTable, outVarColMap, outSortedOn, outLocalVocab,
                  outCacheKey, outGeoIndex, alloc, blankNodeManager] = *res;
-    EXPECT_THAT(*outTable, matchesIdTable(table));
+    EXPECT_THAT(ExplicitIdTableOperation::viewOf(outTable),
+                matchesIdTable(table));
     EXPECT_THAT(outVarColMap, ::testing::UnorderedElementsAreArray(varColMap));
     EXPECT_THAT(outSortedOn, ::testing::ElementsAre(1, 0));
     EXPECT_THAT(outLocalVocab, matchLocalVocab());
+    EXPECT_TRUE(cache.contains("query-1"));
   }
   // overwrite with a different value
   {
@@ -70,12 +80,13 @@ TEST(NamedResultCache, basicWorkflow) {
 
     const auto& [outTable, outVarColMap, outSortedOn, outLocalVocab,
                  outCacheKey, outGeoIndex, alloc, blankNodeManager] = *res;
-    EXPECT_THAT(*outTable, matchesIdTable(table2));
+    EXPECT_THAT(ExplicitIdTableOperation::viewOf(outTable),
+                matchesIdTable(table2));
     EXPECT_THAT(outVarColMap, ::testing::UnorderedElementsAreArray(varColMap));
     EXPECT_THAT(outSortedOn, ::testing::ElementsAre(1, 0));
     EXPECT_THAT(outLocalVocab, matchLocalVocab());
     auto op = cache.getOperation("query-1", qec);
-    EXPECT_THAT(op->computeResultOnlyForTesting().idTable(),
+    EXPECT_THAT(op->computeResultOnlyForTesting().idTableView(),
                 matchesIdTable(table2));
   }
 
@@ -87,12 +98,15 @@ TEST(NamedResultCache, basicWorkflow) {
   {
     cache.store("query-2", getCacheValue(table2));
     EXPECT_EQ(cache.numEntries(), 2);
+    EXPECT_TRUE(cache.contains("query-2"));
     auto res = cache.get("query-2");
     ASSERT_NE(res, nullptr);
+    EXPECT_EQ(cache.getIfContained("query-2"), res);
 
     const auto& [outTable, outVarColMap, outSortedOn, outLocalVocab,
                  outCacheKey, outGeoIndex, alloc, blankNodeManager] = *res;
-    EXPECT_THAT(*outTable, matchesIdTable(table2));
+    EXPECT_THAT(ExplicitIdTableOperation::viewOf(outTable),
+                matchesIdTable(table2));
     EXPECT_THAT(outVarColMap, ::testing::UnorderedElementsAreArray(varColMap));
     EXPECT_THAT(outSortedOn, ::testing::ElementsAre(1, 0));
     EXPECT_THAT(outLocalVocab, matchLocalVocab());
@@ -101,10 +115,13 @@ TEST(NamedResultCache, basicWorkflow) {
   {
     cache.erase("query-2");
     EXPECT_EQ(cache.numEntries(), 1);
+    EXPECT_FALSE(cache.contains("query-2"));
     AD_EXPECT_THROW_WITH_MESSAGE(
         cache.getOperation("query-2", qec),
         ::testing::HasSubstr("is not contained in the named result cache"));
+    EXPECT_EQ(cache.getIfContained("query-2"), nullptr);
     EXPECT_NO_THROW(cache.getOperation("query-1", qec));
+    EXPECT_NE(cache.getIfContained("query-1"), nullptr);
   }
 
   cache.clear();
@@ -122,30 +139,29 @@ TEST(NamedResultCache, E2E) {
       "SORT BY ?s";
   qec->pinResultWithName() = {"dummyQuery"};
   auto qet = queryPlannerTestHelpers::parseAndPlan(pinnedQuery, qec);
-  [[maybe_unused]] auto pinnedResult = qet.getResult();
+  [[maybe_unused]] auto pinnedResult = qet->getResult();
 
   qec->pinResultWithName() = std::nullopt;
   std::string query =
       "SELECT ?s { SERVICE ql:cached-result-with-name-dummyQuery {}}";
   qet = queryPlannerTestHelpers::parseAndPlan(query, qec);
   // `false` means `not lazy` so `fully materialized`.
-  auto result = qet.getResult(false);
+  auto result = qet->getResult(false);
 
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
   LocalVocab dummyVocab;
-  auto litOrIri =
-      ad_utility::triple_component::LiteralOrIri::iriref("<notInVocab>");
-  auto notInVocab = Id::makeFromLocalVocabIndex(
-      dummyVocab.getIndexAndAddIfNotContained(litOrIri));
+  auto notInVocab =
+      Id::makeFromLocalVocabIndex(dummyVocab.getIndexAndAddIfNotContained(
+          iriLocalVocabEntry("<notInVocab>", qec->getLocalVocabContext())));
   auto expected =
       makeIdTableFromVector({{notInVocab}, {getId("<s>")}, {getId("<s2>")}});
-  EXPECT_THAT(result->idTable(), matchesIdTable(expected));
+  EXPECT_THAT(result->idTableView(), matchesIdTable(expected));
   EXPECT_THAT(result->localVocab().getAllWordsForTesting(),
               ::testing::ElementsAreArray(dummyVocab.getAllWordsForTesting()));
   EXPECT_THAT(result->sortedBy(), ::testing::ElementsAre(0));
   VariableToColumnMap expectedVars{
       {Variable{"?s"}, makeAlwaysDefinedColumn(0)}};
-  EXPECT_THAT(qet.getVariableColumns(),
+  EXPECT_THAT(qet->getVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVars));
 }
 }  // namespace

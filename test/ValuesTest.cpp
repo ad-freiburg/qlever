@@ -13,6 +13,7 @@
 #include "engine/Values.h"
 #include "engine/idTable/IdTable.h"
 #include "util/IndexTestHelpers.h"
+#include "util/LocalVocabEntryTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 
 using TC = TripleComponent;
@@ -64,6 +65,31 @@ TEST(Values, emptyValuesClause) {
   EXPECT_FLOAT_EQ(emptyValuesOp.getMultiplicity(32), 1.0);
 }
 
+// Test that a `VALUES` clause with variables but no rows has multiplicity 1 for
+// every column (the general formula would divide 0 rows by 0 distinct values).
+TEST(Values, emptyValuesClauseWithVariables) {
+  auto testQec = ad_utility::testing::getQec();
+  Values valuesOp(testQec, {{Variable{"?x"}, Variable{"?y"}}, {}});
+  EXPECT_TRUE(valuesOp.knownEmptyResult());
+  EXPECT_EQ(valuesOp.getSizeEstimate(), 0u);
+  EXPECT_FLOAT_EQ(valuesOp.getMultiplicity(0), 1.0f);
+  EXPECT_FLOAT_EQ(valuesOp.getMultiplicity(1), 1.0f);
+}
+
+// A VALUES clause without variables, but with rows (e.g. `VALUES () { () }`)
+// is not empty, its result consists of one empty solution per row.
+TEST(Values, emptyRowsWithoutVariables) {
+  auto testQec = ad_utility::testing::getQec();
+  for (size_t numRows : {1u, 2u}) {
+    Values valuesOp(testQec,
+                    {{}, std::vector<std::vector<TripleComponent>>(numRows)});
+    EXPECT_FALSE(valuesOp.knownEmptyResult());
+    auto result = valuesOp.getResult();
+    EXPECT_EQ(result->idTableView().numRows(), numRows);
+    EXPECT_EQ(result->idTableView().numColumns(), 0u);
+  }
+}
+
 // Check that `computeResult`, given a parsed VALUES clause, computes the
 // correct result table.
 TEST(Values, computeResult) {
@@ -72,11 +98,12 @@ TEST(Values, computeResult) {
                           {TC::UNDEF{}, TC{iri("<y>")}}};
   Values valuesOperation(testQec, {{Variable{"?x"}, Variable{"?y"}}, values});
   auto result = valuesOperation.getResult();
-  const auto& table = result->idTable();
+  const auto& table = result->idTableView();
   Id x = ad_utility::testing::makeGetId(testQec->getIndex())("<x>");
   auto I = ad_utility::testing::IntId;
   auto l = result->localVocab().getIndexOrNullopt(
-      ad_utility::triple_component::LiteralOrIri::iriref("<y>"));
+      ad_utility::testing::localVocabEntryFromStringRepresentation(
+          "<y>", testQec->getLocalVocabContext()));
   ASSERT_TRUE(l.has_value());
   auto U = Id::makeUndefined();
   ASSERT_EQ(table,

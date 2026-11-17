@@ -8,13 +8,17 @@
 #define QLEVER_SRC_ENGINE_NAMEDRESULTCACHE_H
 
 #include <boost/optional.hpp>
+#include <memory>
+#include <utility>
+#include <vector>
 
 #include "engine/ExplicitIdTableOperation.h"
-#include "engine/LocalVocab.h"
 #include "engine/SpatialJoinCachedIndex.h"
+#include "index/LocalVocab.h"
 #include "util/Cache.h"
-#include "util/Serializer/Serializer.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/Synchronized.h"
+#include "util/serializer/Serializer.h"
 
 // Forward declarations
 class QueryExecutionContext;
@@ -30,20 +34,25 @@ class NamedResultCache {
   // geometry index `cachedGeoIndex_` can be precomputed on a column of the
   // result table for spatial joins with a constant (right) child.
   struct Value {
-    std::shared_ptr<const IdTable> result_;
+    // The result can either be an owning `shared_ptr<const IdTable>` or a
+    // non-owning `IdTableView<0>`. The latter is used when the value was
+    // deserialized as a zero-copy view directly into an externally-owned
+    // buffer (e.g. a memory-mapped or in-memory blob); the caller is then
+    // responsible for keeping that buffer alive for at least as long as this
+    // `Value` (and any `ExplicitIdTableOperation`/`Result` derived from it).
+    ExplicitIdTableOperation::IdTableOrView result_;
     VariableToColumnMap varToColMap_;
-    std::vector<ColumnIndex> resultSortedOn_;
+    qlm::vector<ColumnIndex> resultSortedOn_;
     LocalVocab localVocab_;
     std::string cacheKey_;
     std::optional<SpatialJoinCachedIndex> cachedGeoIndex_;
     // std::optional<TensorIndexCachedIndex> cachedTensorIndex_;
 
-    // The following two members (`Allocator` and `BlankNodeManager`) are only
+    // The following two members (`Allocator` and `LocalVocabContext`) are only
     // used when reading a `Value` from a serializer.
     using Allocator = ad_utility::AllocatorWithLimit<Id>;
     std::optional<Allocator> allocatorForSerialization_{std::nullopt};
-    boost::optional<ad_utility::BlankNodeManager&>
-        blankNodeManagerForSerialization_{boost::none};
+    const LocalVocabContext* contextForSerialization_{nullptr};
   };
 
   // The size of a cached result, which currently is just a dummy value of 1,
@@ -59,6 +68,8 @@ class NamedResultCache {
   // We use an LRU cache, where the key is the name of the cached result.
   using Key = std::string;
   using Cache = ad_utility::LRUCache<Key, Value, ValueSizeGetter>;
+  // The entries of the cache, as returned by `getAllEntriesSortedByKey`.
+  using Entries = std::vector<std::pair<Key, std::shared_ptr<const Value>>>;
 
  private:
   // The `cache_` has a non-const `operator[]` which is non-const because it has
@@ -83,9 +94,16 @@ class NamedResultCache {
   // Get the number of cached results.
   size_t numEntries() const;
 
+  // Check if the cache contains a result with the given `name`.
+  bool contains(const Key& name) const;
+
   // Get a pointer to the cached result with the given `name`. If no such
   // result exists, throw an exception.
   std::shared_ptr<const Value> get(const Key& name) const;
+
+  // Get a pointer to the cached result with the given `name`, or `nullptr` if
+  // no such result exists.
+  std::shared_ptr<const Value> getIfContained(const Key& name) const;
 
   // Get a pointer to the cached result with the given `name`, and convert
   // it into an `ExplicitIdTableOperation` that can be used as part of a
@@ -93,14 +111,20 @@ class NamedResultCache {
   std::shared_ptr<ExplicitIdTableOperation> getOperation(
       const Key& name, QueryExecutionContext* qec);
 
+  // Get all entries of the cache, sorted by their key. The order is
+  // deterministic (and not the arbitrary order of the underlying hash map), so
+  // that serializing the same contents twice yields the same bytes, which a
+  // byte-level comparison of serialized caches relies on.
+  Entries getAllEntriesSortedByKey() const;
+
   // NOTE: The following two templated serialization functions are defined in
   // the `NamedResultCacheSerializer.h` header which has to be included by the
   // code that actually calls them to not get any undefined references.
 
   // Write the current contents of the result cache to the `serializer`.
   CPP_template(typename Serializer)(
-      requires ad_utility::serialization::WriteSerializer<
-          Serializer>) void writeToSerializer(Serializer& serializer) const;
+      requires ad_utility::serialization::WriteSerializer<Serializer>)
+  void writeToSerializer(Serializer& serializer) const;
 
   // Read the contents of the result cache from the `serializer`.
   // NOTE: This function has to be called after the index has been loaded, but
@@ -109,11 +133,9 @@ class NamedResultCache {
   // contains a local blank node, and the `blankNodeManager` already has handed
   // out randomly allocated blank nodes, an `AD_CORRECTNESS_CHECK` will fail.
   CPP_template(typename Serializer)(
-      requires ad_utility::serialization::ReadSerializer<
-          Serializer>) void readFromSerializer(Serializer& serializer,
-                                               Value::Allocator allocator,
-                                               ad_utility::BlankNodeManager&
-                                                   blankNodeManager);
+      requires ad_utility::serialization::ReadSerializer<Serializer>)
+  void readFromSerializer(Serializer& serializer, Value::Allocator allocator,
+                          const LocalVocabContext& context);
 };
 
 #endif  // QLEVER_SRC_ENGINE_NAMEDRESULTCACHE_H

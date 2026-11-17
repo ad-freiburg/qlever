@@ -7,6 +7,9 @@
 #include <absl/cleanup/cleanup.h>
 #include <absl/functional/any_invocable.h>
 
+#include <atomic>
+#include <future>
+#include <memory>
 #include <optional>
 #include <queue>
 #include <string>
@@ -37,8 +40,7 @@ class TaskQueue {
 
   ql::atomic_flag startedFinishing_{false};
   ql::atomic_flag finishedFinishing_{false};
-  size_t queueMaxSize_ = 1;
-  Queue queuedTasks_{queueMaxSize_};
+  Queue queuedTasks_;
   std::vector<ad_utility::JThread> threads_;
   std::string name_;
   // Keep track of the time spent waiting in the push/pop operation
@@ -61,8 +63,8 @@ class TaskQueue {
   /// workers are at least as fast as the "pusher", but the pusher is faster
   /// sometimes (which the queue can then accommodate).
   TaskQueue(size_t maxQueueSize, size_t numThreads, std::string name = "")
-      : queueMaxSize_{maxQueueSize}, name_{std::move(name)} {
-    AD_CONTRACT_CHECK(queueMaxSize_ > 0);
+      : queuedTasks_{maxQueueSize}, name_{std::move(name)} {
+    AD_CONTRACT_CHECK(maxQueueSize > 0);
     threads_.reserve(numThreads);
     for (size_t i = 0; i < numThreads; ++i) {
       threads_.emplace_back(&TaskQueue::function_for_thread, this);
@@ -80,6 +82,18 @@ class TaskQueue {
     // If TrackTimes==true, measure the time and add it to pushTime_,
     // else only perform the pushing.
     return executeAndUpdateTimer(action, pushTime_);
+  }
+
+  // Submit a callable and return a `std::future` for its result. The returned
+  // future resolves (or throws) once the task completes.
+  template <typename Func>
+  auto submit(Func&& func)
+      -> std::future<std::invoke_result_t<std::decay_t<Func>>> {
+    using R = std::invoke_result_t<std::decay_t<Func>>;
+    std::packaged_task<R()> task{AD_FWD(func)};
+    auto future = task.get_future();
+    push(std::move(task));
+    return future;
   }
 
   // Blocks until all tasks have been computed. After a call to finish, no more

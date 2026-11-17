@@ -1,12 +1,10 @@
 //  Copyright 2021, University of Freiburg, Chair of Algorithms and Data
 //  Structures. Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
-#include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
 #include <atomic>
 #include <chrono>
-#include <future>
-#include <vector>
 
 #include "util/TaskQueue.h"
 #include "util/ValueIdentity.h"

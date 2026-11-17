@@ -11,7 +11,9 @@
 #include "engine/Join.h"
 #include "engine/PermutationSelector.h"
 #include "index/IndexImpl.h"
-#include "util/JoinAlgorithms/JoinColumnMapping.h"
+#include "index/TripleComponentConversions.h"
+#include "util/ChunkedForLoop.h"
+#include "util/joinAlgorithms/JoinColumnMapping.h"
 
 // Assert that the `type` is a valid value for the `ScanType` enum.
 static void checkType(HasPredicateScan::ScanType type) {
@@ -109,9 +111,9 @@ std::string HasPredicateScan::getDescriptor() const {
   checkType(type_);
   switch (type_) {
     case ScanType::FREE_S:
-      return "HasPredicateScan free subject: " + subject_.toRdfLiteral();
+      return "HasPredicateScan free subject: " + toRdfLiteral(subject_);
     case ScanType::FREE_O:
-      return "HasPredicateScan free object: " + object_.toRdfLiteral();
+      return "HasPredicateScan free object: " + toRdfLiteral(object_);
     case ScanType::FULL_SCAN:
       return "HasPredicateScan full scan";
     case ScanType::SUBQUERY_S:
@@ -138,20 +140,20 @@ size_t HasPredicateScan::getResultWidth() const {
 }
 
 // ___________________________________________________________________________
-std::vector<ColumnIndex> HasPredicateScan::resultSortedOn() const {
+qlm::vector<ColumnIndex> HasPredicateScan::resultSortedOn() const {
   checkType(type_);
   switch (type_) {
     case ScanType::FREE_S:
       // is the lack of sorting here a problem?
-      return {};
+      return qlm::vector<ColumnIndex>{allocator()};
     case ScanType::FREE_O:
-      return {0};
+      return {{0}, allocator()};
     case ScanType::FULL_SCAN:
-      return {0};
+      return {{0}, allocator()};
     case ScanType::SUBQUERY_S:
-      return subtree().resultSortedOn();
+      break;
   }
-  return {};
+  return subtree().resultSortedOn();
 }
 
 // ___________________________________________________________________________
@@ -265,27 +267,25 @@ Result HasPredicateScan::computeResult([[maybe_unused]] bool requestLaziness) {
   auto scan = makePatternScan(
       getExecutionContext(), TripleComponent{Variable{"?_s"}}, Variable{"?_o"});
   auto result = scan->getResult(true);
-  // The `callback` is invoked with a single-value span of the `idTable` if the
-  // result is fully materialized, because it expects a range of `IdTable`s.
-  // Because of caching we can potentially get a fully materialized result here.
+  // The `callback` is invoked with a single-value span of the `idTableView`
+  // if the result is fully materialized. Because of caching we can potentially
+  // get a fully materialized result here.
   auto runOnResult = [&result](auto callback) {
     if (result->isFullyMaterialized()) {
-      return std::invoke(callback, ql::span{&result->idTable(), 1});
+      return std::invoke(callback, ql::span{&result->idTableView(), 1});
     }
     auto idTables = result->idTables();
-    return std::invoke(
-        callback,
-        idTables | ql::views::transform(
-                       [](Result::IdTableVocabPair& pair) -> const auto& {
-                         return pair.idTable_;
-                       }));
+    return std::invoke(callback,
+                       idTables | ql::views::transform(
+                                      [](const Result::IdTableVocabPair& pair) {
+                                        return pair.idTable_.asStaticView<0>();
+                                      }));
   };
 
   auto getId = [this](const TripleComponent tc) {
-    std::optional<Id> id =
-        tc.toValueId(getIndex().getVocab(), getIndex().encodedIriManager());
+    std::optional<Id> id = toValueId(tc, getIndex());
     if (!id.has_value()) {
-      AD_THROW("The entity '" + tc.toRdfLiteral() +
+      AD_THROW("The entity '" + toRdfLiteral(tc) +
                "' required by `ql:has-predicate` is not in the vocabulary.");
     }
     return id.value();
@@ -327,17 +327,20 @@ void HasPredicateScan::computeFreeS(
   // does a lazy scan on the specified predicate and then simply performs a
   // DISTINCT on the result.
   for (const auto& block : hasPattern) {
-    auto patternColumn = block.getColumn(1);
-    auto subjects = block.getColumn(0);
-    for (size_t i : ad_utility::integerRange(block.numRows())) {
-      const auto& pattern = patterns[patternColumn[i].getInt()];
-      for (const auto& predicate : pattern) {
-        if (predicate == objectId) {
-          result.push_back({subjects[i]});
-          break;
-        }
-      }
-    }
+    // A single `block` is the complete input if the pattern scan was read from
+    // the cache, so check for cancellation within the block.
+    ad_utility::chunkedForEach(
+        ::ranges::views::zip(block.getColumn(0), block.getColumn(1)),
+        [&patterns, &result, objectId](const auto& subjectAndPattern) {
+          const auto& [subject, patternId] = subjectAndPattern;
+          for (const auto& predicate : patterns[patternId.getInt()]) {
+            if (predicate == objectId) {
+              result.push_back({subject});
+              break;
+            }
+          }
+        },
+        cancellationChecker());
   }
   *resultTable = std::move(result).toDynamic();
 }
@@ -351,7 +354,7 @@ void HasPredicateScan::computeFreeO(
   auto scan = makePatternScan(getExecutionContext(), std::move(subject),
                               Variable{"?_o"});
   auto result = scan->getResult(false);
-  const auto& hasPattern = result->idTable();
+  const auto& hasPattern = result->idTableView();
   AD_CORRECTNESS_CHECK(hasPattern.numRows() <= 1);
   for (Id patternId : hasPattern.getColumn(0)) {
     const auto& pattern = patterns[patternId.getInt()];
@@ -368,14 +371,16 @@ void HasPredicateScan::computeFullScan(
   IdTableStatic<2> result = std::move(*resultTable).toStatic<2>();
   result.reserve(resultSize);
   for (const auto& block : hasPattern) {
-    auto patternColumn = block.getColumn(1);
-    auto subjects = block.getColumn(0);
-    for (size_t i : ad_utility::integerRange(block.numRows())) {
-      const auto& pattern = patterns[patternColumn[i].getInt()];
-      for (const auto& predicate : pattern) {
-        result.push_back({subjects[i], predicate});
-      }
-    }
+    // See `computeFreeS` for why we check for cancellation within the block.
+    ad_utility::chunkedForEach(
+        ::ranges::views::zip(block.getColumn(0), block.getColumn(1)),
+        [&patterns, &result](const auto& subjectAndPattern) {
+          const auto& [subject, patternId] = subjectAndPattern;
+          for (const auto& predicate : patterns[patternId.getInt()]) {
+            result.push_back({subject, predicate});
+          }
+        },
+        cancellationChecker());
   }
   *resultTable = std::move(result).toDynamic();
 }
@@ -387,13 +392,15 @@ Result HasPredicateScan::computeSubqueryS(
   auto subresult = subtree().getResult();
   auto patternCol = subtreeColIdx();
   auto result = std::move(*dynResult).toStatic<WIDTH>();
-  for (const auto& row : subresult->idTable().asStaticView<WIDTH>()) {
-    const auto& pattern = patterns[row[patternCol].getInt()];
-    for (auto predicate : pattern) {
-      result.push_back(row);
-      result.back()[patternCol] = predicate;
-    }
-  }
+  ad_utility::chunkedForEach(
+      subresult->idTableView().asStaticView<WIDTH>(),
+      [&patterns, &result, patternCol](const auto& row) {
+        for (auto predicate : patterns[row[patternCol].getInt()]) {
+          result.push_back(row);
+          result.back()[patternCol] = predicate;
+        }
+      },
+      cancellationChecker());
   return {std::move(result).toDynamic(), resultSortedOn(),
           subresult->getSharedLocalVocab()};
 }

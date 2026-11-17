@@ -6,12 +6,21 @@
 #ifndef QLEVER_TEST_UTIL_GTESTHELPERS_H
 #define QLEVER_TEST_UTIL_GTESTHELPERS_H
 
+#include <absl/cleanup/cleanup.h>
+#include <absl/strings/str_cat.h>
+#include <absl/strings/str_replace.h>
 #include <gmock/gmock.h>
+#include <re2/re2.h>
 
+#include <chrono>
+#include <memory>
 #include <optional>
+#include <sstream>
+#include <thread>
 
 #include "backports/concepts.h"
 #include "backports/three_way_comparison.h"
+#include "util/Log.h"
 #include "util/SourceLocation.h"
 #include "util/TypeTraits.h"
 #include "util/json.h"
@@ -76,8 +85,9 @@ https://github.com/google/googletest/blob/main/docs/reference/matchers.md#matche
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(statement, errorMessageMatcher, \
                                         std::exception)
 
-// `EXPECT` that the `argument` is equal to `std::nullopt`.
-#define AD_EXPECT_NULLOPT(argument) EXPECT_EQ(argument, std::nullopt)
+// `EXPECT` that the `argument`'s `has_value` method returns `false`. Checking
+// equality to `std::nullopt` does not work with `boost::optional`.
+#define AD_EXPECT_NULLOPT(argument) EXPECT_FALSE(argument.has_value())
 
 // _____________________________________________________________________________
 // Add the given `source_location`  to all gtest failure messages that occur,
@@ -91,17 +101,116 @@ https://github.com/google/googletest/blob/main/docs/reference/matchers.md#matche
 }
 
 // _____________________________________________________________________________
+// Create a unique name for the `ad_utility::ScopedLogLevel` object that
+// `ENFORCE_LOG_LEVEL_OR_SKIP` below declares. The indirection via the
+// `..._IMPL` macro is required so that `__COUNTER__` is expanded before the
+// tokens are pasted together.
+#define AD_SCOPED_LOG_LEVEL_NAME_IMPL(counter) scopedLogLevel##counter##_
+#define AD_SCOPED_LOG_LEVEL_NAME(counter) AD_SCOPED_LOG_LEVEL_NAME_IMPL(counter)
+
+// _____________________________________________________________________________
 // Some tests require a certain log level, e.g. but not only because they
-// capture log output and make assertions about it. This macro can be used to
-// skip such tests if the log level is too low.
-#define SKIP_IF_LOGLEVEL_IS_LOWER(level)                        \
-  if (LOGLEVEL < level) {                                       \
-    GTEST_SKIP() << "This test requires log level of at least " \
-                 << ad_utility::Log::getLevel<level>()          \
-                 << ", but the current log level is "           \
-                 << ad_utility::Log::getLevel<LOGLEVEL>();      \
-  }                                                             \
-  ASSERT_GE(LOGLEVEL, level);
+// capture log output and make assertions about it. This macro enforces that
+// `level` is the runtime log level for the remainder of the enclosing scope, by
+// declaring an `ad_utility::ScopedLogLevel` object that restores the previous
+// level when the scope is left. If `ad_utility::compileTimeLogLevel` is less
+// verbose than `level`, the test is skipped instead: such log levels are
+// compiled out and can never become the runtime log level, so the test could
+// never pass. The `level` is the plain name of a log level, for example
+// `ENFORCE_LOG_LEVEL_OR_SKIP(INFO)`.
+#define ENFORCE_LOG_LEVEL_OR_SKIP(level)                                      \
+  if (ad_utility::compileTimeLogLevel < ad_utility::LogLevel::Enum::level) {  \
+    GTEST_SKIP()                                                              \
+        << "This test requires a compile-time log level of at least "         \
+        << ad_utility::LogLevel{ad_utility::LogLevel::Enum::level}.toString() \
+        << ", but it is "                                                     \
+        << ad_utility::LogLevel{ad_utility::compileTimeLogLevel}.toString();  \
+  }                                                                           \
+  ad_utility::ScopedLogLevel AD_SCOPED_LOG_LEVEL_NAME(__COUNTER__) {          \
+    ad_utility::LogLevel::Enum::level                                         \
+  }
+
+// Match the captured log with `matcher`, but fail with a readable message if
+// the runtime log level suppresses messages with the given `level`, for example
+// because an earlier test did not restore it. See `ifLogLevelIsCompiledIn`.
+MATCHER_P2(LogLevelIsEnabledAndLogMatches, level, matcher,
+           absl::StrCat("(with ", ad_utility::LogLevel{level}.toString(),
+                        " messages enabled at runtime) ",
+                        ::testing::DescribeMatcher<std::string>(matcher,
+                                                                negation))) {
+  if (!ad_utility::detail::logLevelIsEnabled(level)) {
+    *result_listener << "which was not checked, because the runtime log level "
+                     << ad_utility::getRuntimeLogLevel().toString()
+                     << " suppresses " << ad_utility::LogLevel{level}.toString()
+                     << " messages (did an earlier test not restore it?)";
+    return false;
+  }
+  return ::testing::ExplainMatchResult(matcher, arg, result_listener);
+}
+
+// Return `matcher` if messages with the given `level` are compiled in (see
+// `ad_utility::compileTimeLogLevel`), and a matcher that matches anything
+// otherwise. The returned matcher also checks that the runtime log level does
+// not suppress messages with `level`. Use this for the log checks of a test
+// that also checks other things, which `ENFORCE_LOG_LEVEL_OR_SKIP` would skip
+// as well.
+//
+// NOTE: Don't negate the result, `Not(_)` matches nothing. Write
+// `Not(HasSubstr(...))` directly instead, it is valid at every log level.
+template <ad_utility::LogLevel::Enum level, typename Matcher>
+auto ifLogLevelIsCompiledIn(Matcher matcher) {
+  if constexpr (ad_utility::compileTimeLogLevel >= level) {
+    return LogLevelIsEnabledAndLogMatches(level, std::move(matcher));
+  } else {
+    return ::testing::_;
+  }
+}
+
+// _____________________________________________________________________________
+// Skip the enclosing test if the `_NO_TIMING_TESTS` CMake option is set. Use
+// this in tests that depend on the actual duration of `sleep` or on similar
+// timings, which are unreliable on some platforms (in particular macOS). Note
+// that the macro has to be used as a statement (with a trailing semicolon).
+#ifdef _QLEVER_NO_TIMING_TESTS
+#define QLEVER_SKIP_TEST_IF_FLAKY_TIMING \
+  GTEST_SKIP() << "because `_QLEVER_NO_TIMING_TESTS` is defined"
+#else
+#define QLEVER_SKIP_TEST_IF_FLAKY_TIMING static_assert(true)
+#endif
+
+// _____________________________________________________________________________
+// Redirect the global logging stream to `stream` and return an `absl::Cleanup`
+// that restores the *previously active* stream when it goes out of scope. Use
+// this in tests that temporarily capture or suppress log output, so the global
+// stream is never left dangling or reset to the wrong value.
+inline auto setGlobalLoggingStreamForTesting(std::ostream* stream) {
+  auto* previous = &ad_utility::LogstreamChoice::get().getStream();
+  ad_utility::setGlobalLoggingStream(stream);
+  return absl::Cleanup(
+      [previous] { ad_utility::setGlobalLoggingStream(previous); });
+}
+
+// _____________________________________________________________________________
+// Redirect the global logging stream to a fresh `std::ostringstream` and return
+// a pair of an `absl::Cleanup` (which restores the previously active stream
+// when it goes out of scope) and a reference to that stream. Typical usage is
+// `auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();`.
+// NOTE: The returned reference is only valid as long as the `cleanup` is alive,
+// as the underlying stream is owned by the `cleanup`.
+inline auto setGlobalLoggingStreamToStringStream() {
+  auto stream = std::make_shared<std::ostringstream>();
+  auto& streamRef = *stream;
+  // `setGlobalLoggingStreamForTesting` cannot be used here because we have to
+  // move the shared pointer to the string stream into the cleanup to keep it
+  // alive.
+  auto* previous = &ad_utility::LogstreamChoice::get().getStream();
+  ad_utility::setGlobalLoggingStream(stream.get());
+  auto cleanup = absl::Cleanup([previous, stream = std::move(stream)] {
+    ad_utility::setGlobalLoggingStream(previous);
+  });
+  return std::pair<decltype(cleanup), std::ostringstream&>{std::move(cleanup),
+                                                           streamRef};
+}
 
 // _____________________________________________________________________________
 
@@ -119,6 +228,15 @@ MATCHER_P(ParsedAsJson, matcher,
     *result_listener << "is not a JSON object.";
   }
   return false;
+}
+
+// Helper matcher for a full `RE2` match, to use instead of
+// `::testing::MatchesRegex`, which works differently on non-POSIX platforms.
+// Example: EXPECT_THAT("t42", MatchesRegex("t[0-9]+"));
+MATCHER_P(MatchesRegex, pattern,
+          absl::StrCat(negation ? "doesn't match" : "matches", " the regex \"",
+                       pattern, "\"")) {
+  return RE2::FullMatch(arg, RE2{pattern});
 }
 
 // Helper matcher that can be used to make assertions about a JSON object's
@@ -163,13 +281,13 @@ class CopyShield {
 
  public:
   CPP_variadic_template(typename... Ts)(
-      requires ql::concepts::constructible_from<
-          T, Ts&&...>) explicit CopyShield(Ts&&... args)
+      requires ql::concepts::constructible_from<T, Ts...>)
+  explicit CopyShield(Ts&&... args)
       : pointer_{std::make_shared<T>(AD_FWD(args)...)} {}
 
-  CPP_template(typename Ts)(requires ql::concepts::constructible_from<T, Ts&&>)
-      CopyShield&
-      operator=(Ts&& ts) {
+  CPP_template(typename Ts)(
+      requires ql::concepts::constructible_from<T, Ts &&>)
+  CopyShield& operator=(Ts&& ts) {
     pointer_ = std::make_shared<T>(AD_FWD(ts));
     return *this;
   }
@@ -212,8 +330,8 @@ auto liftOptionalMatcher(MakeMatcher makeMatcher) {
 // returns a function `ArrayType -> Matcher<ArrayType>` that applies
 // `MakeMatcher` to each of the expected values in the argument of `ArrayType`
 // and returns an `ElementsAreArray` matcher of these submatchers.
-template <typename T, typename ArrayType, typename MakeMatcher>
-requires std::is_convertible_v<ArrayType, std::vector<T>>
+CPP_template(typename T, typename ArrayType, typename MakeMatcher)(
+    requires std::is_convertible_v<ArrayType, std::vector<T>>)
 auto liftMatcherToElementsAreArray(MakeMatcher makeMatcher) {
   return
       [makeMatcher](ArrayType expectedValues) -> ::testing::Matcher<ArrayType> {
@@ -222,6 +340,63 @@ auto liftMatcherToElementsAreArray(MakeMatcher makeMatcher) {
                               makeMatcher);
         return ::testing::ElementsAreArray(childMatchers);
       };
+}
+
+// Matcher that takes a range of arguments, applies the `func` to them, and
+// asserts, that the results are all unique. Is currently implemented using a
+// linear find, s.t. we don't require hashing support for the projection result,
+// but therefore has a quadratic runtime.
+MATCHER_P(AllUniqueBy, func, "has all unique values under projection") {
+  std::vector<decltype(func(*arg.begin()))> seen;
+  for (const auto& item : arg) {
+    auto val = func(item);
+    if (std::find(seen.begin(), seen.end(), val) != seen.end()) {
+      *result_listener << "duplicate value found: "
+                       << ::testing::PrintToString(val);
+      return false;
+    }
+    seen.push_back(std::move(val));
+  }
+  return true;
+}
+
+// _____________________________________________________________________________
+// Returns "<TestSuiteName>_<TestName>" for the currently running gtest, with
+// any '/' replaced by '_' (parameterized tests embed '/' in their names).
+// If `assertInGtestEnvironment` is true (the default), crashes if called
+// outside a running gtest (i.e. when `current_test_info()` returns nullptr).
+// Pass false when the caller is also used by non-test code (e.g. benchmarks),
+// in which case an empty string is returned instead.
+inline std::string gtestCurrentTestName(bool assertInGtestEnvironment = true) {
+  const auto* testInfo =
+      ::testing::UnitTest::GetInstance()->current_test_info();
+  if (assertInGtestEnvironment) {
+    AD_CORRECTNESS_CHECK(testInfo != nullptr);
+  }
+  if (testInfo == nullptr) {
+    return "";
+  }
+  return absl::StrReplaceAll(
+      absl::StrCat(testInfo->test_suite_name(), "_", testInfo->name()),
+      {{"/", "_"}});
+}
+
+// _____________________________________________________________________________
+// Block until the `predicate` is true, polling it every millisecond, but at
+// most for the `timeout`. Return the final value of the `predicate`. Use this
+// to wait for the effect of work that runs on another thread, typically as
+// `ASSERT_TRUE(waitUntil(...))`.
+//
+// NOTE: The `timeout` is deliberately generous, because it is only waited for
+// in full when the awaited event never happens, which is a failing test anyway.
+template <typename Predicate>
+bool waitUntil(const Predicate& predicate,
+               std::chrono::milliseconds timeout = std::chrono::seconds{10}) {
+  auto deadline = std::chrono::steady_clock::now() + timeout;
+  while (!predicate() && std::chrono::steady_clock::now() < deadline) {
+    std::this_thread::sleep_for(std::chrono::milliseconds{1});
+  }
+  return predicate();
 }
 
 #endif  // QLEVER_TEST_UTIL_GTESTHELPERS_H

@@ -34,6 +34,11 @@ struct SpatialQuery : MagicServiceQuery {
   // search results is bound
   std::optional<Variable> distanceVariable_;
 
+  // The unit of the distances bound to `distanceVariable_`. If not given,
+  // `libspatialjoin` defaults to meters and all other algorithms default to
+  // kilometers.
+  std::optional<UnitOfMeasurement> distanceUnit_;
+
   // A list of variables from the right join table that shall be part of the
   // result table. If empty, only the join column - given by `right_` - will
   // be in the result together with the all left columns and (optionally) the
@@ -44,13 +49,19 @@ struct SpatialQuery : MagicServiceQuery {
   // `PayloadAllVariables` to ensure appropriate semantics.
   PayloadVariables payloadVariables_;
 
-  // Optional further argument: the join algorithm. If it is not given, the
-  // default algorithm is used implicitly.
+  // The join algorithm. Mandatory for the `SERVICE spatialSearch:` syntax
+  // (checked in `toSpatialJoinConfiguration`); implicitly set to a fixed
+  // value for the deprecated magic predicate syntax, which has no way to
+  // specify it.
   std::optional<SpatialJoinAlgorithm> algo_;
 
   // Optional join type for libspatialjoin. If it is not given, INTERSECT
   // is used implicitly.
   std::optional<SpatialJoinType> joinType_;
+
+  // The DE-9IM filter pattern, mandatory if and only if `joinType_` is
+  // `SpatialJoinType::DE9IM`.
+  std::optional<De9imFilterString> de9imFilter_;
 
   // If the s2-point-polyline algorithm is used, the right side of the spatial
   // join will be an already existing s2 index together with the fully
@@ -85,21 +96,12 @@ struct SpatialQuery : MagicServiceQuery {
   // Throw if the current configuration is invalid.
   void validate() const override;
 
-  constexpr std::string_view name() const override { return "spatial join"; };
+  QL_CONSTEXPR std::string_view name() const override { return "spatial join"; }
 
  private:
   // If `throwCondition` is `true`, throw `SpatialSearchException{message}`.
   void throwIf(bool throwCondition, std::string_view message) const;
 };
-
-namespace detail {
-
-// Convert a string like `libspatialjoin` to the corresponding enum element.
-// Throws a `SpatialSearchException` for invalid inputs.
-SpatialJoinAlgorithm spatialJoinAlgorithmFromString(
-    std::string_view identifier);
-
-}  // namespace detail
 
 }  // namespace parsedQuery
 

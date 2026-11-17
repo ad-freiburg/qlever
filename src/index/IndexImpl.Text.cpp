@@ -6,6 +6,7 @@
 
 #include "index/IndexImpl.h"
 
+#include <absl/strings/str_cat.h>
 #include <absl/strings/str_split.h>
 
 #include <charconv>
@@ -14,25 +15,26 @@
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
+#include "global/FileSuffixConstants.h"
 #include "index/FTSAlgorithms.h"
+#include "index/SortConfig.h"
 #include "index/TextIndexReadWrite.h"
 #include "parser/WordsAndDocsFileParser.h"
-#include "util/MmapVector.h"
 #include "util/TransparentFunctors.h"
 
 // _____________________________________________________________________________
 void IndexImpl::addTextFromOnDiskIndex() {
   // Read the text vocabulary (into RAM).
-  textVocab_.readFromFile(onDiskBase_ + ".text.vocabulary");
+  textVocab_.readFromFile(absl::StrCat(onDiskBase_, TEXT_VOCAB_FILE_SUFFIX));
 
   // Initialize the text index.
-  std::string textIndexFileName = onDiskBase_ + ".text.index";
+  std::string textIndexFileName =
+      absl::StrCat(onDiskBase_, TEXT_INDEX_FILE_SUFFIX);
   AD_LOG_INFO << "Reading metadata from file " << textIndexFileName << " ..."
               << std::endl;
   textIndexFile_.open(textIndexFileName.c_str(), "r");
   AD_CONTRACT_CHECK(textIndexFile_.isOpen());
-  off_t metaFrom;
-  [[maybe_unused]] off_t metaTo = textIndexFile_.getLastOffset(&metaFrom);
+  auto [metaTo, metaFrom] = textIndexFile_.getLastOffset();
   ad_utility::serialization::FileReadSerializer serializer(
       std::move(textIndexFile_));
   serializer.setSerializationPosition(metaFrom);
@@ -44,11 +46,12 @@ void IndexImpl::addTextFromOnDiskIndex() {
   // without this, but then there is no content to show when a text record
   // matches. This is perfectly fine when the text records come from IRIs or
   // literals from our RDF vocabulary.
-  std::string docsDbFileName = onDiskBase_ + ".text.docsDB";
+  std::string docsDbFileName =
+      absl::StrCat(onDiskBase_, TEXT_DOCS_DB_FILE_SUFFIX);
   std::ifstream f(docsDbFileName.c_str());
   if (f.good()) {
     f.close();
-    docsDB_.init(std::string(onDiskBase_ + ".text.docsDB"));
+    docsDB_.init(docsDbFileName);
     AD_LOG_INFO << "Registered text records: #records = " << docsDB_._size
                 << std::endl;
   } else {
@@ -66,11 +69,13 @@ IdTable IndexImpl::mergeTextBlockResults(
         reader,
     const std::vector<TextBlockMetadataAndWordInfo>& tbmds,
     const ad_utility::AllocatorWithLimit<Id>& allocator,
-    TextScanMode textScanMode) const {
+    TextScanMode textScanMode, const SortConfig& sortConfig) const {
   AD_CONTRACT_CHECK(tbmds.size() > 0);
   // Collect all blocks as IdTables
+  const auto& cancellationHandle = sortConfig.cancellationHandle_;
   std::vector<IdTable> partialResults;
   for (const auto& tbmd : tbmds) {
+    cancellationHandle->throwIfCancelled();
     IdTable partialResult{allocator};
     partialResult =
         reader(tbmd.tbmd_, allocator, textIndexFile_, textScoringMetric_);
@@ -93,11 +98,12 @@ IdTable IndexImpl::mergeTextBlockResults(
                                    return acc + partialResult.numRows();
                                  }));
   for (const auto& partialResult : partialResults) {
+    cancellationHandle->throwIfCancelled();
     result.insertAtEnd(partialResult);
   }
   auto toSort = std::move(result).toStatic<3>();
   // Sort the table
-  ql::ranges::sort(toSort, [](const auto& a, const auto& b) {
+  sortConfig.sort(toSort, [](const auto& a, const auto& b) {
     return ql::ranges::lexicographical_compare(
         std::begin(a), std::end(a), std::begin(b), std::end(b),
         [](const Id& x, const Id& y) {
@@ -126,7 +132,8 @@ TextBlockIndex IndexImpl::getWordBlockId(WordIndex wordIndex) const {
 // _____________________________________________________________________________
 void IndexImpl::openTextFileHandle() {
   AD_CONTRACT_CHECK(!onDiskBase_.empty());
-  textIndexFile_.open(std::string(onDiskBase_ + ".text.index").c_str(), "r");
+  textIndexFile_.open(absl::StrCat(onDiskBase_, TEXT_INDEX_FILE_SUFFIX).c_str(),
+                      "r");
 }
 
 // _____________________________________________________________________________
@@ -137,7 +144,8 @@ std::string_view IndexImpl::wordIdToString(WordIndex wordIndex) const {
 // _____________________________________________________________________________
 IdTable IndexImpl::getWordPostingsForTerm(
     const std::string& term,
-    const ad_utility::AllocatorWithLimit<Id>& allocator) const {
+    const ad_utility::AllocatorWithLimit<Id>& allocator,
+    const SortConfig& sortConfig) const {
   AD_LOG_DEBUG << "Getting word postings for term: " << term << '\n';
   IdTable idTable{allocator};
   auto tbmds = getTextBlockMetadataForWordOrPrefix(term);
@@ -146,8 +154,9 @@ IdTable IndexImpl::getWordPostingsForTerm(
     return idTable;
   }
 
-  IdTable result = mergeTextBlockResults(textIndexReadWrite::readWordCl, tbmds,
-                                         allocator, TextScanMode::WordScan);
+  IdTable result =
+      mergeTextBlockResults(textIndexReadWrite::readWordCl, tbmds, allocator,
+                            TextScanMode::WordScan, sortConfig);
 
   AD_LOG_DEBUG << "Word postings for term: " << term
                << ": cids: " << result.getColumn(0).size() << '\n';
@@ -157,11 +166,12 @@ IdTable IndexImpl::getWordPostingsForTerm(
 // _____________________________________________________________________________
 IdTable IndexImpl::getEntityMentionsForWord(
     const std::string& term,
-    const ad_utility::AllocatorWithLimit<Id>& allocator) const {
+    const ad_utility::AllocatorWithLimit<Id>& allocator,
+    const SortConfig& sortConfig) const {
   auto tbmds = getTextBlockMetadataForWordOrPrefix(term);
   AD_CORRECTNESS_CHECK(!tbmds.empty());
   return mergeTextBlockResults(textIndexReadWrite::readWordEntityCl, tbmds,
-                               allocator, TextScanMode::EntityScan);
+                               allocator, TextScanMode::EntityScan, sortConfig);
 }
 
 // _____________________________________________________________________________
@@ -211,7 +221,7 @@ size_t IndexImpl::getSizeOfTextBlocksSum(
         return acc + tbmdAndWordInfo.tbmd_._entityCl._nofElements;
       };
   return std::accumulate(tbmds.begin(), tbmds.end(), size_t{0}, addSizeOfBlock);
-};
+}
 
 // _____________________________________________________________________________
 void IndexImpl::setTextName(const std::string& name) {

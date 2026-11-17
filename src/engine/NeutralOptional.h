@@ -10,6 +10,12 @@
 // Implement the case where an `OPTIONAL` clause is joined with the empty
 // pattern. Conceptually this is the same as an optional join with the neutral
 // element, but specialized and more efficient.
+//
+// NOTE: `NeutralOptional` does not override `makeTreeWithBindColumn`. When
+// `tree_` is empty, `computeResult` fabricates a single all-`UNDEF` row, on
+// which a `BIND` pushed into `tree_` would never be evaluated (e.g. a constant
+// `BIND` would become `UNDEF`). Whether `tree_` is non-empty is not known at
+// planning time, so the push down is refused.
 class NeutralOptional : public Operation {
   std::shared_ptr<QueryExecutionTree> tree_;
 
@@ -20,6 +26,7 @@ class NeutralOptional : public Operation {
  private:
   std::string getCacheKeyImpl() const override;
   uint64_t getSizeEstimateBeforeLimit() override;
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
   std::unique_ptr<Operation> cloneImpl() const override;
   Result computeResult(bool requestLaziness) override;
   VariableToColumnMap computeVariableToColumnMap() const override;
@@ -28,19 +35,21 @@ class NeutralOptional : public Operation {
   // neutral element from ever appearing in the result.
   bool singleRowCroppedByLimit() const;
 
+ private:
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override;
+
  public:
-  std::vector<QueryExecutionTree*> getChildren() override;
   std::string getDescriptor() const override;
   size_t getResultWidth() const override;
   size_t getCostEstimate() override;
   float getMultiplicity(size_t col) override;
   bool knownEmptyResult() override;
-  bool supportsLimitOffset() const override;
-  void onLimitOffsetChanged(
-      const LimitOffsetClause& limitOffset) const override;
+  LimitOffsetHandling handlesLimitOffset() const override;
+  void onLimitOffsetChanged(const LimitOffsetClause& limitOffset,
+                            bool childrenAreExclusivelyOwned) override;
 
  protected:
-  std::vector<ColumnIndex> resultSortedOn() const override;
+  qlm::vector<ColumnIndex> resultSortedOn() const override;
 };
 
 #endif  // QLEVER_SRC_ENGINE_NEUTRALOPTIONAL_H

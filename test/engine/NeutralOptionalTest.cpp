@@ -6,6 +6,7 @@
 
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/LocalVocabEntryTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
 #include "./ValuesForTesting.h"
 #include "engine/NeutralOptional.h"
@@ -88,7 +89,7 @@ TEST(NeutralOptional, getSizeEstimate) {
         qec, IdTable{0, qec->getAllocator()},
         std::vector<std::optional<Variable>>{});
     NeutralOptional no{qec, std::move(child)};
-    no.applyLimitOffset({0, 0});
+    no.applyLimitOffset({0, 0}, false);
     EXPECT_EQ(no.getSizeEstimate(), 0);
   }
   {
@@ -97,7 +98,7 @@ TEST(NeutralOptional, getSizeEstimate) {
     auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, std::move(idTable), std::vector<std::optional<Variable>>{});
     NeutralOptional no{qec, std::move(child)};
-    no.applyLimitOffset({40, 1});
+    no.applyLimitOffset({40, 1}, false);
     EXPECT_EQ(no.getSizeEstimate(), 40);
   }
   {
@@ -133,13 +134,13 @@ TEST(NeutralOptional, knownEmptyResult) {
 }
 
 // _____________________________________________________________________________
-TEST(NeutralOptional, supportsLimit) {
+TEST(NeutralOptional, handlesLimit) {
   auto* qec = ad_utility::testing::getQec();
   auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, IdTable{0, qec->getAllocator()},
       std::vector<std::optional<Variable>>{});
   NeutralOptional no{qec, std::move(child)};
-  EXPECT_TRUE(no.supportsLimitOffset());
+  EXPECT_EQ(no.handlesLimitOffset(), LimitOffsetHandling::FULL);
 }
 
 // _____________________________________________________________________________
@@ -192,11 +193,11 @@ TEST(NeutralOptional, ensureEmptyResultWhenLimitCutsOffEverything) {
         qec, IdTable{1, qec->getAllocator()},
         std::vector<std::optional<Variable>>{std::nullopt});
     NeutralOptional no{qec, std::move(child)};
-    no.applyLimitOffset({std::nullopt, 1});
+    no.applyLimitOffset({std::nullopt, 1}, false);
 
     qec->getQueryTreeCache().clearAll();
     auto result = no.computeResultOnlyForTesting(false);
-    EXPECT_TRUE(result.idTable().empty());
+    EXPECT_TRUE(result.idTableView().empty());
     EXPECT_TRUE(result.localVocab().empty());
   }
 
@@ -205,7 +206,7 @@ TEST(NeutralOptional, ensureEmptyResultWhenLimitCutsOffEverything) {
         qec, IdTable{1, qec->getAllocator()},
         std::vector<std::optional<Variable>>{std::nullopt});
     NeutralOptional no{qec, std::move(child)};
-    no.applyLimitOffset({std::nullopt, 1});
+    no.applyLimitOffset({std::nullopt, 1}, false);
 
     qec->getQueryTreeCache().clearAll();
     auto result = no.computeResultOnlyForTesting(true);
@@ -217,11 +218,11 @@ TEST(NeutralOptional, ensureEmptyResultWhenLimitCutsOffEverything) {
         qec, IdTable{1, qec->getAllocator()},
         std::vector<std::optional<Variable>>{std::nullopt});
     NeutralOptional no{qec, std::move(child)};
-    no.applyLimitOffset({0});
+    no.applyLimitOffset({0}, false);
 
     qec->getQueryTreeCache().clearAll();
     auto result = no.computeResultOnlyForTesting(false);
-    EXPECT_TRUE(result.idTable().empty());
+    EXPECT_TRUE(result.idTableView().empty());
     EXPECT_TRUE(result.localVocab().empty());
   }
 
@@ -230,7 +231,7 @@ TEST(NeutralOptional, ensureEmptyResultWhenLimitCutsOffEverything) {
         qec, IdTable{1, qec->getAllocator()},
         std::vector<std::optional<Variable>>{std::nullopt});
     NeutralOptional no{qec, std::move(child)};
-    no.applyLimitOffset({0});
+    no.applyLimitOffset({0}, false);
 
     qec->getQueryTreeCache().clearAll();
     auto result = no.computeResultOnlyForTesting(true);
@@ -250,7 +251,8 @@ TEST(NeutralOptional, ensureSingleRowWhenChildIsEmpty) {
   {
     qec->getQueryTreeCache().clearAll();
     auto result = no.computeResultOnlyForTesting(false);
-    EXPECT_EQ(result.idTable(), makeIdTableFromVector({{Id::makeUndefined()}}));
+    EXPECT_EQ(result.idTableView(),
+              makeIdTableFromVector({{Id::makeUndefined()}}));
     EXPECT_TRUE(result.localVocab().empty());
   }
 
@@ -278,9 +280,9 @@ TEST(NeutralOptional, ensureSingleRowWhenChildIsEmpty) {
 TEST(NeutralOptional, ensureResultIsProperlyPropagated) {
   auto* qec = ad_utility::testing::getQec();
   LocalVocab localVocab{};
-  localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{
-      ad_utility::triple_component::Literal::fromStringRepresentation(
-          "\"Test\"")});
+  localVocab.getIndexAndAddIfNotContained(
+      ad_utility::testing::localVocabEntryFromStringRepresentation(
+          "\"Test\"", qec->getLocalVocabContext()));
 
   {
     auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
@@ -292,7 +294,7 @@ TEST(NeutralOptional, ensureResultIsProperlyPropagated) {
     {
       qec->getQueryTreeCache().clearAll();
       auto result = no.computeResultOnlyForTesting(false);
-      EXPECT_EQ(result.idTable(), makeIdTableFromVector({{1}, {2}, {3}}));
+      EXPECT_EQ(result.idTableView(), makeIdTableFromVector({{1}, {2}, {3}}));
       EXPECT_EQ(result.localVocab().getAllWordsForTesting(),
                 localVocab.getAllWordsForTesting());
     }
@@ -318,10 +320,13 @@ TEST(NeutralOptional, ensureResultIsProperlyPropagated) {
         std::vector<std::optional<Variable>>{std::nullopt}, false,
         std::vector<ColumnIndex>{}, localVocab.clone());
     NeutralOptional no{qec, child};
-    no.applyLimitOffset({std::nullopt, 1});
+    no.applyLimitOffset({std::nullopt, 1}, false);
+    EXPECT_EQ(no.getChildren().at(0)->getRootOperation()->getLimitOffset(),
+              LimitOffsetClause(std::nullopt, 1));
+    EXPECT_TRUE(child->getRootOperation()->getLimitOffset().isUnconstrained());
     qec->getQueryTreeCache().clearAll();
     auto result = no.computeResultOnlyForTesting(false);
-    EXPECT_EQ(result.idTable(), makeIdTableFromVector({{2}, {3}}));
+    EXPECT_EQ(result.idTableView(), makeIdTableFromVector({{2}, {3}}));
     EXPECT_EQ(result.localVocab().getAllWordsForTesting(),
               localVocab.getAllWordsForTesting());
   }
@@ -332,7 +337,10 @@ TEST(NeutralOptional, ensureResultIsProperlyPropagated) {
         std::vector<std::optional<Variable>>{std::nullopt}, false,
         std::vector<ColumnIndex>{}, localVocab.clone());
     NeutralOptional no{qec, child};
-    no.applyLimitOffset({std::nullopt, 1});
+    no.applyLimitOffset({std::nullopt, 1}, false);
+    EXPECT_EQ(no.getChildren().at(0)->getRootOperation()->getLimitOffset(),
+              LimitOffsetClause(std::nullopt, 1));
+    EXPECT_TRUE(child->getRootOperation()->getLimitOffset().isUnconstrained());
     qec->getQueryTreeCache().clearAll();
     auto result = no.computeResultOnlyForTesting(true);
     auto idTables = result.idTables();
@@ -352,10 +360,13 @@ TEST(NeutralOptional, ensureResultIsProperlyPropagated) {
         std::vector<std::optional<Variable>>{std::nullopt}, false,
         std::vector<ColumnIndex>{}, localVocab.clone());
     NeutralOptional no{qec, child};
-    no.applyLimitOffset({2});
+    no.applyLimitOffset({2}, false);
+    EXPECT_EQ(no.getChildren().at(0)->getRootOperation()->getLimitOffset(),
+              LimitOffsetClause(2));
+    EXPECT_TRUE(child->getRootOperation()->getLimitOffset().isUnconstrained());
     qec->getQueryTreeCache().clearAll();
     auto result = no.computeResultOnlyForTesting(false);
-    EXPECT_EQ(result.idTable(), makeIdTableFromVector({{1}, {2}}));
+    EXPECT_EQ(result.idTableView(), makeIdTableFromVector({{1}, {2}}));
     EXPECT_EQ(result.localVocab().getAllWordsForTesting(),
               localVocab.getAllWordsForTesting());
   }
@@ -366,7 +377,10 @@ TEST(NeutralOptional, ensureResultIsProperlyPropagated) {
         std::vector<std::optional<Variable>>{std::nullopt}, false,
         std::vector<ColumnIndex>{}, localVocab.clone());
     NeutralOptional no{qec, child};
-    no.applyLimitOffset({2});
+    no.applyLimitOffset({2}, false);
+    EXPECT_EQ(no.getChildren().at(0)->getRootOperation()->getLimitOffset(),
+              LimitOffsetClause(2));
+    EXPECT_TRUE(child->getRootOperation()->getLimitOffset().isUnconstrained());
     qec->getQueryTreeCache().clearAll();
     auto result = no.computeResultOnlyForTesting(true);
     auto idTables = result.idTables();

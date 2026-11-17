@@ -7,9 +7,10 @@
 
 #include "engine/AddCombinedRowToTable.h"
 #include "engine/CallFixedSize.h"
-#include "engine/Engine.h"
 #include "engine/JoinHelpers.h"
-#include "util/JoinAlgorithms/JoinAlgorithms.h"
+#include "global/Constants.h"
+#include "index/IdTableUtils.h"
+#include "util/joinAlgorithms/JoinAlgorithms.h"
 
 using std::endl;
 using std::string;
@@ -75,10 +76,10 @@ Result MultiColumnJoin::computeResult([[maybe_unused]] bool requestLaziness) {
   AD_LOG_DEBUG << "MultiColumnJoin subresult computation done." << std::endl;
 
   AD_LOG_DEBUG << "Computing a multi column join between results of size "
-               << leftResult->idTable().size() << " and "
-               << rightResult->idTable().size() << endl;
+               << leftResult->idTableView().size() << " and "
+               << rightResult->idTableView().size() << endl;
 
-  computeMultiColumnJoin(leftResult->idTable(), rightResult->idTable(),
+  computeMultiColumnJoin(leftResult->idTableView(), rightResult->idTableView(),
                          _joinColumns, &idTable);
 
   checkCancellation();
@@ -106,8 +107,8 @@ size_t MultiColumnJoin::getResultWidth() const {
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> MultiColumnJoin::resultSortedOn() const {
-  std::vector<ColumnIndex> sortedOn;
+qlm::vector<ColumnIndex> MultiColumnJoin::resultSortedOn() const {
+  qlm::vector<ColumnIndex> sortedOn{allocator()};
   // The result is sorted on all join columns from the left subtree.
   for (const auto& a : _joinColumns) {
     sortedOn.push_back(a[0]);
@@ -206,9 +207,8 @@ void MultiColumnJoin::computeSizeEstimateAndMultiplicities() {
 
 // _______________________________________________________________________
 void MultiColumnJoin::computeMultiColumnJoin(
-    const IdTable& left, const IdTable& right,
-    const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
-    IdTable* result) {
+    const IdTableView<0>& left, const IdTableView<0>& right,
+    ql::span<const std::array<ColumnIndex, 2>> joinColumns, IdTable* result) {
   // check for trivial cases
   if (left.empty() || right.empty()) {
     return;
@@ -228,7 +228,7 @@ void MultiColumnJoin::computeMultiColumnJoin(
 
   auto rowAdder = ad_utility::AddCombinedRowToIdTable(
       joinColumns.size(), leftPermuted, rightPermuted, std::move(*result),
-      cancellationHandle_);
+      cancellationHandle());
   auto addRow = [&rowAdder, beginLeft = leftJoinColumns.begin(),
                  beginRight = rightJoinColumns.begin()](const auto& itLeft,
                                                         const auto& itRight) {
@@ -243,19 +243,14 @@ void MultiColumnJoin::computeMultiColumnJoin(
   // for a later PR.
   bool isCheap = ql::ranges::none_of(joinColumns, [&](const auto& jcs) {
     auto [leftCol, rightCol] = jcs;
-    return (ql::ranges::any_of(right.getColumn(rightCol), &Id::isUndefined)) ||
-           (ql::ranges::any_of(left.getColumn(leftCol), &Id::isUndefined));
+    return ql::ranges::any_of(right.getColumn(rightCol), Id::isUndefinedL) ||
+           ql::ranges::any_of(left.getColumn(leftCol), Id::isUndefinedL);
   });
 
-  auto checkCancellationLambda = [this] { checkCancellation(); };
+  auto checkCancellationLambda = cancellationChecker();
 
   const size_t numOutOfOrder = [&]() {
-    if (isCheap) {
-      return ad_utility::zipperJoinWithUndef(
-          leftJoinColumns, rightJoinColumns,
-          ql::ranges::lexicographical_compare, addRow, ad_utility::noop,
-          ad_utility::noop, ad_utility::noop, checkCancellationLambda);
-    } else {
+    if (!isCheap) {
       return ad_utility::zipperJoinWithUndef(
           leftJoinColumns, rightJoinColumns,
           ql::ranges::lexicographical_compare, addRow,
@@ -263,6 +258,28 @@ void MultiColumnJoin::computeMultiColumnJoin(
           ad_utility::findSmallerUndefRanges, ad_utility::noop,
           checkCancellationLambda);
     }
+    // Without UNDEF values, use the galloping join if one input is much
+    // smaller than the other (like `Join` does for a single join column). The
+    // first argument to `gallopingJoin` is always the smaller input.
+    if (right.size() / left.size() > GALLOP_THRESHOLD) {
+      ad_utility::gallopingJoin(leftJoinColumns, rightJoinColumns,
+                                ql::ranges::lexicographical_compare, addRow,
+                                ad_utility::noop, checkCancellationLambda);
+    } else if (left.size() / right.size() > GALLOP_THRESHOLD) {
+      auto addRowSwapped = [&addRow](const auto& itRight, const auto& itLeft) {
+        addRow(itLeft, itRight);
+      };
+      ad_utility::gallopingJoin(rightJoinColumns, leftJoinColumns,
+                                ql::ranges::lexicographical_compare,
+                                addRowSwapped, ad_utility::noop,
+                                checkCancellationLambda);
+    } else {
+      return ad_utility::zipperJoinWithUndef(
+          leftJoinColumns, rightJoinColumns,
+          ql::ranges::lexicographical_compare, addRow, ad_utility::noop,
+          ad_utility::noop, ad_utility::noop, checkCancellationLambda);
+    }
+    return size_t{0};
   }();
   *result = std::move(rowAdder).resultTable();
   // If there were UNDEF values in the input, the result might be out of
@@ -276,7 +293,7 @@ void MultiColumnJoin::computeMultiColumnJoin(
       cols.push_back(i);
     }
     checkCancellation();
-    Engine::sort(*result, cols);
+    IdTableUtils::sort(*result, cols, sortConfig());
   }
 
   // The result that `zipperJoinWithUndef` produces has a different order of
@@ -306,4 +323,17 @@ bool MultiColumnJoin::columnOriginatesFromGraphOrUndef(
     return doesJoinProduceGuaranteedGraphValuesOrUndef(_left, _right, variable);
   }
   return Operation::columnOriginatesFromGraphOrUndef(variable);
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+MultiColumnJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
+  return pushDownBindToAnyChild(bind, {{_left, _right}, allocator()});
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> MultiColumnJoin::cloneWithNewChildren(
+    qlm::vector<std::shared_ptr<QueryExecutionTree>> children) const {
+  return std::make_unique<MultiColumnJoin>(
+      _executionContext, std::move(children.at(0)), std::move(children.at(1)));
 }

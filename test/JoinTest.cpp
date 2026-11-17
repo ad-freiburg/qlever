@@ -17,7 +17,6 @@
 #include "./util/IdTableHelpers.h"
 #include "./util/JoinHelpers.h"
 #include "engine/CallFixedSize.h"
-#include "engine/Engine.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/JoinHelpers.h"
@@ -26,8 +25,10 @@
 #include "engine/Values.h"
 #include "engine/ValuesForTesting.h"
 #include "engine/idTable/IdTable.h"
+#include "index/IdTableUtils.h"
 #include "util/Forward.h"
 #include "util/IndexTestHelpers.h"
+#include "util/Math.h"
 #include "util/OperationTestHelpers.h"
 #include "util/Random.h"
 #include "util/RuntimeParametersTestHelpers.h"
@@ -241,8 +242,7 @@ namespace {
 // A hash map that connects variables to the expected contents of the
 // corresponding result column and the `UndefStatus`.
 using ExpectedColumns = ad_utility::HashMap<
-    Variable,
-    std::pair<ql::span<const Id>, ColumnIndexAndTypeInfo::UndefStatus>>;
+    Variable, std::pair<ConstIdColumnRef, ColumnIndexAndTypeInfo::UndefStatus>>;
 
 // Test that the result of the `join` matches the `expected` outcome.
 // If `requestLaziness` is true, the join is requested to be lazy. If
@@ -259,12 +259,12 @@ void testJoinOperation(
   const auto& varToCols = join.getExternallyVisibleVariableColumns();
   EXPECT_EQ(varToCols.size(), expected.size());
   if (expectLazinessParityWhenNonEmpty &&
-      (!res->isFullyMaterialized() || !res->idTable().empty())) {
+      (!res->isFullyMaterialized() || !res->idTableView().empty())) {
     EXPECT_EQ(res->isFullyMaterialized(), !requestLaziness);
   }
   IdTable table =
       res->isFullyMaterialized()
-          ? res->idTable().clone()
+          ? res->cloneIdTable()
           : aggregateTables(res->idTables(), join.getResultWidth()).first;
   ASSERT_EQ(table.numColumns(), expected.size());
   for (const auto& [var, columnAndStatus] : expected) {
@@ -600,12 +600,77 @@ TEST_P(JoinTestParametrized, joinTwoScansWithDifferentGraphs) {
   testJoinOperation(joinSwitched, expectedColumns, true, true);
 }
 
+// Test joins with an `IndexScan` without variables, which must not use the
+// prefiltered join (regression test for
+// https://github.com/ad-freiburg/qlever/issues/3574).
+TEST_P(JoinTestParametrized, joinWithScanWithoutVariables) {
+  auto keepJoinCol = GetParam();
+  ad_utility::testing::TestIndexConfig config{
+      "<a> <b> <c> <g1> . <a> <b> <c> <g2> . <x> <y> <g1> . <x> <y> <g2> ."
+      " <x> <y> <g3> ."};
+  config.indexType = qlever::Filetype::NQuad;
+  auto qec = ad_utility::testing::getQec(config);
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  auto cleanup = setRuntimeParameterForTest<
+      &RuntimeParameters::lazyIndexScanMaxSizeMaterialization_>(0);
+
+  // `GRAPH ?g { <a> <b> <c> }`
+  auto makeFixedScan = [qec]() {
+    return ad_utility::makeExecutionTree<IndexScan>(
+        qec, PSO,
+        SparqlTripleSimple{iri("<a>"),
+                           iri("<b>"),
+                           iri("<c>"),
+                           {std::pair{ADDITIONAL_COLUMN_GRAPH_ID, Var{"?g"}}}});
+  };
+  // `<x> <y> ?g`
+  auto scanWithVariable = ad_utility::makeExecutionTree<IndexScan>(
+      qec, PSO, SparqlTripleSimple{iri("<x>"), iri("<y>"), Var{"?g"}});
+  auto values =
+      makeValuesForSingleVariable(qec, "?g", {iri("<g2>"), iri("<g3>")});
+
+  auto expectResult = [&](std::shared_ptr<QueryExecutionTree> left,
+                          std::shared_ptr<QueryExecutionTree> right,
+                          const std::vector<std::string>& expectedGraphs,
+                          ad_utility::source_location location =
+                              AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(location);
+    IdTable expected{1, qec->getAllocator()};
+    for (const auto& graph : expectedGraphs) {
+      expected.push_back({getId(graph)});
+    }
+    VariableToColumnMap expectedVariables{
+        {Var{"?g"}, makeAlwaysDefinedColumn(0)}};
+    if (!keepJoinCol) {
+      removeJoinColFromVarColMap(Var{"?g"}, expectedVariables);
+    }
+    auto expectedColumns = makeExpectedColumns(expectedVariables, expected);
+    for (bool swap : {false, true}) {
+      auto join = swap ? Join{qec, right, left, 0, 0, keepJoinCol, false}
+                       : Join{qec, left, right, 0, 0, keepJoinCol, false};
+      for (bool requestLaziness : {false, true}) {
+        qec->getQueryTreeCache().clearAll();
+        testJoinOperation(join, expectedColumns, requestLaziness);
+      }
+    }
+  };
+
+  // Two scans without variables.
+  expectResult(makeFixedScan(), makeFixedScan(), {"<g1>", "<g2>"});
+
+  // A scan without variables and a scan with a variable.
+  expectResult(makeFixedScan(), scanWithVariable, {"<g1>", "<g2>"});
+
+  // A scan without variables and an operation that is not a scan.
+  expectResult(makeFixedScan(), values, {"<g2>"});
+}
+
 // This is a regression test for a related issue found during the analysis of
 // https://github.com/ad-freiburg/qlever/issues/1893 where the join of two index
 // scans would fail if one element could potentially be found in multiple blocks
 // of the respective other side.
 TEST_P(JoinTestParametrized, joinTwoScansWithSubjectInMultipleBlocks) {
-  // Default block size is 16 bytes for testing, so the triples are spread
+  // Default block size is 2 rows for testing, so the triples are spread
   // across 3 blocks in total.
   auto keepJoinCol = GetParam();
   auto qec = ad_utility::testing::getQec(
@@ -942,6 +1007,32 @@ TEST(JoinTest, clone) {
 }
 
 // _____________________________________________________________________________
+// A `BIND` must not be pushed down into a child that already has a column for
+// the target variable, even if that child has all the variables the `BIND`
+// expression needs.
+TEST(JoinTest, makeTreeWithBindColumnSkipsChildThatAlreadyHasTheTarget) {
+  auto qec = ad_utility::testing::getQec();
+  auto leftTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{I(1), I(1), I(1)}}),
+      Vars{Variable{"?s"}, Variable{"?o"}, Variable{"?bind"}}, false,
+      std::vector<ColumnIndex>{0});
+  // The right tree doesn't contain `?o`, so the `BIND` can't be pushed down
+  // into it either.
+  auto rightTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{I(1)}}), Vars{Variable{"?s"}}, false,
+      std::vector<ColumnIndex>{0});
+  auto join = ad_utility::makeExecutionTree<Join>(qec, std::move(leftTree),
+                                                  std::move(rightTree), 0, 0);
+
+  parsedQuery::Bind bind{
+      sparqlExpression::SparqlExpressionPimpl::makeVariableExpression(
+          Variable{"?o"}),
+      Variable{"?bind"}};
+  EXPECT_FALSE(
+      join->getRootOperation()->makeTreeWithBindColumn(bind).has_value());
+}
+
+// _____________________________________________________________________________
 TEST_P(JoinTestParametrized, columnOriginatesFromGraphOrUndef) {
   auto keepJoinCol = GetParam();
   using ad_utility::triple_component::Iri;
@@ -1052,7 +1143,7 @@ TEST(JoinTest, lazyJoinIndexScanDetails) {
 
   // Check that the join result has 10 rows as expected.
   ASSERT_TRUE(result->isFullyMaterialized());
-  EXPECT_EQ(result->idTable().size(), 10);
+  EXPECT_EQ(result->idTableView().size(), 10);
 
   // Get the detalis of the runtime info of both index scans.
   const auto& scan1Rti = scan1->getRootOperation()->getRuntimeInfoPointer();
@@ -1077,6 +1168,158 @@ TEST(JoinTest, lazyJoinIndexScanDetails) {
   EXPECT_EQ(details2["num-blocks-all"].get<size_t>(), 5);
   EXPECT_EQ(details2["num-blocks-read"].get<size_t>(), 5);
   EXPECT_EQ(details2["num-elements-read"].get<size_t>(), 10);
+}
+
+// Test that the cost estimate of a join charges an index scan child that is
+// read lazily at most one block per row of a small sibling (the join reads only
+// the blocks that contain a value of the sibling), and its full cost otherwise.
+TEST(JoinTest, costEstimateOfJoinWithIndexScan) {
+  // Ten triples with the predicate `<p>`, two rows per block in the test index.
+  std::string kg;
+  for (size_t i = 0; i < 10; ++i) {
+    kg += absl::StrCat("<s", i, "> <p> <o", i, "> .\n");
+  }
+  auto qec = ad_utility::testing::getQec(kg);
+  // A sibling with one row is small, the scan with ten rows is not.
+  auto cleanup = setRuntimeParameterForTest<
+      &RuntimeParameters::lazyIndexScanMaxSizeMaterialization_>(2);
+  const size_t rowsPerBlock = qec->getIndex().rowsPerBlock();
+  using V = Variable;
+  auto makeScan = [qec]() {
+    return ad_utility::makeExecutionTree<IndexScan>(
+        qec, Permutation::PSO,
+        SparqlTripleSimple{V{"?s"}, iri("<p>"), V{"?o"}});
+  };
+  auto scan = makeScan();
+  ASSERT_EQ(scan->getSizeEstimate(), 10u);
+
+  // Check the cost of a join of the given `sibling` and `scanTree` against the
+  // formula of `JoinImpl::getCostEstimate`, where the join reads `scanRead`
+  // rows of the scan and charges `scanCost` for it as a subtree.
+  // NOTE: The join sorts the `sibling` (a `Values`), so the sibling that the
+  // formula sees is the join's first child.
+  auto expectCost = [&](std::shared_ptr<QueryExecutionTree> sibling,
+                        std::shared_ptr<QueryExecutionTree> scanTree,
+                        size_t scanRead, size_t scanCost,
+                        ad_utility::source_location l =
+                            AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    Join join{qec, sibling, scanTree, 0, 0};
+    auto children = join.getChildren();
+    ASSERT_EQ(children.size(), 2u);
+    ASSERT_NE(std::dynamic_pointer_cast<IndexScan>(
+                  children.at(1)->getRootOperation()),
+              nullptr);
+    auto& sorted = *children.at(0);
+    EXPECT_EQ(join.getCostEstimate(), join.getSizeEstimate() +
+                                          sorted.getSizeEstimate() + scanRead +
+                                          sorted.getCostEstimate() + scanCost);
+    bool isOverwritten = scanCost < scanTree->getCostEstimate();
+    EXPECT_THAT(join.getCostEstimatesChargedForChildren(),
+                ::testing::ElementsAre(sorted.getCostEstimate(), scanCost));
+
+    // The runtime information shows the cost that the join charges for the
+    // scan, so the operation cost of the join is what it adds itself.
+    join.createRuntimeInfoFromEstimates(join.getRuntimeInfoPointer());
+    const auto& info = join.runtimeInfo();
+    ASSERT_EQ(info.children_.size(), 2u);
+    const auto& scanInfo = *info.children_.at(1);
+    EXPECT_EQ(scanInfo.costEstimate_, scanCost);
+    EXPECT_EQ(info.getOperationCostEstimate(),
+              join.getSizeEstimate() + sorted.getSizeEstimate() + scanRead);
+    // The standalone cost is shown only if it differs (the `scanTree` is
+    // reused, so a stale detail of a previous call must be gone).
+    if (isOverwritten) {
+      EXPECT_EQ(scanInfo.details_.at("standalone-cost-estimate"),
+                scanTree->getCostEstimate());
+    } else {
+      EXPECT_FALSE(scanInfo.details_.contains("standalone-cost-estimate"));
+    }
+  };
+
+  // One row on the other side: the scan is charged one block (two rows), not
+  // its ten rows.
+  ASSERT_LT(rowsPerBlock, 10u);
+  auto one = makeValuesForSingleVariable(qec, "?s", {iri("<s3>")});
+  expectCost(one, scan, rowsPerBlock, rowsPerBlock);
+
+  // Ten rows on the other side: the sibling is not small, so it is not
+  // materialized, and the scan is charged its size.
+  std::vector<TripleComponent> ten;
+  for (size_t i = 0; i < 10; ++i) {
+    ten.push_back(iri(absl::StrCat("<s", i, ">")));
+  }
+  auto many = makeValuesForSingleVariable(qec, "?s", ten);
+  expectCost(many, scan, 10, 10);
+
+  // A small sibling with more rows than the scan has blocks: the bound would
+  // exceed the scan, so the scan is charged its size.
+  {
+    auto cleanupLarger = setRuntimeParameterForTest<
+        &RuntimeParameters::lazyIndexScanMaxSizeMaterialization_>(10);
+    size_t numSiblingRows = ad_utility::ceilDiv(10, rowsPerBlock) + 1;
+    ASSERT_LT(numSiblingRows, 10u);
+    auto moreThanBlocks = makeValuesForSingleVariable(
+        qec, "?s", std::vector(ten.begin(), ten.begin() + numSiblingRows));
+    expectCost(moreThanBlocks, scan, 10, 10);
+  }
+
+  // A sibling with UNDEF in the join column: the scan reads all blocks.
+  auto undef =
+      makeValuesForSingleVariable(qec, "?s", {TripleComponent::UNDEF{}});
+  expectCost(undef, scan, 10, 10);
+
+  // A scan with a LIMIT and OFFSET reads all blocks. Its size is the limit,
+  // its own cost includes the offset.
+  auto scanWithLimit = makeScan();
+  scanWithLimit->applyLimitOffset({3, 2}, false);
+  ASSERT_EQ(scanWithLimit->getSizeEstimate(), 3u);
+  ASSERT_EQ(scanWithLimit->getCostEstimate(), 5u);
+  expectCost(one, scanWithLimit, 3, 5);
+
+  // A scan that is small itself is materialized and charged its size.
+  {
+    auto cleanupLarge = setRuntimeParameterForTest<
+        &RuntimeParameters::lazyIndexScanMaxSizeMaterialization_>(1'000'000);
+    expectCost(one, scan, 10, 10);
+  }
+
+  // A small scan as the sibling (one row, because the object is fixed): the
+  // join materializes it, so the other scan is charged one block, like for the
+  // `Values` above. The small scan is charged its one row.
+  auto smallScan = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::POS,
+      SparqlTripleSimple{V{"?s"}, iri("<p>"), iri("<o3>")});
+  ASSERT_EQ(smallScan->getSizeEstimate(), 1u);
+  Join scanAndSmallScan{qec, smallScan, scan, 0, 0};
+  EXPECT_EQ(scanAndSmallScan.getCostEstimate(),
+            scanAndSmallScan.getSizeEstimate() + 2 * (1 + rowsPerBlock));
+  auto children = scanAndSmallScan.getChildren();
+  auto chargedCosts = scanAndSmallScan.getCostEstimatesChargedForChildren();
+  ASSERT_EQ(chargedCosts.size(), 2u);
+  for (size_t i = 0; i < 2; ++i) {
+    bool isSmall = children.at(i)->getSizeEstimate() == 1;
+    EXPECT_EQ(chargedCosts.at(i), isSmall ? 1 : rowsPerBlock);
+  }
+
+  // Two scans that are both not small: no bound, both scans are charged their
+  // size.
+  auto scan2 = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::PSO, SparqlTripleSimple{V{"?s"}, iri("<p>"), V{"?o2"}});
+  Join twoScans{qec, scan2, scan, 0, 0};
+  EXPECT_EQ(twoScans.getCostEstimate(), twoScans.getSizeEstimate() + 40);
+  EXPECT_THAT(twoScans.getCostEstimatesChargedForChildren(),
+              ::testing::ElementsAre(10, 10));
+
+  // A cached scan with `zero-cost-estimate-for-cached-subtree` keeps its zero
+  // cost, the bound does not raise it.
+  [[maybe_unused]] auto scanResult = makeScan()->getResult();
+  auto cleanupZero = setRuntimeParameterForTest<
+      &RuntimeParameters::zeroCostEstimateForCachedSubtree_>(true);
+  auto cachedScan = makeScan();
+  ASSERT_EQ(cachedScan->getCostEstimate(), 0u);
+  Join withCachedScan{qec, one, cachedScan, 0, 0};
+  EXPECT_EQ(withCachedScan.getCostEstimatesChargedForChildren().at(1), 0u);
 }
 
 // _____________________________________________________________________________

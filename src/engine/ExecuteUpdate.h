@@ -7,18 +7,11 @@
 
 #include <gtest/gtest_prod.h>
 
+#include "engine/UpdateMetadata.h"
 #include "index/Index.h"
 #include "parser/ParsedQuery.h"
 #include "util/CancellationHandle.h"
 #include "util/TimeTracer.h"
-
-// Metadata of a single update operation: number of inserted and deleted triples
-// before the operation, of the operation, and after the operation.
-struct UpdateMetadata {
-  std::optional<DeltaTriplesCount> countBefore_;
-  std::optional<DeltaTriplesCount> inUpdate_;
-  std::optional<DeltaTriplesCount> countAfter_;
-};
 
 class ExecuteUpdate {
  public:
@@ -40,8 +33,7 @@ class ExecuteUpdate {
   // `SparqlTripleSimpleWithGraph` into `Variable`s or `Id`s.
   static std::pair<std::vector<ExecuteUpdate::TransformedTriple>, LocalVocab>
   transformTriplesTemplate(
-      const EncodedIriManager& encodedIriManager, const Index::Vocab& vocab,
-      const VariableToColumnMap& variableColumns,
+      const IndexImpl& index, const VariableToColumnMap& variableColumns,
       const std::vector<SparqlTripleSimpleWithGraph>& triples);
   FRIEND_TEST(ExecuteUpdate, transformTriplesTemplate);
 
@@ -49,7 +41,7 @@ class ExecuteUpdate {
   // result row. The `Id`s will never be undefined. If (and only if) the input
   // `Id` or the `Id` looked up in the `IdTable` is undefined then
   // `std::nullopt` is returned.
-  static std::optional<Id> resolveVariable(const IdTable& idTable,
+  static std::optional<Id> resolveVariable(const IdTableView<0>& idTable,
                                            const uint64_t& rowIdx,
                                            IdOrVariableIndex idOrVar);
   FRIEND_TEST(ExecuteUpdate, resolveVariable);
@@ -59,7 +51,8 @@ class ExecuteUpdate {
   // consist of only `Id`s.
   static void computeAndAddQuadsForResultRow(
       const std::vector<TransformedTriple>& templates,
-      std::vector<IdTriple<>>& result, const IdTable& idTable, uint64_t rowIdx);
+      std::vector<IdTriple<>>& result, const IdTableView<0>& idTable,
+      uint64_t rowIdx);
   FRIEND_TEST(ExecuteUpdate, computeAndAddQuadsForResultRow);
 
   struct IdTriplesAndLocalVocab {

@@ -9,6 +9,9 @@
 #include "engine/ExplicitIdTableOperation.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
+#include "engine/QueryExecutionTree.h"
+#include "index/TripleComponentConversions.h"
+#include "util/ChunkedForLoop.h"
 
 // _____________________________________________________________________________
 Describe::Describe(QueryExecutionContext* qec,
@@ -23,8 +26,8 @@ Describe::Describe(QueryExecutionContext* qec,
 }
 
 // _____________________________________________________________________________
-std::vector<QueryExecutionTree*> Describe::getChildren() {
-  return {subtree_.get()};
+qlm::vector<QueryExecutionTree*> Describe::getChildrenImpl() const {
+  return {{subtree_.get()}, allocator()};
 }
 
 // _____________________________________________________________________________
@@ -56,7 +59,7 @@ std::string Describe::getCacheKeyImpl() const {
   if (defaultGraphs.has_value()) {
     std::vector<std::string> graphIdVec;
     ql::ranges::transform(defaultGraphs.value(), std::back_inserter(graphIdVec),
-                          &TripleComponent::toRdfLiteral);
+                          &toRdfLiteral);
     ql::ranges::sort(graphIdVec);
     absl::StrAppend(&result,
                     "\nFiltered by Graphs:", absl::StrJoin(graphIdVec, " "));
@@ -81,7 +84,9 @@ bool Describe::knownEmptyResult() { return false; }
 
 // The result cannot easily be sorted, as it involves recursive expanding of
 // graphs.
-std::vector<ColumnIndex> Describe::resultSortedOn() const { return {}; }
+qlm::vector<ColumnIndex> Describe::resultSortedOn() const {
+  return qlm::vector<ColumnIndex>{allocator()};
+}
 
 // The result always has three variables `?subject`, `?predicate`, `?object`.
 //
@@ -98,25 +103,30 @@ VariableToColumnMap Describe::computeVariableToColumnMap() const {
 // A helper function for the recursive BFS. Return those `Id`s from `input` (an
 // `IdTable` with one column) that are blank nodes and not in `alreadySeen`,
 // with duplicates removed. The returned `Id`s are added to `alreadySeen`.
-template <typename Allocator>
+// `checkCancellation` is called regularly.
+template <typename Allocator, typename CheckCancellation>
 static IdTable getNewBlankNodes(
     const Allocator& allocator,
-    ad_utility::HashSetWithMemoryLimit<Id>& alreadySeen, ql::span<Id> input) {
+    ad_utility::HashSetWithMemoryLimit<Id>& alreadySeen, ConstIdColumnRef input,
+    CheckCancellation checkCancellation) {
   IdTable result{1, allocator};
   result.resize(input.size());
   decltype(auto) resultColumn = result.getColumn(0);
   size_t i = 0;
-  for (Id id : input) {
-    if (id.getDatatype() != Datatype::BlankNodeIndex) {
-      continue;
-    }
-    auto [it, isNew] = alreadySeen.emplace(id);
-    if (!isNew) {
-      continue;
-    }
-    resultColumn[i] = id;
-    ++i;
-  }
+  ad_utility::chunkedForEach(
+      input,
+      [&alreadySeen, &resultColumn, &i](Id id) {
+        if (id.getDatatype() != Datatype::BlankNodeIndex) {
+          return;
+        }
+        auto [it, isNew] = alreadySeen.emplace(id);
+        if (!isNew) {
+          return;
+        }
+        resultColumn[i] = id;
+        ++i;
+      },
+      std::move(checkCancellation));
   result.resize(i);
   return result;
 }
@@ -142,8 +152,8 @@ void Describe::recursivelyAddBlankNodes(
   finalResult.insertAtEnd(table);
 
   // Compute the set of newly found blank nodes and recurse.
-  auto newBlankNodes =
-      getNewBlankNodes(allocator(), alreadySeen, table.getColumn(2));
+  auto newBlankNodes = getNewBlankNodes(
+      allocator(), alreadySeen, table.getColumn(2), cancellationChecker());
   recursivelyAddBlankNodes(finalResult, localVocab, alreadySeen,
                            std::move(newBlankNodes));
 }
@@ -161,11 +171,11 @@ IdTable Describe::makeAndExecuteJoinWithFullIndex(
   using V = Variable;
   auto subjectVar = V{"?subject"};
   auto valuesOp = ad_utility::makeExecutionTree<ExplicitIdTableOperation>(
-      getExecutionContext(), std::make_shared<IdTable>(std::move(input)),
+      getExecutionContext(), makeShared<IdTable>(std::move(input)),
       VariableToColumnMap{
           {subjectVar,
            ColumnIndexAndTypeInfo{0, ColumnIndexAndTypeInfo::AlwaysDefined}}},
-      std::vector<ColumnIndex>{}, LocalVocab{},
+      qlm::vector<ColumnIndex>{allocator()}, LocalVocab{},
       absl::StrCat("INTERNAL DESCRIBE ", uniqueCounter++));
   SparqlTripleSimple triple{subjectVar, V{"?predicate"}, V{"?object"}};
   auto activeGraphs = describe_.datasetClauses_.activeDefaultGraphs();
@@ -187,7 +197,7 @@ IdTable Describe::makeAndExecuteJoinWithFullIndex(
   // case the `selectColumns` operation is a no-op. Note sure when this is not
   // the case, but better safe than sorry.
   auto result = join->getResult();
-  IdTable resultTable = result->idTable().clone();
+  IdTable resultTable = result->cloneIdTable(cancellationChecker());
   ColumnIndex s = join->getVariableColumn(V{"?subject"});
   ColumnIndex p = join->getVariableColumn(V{"?predicate"});
   ColumnIndex o = join->getVariableColumn(V{"?object"});
@@ -205,24 +215,29 @@ IdTable Describe::getIdsToDescribe(const Result& result,
                                    LocalVocab& localVocab) const {
   // First collect the `Id`s in a hash set, in order to remove duplicates.
   ad_utility::HashSetWithMemoryLimit<Id> idsToDescribe{allocator()};
-  const auto& vocab = getIndex().getVocab();
   for (const auto& resource : describe_.resources_) {
     if (std::holds_alternative<TripleComponent::Iri>(resource)) {
       // For an IRI, add the corresponding ID to `idsToDescribe`.
       idsToDescribe.insert(
-          TripleComponent{std::get<TripleComponent::Iri>(resource)}.toValueId(
-              vocab, localVocab, getIndex().encodedIriManager()));
+          toValueId(TripleComponent{std::get<TripleComponent::Iri>(resource)},
+                    getIndex(), localVocab));
     } else {
       // For a variable, add all IDs that match the variable in the `result` of
-      // the WHERE clause to `idsToDescribe`.
+      // the WHERE clause to `idsToDescribe`. Unbound values (e.g. from an
+      // `OPTIONAL` or `UNDEF` in a `VALUES` clause) have nothing to describe.
       const auto& var = std::get<Variable>(resource);
       auto column = subtree_->getVariableColumnOrNullopt(var);
       if (!column.has_value()) {
         continue;
       }
-      for (Id id : result.idTable().getColumn(column.value())) {
-        idsToDescribe.insert(id);
-      }
+      ad_utility::chunkedForEach(
+          result.idTableView().getColumn(column.value()),
+          [&idsToDescribe](Id id) {
+            if (Id::isDefinedL(id)) {
+              idsToDescribe.insert(id);
+            }
+          },
+          cancellationChecker());
     }
   }
 
@@ -250,7 +265,8 @@ Result Describe::computeResult([[maybe_unused]] bool requestLaziness) {
   // Recursively follow all blank nodes.
   ad_utility::HashSetWithMemoryLimit<Id> alreadySeen{allocator()};
   auto blankNodes =
-      getNewBlankNodes(allocator(), alreadySeen, resultTable.getColumn(2));
+      getNewBlankNodes(allocator(), alreadySeen, resultTable.getColumn(2),
+                       cancellationChecker());
   recursivelyAddBlankNodes(resultTable, localVocab, alreadySeen,
                            std::move(blankNodes));
 

@@ -10,10 +10,11 @@
 
 #include <cstddef>
 #include <sstream>
+#include <tuple>
 
 #include "backports/type_traits.h"
-#include "util/ConfigManager/ConfigOption.h"
 #include "util/TypeTraits.h"
+#include "util/configManager/ConfigOption.h"
 
 /*
 @brief Generate a value of the given type. Used for generating test values in
@@ -21,9 +22,10 @@ cooperation with `generateSingleParameterValidatorFunction`, while keeping the
 invariant of `generateValidatorFunction` true.
 `variant` slightly changes the returned value.
 */
-CPP_template(typename Type)(requires ad_utility::SameAsAnyTypeIn<
-                            Type, ad_utility::ConfigOption::AvailableTypes>)
-    Type createDummyValueForValidator(size_t variant);
+CPP_template(typename Type)(
+    requires ad_utility::SameAsAnyTypeIn<
+        Type, ad_utility::ConfigOption::AvailableTypes>)
+Type createDummyValueForValidator(size_t variant);
 
 /*
 @brief For easily creating `Validator` functions, that compare given values to
@@ -47,14 +49,13 @@ function.
 creation of multiple different validator functions. For more information,
 what the exact difference is, see the code in `createDummyValueForValidator`.
 */
-template <typename... ParameterTypes>
-requires((ad_utility::SameAsAnyTypeIn<
-             ParameterTypes, ad_utility::ConfigOption::AvailableTypes>) &&
-         ...)
+CPP_variadic_template(typename... ParameterTypes)(requires(
+    ad_utility::SameAsAnyTypeIn<ParameterTypes,
+                                ad_utility::ConfigOption::AvailableTypes>&&...))
 auto generateDummyNonExceptionValidatorFunction(size_t variant) {
-  return [... dummyValuesToCompareTo =
-              createDummyValueForValidator<ParameterTypes>(variant)](
-             const ParameterTypes&... args) {
+  return [dummyValuesToCompareTo = std::tuple<ParameterTypes...>{
+              createDummyValueForValidator<ParameterTypes>(
+                  variant)...}](const ParameterTypes&... args) {
     // Special handling for `args` of type bool is needed. For the reasoning:
     // See the doc string.
     auto compare = [](const auto& arg, const auto& dummyValueToCompareTo) {
@@ -68,7 +69,11 @@ auto generateDummyNonExceptionValidatorFunction(size_t variant) {
         return arg != dummyValueToCompareTo;
       }
     };
-    return (compare(args, dummyValuesToCompareTo) || ...);
+    return std::apply(
+        [&](const ParameterTypes&... dummies) {
+          return (compare(args, dummies) || ...);
+        },
+        dummyValuesToCompareTo);
   };
 };
 
