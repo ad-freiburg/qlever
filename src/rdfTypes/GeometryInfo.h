@@ -183,6 +183,13 @@ struct MetricArea {
   bool isValid() const { return !std::isnan(area_); }
 };
 
+// The ID of a parsed geometry in the `sj::GeometryStore` of the
+// `GeoVocabulary` (see `GeometryInfo::getGeometryStoreId`). It has at most 60
+// bits (the upper bits are the type of the geometry, see `sj::ID_TYPE_SHIFT`).
+struct GeometryStoreId {
+  uint64_t id_;
+};
+
 // The serialization format of a geometry literal. For now, only WKT literals
 // are supported (in the future possibly e.g. GeoJSON or KML). The value zero
 // is `WKT`, because all records written before this field was taken into use
@@ -219,7 +226,7 @@ template <typename T>
 CPP_concept RequestedInfoT =
     SameAsAny<T, GeometryInfo, Centroid, BoundingBox, GeometryType,
               SourceCrsType, NumGeometries, MetricLength, MetricArea,
-              SerializationType> ||
+              SerializationType, GeometryStoreId> ||
     SameAsAny<T, WithSourceCrs<Centroid>, WithSourceCrs<BoundingBox>>;
 
 // Where the actual geometries are required, this type can be used.

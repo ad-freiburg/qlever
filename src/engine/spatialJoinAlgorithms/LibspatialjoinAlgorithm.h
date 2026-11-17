@@ -159,6 +159,12 @@ class LibspatialjoinAlgorithm : public SpatialJoinAlgorithmBase {
       const IdTableView<0>* idTable,
       const SpatialJoinBoundingBoxColumns& boundingBoxes, size_t row);
 
+  // Helper for `parse` to get the ID of the geometry in the persisted
+  // `sj::GeometryStore` from an `IdTable` if available.
+  static std::optional<uint64_t> getGeometryStoreIdFromIdTable(
+      const IdTableView<0>* idTable,
+      const SpatialJoinBoundingBoxColumns& boundingBoxes, size_t row);
+
   // Retrieve the number of threads to be used for `parse` and `run`.
   static size_t getNumThreads();
 

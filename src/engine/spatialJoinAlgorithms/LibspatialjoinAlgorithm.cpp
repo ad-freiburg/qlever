@@ -23,6 +23,7 @@
 #include "engine/SpatialJoinParser.h"
 #include "global/RuntimeParameters.h"
 #include "index/vocabulary/GeoVocabulary.h"
+#include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "util/ChunkedForLoop.h"
 #include "util/ContainersWithAllocator.h"
@@ -68,14 +69,26 @@ LibspatialjoinAlgorithm::getBoundingBoxFromIdTable(
   if (!boundingBoxes.has_value()) {
     return std::nullopt;
   }
-  auto idLowerLeft = idTable->at(row, boundingBoxes.value().first);
-  auto idUpperRight = idTable->at(row, boundingBoxes.value().second);
+  auto idLowerLeft = idTable->at(row, boundingBoxes.value().lowerLeft_);
+  auto idUpperRight = idTable->at(row, boundingBoxes.value().upperRight_);
   if (idLowerLeft.getDatatype() != Datatype::GeoPoint ||
       idUpperRight.getDatatype() != Datatype::GeoPoint) {
     return std::nullopt;
   }
   return ad_utility::BoundingBox{idLowerLeft.getGeoPoint(),
                                  idUpperRight.getGeoPoint()};
+}
+
+// ____________________________________________________________________________
+std::optional<uint64_t> LibspatialjoinAlgorithm::getGeometryStoreIdFromIdTable(
+    const IdTableView<0>* idTable,
+    const SpatialJoinBoundingBoxColumns& boundingBoxes, size_t row) {
+  if (!boundingBoxes.has_value() ||
+      !boundingBoxes.value().geometryStoreId_.has_value()) {
+    return std::nullopt;
+  }
+  return ad_utility::geometryStoreIdFromValueId(
+      idTable->at(row, boundingBoxes.value().geometryStoreId_.value()));
 }
 
 // ____________________________________________________________________________
@@ -263,7 +276,8 @@ LibspatialjoinAlgorithm::ParseMetadata LibspatialjoinAlgorithm::parse(
       [&parser, &geoms, &idTable, &boundingBoxes](size_t row) {
         parser.addValueIdToQueue(
             geoms[row], row,
-            getBoundingBoxFromIdTable(idTable, boundingBoxes, row));
+            getBoundingBoxFromIdTable(idTable, boundingBoxes, row),
+            getGeometryStoreIdFromIdTable(idTable, boundingBoxes, row));
       },
       [this, &parser]() {
         throwIfCancelled();

@@ -408,12 +408,14 @@ ExpressionPtr Visitor::processIriFunctionCall(
   static const UnaryFuncTable unaryInternalFuncs{
       {"envelopeLowerLeft", &makeEnvelopeLowerLeftExpression},
       {"envelopeUpperRight", &makeEnvelopeUpperRightExpression},
+      {"geometryStoreId", &makeGeometryStoreIdExpression},
       {"isGeoPoint", &makeIsGeoPointExpression},
       {"isEncodedIri", &makeIsEncodedIriExpression},
       {"toEpoch", &makeToEpochExpression},
   };
   if (checkPrefix(QL_PREFIX)) {
     if (ql::starts_with(functionName, "envelope") ||
+        functionName == "geometryStoreId" ||
         functionName == "simplifyGeometry") {
       checkGeoFunctionArgs(argList, ctx);
     }

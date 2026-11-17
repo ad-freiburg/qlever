@@ -24,12 +24,14 @@ struct SpatialJoinParseJob {
   size_t line;
   std::string wkt;
   std::optional<BoundingBox> boundingBox;
+  std::optional<uint64_t> geometryStoreId;
 };
 
 // Compare two `SpatialJoinParseJob` objects. The member attribute `wkt` is used
 // only as an internal buffer during processing and is otherwise empty,
-// therefore it is not compared here. The `boundingBox` is used for internal
-// prefiltering and is therefore also not compared here.
+// therefore it is not compared here. The `boundingBox` and `geometryStoreId`
+// only save lookups in the `GeoVocabulary` and are therefore also not compared
+// here.
 inline bool operator==(const SpatialJoinParseJob& a,
                        const SpatialJoinParseJob& b) {
   return a.line == b.line && a.valueId == b.valueId;
@@ -77,9 +79,11 @@ class WKTParser : public sj::WKTParserBase<SpatialJoinParseJob> {
   // Enqueue a new row from the input table (given the `ValueId` of the
   // geometry: `GeoPoint` or `VocabIndex` or `LocalVocabIndex` and the
   // `rowIndex` in the input table). If available as part of the `IdTable`,
-  // this function accepts a precomputed bounding box for prefiltering.
-  void addValueIdToQueue(ValueId valueId, size_t rowIndex,
-                         std::optional<BoundingBox> boundingBox);
+  // this function accepts a precomputed bounding box for prefiltering and the
+  // ID of the geometry in the persisted `sj::GeometryStore`.
+  void addValueIdToQueue(
+      ValueId valueId, size_t rowIndex, std::optional<BoundingBox> boundingBox,
+      std::optional<uint64_t> geometryStoreId = std::nullopt);
 
   // The rows whose geometry is in the persisted store (see
   // `usePersistedGeometries`), sorted by the position of the geometry and
@@ -98,7 +102,9 @@ class WKTParser : public sj::WKTParserBase<SpatialJoinParseJob> {
   void processQueue(size_t t) override;
 
   // The `StoredGeometryRow` of a job with a `VocabIndex`, or `std::nullopt` if
-  // its geometry is not in the persisted store (or that is not used).
+  // its geometry is not in the persisted store (or that is not used). If the
+  // job has a precomputed bounding box and geometry store ID, the
+  // `GeometryInfo` is not read from the `GeoVocabulary`.
   std::optional<StoredGeometryRow> storedGeometryRow(
       const SpatialJoinParseJob& job) const;
 

@@ -90,24 +90,41 @@ std::optional<StoredGeometryRow> WKTParser::storedGeometryRow(
     return std::nullopt;
   }
   auto vocabIndex = job.valueId.getVocabIndex();
-  auto info = _index.getVocab().getGeoInfo(vocabIndex);
-  if (!info.has_value() || !info->getGeometryStoreId().has_value()) {
+
+  // Take the geometry store ID and the bounding box from the job if it has
+  // both (precomputed in a materialized view, see
+  // `SpatialJoin::cloneWithBoundingBoxColumns`), otherwise from the
+  // `GeometryInfo` (a random access to disk).
+  auto idAndBox = [&]() -> std::optional<std::pair<uint64_t, BoundingBox>> {
+    if (job.geometryStoreId.has_value() && job.boundingBox.has_value()) {
+      return std::pair{job.geometryStoreId.value(), job.boundingBox.value()};
+    }
+    auto info = _index.getVocab().getGeoInfo(vocabIndex);
+    if (!info.has_value() || !info->getGeometryStoreId().has_value()) {
+      return std::nullopt;
+    }
+    return std::pair{info->getGeometryStoreId().value(),
+                     info->getBoundingBox()};
+  }();
+  if (!idAndBox.has_value()) {
     return std::nullopt;
   }
+  const auto& [geometryStoreId, boundingBox] = idAndBox.value();
+
   auto position = _index.getVocab().getGeoVocabularyPosition(vocabIndex);
   AD_CORRECTNESS_CHECK(position.has_value());
 
-  // The corners of the bounding box of a `GeometryInfo` are rounded to the
-  // nearest `GeoPoint` (a step of less than `2e-7` degrees), so pad it to be
-  // sure that it contains the geometry.
+  // The corners of the bounding box are rounded to the nearest `GeoPoint` (a
+  // step of less than `2e-7` degrees), so pad it to be sure that it contains
+  // the geometry.
   constexpr double padding = 1e-6;
-  auto box = ad_utility::detail::boundingBoxToUtilBox(info->getBoundingBox());
+  auto box = ad_utility::detail::boundingBoxToUtilBox(boundingBox);
   box = ::util::geo::DBox{{box.getLowerLeft().getX() - padding,
                            box.getLowerLeft().getY() - padding},
                           {box.getUpperRight().getX() + padding,
                            box.getUpperRight().getY() + padding}};
   return StoredGeometryRow{
-      position.value(), job.line, info->getGeometryStoreId().value(),
+      position.value(), job.line, geometryStoreId,
       ad_utility::detail::projectDoubleLatLngToInt32WebMerc(box)};
 }
 
@@ -217,8 +234,10 @@ void WKTParser::processQueue(size_t t) {
 
 // _____________________________________________________________________________
 void WKTParser::addValueIdToQueue(ValueId valueId, size_t rowIndex,
-                                  std::optional<BoundingBox> boundingBox) {
-  _curBatch.push_back({valueId, rowIndex, "", std::move(boundingBox)});
+                                  std::optional<BoundingBox> boundingBox,
+                                  std::optional<uint64_t> geometryStoreId) {
+  _curBatch.push_back(
+      {valueId, rowIndex, "", std::move(boundingBox), geometryStoreId});
 
   if (_curBatch.size() >= WKT_PARSER_BATCH_SIZE) {
     _jobs.add(std::move(_curBatch));

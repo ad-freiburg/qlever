@@ -389,6 +389,12 @@ std::optional<RequestedInfo> GeometryInfo::getRequestedInfo() const {
     return getMetricArea();
   } else if constexpr (std::is_same_v<RequestedInfo, SerializationType>) {
     return getSerializationType();
+  } else if constexpr (std::is_same_v<RequestedInfo, GeometryStoreId>) {
+    auto id = getGeometryStoreId();
+    if (!id.has_value()) {
+      return std::nullopt;
+    }
+    return GeometryStoreId{id.value()};
   } else if constexpr (isInstantiation<RequestedInfo, WithSourceCrs>) {
     return detail::getWithSourceCrs(
         getRequestedInfo<typename RequestedInfo::InfoType>(),
@@ -417,6 +423,8 @@ template std::optional<MetricArea> GeometryInfo::getRequestedInfo<MetricArea>()
     const;
 template std::optional<SerializationType>
 GeometryInfo::getRequestedInfo<SerializationType>() const;
+template std::optional<GeometryStoreId>
+GeometryInfo::getRequestedInfo<GeometryStoreId>() const;
 template std::optional<WithSourceCrs<Centroid>>
 GeometryInfo::getRequestedInfo<WithSourceCrs<Centroid>>() const;
 template std::optional<WithSourceCrs<BoundingBox>>
@@ -445,6 +453,9 @@ std::optional<RequestedInfo> GeometryInfo::getRequestedInfo(
     return GeometryInfo::getMetricArea(wkt);
   } else if constexpr (std::is_same_v<RequestedInfo, SerializationType>) {
     return GeometryInfo::getSerializationType(wkt);
+  } else if constexpr (std::is_same_v<RequestedInfo, GeometryStoreId>) {
+    // Only a literal of the `GeoVocabulary` can be in its geometry store.
+    return std::nullopt;
   } else if constexpr (isInstantiation<RequestedInfo, WithSourceCrs>) {
     return detail::getWithSourceCrsFromWkt<typename RequestedInfo::InfoType>(
         wkt);
@@ -472,6 +483,8 @@ template std::optional<MetricArea> GeometryInfo::getRequestedInfo<MetricArea>(
     std::string_view wkt);
 template std::optional<SerializationType>
 GeometryInfo::getRequestedInfo<SerializationType>(std::string_view wkt);
+template std::optional<GeometryStoreId>
+GeometryInfo::getRequestedInfo<GeometryStoreId>(std::string_view wkt);
 template std::optional<WithSourceCrs<Centroid>>
 GeometryInfo::getRequestedInfo<WithSourceCrs<Centroid>>(std::string_view wkt);
 template std::optional<WithSourceCrs<BoundingBox>>
