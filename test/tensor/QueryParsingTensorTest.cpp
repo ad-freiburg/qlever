@@ -154,11 +154,18 @@ TEST(TensorIndexQuery, Parameters) {
   add(query, "algorithm", iri("<hnsw>"));
   add(query, "distance", iri("<cosine>"));
   add(query, "payload", iri("<all>"));
+  // A variable parameter cannot be set twice.
+  EXPECT_ANY_THROW(add(query, "left", Variable{"?a2"}));
   // The full IRI is also accepted.
-  add(query, absl::StrCat(TENSOR_INDEX_IRI.substr(1, TENSOR_INDEX_IRI.size() - 2),
-                          "left"),
-      Variable{"?a2"});
-  EXPECT_EQ(query.left_, Variable{"?a2"});
+  {
+    TensorIndexQuery other;
+    add(other,
+        absl::StrCat(TENSOR_INDEX_IRI.substr(1, TENSOR_INDEX_IRI.size() - 2),
+                     "left"),
+        Variable{"?a2"});
+    EXPECT_EQ(other.left_, Variable{"?a2"});
+  }
+  EXPECT_EQ(query.left_, Variable{"?a"});
   EXPECT_EQ(query.right_, Variable{"?b"});
   EXPECT_EQ(query.distanceVariable_, Variable{"?d"});
   EXPECT_EQ(query.maxResults_, 7u);

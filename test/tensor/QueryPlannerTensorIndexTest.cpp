@@ -297,7 +297,7 @@ TEST(QueryTensorIndexPlanner, TensorIndexMultipleServiceSharedLeft) {
       "  { ?ab <p1> ?b }"
       "}"
       "SERVICE tensorIndex: {"
-      "  _:config tensorIndex:algorithm tensorIndex:ivf ;"
+      "  _:config2 tensorIndex:algorithm tensorIndex:ivf ;"
       "    tensorIndex:left ?y ;"
       "    tensorIndex:right ?c ;"
       "    tensorIndex:numNN 3 ;"
@@ -435,7 +435,7 @@ TEST(QueryPlanner, TensorIndexIncorrectConfigValues) {
                 " { ?a <p> ?b . }"
                 "}}",
                 ::testing::_),
-      ::testing::ContainsRegex("`<numNN>` expects an integer"));
+      ::testing::ContainsRegex("`<numNN>` expects a non-negative integer"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       h::expect("PREFIX tensorIndex: "
                 "<https://qlever.cs.uni-freiburg.de/tensorIndex/>"
@@ -448,7 +448,7 @@ TEST(QueryPlanner, TensorIndexIncorrectConfigValues) {
                 " { ?a <p> ?b . }"
                 "}}",
                 ::testing::_),
-      ::testing::ContainsRegex("`<searchK>` expects an integer"));
+      ::testing::ContainsRegex("`<searchK>` expects a non-negative integer"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       h::expect("PREFIX tensorIndex: "
                 "<https://qlever.cs.uni-freiburg.de/tensorIndex/>"
@@ -461,7 +461,7 @@ TEST(QueryPlanner, TensorIndexIncorrectConfigValues) {
                 " { ?a <p> ?b . }"
                 "}}",
                 ::testing::_),
-      ::testing::ContainsRegex("`<kIVF>` expects an integer"));
+      ::testing::ContainsRegex("`<kIVF>` expects a non-negative integer"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       h::expect("PREFIX tensorIndex: "
                 "<https://qlever.cs.uni-freiburg.de/tensorIndex/>"
