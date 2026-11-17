@@ -125,7 +125,9 @@ void WKTParser::processQueue(size_t t) {
     try {
       sj::WriteBatch w;
       for (auto& job : batch) {
-        if (_cancelled) break;
+        if (_cancelled) {
+          break;
+        }
 
         auto dt = job.valueId.getDatatype();
         if (dt == Datatype::VocabIndex) {
