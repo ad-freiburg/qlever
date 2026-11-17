@@ -243,14 +243,19 @@ TEST(IdRefTest, mutableRestrictedReferenceConvertsToConst) {
   }
 }
 
-// Test that an `IdRef` can be built from a `SplitLayoutId&` and a `ConstIdRef`
-// also from a `const SplitLayoutId&`, but neither from a temporary, which would
-// dangle. This holds in both builds, because the constructor is declared in
-// both.
+constexpr bool idIsSplitLayoutId = std::is_same_v<Id, SplitLayoutId>;
+
+// Test that with `USE_SPLIT_LAYOUT` an `IdRef` can be built from a
+// `SplitLayoutId&` and a `ConstIdRef` also from a `const SplitLayoutId&`, but
+// neither from a temporary, which would dangle. Without it, an `IdRef` refers
+// to a legacy `ValueId` and cannot be built from a `SplitLayoutId` at all.
 TEST(IdRefTest, conversionFromSplitLayoutId) {
-  static_assert(std::is_convertible_v<SplitLayoutId&, IdRef>);
-  static_assert(std::is_convertible_v<SplitLayoutId&, ConstIdRef>);
-  static_assert(std::is_convertible_v<const SplitLayoutId&, ConstIdRef>);
+  static_assert(std::is_convertible_v<SplitLayoutId&, IdRef> ==
+                idIsSplitLayoutId);
+  static_assert(std::is_convertible_v<SplitLayoutId&, ConstIdRef> ==
+                idIsSplitLayoutId);
+  static_assert(std::is_convertible_v<const SplitLayoutId&, ConstIdRef> ==
+                idIsSplitLayoutId);
   static_assert(!std::is_constructible_v<IdRef, const SplitLayoutId&>);
   static_assert(!std::is_constructible_v<IdRef, SplitLayoutId&&>);
   static_assert(!std::is_constructible_v<ConstIdRef, SplitLayoutId&&>);
@@ -259,9 +264,11 @@ TEST(IdRefTest, conversionFromSplitLayoutId) {
   // This is the requirement of `std::indirectly_unary_invocable` that needs the
   // conversion: a range algorithm like `ql::ranges::for_each` only accepts a
   // function with an `IdRef` parameter if it can also be called with an lvalue
-  // of the value type of the range.
+  // of the value type of the range, which is the `SplitLayoutId` with
+  // `USE_SPLIT_LAYOUT`.
   auto setToTrue = [](IdRef id) { id = Id::makeFromBool(true); };
-  static_assert(ql::concepts::invocable<decltype(setToTrue)&, SplitLayoutId&>);
+  static_assert(ql::concepts::invocable<decltype(setToTrue)&, SplitLayoutId&> ==
+                idIsSplitLayoutId);
 
   // A split column has to stay a range. With GCC it would not be one if the
   // restricted reference that `*it` returns could also be built from an `Id&`,
@@ -274,7 +281,6 @@ TEST(IdRefTest, conversionFromSplitLayoutId) {
 // the `Id` is the `SplitLayoutId`, and a plain `Id&` without it, because the
 // folded `Id` keeps its payload and its datatype in one word, to which no
 // `IdRef` can refer.
-constexpr bool idIsSplitLayoutId = std::is_same_v<Id, SplitLayoutId>;
 using RefToId = std::conditional_t<idIsSplitLayoutId, IdRef, Id&>;
 using ConstRefToId =
     std::conditional_t<idIsSplitLayoutId, ConstIdRef, const Id&>;
