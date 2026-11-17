@@ -1835,24 +1835,27 @@ TEST(CompressedExternalIdTable, asyncPushBlock) {
   testAsyncPushBlock(tables, 100'000, 20);
 }
 
-// The callback of `makeAsyncPushBlockCallback` pushes its blocks via
+// Test that the callback of `makeAsyncPushBlockCallback` pushes its blocks via
 // `asyncPushBlock` (also from several threads at the same time), keeps them
 // alive until the push has completed, and reports the completion to its `done`
 // callback.
 TEST(CompressedExternalIdTable, makeAsyncPushBlockCallback) {
+  // A sorter with a merge executor (the pool has to outlive the sorter, see
+  // `setMergeExecutor`).
   auto alloc = ad_utility::testing::makeAllocator();
   auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
   std::string filename = absl::StrCat(gtestCurrentTestName(), ".dat");
   absl::Cleanup cleanup = [&filename] {
     ad_utility::deleteFile(filename, false);
   };
-  // The pool has to outlive the sorter, see `setMergeExecutor`.
   net::thread_pool pool{4};
   ad_utility::CompressedExternalIdTableSorter<SortByOSP, 0> sorter{
       filename, NUM_COLS, memoryForBlocksize(64, NUM_COLS), alloc};
   sorter.setMergeExecutor(pool.get_executor(), 4);
   auto callback = sorter.makeAsyncPushBlockCallback();
 
+  // Push eight random blocks through the callback from eight threads at the
+  // same time.
   IdTable expected{NUM_COLS, alloc};
   std::vector<std::future<void>> results;
   {
@@ -1879,6 +1882,9 @@ TEST(CompressedExternalIdTable, makeAsyncPushBlockCallback) {
       });
     }
   }
+
+  // Every push completes without an exception, and the sorter holds exactly
+  // the pushed rows.
   for (auto& result : results) {
     EXPECT_NO_THROW(result.get());
   }
