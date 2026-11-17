@@ -11,6 +11,7 @@
 
 #include <gdal_priv.h>
 
+#include <array>
 #include <stdexcept>
 
 #include "absl/strings/str_cat.h"
@@ -33,6 +34,9 @@ void registerGdalDrivers() {
 // _____________________________________________________________________________
 struct RasterFile::Impl {
   GDALDatasetUniquePtr dataset_;
+  // Pixel position to coordinates in the CRS of the file, and vice versa
+  std::array<double, 6> pixelToRaster_;
+  std::array<double, 6> rasterToPixel_;
 
   explicit Impl(const std::string& path);
 };
@@ -45,6 +49,15 @@ RasterFile::Impl::Impl(const std::string& path) {
   if (!dataset_) {
     throw std::runtime_error(absl::StrCat("Could not open raster file \"", path,
                                           "\": ", CPLGetLastErrorMsg()));
+  }
+
+  // The C function and not the member function of `GDALDataset`, because that
+  // is deprecated in GDAL 3.12, and its replacement does not exist in GDAL 3.8.
+  if (GDALGetGeoTransform(GDALDataset::ToHandle(dataset_.get()),
+                          pixelToRaster_.data()) != CE_None ||
+      !GDALInvGeoTransform(pixelToRaster_.data(), rasterToPixel_.data())) {
+    throw std::runtime_error(
+        absl::StrCat("Raster file \"", path, "\" has no valid geotransform"));
   }
 }
 
