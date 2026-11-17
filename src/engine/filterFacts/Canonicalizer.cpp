@@ -60,7 +60,8 @@ bool canSubstituteForTarget(
 // (its body is empty), so it may bind any target.
 void removeRedefinedTargets(const parsedQuery::GraphPatternOperation& operation,
                             Definitions& defs) {
-  if (std::holds_alternative<parsedQuery::Bind>(operation)) {
+  if (defs.expressions_.empty() ||
+      std::holds_alternative<parsedQuery::Bind>(operation)) {
     return;
   }
   if (std::holds_alternative<parsedQuery::NamedCachedResult>(operation)) {
