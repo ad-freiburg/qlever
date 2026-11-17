@@ -322,21 +322,26 @@ class BasicIdRef
   /*implicit*/
   BasicIdRef(Base base) : Base{std::move(base)} {}
 
-  // The conversion from a `SplitLayoutId&` to an `IdRef` must be declared (but
-  // not necessarily defined) to fulfill the concepts in `std::ranges`. It is
-  // not part of the restricted reference that `*it` of a column returns,
-  // because then the common reference of that reference and `Id` would be
+  // Refer to an existing `Id`, like `Id&` does, e.g. to pass an element of a
+  // `std::vector<Id>` to a function that takes an `IdRef`. Range algorithms
+  // need this as well: `std::indirectly_unary_invocable` requires that such a
+  // function can also be called with an lvalue of the value type `Id`. The
+  // restricted reference that `*it` of a column returns has no such
+  // constructor, because then its common reference with `Id` would be
   // ambiguous.
   QL_EXPLICIT(false)
   BasicIdRef(
       std::conditional_t<IsConst, const SplitLayoutId&, SplitLayoutId&> id)
       : Base{&id.bits_.payload_, &id.bits_.datatype_} {
-    // Without `USE_SPLIT_LAYOUT` the constructor is only declared for the
-    // concepts. Using it would read the bits of a `SplitLayoutId` as an `Id`.
+    // Without `USE_SPLIT_LAYOUT` the constructor exists, but must not be used,
+    // because it would read the bits of a `SplitLayoutId` as an `Id`.
     static_assert(std::is_same_v<std::decay_t<decltype(id)>, Id>,
                   "An `IdRef` can only refer to the `Id` of the current build");
   }
 
+  // Not from a temporary, the reference would dangle. Without this, a
+  // temporary would bind to the `const SplitLayoutId&` of a `ConstIdRef`, and
+  // a `ConstIdRef` would look assignable from an `Id`.
   BasicIdRef(const SplitLayoutId&&) = delete;
 
   // Explicitly defaulted, because the copy-assignment operator below is
