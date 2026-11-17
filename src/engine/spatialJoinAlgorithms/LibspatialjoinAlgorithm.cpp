@@ -151,8 +151,12 @@ sj::SpatialJoinCfg LibspatialjoinAlgorithm::sweeperConfig(
   cfg.numCacheBuckets = threads;
   // The geometry cache gets half of `totalAllowedMemory` (the other half is
   // used in `run()`). The limit applies to each bucket of each cache.
-  cfg.geomCacheMaxSize =
-      totalAllowedMemory.getBytes() / 2 / (NUM_TYPED_CACHES * threads);
+  //
+  // NOTE: The limit is at least 1 byte, because `libspatialjoin` treats a
+  // limit of 0 as "unlimited". The limit is soft (a geometry that is larger
+  // is still cached), so a small limit only makes the cache less effective.
+  cfg.geomCacheMaxSize = std::max<size_t>(
+      1, totalAllowedMemory.getBytes() / 2 / (NUM_TYPED_CACHES * threads));
   cfg.geomCacheMaxNumElements = 10'000;
   cfg.sepIsect = sep(INTERSECTS);
   cfg.sepContains = sep(CONTAINS);
