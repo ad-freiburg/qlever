@@ -162,6 +162,21 @@ TEST(FilterFactsCanonicalizer, CollectDefinitions) {
   EXPECT_THAT(defs.constants_,
               UnorderedElementsAre(Key(V{"?r"}), Key(V{"?c"})));
 
+  // A later subquery with a `GROUP BY` may bind the target by an alias of its
+  // `SELECT` clause, and a later named cached result may bind any variable.
+  auto subquery = ad_utility::testing::parseQuery(
+      "SELECT * { ?a <p> ?ga . BIND(?ga AS ?x) BIND(?ga AS ?y) "
+      "{ SELECT (MIN(?o) AS ?x) { ?s <q> ?o } GROUP BY ?s } }");
+  EXPECT_THAT(collectDefinitions(subquery._rootGraphPattern._graphPatterns)
+                  .expressions_,
+              UnorderedElementsAre(Key(V{"?y"})));
+  auto cached = ad_utility::testing::parseQuery(
+      "SELECT * { ?a <p> ?ga . BIND(?ga AS ?x) "
+      "SERVICE ql:cached-result-with-name-foo {} }");
+  EXPECT_THAT(
+      collectDefinitions(cached._rootGraphPattern._graphPatterns).expressions_,
+      ::testing::IsEmpty());
+
   // A variable of several `VALUES` clauses has the values in all of them
   // without `UNDEF` in its column.
   auto values = ad_utility::testing::parseQuery(

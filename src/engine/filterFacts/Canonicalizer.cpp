@@ -55,9 +55,16 @@ bool canSubstituteForTarget(
 //
 // NOTE 2: A later `BIND` cannot bind the target again (the target of a `BIND`
 // must not be in scope before it), so its expression may use the target.
+//
+// NOTE 3: The variables of a named cached result are not known at parse time
+// (its body is empty), so it may bind any target.
 void removeRedefinedTargets(const parsedQuery::GraphPatternOperation& operation,
                             Definitions& defs) {
   if (std::holds_alternative<parsedQuery::Bind>(operation)) {
+    return;
+  }
+  if (std::holds_alternative<parsedQuery::NamedCachedResult>(operation)) {
+    defs.expressions_.clear();
     return;
   }
   parsedQuery::VariableCounter variables;
