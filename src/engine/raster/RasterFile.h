@@ -28,6 +28,9 @@ class RasterFile {
   ~RasterFile();
   RasterFile(RasterFile&&) noexcept;
   RasterFile& operator=(RasterFile&&) noexcept;
+
+  // The number of bands. Bands are numbered from 1, as in GDAL.
+  int numBands() const;
 };
 
 }  // namespace qlever::raster

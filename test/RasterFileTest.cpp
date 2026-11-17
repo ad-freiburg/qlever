@@ -39,18 +39,19 @@ constexpr std::string_view UTM_ZONE_32N = "EPSG:25832";
 constexpr std::string_view LOCAL_GRID =
     R"(LOCAL_CS["engineering",UNIT["metre",1]])";
 
-// Write a GeoTIFF with one band of 2 x 2 pixels to `path`. Without a
-// `geoTransform` or a `crs`, the file has none.
+// Write a GeoTIFF of 2 x 2 pixels with `numBands` bands of `type` to `path`.
+// Without a `geoTransform` or a `crs`, the file has none.
 void writeTestRaster(
     const std::string& path,
     std::optional<std::array<double, 6>> geoTransform = NORTH_UP,
-    std::optional<std::string_view> crs = UTM_ZONE_32N) {
+    std::optional<std::string_view> crs = UTM_ZONE_32N, int numBands = 1,
+    GDALDataType type = GDT_Byte) {
   GDALAllRegister();
   GDALDriver* driver = GetGDALDriverManager()->GetDriverByName("GTiff");
   ASSERT_NE(driver, nullptr);
   GDALDatasetUniquePtr dataset{driver->Create(path.c_str(), /*nXSize=*/2,
-                                              /*nYSize=*/2, /*nBands=*/1,
-                                              GDT_Byte, nullptr)};
+                                              /*nYSize=*/2, numBands, type,
+                                              nullptr)};
   ASSERT_NE(dataset, nullptr);
   if (geoTransform.has_value()) {
     ASSERT_EQ(GDALSetGeoTransform(GDALDataset::ToHandle(dataset.get()),
@@ -124,4 +125,30 @@ TEST(RasterFile, throwsForCrsWithoutTransformationToCrs84) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       RasterFile{path.string()},
       HasSubstr("Could not transform between CRS84 and the CRS"));
+}
+
+// _____________________________________________________________________________
+TEST(RasterFile, numBandsCountsAllBands) {
+  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
+  writeTestRaster(path.string(), NORTH_UP, UTM_ZONE_32N, /*numBands=*/3);
+  EXPECT_EQ(RasterFile{path.string()}.numBands(), 3);
+}
+
+// _____________________________________________________________________________
+TEST(RasterFile, throwsForComplexBand) {
+  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
+  writeTestRaster(path.string(), NORTH_UP, UTM_ZONE_32N, /*numBands=*/1,
+                  GDT_CInt16);
+  AD_EXPECT_THROW_WITH_MESSAGE(RasterFile{path.string()},
+                               AllOf(HasSubstr("Band 1 of raster file"),
+                                     HasSubstr("unsupported type CInt16")));
+}
+
+// _____________________________________________________________________________
+TEST(RasterFile, throwsForUInt64Band) {
+  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
+  writeTestRaster(path.string(), NORTH_UP, UTM_ZONE_32N, /*numBands=*/1,
+                  GDT_UInt64);
+  AD_EXPECT_THROW_WITH_MESSAGE(RasterFile{path.string()},
+                               HasSubstr("unsupported type UInt64"));
 }

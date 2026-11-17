@@ -85,6 +85,19 @@ RasterFile::Impl::Impl(const std::string& path) {
         "Could not transform between CRS84 and the CRS of raster file \"", path,
         "\": ", CPLGetLastErrorMsg()));
   }
+
+  for (int bandNumber = 1; bandNumber <= dataset_->GetRasterCount();
+       ++bandNumber) {
+    GDALDataType type =
+        dataset_->GetRasterBand(bandNumber)->GetRasterDataType();
+    // Not every `UInt64` value fits into an `int64_t`.
+    if (GDALDataTypeIsComplex(type) || type == GDT_UInt64 ||
+        type == GDT_Unknown) {
+      throw std::runtime_error(absl::StrCat(
+          "Band ", bandNumber, " of raster file \"", path,
+          "\" has the unsupported type ", GDALGetDataTypeName(type)));
+    }
+  }
 }
 
 // _____________________________________________________________________________
@@ -96,5 +109,8 @@ RasterFile::RasterFile(const std::string& path)
 RasterFile::~RasterFile() = default;
 RasterFile::RasterFile(RasterFile&&) noexcept = default;
 RasterFile& RasterFile::operator=(RasterFile&&) noexcept = default;
+
+// _____________________________________________________________________________
+int RasterFile::numBands() const { return impl_->dataset_->GetRasterCount(); }
 
 }  // namespace qlever::raster
