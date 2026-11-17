@@ -7,7 +7,7 @@
 
 #include <boost/iostreams/filter/zlib.hpp>
 
-#include "engine/tensor/TextIndexScanForWord.h"
+#include "engine/TextIndexScanForWord.h"
 #include "../WordsAndDocsFileLineCreator.h"
 #include "../printers/VariablePrinters.h"
 #include "../util/GTestHelpers.h"

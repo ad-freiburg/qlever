@@ -17,7 +17,7 @@
 #include "../util/RuntimeParametersTestHelpers.h"
 #include "TensorIndexTestHelpers.h"
 #include "TensorTestHelpers.h"
-#include "engine/ExportQueryExecutionTrees.h"
+#include "index/ExportIds.h"
 #include "engine/IndexScan.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/tensor/TensorIndexCachedIndex.h"
@@ -59,10 +59,8 @@ std::shared_ptr<TensorIndex> makeTensorIndexFromValues(
       (?b) {("{\"data\":[0,1.0,0],\"shape\":[3],\"type\":\"float32\"}"^^dt:DataTensor)}})");
   QueryPlanner qp{qec, sharedHandle};
 
-  auto leftChild =
-      std::make_shared<QueryExecutionTree>(qp.createExecutionTree(pqLeft));
-  auto rightChild =
-      std::make_shared<QueryExecutionTree>(qp.createExecutionTree(pqRight));
+  auto leftChild = qp.createExecutionTree(pqLeft);
+  auto rightChild = qp.createExecutionTree(pqRight);
 
   std::shared_ptr<QueryExecutionTree> tensorIndexOperation =
       ad_utility::makeExecutionTree<TensorIndex>(
@@ -195,13 +193,13 @@ class TensorIndexVarColParamTest
         // test, that the column contains the correct values
         ColumnIndex ind =
             varColMap[Variable{expectedColumns.at(i).first}].columnIndex_;
-        const IdTable* r = &resultTable.idTable();
+        const auto* r = &resultTable.idTableView();
         ASSERT_LT(0, r->numRows());
         ASSERT_LT(ind, r->numColumns());
         ValueId tableEntry = r->at(0, ind);
 
-        auto [value, type] = ExportQueryExecutionTrees::idToStringAndType(
-                                 qec->getIndex(), tableEntry, {})
+        auto [value, type] = ql::exportIds::idToStringAndType(
+                                 qec->getIndex(), tableEntry, resultTable.localVocab())
                                  .value();
         if (tableEntry.getDatatype() == Datatype::VocabIndex) {
           ASSERT_TRUE(value.find(expectedColumns.at(i).second, 0) !=
@@ -253,7 +251,7 @@ class TensorIndexVarColParamTest
         // test, that the column contains the correct values
         ColumnIndex ind =
             varColMap[Variable{expectedColumns.at(i).first}].columnIndex_;
-        const IdTable* r = &resultTable.idTable();
+        const auto* r = &resultTable.idTableView();
         ASSERT_LT(0, r->numRows());
         ASSERT_LT(ind, r->numColumns());
 
@@ -261,8 +259,8 @@ class TensorIndexVarColParamTest
         std::vector<std::string> columnEntries;
         columnEntries.reserve(r->numRows());
         for (const auto& valueId : col) {
-          auto [value, type] = ExportQueryExecutionTrees::idToStringAndType(
-                                   qec->getIndex(), valueId, {})
+          auto [value, type] = ql::exportIds::idToStringAndType(
+                                   qec->getIndex(), valueId, resultTable.localVocab())
                                    .value();
           if (type &&
               (type == TENSOR_LITERAL || type == TENSOR_NUMERIC_LITERAL)) {
@@ -449,7 +447,7 @@ TEST(TensorIndexVarColParamTest, testTensorIndexFromvalues) {
   auto tensorIndex_ptr = static_cast<TensorIndex*>(tensorIndex.get());
 
   auto resultTable = tensorIndex_ptr->computeResult(false);
-  ASSERT_EQ(resultTable.idTable().numRows(), 1);
+  ASSERT_EQ(resultTable.idTableView().numRows(), 1);
 }
 
 TEST_P(TensorIndexVarColParamTest, payloadVariables) {

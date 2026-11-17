@@ -169,10 +169,21 @@ TEST(VocabularyFileSuffixes, allVocabularyTypesForIndexBuilding) {
        ".geometry.words.internal.ids", ".geometry.words.external",
        ".geometry.words.external.offsets", ".geometry.codebooks",
        ".geometry.geoinfo"});
+  // The tensor split vocabulary consists of the (on-disk compressed) main
+  // vocabulary, plus a `TensorDataVocabulary` under the `.tensors` prefix
+  // (another on-disk compressed vocabulary plus the files with the serialized
+  // tensors and their offsets).
+  testFileSuffixes(
+      Enum::OnDiskCompressedTensorSplit,
+      {".words.internal", ".words.internal.ids", ".words.external",
+       ".words.external.offsets", ".codebooks", ".tensors.words.internal",
+       ".tensors.words.internal.ids", ".tensors.words.external",
+       ".tensors.words.external.offsets", ".tensors.codebooks",
+       ".tensors.tensors", ".tensors.tensors.offsets"});
 
   // All the vocabulary types that can be used for index building are covered
   // by the checks above.
-  EXPECT_EQ(VocabularyType::allForIndexBuilding_.size(), 5u);
+  EXPECT_EQ(VocabularyType::allForIndexBuilding_.size(), 6u);
 }
 
 // _____________________________________________________________________________
@@ -187,5 +198,5 @@ TEST(VocabularyFileSuffixes, vocabulariesWithHoles) {
       {".words", ".words.ids", ".codebooks"});
 
   // Together with the test above, all the vocabulary types are covered.
-  EXPECT_EQ(VocabularyType::all().size(), 7u);
+  EXPECT_EQ(VocabularyType::all().size(), 8u);
 }

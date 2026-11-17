@@ -761,7 +761,6 @@ if (OPENMP_FOUND)
 
     message(STATUS "OpenMP found, enabling parallel features")
 else ()
-    set(LINK_BLAS_LIBRARIES "")
     message(STATUS "OpenMP not found, parallel features will be disabled")
 endif ()
 

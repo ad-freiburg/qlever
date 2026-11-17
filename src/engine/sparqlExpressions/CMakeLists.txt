@@ -34,7 +34,6 @@ add_library(sparqlExpressions
         BlankNodeExpression.cpp
         TensorExpression.cpp
         ../tensor/aggregate/TensorAggregate.cpp
-        ../tensor/aggregate/TensorVar.cpp
         GroupConcatExpression.cpp)
 
 qlever_target_link_libraries(sparqlExpressions qlever_util index)

@@ -23,15 +23,17 @@ using namespace ::testing;
 inline auto tensorDataMatcher = liftOptionalMatcher<TensorData>(
     [](TensorData expected) -> Matcher<TensorData> {
       return AllOf(Property(&TensorData::dtype, Eq(expected.dtype())),
+                   Property(&TensorData::shape, Eq(expected.shape())),
                    Property(&TensorData::size, Eq(expected.size())),
                    Property(&TensorData::tensorData,
-                            Pointwise(FloatEq(), expected.tensorData())));
+                            Pointwise(NanSensitiveFloatEq(),
+                                      expected.tensorData())));
     });
 #define EXPECT_TENSOR_DATA(a, b) \
   EXPECT_THAT(a, TensorTestHelpers::tensorDataMatcher(b))
 
 static constexpr std::string_view exampleTensorLit =
-    R"("{\"data\":[1.0,2.0,3.0],\"shape\":[3],\"type":\"float32\"}")"
+    R"("{\"data\":[1.0,2.0,3.0],\"shape\":[3],\"type\":\"float32\"}")"
     "^^<https://w3id.org/rdf-tensor/datatypes#DataTensor>";
 static constexpr std::string_view dummyTurtle = R"(
   <s1> <p2> <o1> .

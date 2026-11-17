@@ -35,7 +35,7 @@ enum struct VocabularyTypeEnum {
   InMemoryUncompressedWithHoles,
   InMemoryCompressedWithHoles
 };
-QLEVER_ENUM_SIZE(VocabularyTypeEnum, 7);
+QLEVER_ENUM_SIZE(VocabularyTypeEnum, 8);
 }  // namespace detail
 class VocabularyType
     : public EnumWithStrings<VocabularyType, detail::VocabularyTypeEnum> {
@@ -51,18 +51,18 @@ class VocabularyType
            {Enum::InMemoryCompressed, "in-memory-compressed"},
            {Enum::OnDiskCompressed, "on-disk-compressed"},
            {Enum::OnDiskCompressedGeoSplit, "on-disk-compressed-geo-split"},
-           {Enum::OnDiskCompressedTensorSplit, "on-disk-compressed-tensor-split"},
+           {Enum::OnDiskCompressedTensorSplit,
+            "on-disk-compressed-tensor-split"},
            {Enum::InMemoryUncompressedWithHoles,
             "in-memory-uncompressed-with-holes"},
            {Enum::InMemoryCompressedWithHoles,
             "in-memory-compressed-with-holes"}}};
   // The vocabulary types that can be used to build a regular index, i.e. all
   // types but the "with holes" variants (see above).
-  static constexpr std::array<Enum, 5> allForIndexBuilding_{
-    Enum::InMemoryUncompressed, Enum::OnDiskUncompressed,
-        Enum::InMemoryCompressed, Enum::OnDiskCompressed,
-        Enum::OnDiskCompressedGeoSplit, Enum::OnDiskCompressedTensorSplit
-  };
+  static constexpr std::array<Enum, 6> allForIndexBuilding_{
+      Enum::InMemoryUncompressed,     Enum::OnDiskUncompressed,
+      Enum::InMemoryCompressed,       Enum::OnDiskCompressed,
+      Enum::OnDiskCompressedGeoSplit, Enum::OnDiskCompressedTensorSplit};
 
   static const VocabularyType InMemoryUncompressed;
   static const VocabularyType OnDiskUncompressed;

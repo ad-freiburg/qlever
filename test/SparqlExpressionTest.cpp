@@ -30,13 +30,13 @@
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
 #include "engine/tensor/aggregate/TensorAggregate.h"
-#include "engine/tensor/aggregate/TensorVar.h"
-#include "engine/tensor/aggregate/TensorAggregate.h"
 #include "index/Index.h"
+#include "index/TripleComponentConversions.h"
 #include "parser/LiteralOrIri.h"
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/GeometryInfo.h"
+#include "rdfTypes/TensorData.h"
 #include "util/AllocatorTestHelpers.h"
 #include "util/IdTestHelpers.h"
 #include "util/LocalVocabEntryTestHelpers.h"
@@ -2899,11 +2899,122 @@ TEST(SparqlExpression, isAggregateAndIsDistinct) {
   EXPECT_THAT(SampleExpression(true, varX()), match(false));
 
   EXPECT_THAT(TensorSumExpression(false, varX()), match(false));
+  EXPECT_THAT(TensorSumExpression(true, varX()), match(true));
   EXPECT_THAT(TensorAvgExpression(false, varX()), match(false));
+  EXPECT_THAT(TensorAvgExpression(true, varX()), match(true));
   EXPECT_THAT(TensorVarExpression(false, varX()), match(false));
+  EXPECT_THAT(TensorVarExpression(true, varX()), match(true));
+  EXPECT_THAT(TensorStdExpression(false, varX()), match(false));
+  EXPECT_THAT(TensorStdExpression(true, varX()), match(true));
 
   EXPECT_THAT(*makeCountStarExpression(true), match(true, false));
   EXPECT_THAT(*makeCountStarExpression(false), match(false, false));
+}
+
+
+// _____________________________________________________________________________
+// The tensor functions `dtf:*` (see `TensorExpression.cpp`).
+namespace {
+// A tensor literal (as an `IdOrLocalVocabEntry`) with the given data and
+// shape.
+auto tensorLit = [](std::vector<float> data,
+                    std::optional<std::vector<size_t>> shape = std::nullopt)
+    -> IdOrLocalVocabEntry {
+  auto s = shape.value_or(std::vector<size_t>{data.size()});
+  return toIdOrLocalVocabEntry(
+      ad_utility::TensorData(std::move(data), std::move(s),
+                             ad_utility::TensorData::DType::FLOAT)
+          .toLiteral(),
+      testContext().qec->getLocalVocabContext());
+};
+}  // namespace
+
+TEST(SparqlExpression, tensorFromString) {
+  auto check = testUnaryExpression<&makeTensorFromStringExpression>;
+  // A plain literal with the given (unescaped) content.
+  auto plainLit = [](std::string_view content) -> IdOrLocalVocabEntry {
+    return LocalVocabEntry::literalWithNormalizedContent(
+        content, testContext().qec->getLocalVocabContext());
+  };
+  check(IdOrLocalVocabEntryVec{
+            plainLit(R"({"data":[1.0,2.0],"shape":[2],"type":"float32"})"),
+            plainLit(R"({"data":[1.0,2.0],"shape":[3],"type":"float32"})"),
+            lit("not json"), I(3), U},
+        IdOrLocalVocabEntryVec{tensorLit({1, 2}), U, U, U, U});
+  // A tensor literal is also accepted (via its string value).
+  check(IdOrLocalVocabEntryVec{tensorLit({3, 4})},
+        IdOrLocalVocabEntryVec{tensorLit({3, 4})});
+}
+
+TEST(SparqlExpression, tensorArithmetic) {
+  auto a = tensorLit({1, 2, 3});
+  auto b = tensorLit({4, -5, 6});
+  auto other = tensorLit({1, 2});
+  auto matrix = tensorLit({1, 2, 3, 4, 5, 6}, std::vector<size_t>{2, 3});
+  // Each row of the inputs: matching shapes, shape mismatch (different length,
+  // same number of elements but different shape), non-tensor arguments.
+  IdOrLocalVocabEntryVec left{a, a, matrix, a, I(1), lit("x"), U};
+  IdOrLocalVocabEntryVec right{b, other, b, U, a, a, a};
+  auto undefinedTail = [](IdOrLocalVocabEntry first) {
+    return IdOrLocalVocabEntryVec{first, U, U, U, U, U, U};
+  };
+  testNaryExpression(&makeTensorAddExpression,
+                     undefinedTail(tensorLit({5, -3, 9})), left, right);
+  testNaryExpression(&makeTensorSubtractExpression,
+                     undefinedTail(tensorLit({-3, 7, -3})), left, right);
+  testNaryExpression(&makeTensorMultiplyExpression,
+                     undefinedTail(tensorLit({4, -10, 18})), left, right);
+  testNaryExpression(&makeTensorDivideExpression,
+                     undefinedTail(tensorLit({0.25f, -0.4f, 0.5f})), left,
+                     right);
+  // Constant inputs.
+  testNaryExpression(&makeTensorAddExpression, tensorLit({2, 4, 6}), a, a);
+  testNaryExpression(&makeTensorAddExpression, IdOrLocalVocabEntry{U}, a,
+                     I(1));
+  // Multi-dimensional tensors keep their shape.
+  testNaryExpression(&makeTensorAddExpression,
+                     tensorLit({2, 4, 6, 8, 10, 12}, std::vector<size_t>{2, 3}),
+                     matrix, matrix);
+}
+
+TEST(SparqlExpression, tensorNumericFunctions) {
+  // Values for which all results are exactly representable.
+  auto a = tensorLit({3, 4, 0});
+  auto b = tensorLit({0, 4, 3});
+  auto zero = tensorLit({0, 0, 0});
+  auto other = tensorLit({1, 2});
+  IdOrLocalVocabEntryVec left{a, a, a, a, I(1), U};
+  IdOrLocalVocabEntryVec right{b, a, zero, other, a, a};
+  testNaryExpression(&makeTensorDotProductExpression,
+                     Ids{D(16), D(25), D(0), U, U, U}, left, right);
+  testNaryExpression(&makeTensorEuclideanDistanceExpression,
+                     Ids{D(std::sqrt(18.0)), D(0), D(5), U, U, U}, left,
+                     right);
+  // The cosine similarity with a zero vector is defined as zero.
+  testNaryExpression(&makeTensorCosineSimilarityExpression,
+                     Ids{D(0.64), D(1), D(0), U, U, U}, left, right);
+
+  auto checkNorm = testUnaryExpression<&makeTensorNormExpression>;
+  checkNorm(IdOrLocalVocabEntryVec{a, zero, I(4), lit("x"), U},
+            Ids{D(5), D(0), U, U, U});
+}
+
+TEST(SparqlExpression, tensorAggregatesSimpleMembers) {
+  auto x = std::make_unique<VariableExpression>(Variable{"?x"});
+  TensorVarExpression var{true, std::move(x)};
+  EXPECT_EQ(var.kind(), TensorAggregateKind::Var);
+  EXPECT_EQ(var.resultForEmptyGroup(), Id::makeUndefined());
+  VariableToColumnMap map;
+  map[Variable{"?x"}] = makeAlwaysDefinedColumn(0);
+  auto key = var.getCacheKey(map);
+  EXPECT_THAT(key, ::testing::HasSubstr("DISTINCT"));
+  TensorVarExpression var2{false,
+                           std::make_unique<VariableExpression>(Variable{"?x"})};
+  TensorStdExpression std2{false,
+                           std::make_unique<VariableExpression>(Variable{"?x"})};
+  EXPECT_NE(key, var2.getCacheKey(map));
+  EXPECT_NE(var2.getCacheKey(map), std2.getCacheKey(map));
+  EXPECT_TRUE(var2.isDeterministic());
 }
 
 // ___________________________________________________________________________

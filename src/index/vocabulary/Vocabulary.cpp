@@ -264,7 +264,6 @@ bool Vocabulary<S, C, I>::isGeoInfoAvailable() const {
   }
 }
 
-
 // _____________________________________________________________________________
 template <typename S, typename C, typename I>
 std::optional<ad_utility::TensorData> Vocabulary<S, C, I>::getTensorData(
@@ -277,7 +276,7 @@ std::optional<ad_utility::TensorData> Vocabulary<S, C, I>::getTensorData(
     static_assert(NeverProvidesTensorData<S>);
     return std::nullopt;
   }
-};
+}
 
 // _____________________________________________________________________________
 template <typename S, typename C, typename I>
@@ -287,10 +286,10 @@ bool Vocabulary<S, C, I>::isTensorDataAvailable() const {
   if constexpr (MaybeProvidesTensorData<S>) {
     return vocabulary_.getUnderlyingVocabulary().isTensorDataAvailable();
   } else {
-    static_assert(NeverProvidesGeometryInfo<S>);
+    static_assert(NeverProvidesTensorData<S>);
     return false;
   }
-};
+}
 
 // _____________________________________________________________________________
 template <typename S, typename ComparatorType, typename I>

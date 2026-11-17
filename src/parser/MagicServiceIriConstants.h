@@ -62,8 +62,11 @@ static constexpr auto MAX_DIST_IN_METERS_REGEX =
 ctll::fixed_string{"<max-distance-in-meters:(?<dist>[0-9]+)>"};
 static constexpr auto NEAREST_NEIGHBORS_REGEX = ctll::fixed_string{
     "<nearest-neighbors:(?<results>[0-9]+)(:(?<dist>[0-9]+))?>"};
-    
-static const std::string TENSOR_NEAREST_NEIGHBORS = "<tensor-nearest-neighbors:";
-static constexpr auto TENSOR_NEAREST_NEIGHBORS_REGEX = ctll::fixed_string{
-    "<tensor-nearest-neighbors:(?<results>[0-9]+)?>"};
+
+// For convenience: invocation of a tensor nearest neighbour search via the
+// special predicate `<tensor-nearest-neighbors:K>` (see `TensorIndexQuery`).
+constexpr inline std::string_view TENSOR_NEAREST_NEIGHBORS =
+    "<tensor-nearest-neighbors:";
+static constexpr auto TENSOR_NEAREST_NEIGHBORS_REGEX =
+    ctll::fixed_string{"<tensor-nearest-neighbors:(?<results>[0-9]+)>"};
 #endif  // QLEVER_SRC_PARSER_MAGICSERVICEIRICONSTANTS_H

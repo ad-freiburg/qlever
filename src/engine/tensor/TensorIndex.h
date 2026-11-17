@@ -14,38 +14,63 @@
 #include "global/Id.h"
 #include "rdfTypes/TensorData.h"
 #include "rdfTypes/Variable.h"
+#include "util/ContainersWithAllocator.h"
 
 class TensorIndexCachedIndex;
+class TensorIndex;
+
 // helper struct to improve readability in prepareJoin()
 struct PreparedTensorIndexParams {
-  const IdTable* const idTableLeft_;
+  const IdTableView<0>* const idTableLeft_;
   std::shared_ptr<const Result> resultLeft_;
-  const IdTable* const idTableRight_;
+  const IdTableView<0>* const idTableRight_;
   std::shared_ptr<const Result> resultRight_;
   ColumnIndex leftJoinCol_;
   ColumnIndex rightJoinCol_;
-  std::vector<ColumnIndex> rightSelectedCols_;
-  std::string cacheKey_;
+  // The (visible) columns of the left and right input that are copied to the
+  // result (in this order).
+  qlm::vector<ColumnIndex> leftSelectedCols_;
+  qlm::vector<ColumnIndex> rightSelectedCols_;
+  // The key under which the FAISS index for the right side is cached (empty if
+  // it must not be cached), whether the cache entry is pinned (named by the
+  // user), and the fingerprint of the right input that is used to validate a
+  // cached index.
+  std::string indexCacheKey_;
+  bool pinIndex_;
+  std::string indexFingerprint_;
   size_t numColumns_;
   TensorIndexConfiguration config_;
 };
 
+// The actual algorithms of the `TensorIndex` operation.
 class TensorIndexImpl {
  private:
-  void addResultTableEntry(IdTable* result, const IdTable* resultLeft,
-                           const IdTable* resultRight, size_t rowLeft,
-                           size_t rowRight, Id distance) const;
   PreparedTensorIndexParams params_;
   QueryExecutionContext* qec_;
-  float computeDistance(const ad_utility::TensorData& tensorLeft,
-                        const ad_utility::TensorData& tensorRight) const;
+  // The operation, used for cancellation checks and warnings. May be `nullptr`.
+  const TensorIndex* op_;
+
+  // One match: a row of the left input, a row of the right input, and the
+  // distance value.
+  struct Match {
+    size_t rowLeft_;
+    size_t rowRight_;
+    double dist_;
+  };
+
+  // Append the given `matches` to the `result`.
+  void appendMatches(IdTable& result, const std::vector<Match>& matches) const;
+  void checkCancellation() const;
+  void addWarning(std::string warning) const;
+  Result makeResult(IdTable result) const;
+
   Result computeTensorIndexResultFaiss();
   Result computeTensorIndexResultNaive();
 
  public:
-  TensorIndexImpl(PreparedTensorIndexParams& params,
-                   QueryExecutionContext* qec)
-      : params_(std::move(params)), qec_(qec) {};
+  TensorIndexImpl(PreparedTensorIndexParams params, QueryExecutionContext* qec,
+                  const TensorIndex* op = nullptr)
+      : params_(std::move(params)), qec_(qec), op_(op) {}
   static size_t getNumThreads();
   Result computeTensorIndexResult();
   static void initializeGlobalRuntimeParameters();
@@ -56,18 +81,17 @@ class TensorIndexImpl {
 class TensorIndex : public Operation {
  public:
   // creates a TensorIndex operation: the required configuration object
-  // can for example be obtained from the SpatialQuery class. Children are
-  // optional, because they may be added later using the addChild method.
-  // The substitutesFilterOp parameter indicates whether the spatial join
+  // can for example be obtained from the `TensorIndexQuery` class. Children
+  // are optional, because they may be added later using the addChild method.
+  // The substitutesFilterOp parameter indicates whether the tensor search
   // was explicitly requested by the user (false) or has been created to
-  // implicitly rewrite a cartesian product with a geo filter (true).
+  // implicitly rewrite a filter (true, currently unused).
   TensorIndex(
       QueryExecutionContext* qec, TensorIndexConfiguration config,
       std::optional<std::shared_ptr<QueryExecutionTree>> childLeft,
       std::optional<std::shared_ptr<QueryExecutionTree>> childRight,
       bool substitutesFilterOp = false);
 
-  std::vector<QueryExecutionTree*> getChildren() override;
   std::string getCacheKeyImpl() const override;
   std::string getDescriptor() const override;
   size_t getResultWidth() const override;
@@ -90,7 +114,6 @@ class TensorIndex : public Operation {
   float getMultiplicity(size_t col) override;
 
   bool knownEmptyResult() override;
-  [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override;
   Result computeResult(bool requestLaziness) override;
 
   // Depending on the amount of children the operation returns a different
@@ -173,10 +196,29 @@ class TensorIndex : public Operation {
   void checkCancellationWrapperForTensorIndexAlgorithms() const {
     checkCancellation();
   }
-  static size_t getNumThreadsForTensorIndex();
+
+  // The key under which the FAISS index for the right side is stored in the
+  // global cache of `TensorIndexCachedIndex`. This is the user-specified name
+  // (`experimentalRightCacheName`) if given, otherwise a key derived from the
+  // right child and the index parameters. Empty if the index can't be cached
+  // (e.g. because caching is disabled).
+  std::string getTensorIndexCacheKey() const;
+
+  // Create a new `TensorIndex` with the same configuration but the given
+  // children (`nullptr` represents a child that is not yet attached).
+  std::unique_ptr<Operation> cloneWithNewChildren(
+      qlm::vector<std::shared_ptr<QueryExecutionTree>> children) const override;
+
+  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
 
  private:
+  qlm::vector<QueryExecutionTree*> getChildrenImpl() const override;
+  [[nodiscard]] qlm::vector<ColumnIndex> resultSortedOn() const override;
   std::unique_ptr<Operation> cloneImpl() const override;
+
+  // The fingerprint of the right input of the FAISS index (see
+  // `TensorIndexCachedIndex`).
+  std::string getTensorIndexFingerprint() const;
 
   // helper function to generate a variable to column map from `childRight_`
   // that only contains the columns selected by `config_.payloadVariables_`
@@ -194,4 +236,4 @@ class TensorIndex : public Operation {
   bool substitutesFilterOp_ = false;
 };
 
-#endif  // QLEVER_SRC_ENGINE_TensorIndex_H
+#endif  // QLEVER_SRC_ENGINE_TENSORINDEX_H

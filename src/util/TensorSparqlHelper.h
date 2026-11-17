@@ -2,30 +2,15 @@
 #ifndef QLEVER_TENSORHELPERS_H
 #define QLEVER_TENSORHELPERS_H
 
-#include <absl/strings/str_cat.h>
-
-#include <limits>
-#include <optional>
-#include <string_view>
-
-#include "engine/SpatialJoinConfig.h"
-#include "engine/sparqlExpressions/SparqlExpressionTypes.h"
-#include "global/Constants.h"
-#include "global/ValueId.h"
-#include "index/LocalVocabEntry.h"
-#include "parser/NormalizedString.h"
-#include "rdfTypes/Iri.h"
-#include "rdfTypes/Literal.h"
-#include "util/UnitOfMeasurement.h"
-
+// Placeholder for helpers of the tensor SPARQL functions. The distance metrics
+// of the tensor search are implemented in
+// `engine/tensor/TensorIndexCachedIndex.h` (namespace `tensorIndex`).
+// NOTE: This header is currently not included anywhere. Its former includes
+// (e.g. `parser/NormalizedString.h`) no longer exist after the upstream merge.
 
 namespace ad_utility {
 
-namespace detail {}
-class TensorCosineSimilarity {
-
-  
-};
+class TensorCosineSimilarity {};
 
 }  // namespace ad_utility
 

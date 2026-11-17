@@ -120,6 +120,7 @@ FileSuffixes PolymorphicVocabulary::fileSuffixes(VocabularyType type) {
     AD_CASE(InMemoryCompressed);
     AD_CASE(OnDiskCompressed);
     AD_CASE(OnDiskCompressedGeoSplit);
+    AD_CASE(OnDiskCompressedTensorSplit);
     AD_CASE(InMemoryUncompressedWithHoles);
     AD_CASE(InMemoryCompressedWithHoles);
     default:

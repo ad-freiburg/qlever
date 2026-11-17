@@ -180,32 +180,31 @@ bool SplitVocabulary<SF, FS, S...>::isGeoInfoAvailable() {
 }
 
 // _____________________________________________________________________________
-template <typename SF, typename SFN, typename... S>
+template <typename SF, const auto& FS, typename... S>
 QL_CONCEPT_OR_NOTHING(
-    requires SplitFunctionT<SF>&& SplitFilenameFunctionT<SFN, sizeof...(S)>)
+    requires SplitFunctionT<SF>&& FilenameSuffixesT<decltype(FS), sizeof...(S)>)
 std::optional<ad_utility::TensorData> SplitVocabulary<
-    SF, SFN, S...>::getTensorData(uint64_t indexWithMarker) const {
+    SF, FS, S...>::getTensorData(uint64_t indexWithMarker) const {
   // Visit the underlying vocabulary and retrieve the requested `TensorData`
   // if it is a `TensorDataVocabulary`.
   const auto& vocab = underlying_[getMarker(indexWithMarker)];
-  return std::visit(
-      [&](const auto& v) -> std::optional<ad_utility::TensorData> {
-        using T = std::decay_t<decltype(v)>;
-        if constexpr (ad_utility::isInstantiation<T, TensorDataVocabulary>) {
-          return v.getTensorData(getVocabIndex(indexWithMarker));
-        } else {
-          static_assert(NeverProvidesTensorData<T>);
-          return std::nullopt;
-        }
+  return ad_utility::visitIf(
+      vocab,
+      CPP_template_lambda(indexWithMarker)(typename T)(const T& v)(
+          requires ad_utility::isInstantiation<T, TensorDataVocabulary>) {
+        return v.getTensorData(getVocabIndex(indexWithMarker));
       },
-      vocab);
+      [](const auto& v) -> std::optional<ad_utility::TensorData> {
+        static_assert(NeverProvidesTensorData<std::decay_t<decltype(v)>>);
+        return std::nullopt;
+      });
 }
 
 // _____________________________________________________________________________
-template <typename SF, typename SFN, typename... S>
+template <typename SF, const auto& FS, typename... S>
 QL_CONCEPT_OR_NOTHING(
-    requires SplitFunctionT<SF>&& SplitFilenameFunctionT<SFN, sizeof...(S)>)
-bool SplitVocabulary<SF, SFN, S...>::isTensorDataAvailable() {
+    requires SplitFunctionT<SF>&& FilenameSuffixesT<decltype(FS), sizeof...(S)>)
+bool SplitVocabulary<SF, FS, S...>::isTensorDataAvailable() {
   // If any of the underlying vocabularies is a `TensorDataVocabulary`, then this
   // `SplitVocabulary` is able to provide precomputed `TensorData`. The other
   // two possibilities, `SplitVocabulary` and `PolymorphicVocabulary`, which

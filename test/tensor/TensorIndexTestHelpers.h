@@ -4,23 +4,23 @@
 #include <absl/strings/str_cat.h>
 
 #include <cstdlib>
+#include <random>
 
 #include "engine/tensor/TensorIndex.h"
 #include "../util/IndexTestHelpers.h"
-#include "engine/ExportQueryExecutionTrees.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/tensor/TensorIndexCachedIndex.h"
+#include "index/ExportIds.h"
 #include "index/vocabulary/VocabularyType.h"
 #include "rdfTypes/Variable.h"
-#include "util/GeoSparqlHelpers.h"
 
 namespace TensorIndexTestHelpers {
 // Helper to build a small deterministic dataset of vectors. The returned
 // Turtle contains subjects <s0> .. <sN-1> with predicate <p1> and a
 // tensor literal as required by the tensor datatype.
-std::string makeVectorKg(size_t n, size_t dim = 3) {
+inline std::string makeVectorKg(size_t n, size_t dim = 3) {
   std::string out;
   for (size_t i = 0; i < n; ++i) {
     std::vector<double> vec(dim, 0.0);
@@ -42,15 +42,61 @@ std::string makeVectorKg(size_t n, size_t dim = 3) {
   }
   return out;
 }
+// Turtle for a single tensor literal with the given values.
+inline std::string tensorLiteral(const std::vector<float>& values) {
+  std::string data = R"("{\"data\":[)";
+  for (size_t d = 0; d < values.size(); ++d) {
+    data += absl::StrCat(values[d]);
+    if (d + 1 < values.size()) data += ",";
+  }
+  data += absl::StrCat(R"(],\"shape\":[)", values.size(),
+                       R"(],\"type\":\"float32\"}")");
+  return absl::StrCat(data,
+                      "^^<https://w3id.org/rdf-tensor/datatypes#DataTensor>");
+}
+
+// Random vectors with values in [-1, 1] (rounded to 3 decimal places such
+// that the turtle representation is exact enough).
+inline std::vector<std::vector<float>> makeRandomVectors(size_t n, size_t dim,
+                                                         unsigned seed = 42) {
+  std::mt19937 gen{seed};
+  std::uniform_int_distribution<int> dist{-1000, 1000};
+  std::vector<std::vector<float>> result(n, std::vector<float>(dim));
+  for (auto& vec : result) {
+    for (auto& v : vec) {
+      v = static_cast<float>(dist(gen)) / 1000.0f;
+    }
+  }
+  return result;
+}
+
+// Turtle with subjects <s0> ... <sN-1> that have the given vectors as <p1>.
+inline std::string makeKgFromVectors(
+    const std::vector<std::vector<float>>& vectors) {
+  std::string out;
+  for (size_t i = 0; i < vectors.size(); ++i) {
+    out += absl::StrCat("<s", i, "> <p1> ", tensorLiteral(vectors[i]), " .\n");
+  }
+  return out;
+}
+
+// Return the string representation of `id`.
+inline std::string idToString(const QueryExecutionContext* qec, Id id,
+                              const LocalVocab& localVocab = LocalVocab{}) {
+  auto str = ql::exportIds::idToStringAndType(qec->getIndex(), id, localVocab);
+  return str.has_value() ? str.value().first : std::string{"UNDEF"};
+}
+
 // helper function to create a vector of strings from a result table
 inline std::vector<std::string> printTable(const QueryExecutionContext* qec,
                                            const Result* table) {
   std::vector<std::string> output;
-  for (size_t i = 0; i < table->idTable().numRows(); i++) {
+  const auto& idTable = table->idTableView();
+  for (size_t i = 0; i < idTable.numRows(); i++) {
     std::string line = "";
-    for (size_t k = 0; k < table->idTable().numColumns(); k++) {
-      auto test = ExportQueryExecutionTrees::idToStringAndType(
-          qec->getIndex(), table->idTable().at(i, k), {});
+    for (size_t k = 0; k < idTable.numColumns(); k++) {
+      auto test = ql::exportIds::idToStringAndType(
+          qec->getIndex(), idTable.at(i, k), table->localVocab());
       line += test.value().first;
       line += " ";
     }
@@ -112,7 +158,6 @@ inline auto buildQec(std::string turtleKg, bool useTensorVocab = false) {
     vocabType = ad_utility::VocabularyType{OnDiskCompressedTensorSplit};
   }
   config.vocabularyType = vocabType;
-  config.blocksizePermutations = 16_MB;
   config.parserBufferSize = 10_kB;
   return ad_utility::testing::getQec(std::move(config));
 }
@@ -183,11 +228,12 @@ std::shared_ptr<TensorIndex> makeTensorIndex(
     TensorDistanceAlgorithm distAlg = TENSOR_INDEX_DEFAULT_DISTANCE,
     std::optional<std::string> cacheName = std::nullopt,
     size_t max_num_results = -1, bool addLeftChildFirst = false,
-    std::optional<size_t> searchK = std::nullopt) {
-  auto leftChild =
-      buildSmallestChild(qec, {"?obja", std::string{"<p1>"}, "?t1"});
+    std::optional<size_t> searchK = std::nullopt,
+    std::optional<size_t> kIVF = std::nullopt,
+    std::string leftPredicate = "<p1>", std::string rightPredicate = "<p1>") {
+  auto leftChild = buildSmallestChild(qec, {"?obja", leftPredicate, "?t1"});
   auto rightChild =
-      buildSmallestChild(qec, {"?objb", std::string{"<p1>"}, "?t2"});
+      buildSmallestChild(qec, {"?objb", rightPredicate, "?t2"});
 
   std::optional<Variable> dist = std::nullopt;
   if (addDist) {
@@ -197,8 +243,8 @@ std::shared_ptr<TensorIndex> makeTensorIndex(
       ad_utility::makeExecutionTree<TensorIndex>(
           qec,
           TensorIndexConfiguration{Variable{"?t1"}, Variable{"?t2"}, dist, pv,
-                                    alg, distAlg, max_num_results, searchK,
-                                    std::nullopt, std::nullopt, cacheName},
+                                   alg, distAlg, max_num_results, searchK,
+                                   kIVF, std::nullopt, cacheName},
           std::nullopt, std::nullopt);
   std::shared_ptr<Operation> op = tensorIndexOperation->getRootOperation();
   TensorIndex* tensorIndex = static_cast<TensorIndex*>(op.get());
@@ -214,7 +260,8 @@ std::shared_ptr<TensorIndex> makeTensorIndex(
   return tensorIndex2;
 }
 
-void expectSelfResult(const IdTable* idTable, VariableToColumnMap& varColMap,
+template <typename Table>
+void expectSelfResult(const Table* idTable, VariableToColumnMap& varColMap,
                       QueryExecutionContext* qec, bool reverse = false) {
   for (size_t i = 0; i < idTable->numRows(); ++i) {
     // id of obja:
@@ -224,15 +271,12 @@ void expectSelfResult(const IdTable* idTable, VariableToColumnMap& varColMap,
     auto aid = idTable->at(i, col_id_obja);
     auto bid = idTable->at(i, col_id_objb);
     auto dist = idTable->at(i, col_id_dist);
+    LocalVocab localVocab;
     auto aStrOpt =
-        ExportQueryExecutionTrees::idToStringAndType(qec->getIndex(), aid, {});
+        ql::exportIds::idToStringAndType(qec->getIndex(), aid, localVocab);
     auto bStrOpt =
-        ExportQueryExecutionTrees::idToStringAndType(qec->getIndex(), bid, {});
-    auto distOpt =
-        ExportQueryExecutionTrees::idToStringAndType(qec->getIndex(), dist, {});
-    std::cout << "Result row " << i << ": subject id " << aStrOpt->first
-              << ", value id " << bStrOpt->first << ", distance "
-              << distOpt->first << "\n";
+        ql::exportIds::idToStringAndType(qec->getIndex(), bid, localVocab);
+    ASSERT_TRUE(dist.getDatatype() == Datatype::Double);
     ASSERT_TRUE(aStrOpt.has_value());
     ASSERT_TRUE(bStrOpt.has_value());
     if (reverse) {

@@ -17,10 +17,10 @@
 #include "global/Id.h"
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeometryInfo.h"
+#include "rdfTypes/TensorData.h"
 #include "util/ConstexprSmallString.h"
 #include "util/Iterators.h"
 #include "util/LruCache.h"
-#include "rdfTypes/TensorData.h"
 #include "util/ParsedUri.h"
 #include "util/TypeTraits.h"
 #include "util/UnitOfMeasurement.h"
@@ -312,15 +312,15 @@ struct GeoPointValueGetter : Mixin<GeoPointValueGetter> {
   }
 };
 
+// Value getter for tensors (dense vectors stored as literals with the datatype
+// `TENSOR_LITERAL` or `TENSOR_NUMERIC_LITERAL`). Returns `std::nullopt` for all
+// values that are not a valid tensor.
 struct TensorValueGetter : Mixin<TensorValueGetter> {
+  using Value = std::optional<ad_utility::TensorData>;
   using Mixin<TensorValueGetter>::operator();
-  std::optional<ad_utility::TensorData> operator()(
-      ValueId id, const EvaluationContext* ctx) const;
-
-  // TODO<joka921> probably we should return a reference or a view here.
-  // TODO<joka921> use a `NormalizedStringView` inside the expressions.
-  std::optional<ad_utility::TensorData> operator()(
-      const LiteralOrIri& s, const EvaluationContext*) const ;
+  Value operator()(ValueId id, const EvaluationContext* context) const;
+  Value operator()(const LiteralOrIri& litOrIri,
+                   const EvaluationContext* context) const;
 };
 
 // If the `id` points to a literal, return the contents of that literal (without

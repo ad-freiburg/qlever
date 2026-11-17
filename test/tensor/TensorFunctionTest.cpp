@@ -41,4 +41,33 @@ TEST(TensorFunction, Norm) {
   EXPECT_FLOAT_EQ(TensorData::norm(tensors[1]), 2.0f);
   EXPECT_FLOAT_EQ(TensorData::norm(tensors[2]), 2.0f);
 }
+TEST(TensorFunction, EuclideanDistance) {
+  auto tensors = generateIdentityTensors(3, 3, 3.0f);
+  EXPECT_FLOAT_EQ(TensorData::euclideanDistance(tensors[0], tensors[0]), 0.0f);
+  EXPECT_FLOAT_EQ(TensorData::euclideanDistance(tensors[0], tensors[1]),
+                  std::sqrt(18.0f));
+}
+TEST(TensorFunction, CosineSimilarityZeroVector) {
+  auto tensors = generateIdentityTensors(1, 3);
+  auto zero = TensorData::zeros_like(tensors[0]);
+  EXPECT_EQ(zero.shape(), tensors[0].shape());
+  EXPECT_EQ(TensorData::cosineSimilarity(tensors[0], zero), 0.0f);
+}
+TEST(TensorFunction, Arithmetic) {
+  auto tensors = generateIdentityTensors(2, 2, 2.0f);
+  auto sum = tensors[0] + tensors[1];
+  EXPECT_THAT(sum.tensorData(), ::testing::ElementsAre(2.0f, 2.0f));
+  auto diff = tensors[0] - tensors[1];
+  EXPECT_THAT(diff.tensorData(), ::testing::ElementsAre(2.0f, -2.0f));
+  auto prod = tensors[0] * tensors[1];
+  EXPECT_THAT(prod.tensorData(), ::testing::ElementsAre(0.0f, 0.0f));
+  auto scaled = TensorData::scale(sum, 0.5f);
+  EXPECT_THAT(scaled.tensorData(), ::testing::ElementsAre(1.0f, 1.0f));
+  sum.addInPlace(tensors[0]).scaleInPlace(2.0f);
+  EXPECT_THAT(sum.tensorData(), ::testing::ElementsAre(8.0f, 4.0f));
+  EXPECT_THROW(TensorData::add(tensors[0], TensorData({1.0f, 2.0f, 3.0f})),
+               std::runtime_error);
+  EXPECT_THROW(TensorData::dot(tensors[0], TensorData({1.0f, 2.0f, 3.0f})),
+               std::runtime_error);
+}
 }  // anonymous namespace

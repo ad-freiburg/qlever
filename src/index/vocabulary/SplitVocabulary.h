@@ -18,13 +18,13 @@
 #include <utility>
 #include <variant>
 
-#include "TensorDataVocabulary.h"
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
 #include "backports/functional.h"
 #include "backports/type_traits.h"
 #include "global/Id.h"
 #include "index/vocabulary/GeoVocabulary.h"
+#include "index/vocabulary/TensorDataVocabulary.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "rdfTypes/GeoCellGrid.h"
 #include "rdfTypes/GeometryInfo.h"
@@ -531,15 +531,11 @@ struct TensorDataSplitFunc {
   }
 };
 
-// Split filename function for Tensor Data Literals: The vocabulary 0 is
-// saved under the base filename and Tensor Data literals are saved with a
-// suffix
-// ".tensordata"
-struct TensorDataFilenameFunc {
-  std::array<std::string, 2> operator()(std::string_view base) const {
-    return {std::string(base), absl::StrCat(base, ".tensors")};
-  }
-};
+// Filename suffixes for Tensor Data literals: The vocabulary 0 is saved under
+// the base filename and Tensor Data literals are saved with the suffix
+// ".tensors".
+inline constexpr std::array<std::string_view, 2> tensorFilenameSuffixes{
+    "", ".tensors"};
 
 }  // namespace detail::splitVocabulary
 
@@ -551,10 +547,13 @@ using SplitGeoVocabulary =
                     detail::splitVocabulary::geoFilenameSuffixes,
                     UnderlyingVocabulary, GeoVocabulary<UnderlyingVocabulary>>;
 
+// A SplitTensorVocabulary splits only Tensor Data literals (see
+// `TensorDataSplitFunc`) to their own `TensorDataVocabulary`, which stores the
+// parsed tensors for fast access.
 template <class UnderlyingVocabulary>
 using SplitTensorVocabulary =
     SplitVocabulary<detail::splitVocabulary::TensorDataSplitFunc,
-                    detail::splitVocabulary::TensorDataFilenameFunc,
+                    detail::splitVocabulary::tensorFilenameSuffixes,
                     UnderlyingVocabulary,
                     TensorDataVocabulary<UnderlyingVocabulary>>;
 

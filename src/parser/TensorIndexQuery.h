@@ -5,7 +5,8 @@
 #ifndef QLEVER_SRC_PARSER_TENSORINDEXQUERY_H
 #define QLEVER_SRC_PARSER_TENSORINDEXQUERY_H
 
-#include "../engine/tensor/TensorIndexConfig.h"
+#include "backports/keywords.h"
+#include "engine/tensor/TensorIndexConfig.h"
 #include "parser/MagicServiceQuery.h"
 #include "parser/PayloadVariables.h"
 
@@ -24,8 +25,8 @@ struct TensorIndexQuery : MagicServiceQuery {
   std::optional<Variable> left_;
   std::optional<Variable> right_;
 
-  // The tensor search task definition: number of results, and search_k (defaults to -1).
-  // One of both - or both - must be provided.
+  // The tensor search task definition: the number of results (`<numNN>`) and
+  // the optional tuning parameters of the approximate algorithms.
   std::optional<size_t> maxResults_;
   std::optional<size_t> searchK_;
   std::optional<size_t> kIVF_;
@@ -41,7 +42,8 @@ struct TensorIndexQuery : MagicServiceQuery {
   // `PayloadAllVariables` to ensure appropriate semantics.
   PayloadVariables payloadVariables_;
 
-  // Optional further argument: a variable to which the number of results is bound.
+  // Optional further argument: a variable to which the distance (or
+  // similarity) of each result is bound.
   std::optional<Variable> distanceVariable_;
 
   // Optional further argument: the join algorithm. If it is not given, the
@@ -79,13 +81,20 @@ struct TensorIndexQuery : MagicServiceQuery {
   // Throw if the current configuration is invalid.
   void validate() const override;
 
-  constexpr std::string_view name() const override { return "tensor search"; };
+  QL_CONSTEXPR std::string_view name() const override {
+    return "tensor search";
+  }
 
  private:
   // If `throwCondition` is `true`, throw `TensorIndexException{message}`.
   void throwIf(bool throwCondition, std::string_view message) const;
-};
 
+  // Return the value of `object` if it is a non-negative integer, otherwise
+  // throw a `TensorIndexException` that names the parameter and its `meaning`.
+  size_t getNonNegativeInt(const TripleComponent& object,
+                           std::string_view parameterName,
+                           std::string_view meaning) const;
+};
 
 }  // namespace parsedQuery
 

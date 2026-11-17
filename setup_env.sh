@@ -1,24 +1,29 @@
 conda create -y -n qlever
 conda init bash
 conda activate qlever
+# conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r 
+# conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main  
 
 conda install -y -c conda-forge python pip
 conda install -y -c conda-forge cmake
+conda install -y -c conda-forge icu
 conda install -y -c conda-forge gcc=13 # 13 is twice as fast as 14?? source (?) https://www.reddit.com/r/cpp/comments/1cfzydb/gcc_14_twice_as_slow_as_gcc_13/
 conda install -y -c conda-forge gdb
 conda install -y -c conda-forge ninja
 conda install -y -c conda-forge libcxx
 conda install -y -c conda-forge glib
 conda install -y -c conda-forge gxx_linux-64
-conda install -y -c conda-forge ninja
 conda install -y -c anaconda zlib
+conda install -y -c anaconda bzip2
 conda install -y -c anaconda clang-format
 conda install -y -c conda-forge jemalloc
 conda install -y -c conda-forge llvm-openmp
 conda install -y -c conda-forge ld_impl_linux-64
 conda install -y -c conda-forge openblas
 conda install -y -c conda-forge linux-perf
-# conda install -y -c conda-forge boost==1.83.0
+conda install -y -c conda-forge jemalloc
+conda install -y -c conda-forge python=3.10
+conda install -y -c conda-forge boost==1.83.0
 pip install conan
 
 conan profile detect --name qlever

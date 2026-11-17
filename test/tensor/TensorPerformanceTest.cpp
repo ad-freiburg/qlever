@@ -32,10 +32,15 @@ TEST(TensorPerformance, BigTensorInnerProduct) {
     long_str += absl::StrCat(R"(],"shape":[)", N, R"(],"type":"float32"})");
     vectors.push_back(long_str);
   }
+  std::vector<TensorData> tensors;
+  tensors.reserve(N);
+  for (const auto& str : vectors) {
+    tensors.push_back(TensorData::parseFromString(str));
+  }
   for (size_t i = 0; i < N; i++) {
     for (size_t j = 0; j < N; j++) {
-      auto vecA = TensorData::parseFromString(vectors.at(i));
-      auto vecB = TensorData::parseFromString(vectors.at(j));
+      const auto& vecA = tensors.at(i);
+      const auto& vecB = tensors.at(j);
       auto sim = TensorData::cosineSimilarity(vecA, vecB);
       if (i != j) {
         EXPECT_FLOAT_EQ(sim, 0.0f);
@@ -43,6 +48,21 @@ TEST(TensorPerformance, BigTensorInnerProduct) {
         EXPECT_FLOAT_EQ(sim, 1.0f);
       }
     }
+  }
+}
+// Parse and print many large tensors (exercises the fast JSON path).
+TEST(TensorPerformance, ParseAndPrintManyTensors) {
+  constexpr size_t numTensors = 2000;
+  constexpr size_t dim = 768;
+  for (size_t i = 0; i < numTensors; ++i) {
+    std::vector<float> data(dim);
+    for (size_t j = 0; j < dim; ++j) {
+      data[j] = static_cast<float>(i * dim + j) / 997.0f - 3.5f;
+    }
+    TensorData tensor{std::move(data)};
+    auto parsed = TensorData::parseFromString(tensor.toJsonString());
+    ASSERT_EQ(parsed, tensor);
+    ASSERT_EQ(TensorData::deserialize(tensor.serialize()), tensor);
   }
 }
 }  // namespace

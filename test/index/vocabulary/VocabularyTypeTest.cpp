@@ -21,6 +21,12 @@ TEST(VocabularyType, allTests) {
   t = T::fromString("on-disk-compressed");
   EXPECT_EQ(t.value(), E::OnDiskCompressed);
 
+  t = T::fromString("on-disk-compressed-tensor-split");
+  EXPECT_EQ(t.value(), E::OnDiskCompressedTensorSplit);
+  EXPECT_EQ(T::OnDiskCompressedTensorSplit.toString(),
+            "on-disk-compressed-tensor-split");
+  EXPECT_TRUE(T::OnDiskCompressedTensorSplit.isSupportedForIndexBuilding());
+
   EXPECT_ANY_THROW(T::fromString("kartoffelsalat"));
 
   EXPECT_EQ(T{E::OnDiskUncompressed}.toString(), "on-disk-uncompressed");
@@ -55,7 +61,7 @@ TEST(VocabularyType, random) {
 TEST(VocabularyType, vocabularyTypesWithHoles) {
   using E = VocabularyType::Enum;
   using T = VocabularyType;
-  EXPECT_EQ(T::numValues(), 7);
+  EXPECT_EQ(T::numValues(), 8);
 
   EXPECT_EQ(T::fromString("in-memory-uncompressed-with-holes").value(),
             E::InMemoryUncompressedWithHoles);
@@ -73,7 +79,7 @@ TEST(VocabularyType, vocabularyTypesWithHoles) {
   // The types with holes are not part of the types for index building, and
   // hence are never returned by `randomForIndexBuilding`.
   const auto& typesForIndexBuilding = T::allForIndexBuilding_;
-  EXPECT_EQ(typesForIndexBuilding.size(), 5);
+  EXPECT_EQ(typesForIndexBuilding.size(), 6);
   using namespace ::testing;
   EXPECT_THAT(typesForIndexBuilding,
               Not(Contains(E::InMemoryUncompressedWithHoles)));

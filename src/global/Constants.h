@@ -272,7 +272,6 @@ constexpr inline std::string_view TENSOR_NUMERIC_LITERAL =
 constexpr inline std::string_view TENSOR_LITERAL =
     "https://w3id.org/rdf-tensor/datatypes#DataTensor";
 
-
 constexpr inline std::string_view GEO_JSON_LITERAL =
     "http://www.opengis.net/ont/geosparql#geoJSONLiteral";
 namespace string_constants::detail {
@@ -284,11 +283,13 @@ static constexpr std::string_view GEO_LITERAL_SUFFIX =
                                 GEO_WKT_LITERAL,
                                 string_constants::detail::closeAngle>();
 
-static constexpr std::string_view TENSOR_LITERAL_SUFFIX =
+// The suffixes of the string representations of tensor literals (used to
+// split them off into a separate vocabulary).
+constexpr inline std::string_view TENSOR_LITERAL_SUFFIX =
     ad_utility::constexprStrCat<string_constants::detail::tensor_literal_prefix,
                                 TENSOR_LITERAL,
                                 string_constants::detail::closeAngle>();
-static constexpr std::string_view TENSOR_NUMERIC_LITERAL_SUFFIX =
+constexpr inline std::string_view TENSOR_NUMERIC_LITERAL_SUFFIX =
     ad_utility::constexprStrCat<string_constants::detail::tensor_literal_prefix,
                                 TENSOR_NUMERIC_LITERAL,
                                 string_constants::detail::closeAngle>();

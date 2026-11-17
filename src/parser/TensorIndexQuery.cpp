@@ -3,8 +3,9 @@
 // Authors: Benedikt Kantz <benedikt.kantz@tugraz.at>
 // Adapted from Spatial Join Logic
 
+#include <charconv>
+
 #include "parser/MagicServiceIriConstants.h"
-#include "parser/NormalizedString.h"
 #include "parser/PayloadVariables.h"
 #include "parser/SparqlTriple.h"
 #include "parser/TensorIndexQuery.h"
@@ -15,6 +16,16 @@ namespace detail {
 // CTRE named capture group identifiers for C++17 compatibility
 constexpr ctll::fixed_string resultsCaptureGroup = "results";
 }  // namespace detail
+
+// ____________________________________________________________________________
+size_t TensorIndexQuery::getNonNegativeInt(const TripleComponent& object,
+                                           std::string_view parameterName,
+                                           std::string_view meaning) const {
+  throwIf(!object.isInt() || object.getInt() < 0,
+          absl::StrCat("The parameter `<", parameterName,
+                       ">` expects a non-negative integer (", meaning, ")"));
+  return static_cast<size_t>(object.getInt());
+}
 
 // ____________________________________________________________________________
 void TensorIndexQuery::addParameter(const SparqlTriple& triple) {
@@ -31,34 +42,19 @@ void TensorIndexQuery::addParameter(const SparqlTriple& triple) {
   } else if (predString == "bindDistance") {
     setVariable("bindDistance", object, distanceVariable_);
   } else if (predString == "numNN") {
-    throwIf(!object.isInt(),
-            "The parameter `<numNN>` expects an integer (the "
-            "maximum "
-            "number of nearest neighbors)");
-    maxResults_ = object.getInt();
+    maxResults_ = getNonNegativeInt(object, "numNN",
+                                    "the maximum number of nearest neighbors");
   } else if (predString == "nNeighbors") {
-    throwIf(!object.isInt(),
-            "The parameter `<nNeighbors>` expects an integer (the "
-            "number "
-            "nearest neighbors in the tree)");
-    nNeighbors_ = object.getInt();
+    nNeighbors_ = getNonNegativeInt(
+        object, "nNeighbors", "the number of neighbors in the HNSW graph");
   } else if (predString == "searchK") {
-    if (object.isInt()) {
-      searchK_ = static_cast<size_t>(object.getInt());
-    } else {
-      throw TensorIndexException(
-          "The parameter `<searchK>` expects an integer (the number of nearest "
-          "trees to search for, which may be higher than the number of "
-          "neighbors to return).");
-    }
+    searchK_ = getNonNegativeInt(
+        object, "searchK",
+        "the number of candidates to search for, which may be higher than the "
+        "number of neighbors to return");
   } else if (predString == "kIVF") {
-    if (object.isInt()) {
-      kIVF_ = static_cast<size_t>(object.getInt());
-    } else {
-      throw TensorIndexException(
-          "The parameter `<kIVF>` expects an integer (the number of trees to "
-          "build for the index).");
-    }
+    kIVF_ = getNonNegativeInt(object, "kIVF",
+                              "the number of clusters of the IVF index");
   } else if (predString == "algorithm") {
     // This case is already covered in `extractParameterName` below, but we
     // want to throw a more precise error description
@@ -130,13 +126,13 @@ void TensorIndexQuery::addParameter(const SparqlTriple& triple) {
     throwIf(!object.isLiteral(),
             "The argument to the `<experimentalRightCacheName>` parameter must "
             "be the name of a pinned cache entry as a string literal.");
-    rightCacheName_ = asStringViewUnsafe(object.getLiteral().getContent());
+    rightCacheName_ = std::string{object.getLiteral().getContent()};
   } else {
     throw TensorIndexException(absl::StrCat(
         "Unsupported argument ", predString,
         " in tensor search; supported arguments are: `<left>`, `<right>`, "
-        "`<nNeighbors>`, `<searchK>`, `<kIVF>`, "
-        "`<algo>`, `<distance>`, `<payload>`, and "
+        "`<numNN>`, `<bindDistance>`, `<nNeighbors>`, `<searchK>`, `<kIVF>`, "
+        "`<algorithm>`, `<distance>`, `<payload>`, and "
         "`<experimentalRightCacheName>`"));
   }
 }
@@ -158,7 +154,7 @@ TensorIndexConfiguration TensorIndexQuery::toTensorIndexConfiguration()
           (algo != TensorIndexAlgorithm::FAISS_HNSW &&
            algo != TensorIndexAlgorithm::FAISS_IVF),
       "The parameter `<experimentalRightCacheName>` is only supported by the "
-      "`<faiss>` algorithm.");
+      "`<hnsw>` and `<ivf>` algorithms.");
   // the cache parameter is automatically imputed for faiss
   // if (algo == TensorIndexAlgorithm::FAISS) {
   //   throwIf(!rightCacheName_.has_value(),
@@ -229,13 +225,12 @@ TensorIndexQuery::TensorIndexQuery(const SparqlTriple& triple) {
 
   // Helper to convert a ctre match to an integer
   auto matchToInt = [](std::string_view match) -> std::optional<size_t> {
-    if (match.size() == 0) {
-      // We need to accept empty matches because the maximum distance argument
-      // to a <nearest-neighbors:...> predicate is optional.
+    size_t res = 0;
+    auto [ptr, ec] =
+        std::from_chars(match.data(), match.data() + match.size(), res);
+    if (ec != std::errc{} || ptr != match.data() + match.size()) {
       return std::nullopt;
     }
-    size_t res = 0;
-    std::from_chars(match.data(), match.data() + match.size(), res);
     return res;
   };
 
@@ -243,7 +238,8 @@ TensorIndexQuery::TensorIndexQuery(const SparqlTriple& triple) {
   if (auto match = ctre::match<TENSOR_NEAREST_NEIGHBORS_REGEX>(input)) {
     maxResults_ = matchToInt(match.get<detail::resultsCaptureGroup>());
     ignoreMissingRightChild_ = true;
-    AD_CORRECTNESS_CHECK(maxResults_.has_value());
+    throwIf(!maxResults_.has_value(),
+            absl::StrCat("Invalid number of results in ", input));
   } else {
     AD_THROW(absl::StrCat(
         "Tried to perform tensor search with unknown triple ", input,

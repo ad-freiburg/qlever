@@ -1,95 +1,111 @@
-// Copyright 2026
-// Benedikt Kantz, TUGRAZ/UNIPD
+// Copyright 2026, Graz Technical University, University of Padova
+// Institute for Visual Computing, Department of Information Engineering
+// Authors: Benedikt Kantz <benedikt.kantz@tugraz.at>
 
-#include "backports/type_traits.h"
-#include "engine/sparqlExpressions/LiteralExpression.h"
+// The tensor functions `dtf:*` (see `TENSOR_FUNCTION_PREFIX`) and the
+// factories for the tensor aggregates `dta:*` (see `TensorAggregate.h`).
+//
+// Semantics: All functions return UNDEF if one of the arguments is not a
+// (valid) tensor, or if the shapes of the two arguments of a binary function
+// differ. The elementwise arithmetic follows IEEE semantics (e.g. `x / 0`), the
+// numeric functions return UNDEF for a NaN or infinite result.
+
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
-#include "engine/sparqlExpressions/QueryRewriteExpressionHelpers.h"
-#include "engine/sparqlExpressions/SparqlExpression.h"
-#include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "engine/tensor/aggregate/TensorAggregate.h"
-#include "engine/tensor/aggregate/TensorVar.h"
-#include "global/Constants.h"
-using TensorData = ad_utility::TensorData;
+#include "rdfTypes/TensorData.h"
+
 namespace sparqlExpression {
 namespace detail {
-NARY_EXPRESSION(TensorFromListExpression, 1,
-                FV<TensorValueGetter, TensorValueGetter>);
+using ad_utility::TensorData;
+using OptTensor = std::optional<TensorData>;
 
-struct TensorFromStringValueGetter {
-  IdOrLiteralOrIri operator()(std::optional<std::string> str) const {
+// dtf:tensor(?string): Parse the (string value of the) argument as the JSON
+// representation of a tensor.
+struct TensorFromStringImpl {
+  IdOrLiteralOrIri operator()(const std::optional<std::string>& str) const {
     if (str.has_value()) {
-      return TensorData::parseFromString(str.value()).toLiteral();
+      if (auto tensor = TensorData::tryParseFromString(str.value())) {
+        return tensor.value().toLiteral();
+      }
     }
     return Id::makeUndefined();
   }
 };
 NARY_EXPRESSION(TensorFromStringExpression, 1,
-                FV<TensorFromStringValueGetter, StringValueGetter>);
+                FV<TensorFromStringImpl, StringValueGetter>);
 
-template <auto BinaryTensorFunction>
-struct BinaryFloatTensorFunctionImpl {
-  float operator()(std::optional<TensorData> tensor1,
-                   std::optional<TensorData> tensor2) const {
-    if (!tensor1.has_value() || !tensor2.has_value()) {
-      // set to NaN
-      return std::numeric_limits<float>::quiet_NaN();
-    }
-    return std::invoke(BinaryTensorFunction, tensor1.value(), tensor2.value());
-  }
-};
-template <auto BinaryTensorFunction>
+// Return true iff both tensors are defined and have the same shape.
+inline bool compatible(const OptTensor& tensor1, const OptTensor& tensor2) {
+  return tensor1.has_value() && tensor2.has_value() &&
+         tensor1->shape() == tensor2->shape();
+}
+
+// Elementwise binary arithmetic. The first argument is taken by value, so that
+// its storage is reused for the result if the value getter produced a
+// temporary (no additional allocation).
+template <auto InPlaceOperation>
 struct BinaryTensorFunctionImpl {
-  IdOrLiteralOrIri operator()(std::optional<TensorData> tensor1,
-                              std::optional<TensorData> tensor2) const {
-    if (!tensor1.has_value() || !tensor2.has_value()) {
+  IdOrLiteralOrIri operator()(OptTensor tensor1,
+                              const OptTensor& tensor2) const {
+    if (!compatible(tensor1, tensor2)) {
       return Id::makeUndefined();
     }
-    return std::invoke(BinaryTensorFunction, tensor1.value(), tensor2.value())
-        .toLiteral();
+    std::invoke(InPlaceOperation, tensor1.value(), tensor2.value());
+    return tensor1.value().toLiteral();
   }
 };
+
+// Binary functions with a numeric result. Return NaN (which is converted to
+// UNDEF by the `NumericIdWrapper` below) for incompatible arguments.
+template <auto Function>
+struct BinaryNumericTensorFunctionImpl {
+  double operator()(const OptTensor& tensor1, const OptTensor& tensor2) const {
+    if (!compatible(tensor1, tensor2)) {
+      return std::numeric_limits<double>::quiet_NaN();
+    }
+    return static_cast<double>(
+        std::invoke(Function, tensor1.value(), tensor2.value()));
+  }
+};
+
+template <auto Function>
+using NumericTensorFunction =
+    NumericIdWrapper<BinaryNumericTensorFunctionImpl<Function>, true>;
 
 NARY_EXPRESSION(
     TensorAddExpression, 2,
-    FV<BinaryTensorFunctionImpl<&TensorData::add>, TensorValueGetter>);
+    FV<BinaryTensorFunctionImpl<&TensorData::addInPlace>, TensorValueGetter>);
+NARY_EXPRESSION(TensorSubtractExpression, 2,
+                FV<BinaryTensorFunctionImpl<&TensorData::subtractInPlace>,
+                   TensorValueGetter>);
+NARY_EXPRESSION(TensorMultiplyExpression, 2,
+                FV<BinaryTensorFunctionImpl<&TensorData::multiplyInPlace>,
+                   TensorValueGetter>);
+NARY_EXPRESSION(TensorDivideExpression, 2,
+                FV<BinaryTensorFunctionImpl<&TensorData::divideInPlace>,
+                   TensorValueGetter>);
 
-NARY_EXPRESSION(
-    TensorSubtractExpression, 2,
-    FV<BinaryTensorFunctionImpl<&TensorData::subtract>, TensorValueGetter>);
-
-NARY_EXPRESSION(
-    TensorMultiplyExpression, 2,
-    FV<BinaryTensorFunctionImpl<&TensorData::multiply>, TensorValueGetter>);
-
-NARY_EXPRESSION(
-    TensorDivideExpression, 2,
-    FV<BinaryTensorFunctionImpl<&TensorData::divide>, TensorValueGetter>);
-
-NARY_EXPRESSION(
-    TensorDotProductExpression, 2,
-    FV<NumericIdWrapper<BinaryFloatTensorFunctionImpl<&TensorData::dot>, true>,
-       TensorValueGetter>);
+NARY_EXPRESSION(TensorDotProductExpression, 2,
+                FV<NumericTensorFunction<&TensorData::dot>, TensorValueGetter>);
 NARY_EXPRESSION(
     TensorEuclideanDistanceExpression, 2,
-    FV<NumericIdWrapper<
-           BinaryFloatTensorFunctionImpl<&TensorData::euclideanDistance>, true>,
+    FV<NumericTensorFunction<&TensorData::euclideanDistance>,
        TensorValueGetter>);
 NARY_EXPRESSION(
     TensorCosineSimilarityExpression, 2,
-    FV<NumericIdWrapper<
-           BinaryFloatTensorFunctionImpl<&TensorData::cosineSimilarity>, true>,
-       TensorValueGetter>)
+    FV<NumericTensorFunction<&TensorData::cosineSimilarity>,
+       TensorValueGetter>);
 
+// dtf:norm2(?t): The euclidean (L2) norm.
 struct NormTensorFunctionImpl {
-  float operator()(std::optional<TensorData> tensor1) const {
-    return tensor1.has_value() ? TensorData::norm(tensor1.value())
-                               : std::numeric_limits<float>::quiet_NaN();
+  double operator()(const OptTensor& tensor) const {
+    return tensor.has_value()
+               ? static_cast<double>(TensorData::norm(tensor.value()))
+               : std::numeric_limits<double>::quiet_NaN();
   }
 };
-
 NARY_EXPRESSION(
     TensorNormExpression, 1,
     FV<NumericIdWrapper<NormTensorFunctionImpl, true>, TensorValueGetter>);
@@ -99,18 +115,10 @@ NARY_EXPRESSION(
 using namespace detail;
 using Expr = SparqlExpression::Ptr;
 
-// Expr makeTensorFromListExpression(Expr child) {
-//   return std::make_unique<TensorFromListExpression>(std::move(child));
-// }
-
+// _____________________________________________________________________________
 Expr makeTensorFromStringExpression(Expr child) {
   return std::make_unique<TensorFromStringExpression>(std::move(child));
 }
-
-// Expr makeTensorFromRdfTermExpression(Expr child) {
-//   return std::make_unique<TensorFromRdfTermExpression>(std::move(child));
-// }
-
 Expr makeTensorAddExpression(Expr child1, Expr child2) {
   return std::make_unique<TensorAddExpression>(std::move(child1),
                                                std::move(child2));
@@ -142,16 +150,18 @@ Expr makeTensorCosineSimilarityExpression(Expr child1, Expr child2) {
 Expr makeTensorNormExpression(Expr child) {
   return std::make_unique<TensorNormExpression>(std::move(child));
 }
-Expr makeTensorVarExpr(Expr child) {
-  return std::make_unique<TensorVarExpression>(false, std::move(child));
+
+// _____________________________________________________________________________
+Expr makeTensorSumExpr(Expr child, bool distinct) {
+  return std::make_unique<TensorSumExpression>(distinct, std::move(child));
 }
-Expr makeTensorStdExpr(Expr child) {
-  return std::make_unique<TensorStdExpression>(false, std::move(child));
+Expr makeTensorAvgExpr(Expr child, bool distinct) {
+  return std::make_unique<TensorAvgExpression>(distinct, std::move(child));
 }
-Expr makeTensorSumExpr(Expr child) {
-  return std::make_unique<TensorSumExpression>(false, std::move(child));
+Expr makeTensorVarExpr(Expr child, bool distinct) {
+  return std::make_unique<TensorVarExpression>(distinct, std::move(child));
 }
-Expr makeTensorAvgExpr(Expr child) {
-  return std::make_unique<TensorAvgExpression>(false, std::move(child));
+Expr makeTensorStdExpr(Expr child, bool distinct) {
+  return std::make_unique<TensorStdExpression>(distinct, std::move(child));
 }
 }  // namespace sparqlExpression

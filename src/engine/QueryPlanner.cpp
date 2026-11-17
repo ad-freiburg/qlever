@@ -130,7 +130,7 @@ void assignNodesFilterAndTextLimitIds(QueryPlanner::SubtreePlan& target,
   target.containsBindSubstitute_ = source.containsBindSubstitute_;
 }
 
-using JoinColumns = std::vector<std::array<ColumnIndex, 2>>;
+using JoinColumns = QueryPlanner::JoinColumns;
 // _____________________________________________________________________________________________________________________
 // Helper that returns `true` for each of the subtree plans `a` and `b` iff
 // the subtree plan is an operation and it is not yet fully constructed
@@ -965,21 +965,23 @@ auto QueryPlanner::seedWithScansAndText(
             " { ... }'. For more information, please see the QLever Docs "
             "(https://docs.qlever.dev/geosparql/)."));
       }
-    } else if ((ql::starts_with(input, TENSOR_NEAREST_NEIGHBORS)) &&
-               ql::ends_with(input, '>')) {
+      pushPlan(plan);
+      continue;
+    }
+
+    // Backward compatibility with the tensor nearest neighbors predicate.
+    if (ql::starts_with(input, TENSOR_NEAREST_NEIGHBORS) &&
+        ql::ends_with(input, '>')) {
       parsedQuery::TensorIndexQuery config{node.triple_};
       auto plan = makeSubtreePlan<TensorIndex>(
           _qec, config.toTensorIndexConfiguration(), std::nullopt,
           std::nullopt);
-      if (ql::starts_with(input, TENSOR_NEAREST_NEIGHBORS)) {
-        plan._qet->getRootOperation()->addWarning(absl::StrCat(
-            "The special predicate <tensor-nearest-neighbors:...> is "
-            "deprecated due "
-            "to confusing semantics. Please upgrade your query to the new "
-            "syntax 'SERVICE ",
-            TENSOR_INDEX_IRI,
-            " { ... }'. For more information, please see the QLever Wiki."));
-      }
+      plan._qet->getRootOperation()->addWarning(absl::StrCat(
+          "The special predicate <tensor-nearest-neighbors:...> is "
+          "deprecated due to confusing semantics. Please upgrade your query "
+          "to the new syntax 'SERVICE ",
+          TENSOR_INDEX_IRI,
+          " { ... }'. For more information, please see the QLever Wiki."));
       pushPlan(plan);
       continue;
     }
@@ -2432,6 +2434,10 @@ SubtreePlanVec QueryPlanner::createJoinCandidates(
   if (checkJoin<SpatialJoin>(a, b) == std::pair<bool, bool>{true, true}) {
     return candidates;
   }
+  // The same holds for tensor searches.
+  if (checkJoin<TensorIndex>(a, b) == std::pair<bool, bool>{true, true}) {
+    return candidates;
+  }
 
   // if one of the inputs is the spatial join and the other input is compatible
   // with the SpatialJoin, add it as a child to the spatialJoin. As unbound
@@ -2443,6 +2449,7 @@ SubtreePlanVec QueryPlanner::createJoinCandidates(
     candidates.push_back(std::move(opt.value()));
     return candidates;
   }
+  // The same holds for an incomplete `TensorIndex` operation.
   if (auto opt = createJoin<TensorIndex>(a, b, jcs)) {
     candidates.push_back(std::move(opt.value()));
     return candidates;
@@ -3567,14 +3574,15 @@ void QueryPlanner::GraphPatternPlanner::visitTensorIndex(
   auto config = tensorIndexQuery.toTensorIndexConfiguration();
 
   // If there is no child graph pattern, we need to construct a neutral element
-  std::vector<SubtreePlan> candidatesIn;
+  SubtreePlanVec candidatesIn{allocator()};
   if (tensorIndexQuery.childGraphPattern_.has_value()) {
     candidatesIn =
         planner_.optimize(&tensorIndexQuery.childGraphPattern_.value());
   } else {
-    candidatesIn = {makeSubtreePlan<NeutralElementOperation>(qec_)};
+    candidatesIn =
+        singlePlanVec(makeSubtreePlan<NeutralElementOperation>(qec_));
   }
-  std::vector<SubtreePlan> candidatesOut;
+  SubtreePlanVec candidatesOut{allocator()};
 
   for (auto& sub : candidatesIn) {
     // This helper function adds a subtree plan to the output candidates, which
@@ -3589,7 +3597,7 @@ void QueryPlanner::GraphPatternPlanner::visitTensorIndex(
         right = std::move(sub._qet);
       }
       auto tensorIndex =
-          std::make_shared<TensorIndex>(qec_, config, std::nullopt, right);
+          qec_->makeShared<TensorIndex>(qec_, config, std::nullopt, right);
       auto plan = makeSubtreePlan<TensorIndex>(std::move(tensorIndex));
       candidatesOut.push_back(std::move(plan));
     };

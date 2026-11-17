@@ -12,7 +12,7 @@
 #include <variant>
 
 #include "../src/engine/tensor/TensorIndex.h"
-#include "../src/engine/tensor/TextIndexScanForEntity.h"
+#include "../src/engine/TextIndexScanForEntity.h"
 #include "./util/GTestHelpers.h"
 #include "./util/ParsedQueryTestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"

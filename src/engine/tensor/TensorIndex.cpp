@@ -5,6 +5,8 @@
 #include <absl/container/flat_hash_set.h>
 #include <absl/strings/charconv.h>
 
+#include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <limits>
 #include <optional>
@@ -14,18 +16,18 @@
 #include <variant>
 
 #include "backports/type_traits.h"
-#include "engine/ExportQueryExecutionTrees.h"
-#include "engine/NamedResultCache.h"
+#include "engine/QueryExecutionTree.h"
 #include "engine/tensor/TensorIndex.h"
 #include "engine/tensor/TensorIndexConfig.h"
 #include "engine/VariableToColumnMap.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Constants.h"
-#include "global/ValueId.h"
+#include "global/Id.h"
 #include "parser/ParsedQuery.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/Exception.h"
-#include "util/MemorySize/MemorySize.h"
+#include "util/memorySize/MemorySize.h"
+
 // ____________________________________________________________________________
 TensorIndex::TensorIndex(
     QueryExecutionContext* qec, TensorIndexConfiguration config,
@@ -49,13 +51,12 @@ std::shared_ptr<TensorIndex> TensorIndex::addChild(
     const Variable& varOfChild) const {
   std::shared_ptr<TensorIndex> sj;
   if (varOfChild == config_.left_) {
-    sj = std::make_shared<TensorIndex>(getExecutionContext(), config_,
-                                        std::move(child), childRight_,
-                                        substitutesFilterOp_);
+    sj = makeShared<TensorIndex>(getExecutionContext(), config_,
+                                 std::move(child), childRight_,
+                                 substitutesFilterOp_);
   } else if (varOfChild == config_.right_) {
-    sj = std::make_shared<TensorIndex>(getExecutionContext(), config_,
-                                        childLeft_, std::move(child),
-                                        substitutesFilterOp_);
+    sj = makeShared<TensorIndex>(getExecutionContext(), config_, childLeft_,
+                                 std::move(child), substitutesFilterOp_);
   } else {
     AD_THROW("variable does not match");
   }
@@ -79,8 +80,8 @@ std::optional<size_t> TensorIndex::getMaxResults() const {
 }
 
 // ____________________________________________________________________________
-std::vector<QueryExecutionTree*> TensorIndex::getChildren() {
-  std::vector<QueryExecutionTree*> result;
+qlm::vector<QueryExecutionTree*> TensorIndex::getChildrenImpl() const {
+  qlm::vector<QueryExecutionTree*> result{allocator()};
   auto addChild = [&](std::shared_ptr<QueryExecutionTree> child) {
     if (child) {
       result.push_back(child.get());
@@ -107,12 +108,18 @@ std::string TensorIndex::getCacheKeyImpl() const {
 
     auto maxResults = getMaxResults();
 
-    os << "Max Results: " << (int)maxResults.value_or(-1) << "\n";
-    os << "kTrees" << (int)config_.searchK_.value_or(-1) << "\n";
-    os << "kIVF" << (int)config_.kIVF_.value_or(-1) << "\n";
+    os << "Max Results: " << maxResults.value_or(0) << "\n";
+    auto optToString = [](const std::optional<size_t>& opt) {
+      return opt.has_value() ? std::to_string(opt.value()) : std::string{"-"};
+    };
+    os << "searchK: " << optToString(config_.searchK_) << "\n";
+    os << "kIVF: " << optToString(config_.kIVF_) << "\n";
+    os << "nNeighbours: " << optToString(config_.nNeighbours_) << "\n";
 
-    os << "TensorIndex in distance: " << (int)config_.algo_ << "with algorithm"
-       << (int)config_.dist_ << "\n";
+    // The algorithm is included, because approximate algorithms may yield
+    // different results.
+    os << "TensorIndex algorithm: " << static_cast<int>(config_.algo_)
+       << " with distance " << static_cast<int>(config_.dist_) << "\n";
 
     // Uses distance variable?
     if (config_.distanceVariable_.has_value()) {
@@ -128,14 +135,10 @@ std::string TensorIndex::getCacheKeyImpl() const {
     }
     os << "\n";
 
-    // If we use the s2-point-polyline algorithm, we also need to add the cache
-    // entry name to our own cache key.
+    // The name of the cached index.
     if (config_.rightCacheName_.has_value()) {
       os << "right cache name:" << config_.rightCacheName_.value() << "\n";
     }
-
-    // Algorithm is not included here because it should not have any impact on
-    // the result.
     return std::move(os).str();
   } else {
     return "incomplete TensorIndex class";
@@ -193,7 +196,7 @@ size_t TensorIndex::getResultWidth() const {
     // For the right join table we only use the selected columns.
     size_t sizeRight;
     if (config_.payloadVariables_.isAll()) {
-      sizeRight = childRight_->getResultWidth();
+      sizeRight = childRight_->getVariableColumns().size();
     } else {
       // Derive the actual set of columns we will include from the right child
       // by relying on `getVarColMapPayloadVars()` which filters missing
@@ -203,7 +206,7 @@ size_t TensorIndex::getResultWidth() const {
       auto varColMapRightFiltered = getVarColMapPayloadVars();
       sizeRight = varColMapRightFiltered.size();
     }
-    auto widthChildren = childLeft_->getResultWidth() + sizeRight;
+    auto widthChildren = childLeft_->getVariableColumns().size() + sizeRight;
 
     if (config_.distanceVariable_.has_value()) {
       return widthChildren + 1;
@@ -233,13 +236,16 @@ size_t TensorIndex::getCostEstimate() {
     auto m = childRight_->getSizeEstimate();
     switch (config_.algo_) {
       case NAIVE:
+        // Every pair of rows is compared.
         return n * m;
       case FAISS_IVF:
       case FAISS_HNSW: {
-        auto logn = n > 0
-                        ? static_cast<size_t>(std::sqrt(static_cast<double>(n)))
-                        : size_t{1};
-        return logn * m;
+        // The index on the right side is built in (roughly) `O(m log m)`
+        // (unless it is cached), and each of the `n` left rows is looked up in
+        // (roughly) `O(log m)`.
+        auto logm = std::max<size_t>(
+            1, static_cast<size_t>(std::log2(static_cast<double>(m) + 1)));
+        return (n + m) * logm;
       }
     }
     AD_FAIL();
@@ -257,7 +263,10 @@ uint64_t TensorIndex::getSizeEstimateBeforeLimit() {
     // result can be at most `|childLeft| * k`
     auto maxResults = getMaxResults();
     if (maxResults.has_value()) {
-      return childLeft_->getSizeEstimate() * maxResults.value();
+      // There are at most `|childRight|` results per left row.
+      return childLeft_->getSizeEstimate() *
+             std::min<uint64_t>(maxResults.value(),
+                                childRight_->getSizeEstimate());
     }
 
     // If we don't limit the number of results, we cannot draw conclusions about
@@ -282,13 +291,19 @@ float TensorIndex::getMultiplicity(size_t col) {
 
   if (childLeft_ && childRight_) {
     std::shared_ptr<QueryExecutionTree> child;
+    // `getResultWidth` of the children can't be used here, because
+    // `TensorIndex` only exports columns that appear in the childrens'
+    // `VariableToColumnMap`.
+    size_t widthLeft = childLeft_->getVariableColumns().size();
     size_t column = col;
     if (config_.distanceVariable_.has_value() && col == getResultWidth() - 1) {
       // as each max results value is very likely to be unique, no
       // multiplicities are assumed
       return 1;
-    } else if (col < childLeft_->getResultWidth()) {
+    } else if (col < widthLeft) {
       child = childLeft_;
+      auto leftColumns = copySortedByColumnIndex(childLeft_->getVariableColumns());
+      column = leftColumns.at(col).second.columnIndex_;
     } else {
       child = childRight_;
       // Since we only select the payload variables into the result and
@@ -296,8 +311,7 @@ float TensorIndex::getMultiplicity(size_t col) {
       // translate the column index on the tensor search to a column index in
       // the right child.
       auto filteredColumns = copySortedByColumnIndex(getVarColMapPayloadVars());
-      column = filteredColumns.at(column - childLeft_->getResultWidth())
-                   .second.columnIndex_;
+      column = filteredColumns.at(column - widthLeft).second.columnIndex_;
     }
     auto distinctnessChild = getDistinctness(child, column);
     return static_cast<float>(childLeft_->getSizeEstimate() *
@@ -313,17 +327,16 @@ bool TensorIndex::knownEmptyResult() {
   // return false if either both children don't have an empty result, only one
   // child is available, which doesn't have a known empty result or neither
   // child is available
-  return (childLeft_ && childLeft_->knownEmptyResult()) ||
+  return config_.maxResults_ == 0 ||
+         (childLeft_ && childLeft_->knownEmptyResult()) ||
          (childRight_ && childRight_->knownEmptyResult());
 }
 
 // ____________________________________________________________________________
-std::vector<ColumnIndex> TensorIndex::resultSortedOn() const {
-  // the baseline (with O(n^2) runtime) can have some sorted columns, but as
-  // the "true" computeResult method will use bounding boxes, which can't
-  // guarantee that a sorted column stays sorted, this will return no sorted
-  // column in all cases.
-  return {};
+qlm::vector<ColumnIndex> TensorIndex::resultSortedOn() const {
+  // The result is grouped by the (deduplicated) tensors of the left side, so
+  // no sortedness can be guaranteed.
+  return qlm::vector<ColumnIndex>{allocator()};
 }
 
 // ____________________________________________________________________________
@@ -342,7 +355,7 @@ VariableToColumnMap TensorIndex::getVarColMapPayloadVars() const {
       if (varColMap.contains(var)) {
         newVarColMap.insert_or_assign(var, varColMap.at(var));
       } else {
-        addWarningOrThrow(
+        addUnboundVariableWarningOrThrow(
             absl::StrCat("Variable '", var.name(),
                          "' selected as payload to tensor search but not "
                          "present in right child."));
@@ -358,10 +371,38 @@ VariableToColumnMap TensorIndex::getVarColMapPayloadVars() const {
 }
 
 // ____________________________________________________________________________
+std::string TensorIndex::getTensorIndexFingerprint() const {
+  AD_CONTRACT_CHECK(childRight_);
+  auto rightKey = childRight_->getCacheKey();
+  if (rightKey.empty()) {
+    // Caching is disabled, the right input can't be identified.
+    return "";
+  }
+  return absl::StrCat(
+      "TensorIndexRight:\n", rightKey,
+      "\nJoinColRight:", childRight_->getVariableColumn(config_.right_),
+      "\nalgorithm:", static_cast<int>(config_.algo_),
+      "\ndistance:", static_cast<int>(config_.dist_),
+      "\nkIVF:", config_.kIVF_.value_or(0),
+      "\nnNeighbours:", config_.nNeighbours_.value_or(0));
+}
+
+// ____________________________________________________________________________
+std::string TensorIndex::getTensorIndexCacheKey() const {
+  if (config_.rightCacheName_.has_value()) {
+    return config_.rightCacheName_.value();
+  }
+  if (!childRight_) {
+    return "";
+  }
+  return getTensorIndexFingerprint();
+}
+
+// ____________________________________________________________________________
 PreparedTensorIndexParams TensorIndex::prepareJoin() const {
   auto getIdTable = [](std::shared_ptr<QueryExecutionTree> child) {
     std::shared_ptr<const Result> resTable = child->getResult();
-    auto idTablePtr = &resTable->idTable();
+    auto idTablePtr = &resTable->idTableView();
     return std::pair{idTablePtr, std::move(resTable)};
   };
 
@@ -373,9 +414,17 @@ PreparedTensorIndexParams TensorIndex::prepareJoin() const {
   ColumnIndex leftJoinCol = childLeft_->getVariableColumn(config_.left_);
   ColumnIndex rightJoinCol = childRight_->getVariableColumn(config_.right_);
 
+  // All visible columns of the left side (there might be invisible columns,
+  // which must not be part of the result).
+  qlm::vector<ColumnIndex> leftSelectedCols{allocator()};
+  for (const auto& [var, colInfo] :
+       copySortedByColumnIndex(childLeft_->getVariableColumns())) {
+    leftSelectedCols.push_back(colInfo.columnIndex_);
+  }
+
   // Payload cols and join col
   auto varsAndColInfo = copySortedByColumnIndex(getVarColMapPayloadVars());
-  std::vector<ColumnIndex> rightSelectedCols;
+  qlm::vector<ColumnIndex> rightSelectedCols{allocator()};
   for (const auto& [var, colInfo] : varsAndColInfo) {
     rightSelectedCols.push_back(colInfo.columnIndex_);
   }
@@ -383,19 +432,32 @@ PreparedTensorIndexParams TensorIndex::prepareJoin() const {
   // Size of output table
   size_t numColumns = getResultWidth();
 
-  auto cacheKey = config_.rightCacheName_.value_or(getCacheKey());
-  return PreparedTensorIndexParams{idTableLeft,       std::move(resultLeft),
-                                    idTableRight,      std::move(resultRight),
-                                    leftJoinCol,       rightJoinCol,
-                                    rightSelectedCols, cacheKey,
-                                    numColumns,        config_};
+  auto fingerprint = getTensorIndexFingerprint();
+  // If the right input can't be identified, the index can't be cached safely.
+  auto cacheKey = fingerprint.empty() ? std::string{} : getTensorIndexCacheKey();
+  bool pinIndex = config_.rightCacheName_.has_value();
+  return PreparedTensorIndexParams{idTableLeft,
+                                   std::move(resultLeft),
+                                   idTableRight,
+                                   std::move(resultRight),
+                                   leftJoinCol,
+                                   rightJoinCol,
+                                   std::move(leftSelectedCols),
+                                   std::move(rightSelectedCols),
+                                   std::move(cacheKey),
+                                   pinIndex,
+                                   std::move(fingerprint),
+                                   numColumns,
+                                   config_};
 }
 
 // ____________________________________________________________________________
 Result TensorIndex::computeResult([[maybe_unused]] bool requestLaziness) {
+  AD_CONTRACT_CHECK(
+      isConstructed(),
+      "TensorIndex needs two children, but at least one is missing");
   AD_LOG_TIME_START(tensorIndexComputeResult);
-  auto params = prepareJoin();
-  auto searchImpl = TensorIndexImpl(params, getExecutionContext());
+  auto searchImpl = TensorIndexImpl(prepareJoin(), getExecutionContext(), this);
   auto result = searchImpl.computeTensorIndexResult();
   AD_LOG_TIME_END(tensorIndexComputeResult);
   return result;
@@ -462,8 +524,24 @@ VariableToColumnMap TensorIndex::computeVariableToColumnMap() const {
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> TensorIndex::cloneImpl() const {
+  return cloneWithNewChildren({{childLeft_ ? childLeft_->clone() : nullptr,
+                                childRight_ ? childRight_->clone() : nullptr},
+                               allocator()});
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> TensorIndex::cloneWithNewChildren(
+    qlm::vector<std::shared_ptr<QueryExecutionTree>> children) const {
+  // A child that is not (yet) attached is represented by `nullptr`.
+  AD_CONTRACT_CHECK(children.size() == 2);
+  auto toOptional = [](std::shared_ptr<QueryExecutionTree>& child)
+      -> std::optional<std::shared_ptr<QueryExecutionTree>> {
+    if (child == nullptr) {
+      return std::nullopt;
+    }
+    return std::move(child);
+  };
   return std::make_unique<TensorIndex>(
-      _executionContext, config_,
-      childLeft_ ? std::optional{childLeft_->clone()} : std::nullopt,
-      childRight_ ? std::optional{childRight_->clone()} : std::nullopt);
+      _executionContext, config_, toOptional(children.at(0)),
+      toOptional(children.at(1)), substitutesFilterOp_);
 }

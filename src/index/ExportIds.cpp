@@ -193,6 +193,45 @@ template std::optional<std::string_view> blankNodeIriToString<IriView>(
     const IriView&);
 
 // _____________________________________________________________________________
+std::optional<ad_utility::TensorData> literalOrIriToTensorData(
+    const LiteralOrIri& word) {
+  if (!word.isLiteral() || !word.hasDatatype()) {
+    return std::nullopt;
+  }
+  std::string_view datatype = word.getDatatype();
+  if (datatype != TENSOR_LITERAL && datatype != TENSOR_NUMERIC_LITERAL) {
+    return std::nullopt;
+  }
+  // The content of a `Literal` is already unescaped, so it is plain JSON. A
+  // literal with a tensor datatype but malformed content is not a tensor.
+  return ad_utility::TensorData::tryParseFromString(word.getContent());
+}
+
+// _____________________________________________________________________________
+std::optional<ad_utility::TensorData> idToTensorData(
+    const IndexImpl& index, Id id, const LocalVocab& localVocab) {
+  switch (id.getDatatype()) {
+    case Datatype::VocabIndex: {
+      const auto& vocab = index.getVocab();
+      if (vocab.isTensorDataAvailable()) {
+        // All tensor literals of the index are stored in the underlying
+        // `TensorDataVocabulary`, so if there is no precomputed tensor, the
+        // word is not a (valid) tensor.
+        return vocab.getTensorData(id.getVocabIndex());
+      }
+      [[fallthrough]];
+    }
+    case Datatype::LocalVocabIndex:
+    case Datatype::SecondaryVocabIndex:
+      return literalOrIriToTensorData(
+          getLiteralOrIriFromVocabIndex(index, id, localVocab));
+    default:
+      // Encoded IRIs, numbers, dates, blank nodes, text records, `Undefined`.
+      return std::nullopt;
+  }
+}
+
+// _____________________________________________________________________________
 LiteralOrIri getLiteralOrIriFromVocabIndex(const IndexImpl& index, Id id,
                                            const LocalVocab& localVocab) {
   switch (id.getDatatype()) {

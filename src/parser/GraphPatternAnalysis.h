@@ -51,8 +51,8 @@ struct BasicGraphPatternsInvariantTo {
     static_assert(
         ad_utility::SimilarToAny<
             T, pq::Optional, pq::Union, pq::Subquery, pq::TransPath,
-            pq::BasicGraphPattern, pq::Service, pq::PathQuery, pq::SpatialQuery, pq::TensorIndexQuery,
-            pq::TextSearchQuery, pq::Minus, pq::GroupGraphPattern, pq::Describe,
+            pq::BasicGraphPattern, pq::Service, pq::PathQuery, pq::SpatialQuery,
+            pq::TensorIndexQuery, pq::TextSearchQuery, pq::Minus, pq::GroupGraphPattern, pq::Describe,
             pq::Load, pq::NamedCachedResult, pq::MaterializedViewQuery,
             pq::ExternalValuesQuery, pq::RowNumberQuery>);
     return false;

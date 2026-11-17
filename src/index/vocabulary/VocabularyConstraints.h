@@ -105,21 +105,21 @@ CPP_concept AllNeverProvideGeometryInfo =
 // `isTensorDataAvailable` to determine for sure.
 template <typename T>
 CPP_concept MaybeProvidesTensorData =
-    std::is_same_v<T, PolymorphicVocabulary> ||
-    ad_utility::isInstantiation<T, SplitVocabulary> ||
+    std::is_same_v<T, PolymorphicVocabulary> || isSplitVocabulary<T> ||
     ad_utility::isInstantiation<T, TensorDataVocabulary>;
 
 // As a safeguard for the future: This concept states that a vocabulary
 // implementation will never provide precomputed `TensorData` via a
 // `getTensorData` method. A vocabulary class should only be added if it can be
 // GUARANTEED that this will be the case.
-// Note: Currently, this concept is identical with `HasDefaultGetPositionOfWord`
-// by coincidence. However, both concepts are semantically different.
+// Note: This mirrors `NeverProvidesGeometryInfo` (with the roles of the
+// `GeoVocabulary` and the `TensorDataVocabulary` swapped).
 template <typename T>
 CPP_concept NeverProvidesTensorData = ad_utility::SameAsAny<
     T, VocabularyInMemory, VocabularyInternalExternal,
-    CompressedVocabulary<VocabularyInMemory>,
+    VocabularyInMemoryBinSearch, CompressedVocabulary<VocabularyInMemory>,
     CompressedVocabulary<VocabularyInternalExternal>,
+    CompressedVocabulary<VocabularyInMemoryBinSearch>,
     GeoVocabulary<CompressedVocabulary<VocabularyInternalExternal>>,
     GeoVocabulary<VocabularyInMemory>>;
 

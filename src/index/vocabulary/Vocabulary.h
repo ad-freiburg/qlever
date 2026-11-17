@@ -156,21 +156,20 @@ class Vocabulary {
   // available.
   bool isGeoInfoAvailable() const;
 
-
   // Retrieves a precomputed `TensorData` object from the (possibly)
-  // underlying `TensorDataVocabulary`. This function returns a `TensorData` object
-  // if and only if a `TensorDataVocabulary` is used and the given index points to a
-  // valid tensor in this `TensorDataVocabulary`. In all other cases, `std::nullopt`
-  // is returned.
+  // underlying `TensorDataVocabulary`. This function returns a `TensorData`
+  // object if and only if a `TensorDataVocabulary` is used and the given index
+  // points to a valid tensor literal in this `TensorDataVocabulary`. In all
+  // other cases, `std::nullopt` is returned.
   std::optional<ad_utility::TensorData> getTensorData(IndexType idx) const;
 
   // This function determines if precomputed `TensorData` is available for
-  // this vocabulary. More specifically, `isGeoInfoAvailable` returns `true` if
-  // there is an underlying `GeoVocabulary` such that `getGeoInfo` will return a
-  // `TensorData` object for all indices pointing to valid geometries in the
-  // `GeoVocabulary`. If this function returns `false`, `getGeoInfo` will return
-  // `std::nullopt` for any input, because no precomputed `TensorData` is
-  // available.
+  // this vocabulary. More specifically, `isTensorDataAvailable` returns `true`
+  // if there is an underlying `TensorDataVocabulary` such that `getTensorData`
+  // will return a `TensorData` object for all indices pointing to valid tensor
+  // literals in the `TensorDataVocabulary`. If this function returns `false`,
+  // `getTensorData` will return `std::nullopt` for any input, because no
+  // precomputed `TensorData` is available.
   bool isTensorDataAvailable() const;
 
   // Get the index range for the given prefix or `std::nullopt` if no word with

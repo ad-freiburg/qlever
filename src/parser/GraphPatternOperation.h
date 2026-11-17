@@ -227,9 +227,10 @@ struct Bind {
 // class actually becomes `using GraphPatternOperation = std::variant<...>`
 using GraphPatternOperationVariant =
     std::variant<Optional, Union, Subquery, TransPath, Bind, BasicGraphPattern,
-                 Values, Service, PathQuery, SpatialQuery, TextSearchQuery,TensorIndexQuery,
-                 Minus, GroupGraphPattern, Describe, Load, NamedCachedResult,
-                 MaterializedViewQuery, ExternalValuesQuery, RowNumberQuery>;
+                 Values, Service, PathQuery, SpatialQuery, TextSearchQuery,
+                 TensorIndexQuery, Minus, GroupGraphPattern, Describe, Load,
+                 NamedCachedResult, MaterializedViewQuery, ExternalValuesQuery,
+                 RowNumberQuery>;
 struct GraphPatternOperation
     : public GraphPatternOperationVariant,
       public VisitMixin<GraphPatternOperation, GraphPatternOperationVariant> {

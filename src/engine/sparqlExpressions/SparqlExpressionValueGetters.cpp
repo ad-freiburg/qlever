@@ -510,40 +510,20 @@ std::optional<ad_utility::GeoPointOrWkt> GeoPointOrWktValueGetter::operator()(
   return std::nullopt;
 }
 
+//______________________________________________________________________________
 std::optional<ad_utility::TensorData> TensorValueGetter::operator()(
     const LiteralOrIri& litOrIri, const EvaluationContext*) const {
-  if (litOrIri.isLiteral() && litOrIri.hasDatatype()) {
-    std::string_view type =
-        asStringViewUnsafe(litOrIri.getLiteral().getDatatype());
-    // if(type.end() == '>') {
-    //   // The datatype still has the ending `>` from the IRI form
-    //   `^^<datatypeIri>`, so we need to remove it. type.remove_suffix(1);
-    // }
-    if (type == TENSOR_LITERAL || type == TENSOR_NUMERIC_LITERAL) {
-      try {
-        return ad_utility::TensorData::parseFromString(
-            asStringViewUnsafe(litOrIri.getLiteral().getContent()));
-      } catch (const std::exception& e) {
-        AD_LOG_ERROR << "Failed to parse tensor from literal: "
-                     << asStringViewUnsafe(litOrIri.getLiteral().getContent())
-                     << " with datatype " << type << "\n";
-        AD_LOG_ERROR << "Error message: " << e.what() << "\n";
-        return std::nullopt;
-      }
-    }
-  }
-  return std::nullopt;
+  return ql::exportIds::literalOrIriToTensorData(litOrIri);
 }
+
+//______________________________________________________________________________
 std::optional<ad_utility::TensorData> TensorValueGetter::operator()(
     ValueId id, const EvaluationContext* context) const {
-  try {
-    return ExportQueryExecutionTrees::idToTensorData<true>(
-        context->_qec.getIndex(), id, context->_localVocab);
-  } catch (const std::exception& e) {
-    AD_LOG_ERROR << "Failed to parse tensor from ValueId " << id << "\n";
-    AD_LOG_ERROR << "Error message: " << e.what() << "\n";
-    return std::nullopt;
-  }
+  // Fast path for the words of a `TensorDataVocabulary` (precomputed tensors),
+  // otherwise the literal is fetched and parsed, see
+  // `ql::exportIds::idToTensorData`.
+  return ql::exportIds::idToTensorData(context->_qec.getIndex(), id,
+                                       context->_localVocab);
 }
 
 //______________________________________________________________________________

@@ -257,8 +257,10 @@ ExpressionPtr Visitor::processIriFunctionCall(
   std::string_view prefixName;
 
   // Only a custom aggregate may have `DISTINCT` before its argument list
-  // (SPARQL 1.1 grammar note 15), and `ql:stdev` is currently the only one.
-  if (distinct && functionName != absl::StrCat(QL_PREFIX.second, "stdev")) {
+  // (SPARQL 1.1 grammar note 15). These are `ql:stdev` and the tensor
+  // aggregates `dta:*`.
+  if (distinct && functionName != absl::StrCat(QL_PREFIX.second, "stdev") &&
+      !ql::starts_with(functionName, TENSOR_AGGREGATE_PREFIX.second)) {
     reportNotSupported(ctx,
                        "DISTINCT for the argument list of an IRI function "
                        "that is not an aggregate is");
@@ -382,20 +384,16 @@ ExpressionPtr Visitor::processIriFunctionCall(
       return createBinary(&makePowExpression);
     }
   }
-  // Tensor functions.
+  // Tensor functions (see `TensorExpression.cpp`).
   static const UnaryFuncTable tensorUnaryFuncs{
       {"tensor", &makeTensorFromStringExpression},
       {"norm2", &makeTensorNormExpression},
   };
-  static const UnaryFuncTable tensorAggFuncs{
-      {"sum", &makeTensorSumExpr},
-      {"avg", &makeTensorAvgExpr},
-      {"var", &makeTensorVarExpr},
-      {"std", &makeTensorStdExpr},
-  };
   static const BinaryFuncTable tensorBinaryFuncs{
       {"add", &makeTensorAddExpression},
       {"subtract", &makeTensorSubtractExpression},
+      {"multiply", &makeTensorMultiplyExpression},
+      {"divide", &makeTensorDivideExpression},
       {"cosineSimilarity", &makeTensorCosineSimilarityExpression},
       {"dotProduct", &makeTensorDotProductExpression},
       {"euclideanDistance", &makeTensorEuclideanDistanceExpression},
@@ -407,10 +405,22 @@ ExpressionPtr Visitor::processIriFunctionCall(
       return createBinary(tensorBinaryFuncs.at(functionName));
     }
   }
-  if (checkPrefix(TENSOR_AGGREGATE_PREFIX)) {
-    if (ad_utility::contains(tensorAggFuncs, functionName)) {
-      return createUnary(tensorAggFuncs.at(functionName));
-    }
+
+  // Tensor aggregates (see `TensorAggregate.h`), which support `DISTINCT`.
+  using TensorAggFactory = Ptr (*)(Ptr, bool);
+  static const std::unordered_map<std::string_view, TensorAggFactory>
+      tensorAggFuncs{
+          {"sum", &makeTensorSumExpr},
+          {"avg", &makeTensorAvgExpr},
+          {"var", &makeTensorVarExpr},
+          {"std", &makeTensorStdExpr},
+      };
+  if (checkPrefix(TENSOR_AGGREGATE_PREFIX) &&
+      ad_utility::contains(tensorAggFuncs, functionName)) {
+    auto factory = tensorAggFuncs.at(functionName);
+    return createUnary([factory, distinct](Ptr child) -> Ptr {
+      return factory(std::move(child), distinct);
+    });
   }
 
   // XSD conversion functions.
@@ -430,11 +440,6 @@ ExpressionPtr Visitor::processIriFunctionCall(
       ad_utility::contains(convertFuncs, functionName)) {
     return createUnary(convertFuncs.at(functionName));
   }
-
-  // Tensor functions.
-  static const UnaryFuncTable tensorFuncs{
-      {"tensor", &makeTensorFromStringExpression},
-  };
 
   // QLever-internal functions.
   //

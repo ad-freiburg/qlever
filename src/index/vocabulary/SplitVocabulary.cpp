@@ -4,6 +4,7 @@
 
 #include "index/vocabulary/GeoVocabulary.h"
 #include "index/vocabulary/SplitVocabularyImpl.h"
+#include "index/vocabulary/TensorDataVocabulary.h"
 
 // Explicit template instantiations
 using namespace detail::splitVocabulary;
@@ -16,9 +17,9 @@ template class SplitVocabulary<GeoSplitFunc, geoFilenameSuffixes,
                                GeoVocabulary<VocabularyInMemory>>;
 
 template class SplitVocabulary<
-    TensorDataSplitFunc, TensorDataFilenameFunc,
+    TensorDataSplitFunc, tensorFilenameSuffixes,
     CompressedVocabulary<VocabularyInternalExternal>,
     TensorDataVocabulary<CompressedVocabulary<VocabularyInternalExternal>>>;
-template class SplitVocabulary<TensorDataSplitFunc, TensorDataFilenameFunc,
+template class SplitVocabulary<TensorDataSplitFunc, tensorFilenameSuffixes,
                                VocabularyInMemory,
                                TensorDataVocabulary<VocabularyInMemory>>;
