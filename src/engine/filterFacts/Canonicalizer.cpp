@@ -60,7 +60,7 @@ void removeRedefinedTargets(const parsedQuery::GraphPatternOperation& operation,
   }
   parsedQuery::VariableCounter variables;
   variables(operation);
-  absl::erase_if(defs.expressions_, [&variables](const auto& definition) {
+  ql::erase_if(defs.expressions_, [&variables](const auto& definition) {
     return variables.counts().contains(definition.first);
   });
 }
