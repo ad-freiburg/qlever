@@ -10,10 +10,12 @@
 // Compare the lexicographic comparison of a row of an `IdTable` with a triple
 // of `Id`s (as in `LocatedTriples.cpp`) when the entries of the row are put
 // into an `ad_utility::tie` (as in `LocatedTriples.cpp`, no copy) and into a
-// `std::array<Id, 3>` (copies). `ad_utility::tie` keeps references for lvalues
-// and stores proxies by value, so it ties `Id&` for the legacy layout and the
-// proxies of the split layout. A `std::tie` cannot bind to these proxies, and
-// for the legacy layout it is the same type as `ad_utility::tie`.
+// `std::array<Id, 3>` (copies).
+//
+// NOTE: There is no `std::tie` variant. `ad_utility::tie` keeps references for
+// lvalues and stores proxies by value, so it ties `Id&` for the legacy layout
+// (where it is the same type as `std::tie`) and the proxies of the split
+// layout (which `std::tie` cannot bind).
 
 #include <array>
 #include <string>
