@@ -110,8 +110,12 @@ void readValue(Serializer& serializer, NamedResultCache::Value& arg,
         if constexpr (std::is_same_v<ConstIdColumnRef, ql::span<const Id>>) {
           return zeroCopyDeserializeToSpan<Id>(serializer);
         } else {
-          return columnBasedIdTable::splitLayout::zeroCopyDeserializeIdColumn(
-              serializer);
+          auto column =
+              columnBasedIdTable::splitLayout::zeroCopyDeserializeIdColumn(
+                  serializer);
+          // Break explicitly if the column type of the split layout changes.
+          static_assert(std::is_same_v<decltype(column), ConstIdColumnRef>);
+          return column;
         }
       }();
       AD_CORRECTNESS_CHECK(column.size() == numRows);
