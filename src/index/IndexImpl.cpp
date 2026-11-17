@@ -1002,6 +1002,7 @@ IndexImpl::createPermutationPairImpl(size_t numColumns,
     if constexpr (isChunkwise) {
       // The input is a sorter whose chunks are written directly, see
       // `ChunkwiseInput`. The callbacks are invoked concurrently.
+      //
       // NOTE: The callbacks are move-only, so they cannot be passed via an
       // `std::initializer_list`.
       std::vector<chunkwisePermutationWriter::ConcurrentBlockCallback>
@@ -1067,13 +1068,13 @@ std::tuple<size_t, IndexMetaData> IndexImpl::createPermutationImpl(
 template <typename T, typename... Callbacks>
 std::tuple<size_t, IndexMetaData, IndexMetaData> IndexImpl::createPermutations(
     size_t numColumns, T&& sortedTriples, const Permutation& p1,
-    const Permutation& p2, Callbacks&&... perTripleCallbacks) {
+    const Permutation& p2, Callbacks&&... callbacks) {
   AD_LOG_INFO << "Creating permutations " << p1.readableName() << " and "
               << p2.readableName() << " ..." << std::endl;
   auto metaData = createPermutationPairImpl(
       numColumns, getFilenameForPermutation(p1, false),
       getFilenameForPermutation(p2, false), AD_FWD(sortedTriples),
-      p1.keyOrder(), AD_FWD(perTripleCallbacks)...);
+      p1.keyOrder(), AD_FWD(callbacks)...);
 
   auto& [numDistinctCol0, meta1, meta2] = metaData;
   meta1.calculateStatistics(numDistinctCol0);
@@ -1129,9 +1130,9 @@ size_t IndexImpl::createPermutationPair(size_t numColumns,
                                         SortedTriplesType&& sortedTriples,
                                         const Permutation& p1,
                                         const Permutation& p2,
-                                        CallbackTypes&&... perTripleCallbacks) {
+                                        CallbackTypes&&... callbacks) {
   auto [numDistinctC0, metaData1, metaData2] = createPermutations(
-      numColumns, AD_FWD(sortedTriples), p1, p2, AD_FWD(perTripleCallbacks)...);
+      numColumns, AD_FWD(sortedTriples), p1, p2, AD_FWD(callbacks)...);
   AD_LOG_DEBUG << "Writing meta data for " << p1.readableName() << " and "
                << p2.readableName() << " ..." << std::endl;
   writeMetaData(metaData1, getFilenameForPermutation(p1, false));
