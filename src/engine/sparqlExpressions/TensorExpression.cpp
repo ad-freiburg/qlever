@@ -145,6 +145,9 @@ Expr makeTensorNormExpression(Expr child) {
 Expr makeTensorVarExpr(Expr child) {
   return std::make_unique<TensorVarExpression>(false, std::move(child));
 }
+Expr makeTensorStdExpr(Expr child) {
+  return std::make_unique<TensorStdExpression>(false, std::move(child));
+}
 Expr makeTensorSumExpr(Expr child) {
   return std::make_unique<TensorSumExpression>(false, std::move(child));
 }

@@ -1,6 +1,6 @@
-//
-// Created by Benedikt Kantz on 16.11.26.
-//
+// Copyright 2026, Graz Technical University, University of Padova
+// Institute for Visual Computing, Department of Information Engineering
+// Authors: Benedikt Kantz <benedikt.kantz@tugraz.at>
 
 #ifndef QLEVER_TENSORVAR_H
 #define QLEVER_TENSORVAR_H
@@ -57,10 +57,28 @@ struct TensorVarFinalOperation {
         aggregation.value(), static_cast<float>(numElements) - 1);
   }
 };
+struct TensorStdFinalOperation {
+  OptTensor operator()(const OptTensor& aggregation,
+                       size_t numElements) const {
+    if (!aggregation.has_value()) {
+      return std::nullopt;
+    }
+    auto result = TensorDivByDegreesOfFreedomOperation()(
+        aggregation.value(), static_cast<float>(numElements) - 1);
+    return unaryTensorMap(result, [](auto elem) { return std::sqrt(elem); });
+  }
+};
 using TensorVarExpressionBase =
     TensorDeviationAggExpression<TensorAvgOperation, TensorVarFinalOperation>;
 class TensorVarExpression : public TensorVarExpressionBase {
   using TensorVarExpressionBase::TensorVarExpressionBase;
+  ValueId resultForEmptyGroup() const override { return Id::makeUndefined(); }
+};
+
+using TensorStdExpressionBase =
+    TensorDeviationAggExpression<TensorAvgOperation, TensorStdFinalOperation>;
+class TensorStdExpression : public TensorStdExpressionBase {
+  using TensorStdExpressionBase::TensorStdExpressionBase;
   ValueId resultForEmptyGroup() const override { return Id::makeUndefined(); }
 };
 

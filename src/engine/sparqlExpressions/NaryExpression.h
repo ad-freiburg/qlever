@@ -194,6 +194,7 @@ SparqlExpression::Ptr makeTensorNormExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeTensorSumExpr(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeTensorAvgExpr(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeTensorVarExpr(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeTensorStdExpr(SparqlExpression::Ptr child);
 
 
 

@@ -279,6 +279,7 @@ ExpressionPtr Visitor::processIriFunctionCall(
       {"sum", &makeTensorSumExpr},
       {"avg", &makeTensorAvgExpr},
       {"var", &makeTensorVarExpr},
+      {"std", &makeTensorStdExpr},
   };
   static const BinaryFuncTable tensorBinaryFuncs{
       {"add", &makeTensorAddExpression},
