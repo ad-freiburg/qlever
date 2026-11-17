@@ -67,8 +67,18 @@ inline IdTable scanRelation(const std::string& filename,
                             Id col0Id, size_t numColumns) {
   CompressedRelationReader reader{ad_utility::makeUnlimitedAllocator<Id>(),
                                   ad_utility::File{filename, "r"}};
-  BlockMetadataSpan blockSpan{blocks};
-  BlockMetadataRanges blockRanges{{blockSpan.begin(), blockSpan.end()}};
+  // Only pass the blocks that can contain the relation, the expensive checks
+  // of `ScanSpecAndBlocks` are linear in the number of blocks.
+  BlockMetadataSpan allBlocks{blocks};
+  auto first = ql::ranges::partition_point(
+      allBlocks, [col0Id](const CompressedBlockMetadata& block) {
+        return block.lastTriple_.col0Id_ < col0Id;
+      });
+  auto last = std::partition_point(
+      first, allBlocks.end(), [col0Id](const CompressedBlockMetadata& block) {
+        return block.firstTriple_.col0Id_ <= col0Id;
+      });
+  BlockMetadataRanges blockRanges{{first, last}};
   ScanSpecification scanSpec{col0Id, std::nullopt, std::nullopt};
   std::vector<ColumnIndex> additionalColumns;
   for (size_t col = ADDITIONAL_COLUMN_GRAPH_ID; col < numColumns; ++col) {
@@ -125,6 +135,10 @@ inline void checkPermutation(const std::string& filename,
                              const TestRows& expected, size_t numColumns,
                              source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l);
+  // Check the invariants of all the blocks once, `scanRelation` only passes the
+  // blocks of a single relation to the scan.
+  CompressedRelationReader::ScanSpecAndBlocks::checkBlockMetadataInvariant(
+      blocks, 0);
   size_t begin = 0;
   while (begin < expected.size()) {
     size_t end = begin;
