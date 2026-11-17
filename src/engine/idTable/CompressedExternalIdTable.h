@@ -1350,7 +1350,9 @@ class CompressedExternalIdTableSorter
   // invoked concurrently for several blocks (it is for example used as a
   // `chunkwisePermutationWriter::ConcurrentBlockCallback`).
   auto makeAsyncPushBlockCallback() {
-    return [this](auto block, auto done) {
+    // Note: `self = this` instead of `this` circumvents a false-positive
+    // `-Wunused-lambda-capture` warning of Clang for generic lambdas.
+    return [self = this](auto block, auto done) {
       // The view (and the rows that it refers to) has to stay alive until the
       // push has completed, which the aliasing `shared_ptr` guarantees.
       using Holder = std::pair<decltype(block), IdTableView<0>>;
@@ -1358,10 +1360,10 @@ class CompressedExternalIdTableSorter
           std::make_shared<Holder>(block, block->template asStaticView<0>());
       auto* viewPtr = &holder->second;
       std::shared_ptr<const IdTableView<0>> view{std::move(holder), viewPtr};
-      asyncPushBlock(std::move(view),
-                     [done = std::move(done)](std::exception_ptr e) mutable {
-                       std::move(done)(std::move(e));
-                     });
+      self->asyncPushBlock(std::move(view), [done = std::move(done)](
+                                                std::exception_ptr e) mutable {
+        std::move(done)(std::move(e));
+      });
     };
   }
 
