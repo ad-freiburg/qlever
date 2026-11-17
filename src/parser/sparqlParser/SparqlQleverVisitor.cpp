@@ -2685,7 +2685,7 @@ GraphTerm Visitor::visit(Parser::VarOrTermContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-GraphTerm Visitor::visit(Parser::TripleTermContext* ctx) {
+GraphTerm Visitor::visit(const Parser::TripleTermContext* ctx) {
   // TODO<Prashanth0703> Translate `tripleTerm` once a recursive representation
   // and evaluation are available. Mentioning a triple term must not assert it.
   reportNotSupported(ctx, "Triple terms in SPARQL patterns are");
