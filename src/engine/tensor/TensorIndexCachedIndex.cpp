@@ -236,10 +236,11 @@ TensorIndexCachedIndex::TensorIndexCachedIndex(
                 << tensors.dim_ << " while building the tensor index."
                 << std::endl;
   }
+  // Note: `n` must be computed before `tensors.rowOffsets_` is moved from.
+  size_t n = tensors.numVectors();
   rowOffsets_ = std::move(tensors.rowOffsets_);
   rows_ = std::move(tensors.rows_);
   dimSize_ = tensors.dim_;
-  size_t n = tensors.numVectors();
   if (n == 0) {
     AD_LOG_DEBUG << "No valid tensors found to build the tensor index."
                  << std::endl;

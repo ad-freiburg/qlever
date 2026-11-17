@@ -5,7 +5,10 @@
 #include <unicode/uchar.h>
 
 #include "engine/tensor/TensorIndex.h"
+#include <absl/cleanup/cleanup.h>
+
 #include "../util/GTestHelpers.h"
+#include "../util/RuntimeParametersTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
 #include "global/RuntimeParameters.h"
 #include "rdfTypes/TensorData.h"
@@ -13,7 +16,13 @@ namespace {
 using namespace ad_utility;
 using namespace std::literals;
 TEST(TensorPerformance, BigTensorInnerProduct) {
-  setRuntimeParameter<&RuntimeParameters::tensorIndexMaxNumThreads_>(1);
+  // Use a single thread for this test. At the end of the test, the runtime
+  // parameter is restored first, and then the global (BLAS) thread settings
+  // are reinitialized from it (cleanups run in reverse order of declaration).
+  absl::Cleanup reinitialize{
+      [] { TensorIndexImpl::initializeGlobalRuntimeParameters(); }};
+  auto restoreNumThreads = setRuntimeParameterForTest<
+      &RuntimeParameters::tensorIndexMaxNumThreads_>(size_t{1});
   TensorIndexImpl::initializeGlobalRuntimeParameters();
   constexpr size_t N = 512;
   std::vector<std::string> vectors;
