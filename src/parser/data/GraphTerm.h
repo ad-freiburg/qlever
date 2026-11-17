@@ -26,6 +26,9 @@ class GraphTerm : public GraphTermBase,
                   public VisitMixin<GraphTerm, GraphTermBase> {
  public:
   using GraphTermBase::GraphTermBase;
+  // Since C++26, `std::variant` also has a `visit` member function, so
+  // explicitly choose the one from the mixin to avoid an ambiguity.
+  using VisitMixin<GraphTerm, GraphTermBase>::visit;
   using Iri = ad_utility::triple_component::Iri;
 
   // ___________________________________________________________________________

@@ -29,7 +29,7 @@
 class Sort : public Operation {
  private:
   std::shared_ptr<QueryExecutionTree> subtree_;
-  std::vector<ColumnIndex> sortColumnIndices_;
+  qlm::vector<ColumnIndex> sortColumnIndices_;
   // If `true`, this `Sort` was created from an explicit `INTERNAL SORT BY`
   // clause. In that case we deliberately do not propagate a `LIMIT`/`OFFSET`
   // to the subtree, because the user explicitly asked for the complete sorted
@@ -38,12 +38,12 @@ class Sort : public Operation {
 
  public:
   Sort(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> subtree,
-       std::vector<ColumnIndex> sortColumnIndices, bool explicitSort = false);
+       qlm::vector<ColumnIndex> sortColumnIndices, bool explicitSort = false);
 
  public:
   virtual std::string getDescriptor() const override;
 
-  virtual std::vector<ColumnIndex> resultSortedOn() const override {
+  virtual qlm::vector<ColumnIndex> resultSortedOn() const override {
     return sortColumnIndices_;
   }
 
@@ -52,7 +52,8 @@ class Sort : public Operation {
     return subtree_->getSizeEstimate();
   }
 
-  void onLimitOffsetChanged(const LimitOffsetClause&) override;
+  void onLimitOffsetChanged(const LimitOffsetClause&,
+                            bool childrenAreExclusivelyOwned) override;
 
  public:
   virtual float getMultiplicity(size_t col) override {
@@ -97,11 +98,11 @@ class Sort : public Operation {
 
  public:
   std::optional<std::shared_ptr<QueryExecutionTree>> makeSortedTree(
-      const std::vector<ColumnIndex>& sortColumns) const override;
+      ql::span<const ColumnIndex> sortColumns) const override;
 
   std::optional<std::shared_ptr<QueryExecutionTree>>
   makeTreeWithStrippedColumns(
-      const std::set<Variable>& variables) const override;
+      const std::set<Variable>& requestedVariables) const override;
 
  private:
   [[nodiscard]] bool isDeterministicImpl() const override { return true; }

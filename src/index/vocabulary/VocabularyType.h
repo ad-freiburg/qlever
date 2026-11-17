@@ -34,15 +34,16 @@ enum struct VocabularyTypeEnum {
   InMemoryUncompressedWithHoles,
   InMemoryCompressedWithHoles
 };
-
-}
+QLEVER_ENUM_SIZE(VocabularyTypeEnum, 7);
+}  // namespace detail
 class VocabularyType
     : public EnumWithStrings<VocabularyType, detail::VocabularyTypeEnum> {
  public:
   // The different vocabulary implementations.
   using Enum = detail::VocabularyTypeEnum;
 
-  static constexpr std::array<std::pair<Enum, std::string_view>, 7>
+  static constexpr std::array<std::pair<Enum, std::string_view>,
+                              qlever::enumSize<Enum>>
       descriptions_{
           {{Enum::InMemoryUncompressed, "in-memory-uncompressed"},
            {Enum::OnDiskUncompressed, "on-disk-uncompressed"},

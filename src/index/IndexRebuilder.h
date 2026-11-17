@@ -63,9 +63,8 @@ Id remapBlankNodeId(Id original, const BlankNodeBlocks& blankNodeBlocks,
 // index will be left in an incomplete state and should be deleted by the
 // caller.
 // The old permutations are read and the new ones are written on the
-// `executor` (throttled by the runtime parameters
-// `rebuild-index-scan-num-threads` and
-// `rebuild-permutation-writer-num-threads`).
+// `executor`, by at most `rebuild-index-max-num-threads` tasks at the same time
+// (for the whole rebuild together).
 // Return the datastructures used for mapping to be used in further
 // post-processing.
 indexRebuilder::IndexRebuildMapping materializeToIndex(

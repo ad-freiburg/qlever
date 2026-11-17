@@ -108,13 +108,13 @@ auto runTasksInParallel(std::vector<std::packaged_task<R()>>&& tasks)
 // NOTE: The calling thread blocks until all the tasks have finished, so it must
 // not be a thread of the `executor`.
 CPP_template(typename ChunkFunction)(
-    requires ql::concepts::invocable<
-        const ChunkFunction&, detail::FirstArgumentT<ChunkFunction>&, size_t,
-        size_t>) auto computeInParallelChunks(const qlever::Executor& executor,
-                                              size_t numElements,
-                                              size_t chunkSize,
-                                              const ChunkFunction& computeChunk,
-                                              size_t numTasks = 0) {
+    requires ql::concepts::invocable<const ChunkFunction&,
+                                     detail::FirstArgumentT<ChunkFunction>&,
+                                     size_t, size_t>)
+auto computeInParallelChunks(const qlever::Executor& executor,
+                             size_t numElements, size_t chunkSize,
+                             const ChunkFunction& computeChunk,
+                             size_t numTasks = 0) {
   // The `Result` is the type of the first argument of `computeChunk`.
   using Result = detail::FirstArgumentT<ChunkFunction>;
   // Guard against a subtle bug: if `computeChunk` took its first parameter by

@@ -31,7 +31,6 @@
 #include "global/Constants.h"
 #include "global/FileSuffixConstants.h"
 #include "global/MaterializedViewConstants.h"
-#include "index/CompressedRelationWriter.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/DeltaTriples.h"
 #include "index/Index.h"
@@ -43,6 +42,7 @@
 #include "index/PatternCreator.h"
 #include "index/Permutation.h"
 #include "index/ScanSpecification.h"
+#include "index/compressedRelationWriter/CompressedRelationWriter.h"
 #include "util/Algorithm.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/BitUtils.h"
@@ -110,8 +110,7 @@ static_assert(isStrictlyAscending(datatypesOfSourceFormat));
 
 // Exactly one datatype was added, so no datatype of the source format was
 // removed or duplicated above.
-static_assert(datatypesOfSourceFormat.size() + 1 ==
-              static_cast<size_t>(Datatype::MaxValue) + 1);
+static_assert(datatypesOfSourceFormat.size() + 1 == qlever::enumSize<Datatype>);
 
 // The version of the on-disk format of the materialized views (see
 // `MATERIALIZED_VIEWS_VERSION`) that the views of an index in the source format

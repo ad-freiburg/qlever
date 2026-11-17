@@ -7,6 +7,7 @@
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/LocalVocabEntryTestHelpers.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 
@@ -103,8 +104,8 @@ TEST(GroupConcatExpression, concatenationWithUndefined) {
                              ExpressionResult{Id::makeUndefined()});
 
   auto idx = localVocab.getIndexAndAddIfNotContained(
-      LocalVocabEntry::fromStringRepresentation("\"a\"",
-                                                qec->getLocalVocabContext()));
+      ad_utility::testing::localVocabEntryFromStringRepresentation(
+          "\"a\"", qec->getLocalVocabContext()));
   auto a = Id::makeFromLocalVocabIndex(idx);
   expectIdsAreConcatenatedTo(
       qec, false, makeIdTableFromVector({{Id::makeUndefined()}, {a}}),

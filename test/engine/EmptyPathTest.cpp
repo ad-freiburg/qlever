@@ -13,6 +13,7 @@
 #include "../QueryPlannerTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/LocalVocabEntryTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
 #include "./ValuesForTesting.h"
 #include "engine/EmptyPath.h"
@@ -438,8 +439,9 @@ TEST(EmptyPath, theResultOfTheExistenceCheckCanBeFullyMaterialized) {
   // result is the concatenation of several chunks and the local vocabs of
   // those chunks have to be merged.
   LocalVocab localVocab;
-  localVocab.getIndexAndAddIfNotContained(LocalVocabEntry::fromIriref(
-      "<notInTheIndex>", qec->getLocalVocabContext()));
+  localVocab.getIndexAndAddIfNotContained(
+      ad_utility::testing::iriLocalVocabEntry("<notInTheIndex>",
+                                              qec->getLocalVocabContext()));
   std::vector<IdTable> tables;
   tables.push_back(makeIdTableFromVector({{getId("<a>")}, {getId("<p>")}}));
   tables.push_back(makeIdTableFromVector({{getId("<z>")}}));

@@ -24,6 +24,7 @@ namespace {
 
 using namespace geoInfoTestHelpers;
 using namespace ad_utility;
+using namespace std::string_view_literals;
 using AnyGeoVocab = GeoVocabulary<VocabularyInMemory>;
 
 // Define a typed test suite to test the `GeoVocabulary` on different types of
@@ -93,8 +94,9 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
       for (size_t i = 0; i < testLiterals.size(); i++) {
         ASSERT_EQ(geoVocab[i], testLiterals[i]);
         ASSERT_EQ(geoVocab.getUnderlyingVocabulary()[i], testLiterals[i]);
-        EXPECT_GEOMETRYINFO(geoVocab.getGeoInfo(i),
-                            GeometryInfo::fromWktLiteral(testLiterals[i]));
+        EXPECT_THAT(
+            geoVocab.getGeoInfo(i),
+            geoInfoMatcher(GeometryInfo::fromWktLiteral(testLiterals[i])));
       }
     };
 
@@ -103,7 +105,7 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
     // The literal that is only valid in lenient parsing mode is treated as an
     // invalid geometry.
     auto leniencyIdx =
-        geoVocab.lower_bound("\"LINESTRING(1 1, 2 a", ql::ranges::less{});
+        geoVocab.lower_bound("\"LINESTRING(1 1, 2 a"sv, ql::ranges::less{});
     ASSERT_EQ(leniencyIdx.word(),
               "\"LINESTRING(1 1, 2 a, 3 3)\""
               "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
@@ -116,13 +118,13 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
     ASSERT_EQ(geoVocabConstRef.getUnderlyingVocabulary().size(),
               testLiterals.size());
 
-    auto wI = geoVocab.lower_bound("\"LINE", ql::ranges::less{});
+    auto wI = geoVocab.lower_bound("\"LINE"sv, ql::ranges::less{});
     ASSERT_EQ(wI.index(), 3);
     ASSERT_EQ(wI.word(),
               "\"LINESTRING(1 1, 2 2, 3 3)\""
               "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
 
-    wI = geoVocab.upper_bound("\"XYZ", ql::ranges::less{});
+    wI = geoVocab.upper_bound("\"XYZ"sv, ql::ranges::less{});
     ASSERT_TRUE(wI.isEnd());
 
     geoVocab.close();
@@ -207,7 +209,8 @@ TYPED_TEST(GeoVocabularyUnderlyingVocabTypedTest, LookupBatchesStreamed) {
   this->testLookupBatchesStreamed();
 }
 
-// _____________________________________________________________________________
+// Test that a `PolymorphicVocabulary` returns the precomputed `GeometryInfo`
+// of a WKT literal iff its underlying vocabulary is a `GeoVocabulary`.
 TEST(GeoVocabularyTest, VocabularyGetGeoInfoFromUnderlyingGeoVocab) {
   const VocabularyType geoSplitVocabType{
       VocabularyType::Enum::OnDiskCompressedGeoSplit};
@@ -240,7 +243,7 @@ TEST(GeoVocabularyTest, VocabularyGetGeoInfoFromUnderlyingGeoVocab) {
                    SourceCrsType{util::geo::CRSType::CRS84},
                    getLengthForTesting(exampleGeoLit),
                    getAreaForTesting(exampleGeoLit)};
-  EXPECT_GEOMETRYINFO(gi.value(), exp);
+  EXPECT_THAT(gi.value(), geoInfoMatcher(exp));
 
   // Cannot get `GeometryInfo` from `PolymorphicVocabulary` with no underlying
   // `GeoVocabulary`

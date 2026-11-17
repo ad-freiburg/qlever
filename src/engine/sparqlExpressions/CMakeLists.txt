@@ -12,6 +12,12 @@ add_library(sparqlExpressions
         NumericBinaryExpressions.cpp
         DateExpressions.cpp
         StringExpressions.cpp
+        HashExpressions.cpp
+        SubstringExpressions.cpp
+        StringMatchingExpressions.cpp
+        ReplaceExpression.cpp
+        ConcatExpression.cpp
+        StrLangAndStrDtExpressions.cpp
         IsSomethingExpressions.cpp
         ConditionalExpressions.cpp
         SparqlExpressionTypes.cpp
@@ -22,6 +28,8 @@ add_library(sparqlExpressions
         CountStarExpression.cpp
         PrefilterExpressionIndex.cpp
         GeoExpression.cpp
+        GeoDistanceExpression.cpp
+        GeoRelationExpression.cpp
         GeometryInfoExpression.cpp
         BlankNodeExpression.cpp
         GroupConcatExpression.cpp)

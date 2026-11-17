@@ -16,25 +16,25 @@
 class Distinct : public Operation {
  private:
   std::shared_ptr<QueryExecutionTree> subtree_;
-  std::vector<ColumnIndex> keepIndices_;
+  qlm::vector<ColumnIndex> keepIndices_;
 
  public:
   static constexpr int64_t CHUNK_SIZE = 100'000;
 
   Distinct(QueryExecutionContext* qec,
            std::shared_ptr<QueryExecutionTree> subtree,
-           const std::vector<ColumnIndex>& keepIndices);
+           ql::span<const ColumnIndex> keepIndices);
 
   [[nodiscard]] size_t getResultWidth() const override;
 
   [[nodiscard]] std::string getDescriptor() const override;
 
-  [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override {
+  [[nodiscard]] qlm::vector<ColumnIndex> resultSortedOn() const override {
     return subtree_->resultSortedOn();
   }
 
   // Get all columns that need to be distinct.
-  const std::vector<ColumnIndex>& getDistinctColumns() const {
+  const qlm::vector<ColumnIndex>& getDistinctColumns() const {
     return keepIndices_;
   }
 
@@ -42,7 +42,7 @@ class Distinct : public Operation {
   // in `keepIndices_`, hence it is also distinct wrt any superset of
   // `keepIndices_`.
   bool isDistinctByImpl(
-      const std::vector<ColumnIndex>& distinctIndices) const override;
+      ql::span<const ColumnIndex> distinctIndices) const override;
 
   // Non-template wrapper around `outOfPlaceDistinct` for use in unit tests.
   // Dispatches to the right WIDTH via `callFixedSizeVi`.

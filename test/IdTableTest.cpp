@@ -1164,6 +1164,19 @@ TEST(IdTable, cornerCases) {
   }
 }
 
+namespace {
+// Match an allocator with the memory limit from which exactly `numIds`
+// entries of an `Id` column are allocated.
+MATCHER_P2(hasAllocatedIds, numIds, limit,
+           (negation ? "has not " : "has ") + std::to_string(numIds) +
+               " Ids allocated") {
+  const auto memoryLeft = arg.amountMemoryLeft();
+  *result_listener << "which has " << memoryLeft.getBytes() << " bytes left";
+  return memoryLeft == limit - ad_utility::MemorySize::bytes(
+                                   numIds * BYTES_PER_ID_COLUMN_ENTRY);
+}
+}  // namespace
+
 TEST(IdTable, shrinkToFit) {
   // Note: The behavior of the following test case depends on the implementation
   // of `std::vector::reserve` and `std::vector::push_back`. It might be
@@ -1171,21 +1184,23 @@ TEST(IdTable, shrinkToFit) {
   // different behavior, but this is unlikely due to ABI stability goals between
   // library versions.
   using namespace ad_utility::memory_literals;
-  auto allocator = qlever::makeAllocatorWithLimit<Id>(1_kB);
+  const auto limit = 1_kB;
+  auto allocator = qlever::makeAllocatorWithLimit<Id>(limit);
   IdTable table{2, allocator};
-  ASSERT_EQ(allocator.amountMemoryLeft(), 1_kB);
+  ASSERT_THAT(allocator, hasAllocatedIds(0, limit));
+  // Reserving 20 rows allocates 20 rows of 2 columns, and two `emplace_back`s
+  // do not change that.
   table.reserve(20);
   ASSERT_TRUE(table.empty());
-  // 20 rows * 2 columns * 8 bytes per ID were allocated.
-  ASSERT_EQ(allocator.amountMemoryLeft(), 680_B);
+  ASSERT_THAT(allocator, hasAllocatedIds(20 * 2, limit));
   table.emplace_back();
   table.emplace_back();
   ASSERT_EQ(table.numRows(), 2u);
-  ASSERT_EQ(allocator.amountMemoryLeft(), 680_B);
+  ASSERT_THAT(allocator, hasAllocatedIds(20 * 2, limit));
+  // `shrinkToFit` releases all but the 2 rows of 2 columns.
   table.shrinkToFit();
   ASSERT_EQ(table.numRows(), 2u);
-  // Now only 2 rows * 2 columns * 8 bytes were allocated.
-  ASSERT_EQ(allocator.amountMemoryLeft(), 968_B);
+  ASSERT_THAT(allocator, hasAllocatedIds(2 * 2, limit));
 }
 
 TEST(IdTable, staticAsserts) {

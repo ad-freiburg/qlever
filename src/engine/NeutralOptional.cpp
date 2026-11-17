@@ -55,10 +55,9 @@ LimitOffsetHandling NeutralOptional::handlesLimitOffset() const {
 }
 
 // _____________________________________________________________________________
-void NeutralOptional::onLimitOffsetChanged(
-    const LimitOffsetClause& limitOffset) {
-  tree_ = tree_->clone();
-  tree_->applyLimitOffset(limitOffset);
+void NeutralOptional::onLimitOffsetChanged(const LimitOffsetClause& limitOffset,
+                                           bool childrenAreExclusivelyOwned) {
+  applyLimitOffsetToChild(tree_, limitOffset, childrenAreExclusivelyOwned);
 }
 
 // _____________________________________________________________________________
@@ -68,7 +67,7 @@ std::unique_ptr<Operation> NeutralOptional::cloneImpl() const {
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> NeutralOptional::resultSortedOn() const {
+qlm::vector<ColumnIndex> NeutralOptional::resultSortedOn() const {
   return tree_->resultSortedOn();
 }
 

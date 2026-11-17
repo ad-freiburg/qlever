@@ -15,8 +15,8 @@
 #include "global/RuntimeParameters.h"
 #include "index/IdTableUtils.h"
 #include "util/Algorithm.h"
-#include "util/JoinAlgorithms/IndexNestedLoopJoin.h"
-#include "util/JoinAlgorithms/JoinAlgorithms.h"
+#include "util/joinAlgorithms/IndexNestedLoopJoin.h"
+#include "util/joinAlgorithms/JoinAlgorithms.h"
 
 using namespace qlever::joinHelpers;
 using namespace qlever::joinWithIndexScanHelpers;
@@ -93,7 +93,8 @@ string OptionalJoin::getCacheKeyImpl() const {
 }
 
 // _____________________________________________________________________________
-void OptionalJoin::onLimitOffsetChanged(const LimitOffsetClause&) {
+void OptionalJoin::onLimitOffsetChanged(const LimitOffsetClause&,
+                                        bool childrenAreExclusivelyOwned) {
   // Note that we use the merged `getLimitOffset()` and not the clause that was
   // passed in, which only holds the increment that was just added. The bound
   // below depends on the total limit and offset, so for nested subqueries the
@@ -113,8 +114,8 @@ void OptionalJoin::onLimitOffsetChanged(const LimitOffsetClause&) {
     // the left side. This can significantly speed up the query if the left side
     // is large and the limit is small. The right side is optional, so reducing
     // it can drop matches; we leave it untouched.
-    _left = _left->clone();
-    _left->applyLimitOffset(LimitOffsetClause{safeLimit});
+    applyLimitOffsetToChild(_left, LimitOffsetClause{safeLimit},
+                            childrenAreExclusivelyOwned);
 
     // The pushdown may have un-sorted `_left`, which our join algorithms
     // require to be sorted on the join columns, so restore that order (see the
@@ -234,11 +235,11 @@ size_t OptionalJoin::getResultWidth() const {
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> OptionalJoin::resultSortedOn() const {
+qlm::vector<ColumnIndex> OptionalJoin::resultSortedOn() const {
   if (!keepJoinColumns_) {
-    return {};
+    return qlm::vector<ColumnIndex>{allocator()};
   }
-  std::vector<ColumnIndex> sortedOn;
+  qlm::vector<ColumnIndex> sortedOn{allocator()};
   // This optimization doesn't allow preserving sort order.
   if (isIndexNestedLoopJoinSuitable()) {
     return sortedOn;
@@ -349,14 +350,13 @@ void OptionalJoin::computeSizeEstimateAndMultiplicities() {
 // ______________________________________________________________
 auto OptionalJoin::computeImplementationFromIdTables(
     const IdTableView<0>& left, const IdTableView<0>& right,
-    const std::vector<std::array<ColumnIndex, 2>>& joinColumns)
-    -> Implementation {
+    ql::span<const std::array<ColumnIndex, 2>> joinColumns) -> Implementation {
   auto implementation = Implementation::NoUndef;
   auto anyIsUndefined = [](auto column) {
     return ql::ranges::any_of(column, Id::isUndefinedL);
   };
   for (size_t i = 0; i < joinColumns.size(); ++i) {
-    auto [leftCol, rightCol] = joinColumns.at(i);
+    auto [leftCol, rightCol] = joinColumns[i];
     if (anyIsUndefined(right.getColumn(rightCol))) {
       return Implementation::GeneralCase;
     }
@@ -393,7 +393,7 @@ bool OptionalJoin::columnOriginatesFromGraphOrUndef(
 // ______________________________________________________________
 void OptionalJoin::optionalJoin(
     const IdTableView<0>& left, const IdTableView<0>& right,
-    const std::vector<std::array<ColumnIndex, 2>>& joinColumns, IdTable* result,
+    ql::span<const std::array<ColumnIndex, 2>> joinColumns, IdTable* result,
     Implementation implementation) {
   // check for trivial cases
   if (left.empty()) {
@@ -504,7 +504,7 @@ void OptionalJoin::optionalJoin(
       cols.push_back(i);
     }
     checkCancellation();
-    IdTableUtils::sort(*result, cols, sortConfig(), cancellationHandle());
+    IdTableUtils::sort(*result, cols, sortConfig());
   }
   result->setColumnSubset(joinColumnData.permutationResult());
   checkCancellation();
@@ -662,7 +662,8 @@ std::optional<Result> OptionalJoin::tryIndexNestedLoopJoinIfSuitable(
 
   LocalVocab localVocab = leftRes->getCopyOfLocalVocab();
   ::joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin nestedLoopJoin{
-      _joinColumns, std::move(leftRes), std::move(rightRes)};
+      _joinColumns, std::move(leftRes), std::move(rightRes),
+      cancellationHandle()};
 
   // This algorithm doesn't produce sorted output
   AD_CORRECTNESS_CHECK(resultSortedOn().empty());
@@ -670,8 +671,7 @@ std::optional<Result> OptionalJoin::tryIndexNestedLoopJoinIfSuitable(
   auto lazyResult =
       std::move(nestedLoopJoin)
           .computeOptionalJoin(!requestLaziness, getResultWidth(),
-                               cancellationHandle(), _right->getResultWidth(),
-                               keepJoinColumns_);
+                               _right->getResultWidth(), keepJoinColumns_);
   return requestLaziness
              ? Result{std::move(lazyResult), resultSortedOn()}
              : Result{ad_utility::getSingleElement(std::move(lazyResult)),
@@ -720,12 +720,12 @@ OptionalJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   // instead of evaluating the `BIND` expression on the unbound input. This
   // silently changes the result for any expression that isn't `UNDEF` itself
   // on `UNDEF` input, e.g. `COALESCE`.
-  return pushDownBindToChild(bind, {_left, _right}, 0);
+  return pushDownBindToChild(bind, {{_left, _right}, allocator()}, 0);
 }
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> OptionalJoin::cloneWithNewChildren(
-    std::vector<std::shared_ptr<QueryExecutionTree>> children) const {
+    qlm::vector<std::shared_ptr<QueryExecutionTree>> children) const {
   return std::make_unique<OptionalJoin>(
       _executionContext, std::move(children.at(0)), std::move(children.at(1)),
       keepJoinColumns_);

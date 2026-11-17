@@ -33,6 +33,7 @@
 #include "global/RuntimeParameters.h"
 #include "index/DeltaTriples.h"
 #include "index/GeoPointEncoding.h"
+#include "index/HasWordNormalization.h"
 #include "index/Index.h"
 #include "index/IndexRebuilderTypes.h"
 #include "index/IndexSwap.h"
@@ -43,12 +44,13 @@
 #include "util/Allocator.h"
 #include "util/Executor.h"
 #include "util/GlobalExecutor.h"
-#include "util/MemorySize/MemorySize.h"
+#include "util/NoCopyNoMove.h"
 #include "util/Synchronized.h"
 #include "util/TimeTracer.h"
 #include "util/TransparentFunctors.h"
 #include "util/http/MediaTypes.h"
 #include "util/json.h"
+#include "util/memorySize/MemorySize.h"
 
 namespace qlever {
 
@@ -91,6 +93,15 @@ struct CommonConfig {
   // each literal, a triple `<literal> ql:has-word "word"` is added for each
   // word in the literal. This is useful for keyword search in literals.
   bool addHasWordTriples_ = false;
+
+  // The normalization that is applied to the words of the `ql:has-word`
+  // triples, see `ad_utility::HasWordNormalization`.
+  ad_utility::HasWordNormalization hasWordNormalization_{
+      ad_utility::HasWordNormalization::Lowercase};
+
+  // If not empty, only add the `ql:has-word` triples for literals that are the
+  // object of a triple with one of these predicates.
+  std::vector<std::string> hasWordRestrictPredicates_;
 };
 
 // Additional configuration used for building an index for a given dataset.
@@ -266,6 +277,20 @@ struct EngineConfig : CommonConfig {
   // separately).
   bool doNotLoadPermutations_ = false;
 
+  // If set, load the vocabulary and the named result cache from the
+  // compressed blob in this file instead of loading the index from the files
+  // with the `baseName_`. The blob is written by
+  // `Qlever::serializeVocabAndNamedCacheToCompressedBlob` and read by
+  // `Qlever::deserializeVocabAndNamedCacheFromCompressedBlob`.
+  //
+  // NOTE: The blob contains no permutations, so such an instance can only
+  // answer queries that read from the named result cache (via `SERVICE
+  // ql:cached-result-with-name-...`) or that need no triples at all. It does
+  // not support updates, materialized views, or index rebuilds. Hence
+  // `persistUpdates_`, `loadTextIndex_`, `rebuildIndexStrategy_`, and
+  // `preloadMaterializedViews_` must not be set (see `validate`).
+  std::optional<std::string> compressedBlobFilename_;
+
   // A list of IRI prefixes that are allowed as `SERVICE` endpoints. If empty
   // (the default), all IRIs are allowed. If non-empty, `SERVICE` requests to
   // IRIs that do not start with any of the given prefixes are rejected.
@@ -287,20 +312,31 @@ struct EngineConfig : CommonConfig {
   // via the `index-description` and `text-description` API commands.
   std::optional<std::string> indexDescription_;
   std::optional<std::string> textDescription_;
+
+  // Throw if the given configuration is invalid, in particular if
+  // `compressedBlobFilename_` is combined with an option that a `Qlever`
+  // instance that is loaded from a blob does not support.
+  void validate() const;
 };
 
 // Class to use QLever as an embedded database, without the HTTP server. See
 // `src/engine/LibQleverExample.cpp` for an example use. If you extend the
 // interface of this class, consider also adding bindings to
 // `QleverEmscriptenBindings.cpp` so it can be used by JS code.
-class Qlever {
+//
+// NOTE: Neither copyable nor movable, because the constructors register
+// callbacks (on the allocator and the global runtime parameters) that refer to
+// this instance.
+class Qlever : public ad_utility::NoCopyNoMove {
  public:
   using PlannedQuery = qlever::PlannedQuery;
 
   // Bundle the `Index` and the `MaterializedViewsManager` under a single mutex
   // so that an index rebuild can atomically swap both in, while other threads
   // continue to read the previous instances via the `shared_ptr`s they hold.
-  struct IndexAndViews {
+  // Not copyable or movable, so it is only passed around as a `shared_ptr` or
+  // reference.
+  struct IndexAndViews : public ad_utility::NoCopyNoMove {
     Index index_;
     MaterializedViewsManager materializedViewsManager_;
 
@@ -309,12 +345,6 @@ class Qlever {
                   MaterializedViewsManager materializedViewsManager)
         : index_{std::move(index)},
           materializedViewsManager_{std::move(materializedViewsManager)} {}
-
-    // Make sue this is only passed around as a shared pointer or reference.
-    IndexAndViews(IndexAndViews&&) noexcept = delete;
-    IndexAndViews& operator=(IndexAndViews&&) noexcept = delete;
-    IndexAndViews(const IndexAndViews&) noexcept = delete;
-    IndexAndViews& operator=(const IndexAndViews&) noexcept = delete;
 
     // Helper function to decompose `self` into a pair of two shared pointers
     // pointing to the individual members via aliasing semantics.
@@ -330,8 +360,15 @@ class Qlever {
   };
 
  private:
+  // The owner of the memory limit of this instance. It is declared first, so
+  // that it is destroyed last, after all the members that hold copies of
+  // `allocator_` or memory allocated by it (e.g. the results in `cache_`).
+  qlever::Allocator<Id> owningAllocator_;
   // The cache is threadsafe, so making it `mutable` is reasonably safe.
   mutable QueryResultCache cache_;
+  // A non-owning copy of `owningAllocator_`, which is passed to the query
+  // engine. Copying it costs no atomic operation, which matters because
+  // allocators are copied very often (e.g. with every string).
   qlever::Allocator<Id> allocator_;
   // The executor on which the queries and index rebuilds of this instance run
   // their parallel work, see `executor()`.
@@ -350,20 +387,32 @@ class Qlever {
   NamedCachedQueryBlobManager blobManager_;
   friend class NamedCachedQueryBlobManager;
 
+  // True if this instance was populated from the blob file given by
+  // `EngineConfig::compressedBlobFilename_`, see `isLoadedFromBlob`.
+  bool loadedFromBlob_ = false;
+
   FRIEND_TEST(LibQlever, swapIndexAndViewsThrowsWithNonEmptyNamedCache);
+
+  // Throw if `isLoadedFromBlob()`, with a message that says that the given
+  // `operation` is not supported for such an instance.
+  void throwIfLoadedFromBlob(std::string_view operation) const;
 
  public:
   // Build an index, using an `IndexBuilderConfig` as explained above.
   static void buildIndex(IndexBuilderConfig config);
 
   // Create a QLever instance for querying using an `EngineConfig` as
-  // explained above. If `skipLoading` is true, no index is loaded from disk
-  // (in particular, none of the on-disk index files, not even the vocabulary
-  // or the `.meta-data.json`, need to exist); the instance must then be
-  // populated from a blob via `deserializeVocabAndNamedCacheFromCompressedBlob`
-  // before it can answer queries. The memory limit from `config` is enforced
-  // and cache eviction is wired into the allocator. The queries and index
-  // rebuilds of this instance run their parallel work on the `executor`.
+  // explained above. The memory limit from `config` is enforced and cache
+  // eviction is wired into the allocator. The queries and index rebuilds of
+  // this instance run their parallel work on the `executor`.
+  //
+  // If `skipLoading` is true, no index is loaded from disk (in particular,
+  // none of the on-disk index files, not even the vocabulary or the
+  // `.meta-data.json`, need to exist); the instance must then be populated
+  // from a blob via `deserializeVocabAndNamedCacheFromCompressedBlob` before
+  // it can answer queries. If `config.compressedBlobFilename_` is set, the
+  // instance is populated from that blob file instead of from the on-disk
+  // index, independent of `skipLoading`.
   //
   // NOTE: Neither this constructor nor the computation of a query must be
   // called from a thread of the `executor`, because they block while waiting
@@ -377,10 +426,25 @@ class Qlever {
   Qlever(const EngineConfig& config, bool skipLoading, Allocator<Id> allocator,
          qlever::Executor executor = ad_utility::globalExecutor());
 
+  // Remove the actions that the constructors registered on the global runtime
+  // parameters, as they refer to this instance.
+  //
+  // NOTE: The parameters are global, so only the most recently constructed
+  // instance is bound to them, and destroying any instance unbinds all of
+  // them.
+  ~Qlever();
+
   // The executor on which the queries and index rebuilds of this instance run
   // their parallel work (unless a different one is passed to
   // `createQueryExecutionContext`).
   const qlever::Executor& executor() const { return executor_; }
+
+  // Return true if this instance was populated from the blob file given by
+  // `EngineConfig::compressedBlobFilename_`. Such an instance has no
+  // permutations and no files on disk, so `applyUpdate`,
+  // `vacuumDeltaTriples`, `writeMaterializedView`, `loadMaterializedView`,
+  // `deleteMaterializedView`, and `rebuildIndexToDisk` throw.
+  bool isLoadedFromBlob() const { return loadedFromBlob_; }
 
   // Run the query planner on `parsedQuery`. Despite the name, `ParsedQuery`
   // is also used to represent SPARQL update operations (see
@@ -810,6 +874,9 @@ class Qlever {
   QueryResultCache& cache() { return cache_; }
   const QueryResultCache& cache() const { return cache_; }
 
+  // The allocator of the query engine. It is a non-owning copy (see
+  // `nonOwningCopy()`), so neither it, nor any of its copies, nor memory
+  // allocated by them may outlive this instance.
   Allocator<Id>& allocator() { return allocator_; }
   const Allocator<Id>& allocator() const { return allocator_; }
 

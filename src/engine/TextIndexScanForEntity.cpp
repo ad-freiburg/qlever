@@ -32,7 +32,7 @@ Result TextIndexScanForEntity::computeResult(
   oss << config_;
   runtimeInfo().addDetail("text-index-scan-for-entity-config", oss.str());
   IdTable idTable = getExecutionContext()->getIndex().getEntityMentionsForWord(
-      config_.word_, getExecutionContext()->getAllocator());
+      config_.word_, getExecutionContext()->getAllocator(), sortConfig());
 
   std::vector<ColumnIndex> cols{0};
   if (hasFixedEntity()) {
@@ -123,8 +123,8 @@ bool TextIndexScanForEntity::knownEmptyResult() {
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> TextIndexScanForEntity::resultSortedOn() const {
-  return {ColumnIndex(0)};
+qlm::vector<ColumnIndex> TextIndexScanForEntity::resultSortedOn() const {
+  return {{ColumnIndex(0)}, allocator()};
 }
 
 // _____________________________________________________________________________

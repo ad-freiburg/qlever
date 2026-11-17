@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include "engine/Result.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
 
@@ -17,6 +18,13 @@ using ::testing::Values;
 
 namespace {
 using IdTableVocabPair = Result::IdTableVocabPair;
+
+// The `qlm::vector` of sort columns that the `Result` constructors expect.
+qlm::vector<ColumnIndex> sortOrder(
+    const std::vector<ColumnIndex>& columns = {}) {
+  return {columns.begin(), columns.end(),
+          ad_utility::makeUnlimitedAllocator<ColumnIndex>()};
+}
 
 // Helper function to generate all possible splits of an IdTable in order to
 // exhaustively test generator variants.
@@ -63,7 +71,7 @@ void consumeGenerator(Result::LazyResult generator) {
 }  // namespace
 
 TEST(Result, verifyIdTableThrowsWhenActuallyLazy) {
-  Result result{[]() -> Result::Generator { co_return; }(), {}};
+  Result result{[]() -> Result::Generator { co_return; }(), sortOrder()};
   EXPECT_FALSE(result.isFullyMaterialized());
   EXPECT_THROW(result.idTableView(), ad_utility::Exception);
 }
@@ -71,7 +79,7 @@ TEST(Result, verifyIdTableThrowsWhenActuallyLazy) {
 // _____________________________________________________________________________
 TEST(Result, idTableViewReturnsViewOfMaterializedTable) {
   auto idTable = makeIdTableFromVector({{1, 2}, {3, 4}});
-  Result result{idTable.clone(), {}, LocalVocab{}};
+  Result result{idTable.clone(), sortOrder(), LocalVocab{}};
   ASSERT_TRUE(result.isFullyMaterialized());
   IdTableView<0> view = result.idTableView();
   EXPECT_EQ(view.numRows(), 2u);
@@ -82,7 +90,7 @@ TEST(Result, idTableViewReturnsViewOfMaterializedTable) {
 
 // _____________________________________________________________________________
 TEST(Result, idTableViewThrowsWhenActuallyLazy) {
-  Result result{[]() -> Result::Generator { co_return; }(), {}};
+  Result result{[]() -> Result::Generator { co_return; }(), sortOrder()};
   EXPECT_FALSE(result.isFullyMaterialized());
   EXPECT_THROW(result.idTableView(), ad_utility::Exception);
 }
@@ -90,7 +98,7 @@ TEST(Result, idTableViewThrowsWhenActuallyLazy) {
 // _____________________________________________________________________________
 TEST(Result, cloneIdTableReturnsCopy) {
   auto idTable = makeIdTableFromVector({{1, 2}, {3, 4}});
-  Result result{idTable.clone(), {}, LocalVocab{}};
+  Result result{idTable.clone(), sortOrder(), LocalVocab{}};
   ASSERT_TRUE(result.isFullyMaterialized());
   IdTable cloned = result.cloneIdTable();
   EXPECT_EQ(cloned, idTable);
@@ -100,14 +108,14 @@ TEST(Result, cloneIdTableReturnsCopy) {
 
 // _____________________________________________________________________________
 TEST(Result, cloneIdTableThrowsWhenActuallyLazy) {
-  Result result{[]() -> Result::Generator { co_return; }(), {}};
+  Result result{[]() -> Result::Generator { co_return; }(), sortOrder()};
   EXPECT_FALSE(result.isFullyMaterialized());
   EXPECT_THROW(result.cloneIdTable(), ad_utility::Exception);
 }
 
 // _____________________________________________________________________________
 TEST(Result, verifyIdTableThrowsOnSecondAccess) {
-  const Result result{[]() -> Result::Generator { co_return; }(), {}};
+  const Result result{[]() -> Result::Generator { co_return; }(), sortOrder()};
   // First access should work
   for ([[maybe_unused]] IdTableVocabPair& _ : result.idTables()) {
     ADD_FAILURE() << "Generator is empty";
@@ -118,14 +126,13 @@ TEST(Result, verifyIdTableThrowsOnSecondAccess) {
 
 // _____________________________________________________________________________
 TEST(Result, verifyIdTablesThrowsWhenFullyMaterialized) {
-  Result result1{
-      IdTable{ad_utility::makeUnlimitedAllocator<IdTable>()}, {}, LocalVocab{}};
+  Result result1{IdTable{ad_utility::makeUnlimitedAllocator<IdTable>()},
+                 sortOrder(), LocalVocab{}};
   EXPECT_TRUE(result1.isFullyMaterialized());
   EXPECT_THROW(result1.idTables(), ad_utility::Exception);
 
   Result result2{IdTable{ad_utility::makeUnlimitedAllocator<IdTable>()},
-                 {},
-                 result1.getSharedLocalVocab()};
+                 sortOrder(), result1.getSharedLocalVocab()};
   EXPECT_TRUE(result2.isFullyMaterialized());
   EXPECT_THROW(result2.idTables(), ad_utility::Exception);
 }
@@ -141,7 +148,7 @@ TEST_P(ResultSortTest, verifyAssertSortOrderIsRespectedSucceedsWhenSorted) {
   auto idTable = makeIdTableFromVector({{1, 6, 0}, {2, 5, 0}, {3, 4, 0}});
 
   for (auto& generator : getAllSubSplits(idTable)) {
-    Result result{std::move(generator), std::get<1>(GetParam())};
+    Result result{std::move(generator), sortOrder(std::get<1>(GetParam()))};
     if (std::get<0>(GetParam())) {
       EXPECT_NO_THROW(consumeGenerator(result.idTables()));
     } else {
@@ -152,11 +159,12 @@ TEST_P(ResultSortTest, verifyAssertSortOrderIsRespectedSucceedsWhenSorted) {
   }
 
   if (std::get<0>(GetParam())) {
-    EXPECT_NO_THROW(
-        (Result{std::move(idTable), std::get<1>(GetParam()), LocalVocab{}}));
+    EXPECT_NO_THROW((Result{std::move(idTable),
+                            sortOrder(std::get<1>(GetParam())), LocalVocab{}}));
   } else {
     AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-        (Result{std::move(idTable), std::get<1>(GetParam()), LocalVocab{}}),
+        (Result{std::move(idTable), sortOrder(std::get<1>(GetParam())),
+                LocalVocab{}}),
         HasSubstr("compareRowsBySortColumns"), ad_utility::Exception);
   }
 }
@@ -177,19 +185,21 @@ TEST(Result,
   auto matcher = HasSubstr("colIndex < idTable.numColumns()");
 
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      (Result{idTable.clone(), {3}, LocalVocab{}}), matcher, Exception);
+      (Result{idTable.clone(), sortOrder({3}), LocalVocab{}}), matcher,
+      Exception);
 
   for (auto& generator : getAllSubSplits(idTable)) {
-    Result result{std::move(generator), {3}};
+    Result result{std::move(generator), sortOrder({3})};
     AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(consumeGenerator(result.idTables()),
                                           matcher, Exception);
   }
 
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      (Result{idTable.clone(), {2, 1337}, LocalVocab{}}), matcher, Exception);
+      (Result{idTable.clone(), sortOrder({2, 1337}), LocalVocab{}}), matcher,
+      Exception);
 
   for (auto& generator : getAllSubSplits(idTable)) {
-    Result result{std::move(generator), {2, 1337}};
+    Result result{std::move(generator), sortOrder({2, 1337})};
     AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(consumeGenerator(result.idTables()),
                                           matcher, Exception);
   }
@@ -197,7 +207,7 @@ TEST(Result,
 
 // _____________________________________________________________________________
 TEST(Result, verifyRunOnNewChunkComputedThrowsWithFullyMaterializedResult) {
-  Result result{makeIdTableFromVector({{}}), {}, LocalVocab{}};
+  Result result{makeIdTableFromVector({{}}), sortOrder(), LocalVocab{}};
 
   EXPECT_THROW(result.runOnNewChunkComputed(
                    [](const IdTableVocabPair&, std::chrono::microseconds) {},
@@ -227,7 +237,7 @@ TEST(Result, verifyRunOnNewChunkComputedFiresCorrectly) {
         // Work after the last chunk is reported to `onGeneratorFinished`.
         std::this_thread::sleep_for(5ms);
       }(queryExecutionContext, idTable1, idTable2, idTable3),
-      {}};
+      sortOrder()};
   uint32_t callCounter = 0;
   bool finishedConsuming = false;
 
@@ -268,7 +278,7 @@ TEST(Result, verifyRunOnNewChunkCallsFinishOnError) {
         throw std::runtime_error{"verifyRunOnNewChunkCallsFinishOnError"};
         co_return;
       }(),
-      {}};
+      sortOrder()};
   uint32_t callCounterGenerator = 0;
   uint32_t callCounterFinished = 0;
 
@@ -298,7 +308,7 @@ TEST(Result, verifyRunOnNewChunkCallsFinishOnCancellation) {
                       "verifyRunOnNewChunkCallsFinishOnCancellation"};
                   co_return;
                 }(),
-                {}};
+                sortOrder()};
   uint32_t callCounterGenerator = 0;
   uint32_t callCounterFinished = 0;
 
@@ -327,7 +337,7 @@ TEST(Result, verifyRunOnNewChunkDoesNotReportChunkTimeTwiceOnError) {
                   std::this_thread::sleep_for(1ms);
                   co_yield {std::move(idTable), LocalVocab{}};
                 }(makeIdTableFromVector({{}})),
-                {}};
+                sortOrder()};
   uint32_t callCounterFinished = 0;
 
   result.runOnNewChunkComputed(
@@ -359,7 +369,7 @@ TEST(Result, verifyRunOnNewChunkCallsFinishOnPartialConsumption) {
     Result result{[](IdTable idTable) -> Result::Generator {
                     co_yield {std::move(idTable), LocalVocab{}};
                   }(makeIdTableFromVector({{}})),
-                  {}};
+                  sortOrder()};
 
     result.runOnNewChunkComputed(
         [&](const IdTableVocabPair&, std::chrono::microseconds) {
@@ -380,7 +390,7 @@ TEST(Result, verifyRunOnNewChunkCallsFinishOnPartialConsumption) {
 
 // _____________________________________________________________________________
 TEST(Result, verifyCacheDuringConsumptionThrowsWhenFullyMaterialized) {
-  Result result{makeIdTableFromVector({{}}), {}, LocalVocab{}};
+  Result result{makeIdTableFromVector({{}}), sortOrder(), LocalVocab{}};
   EXPECT_THROW(result.cacheDuringConsumption(
                    [](const std::optional<IdTableVocabPair>&,
                       const IdTableVocabPair&) { return true; },
@@ -394,7 +404,7 @@ TEST(Result, verifyCacheDuringConsumptionRespectsPassedParameters) {
 
   // Test positive case
   for (auto& generator : getAllSubSplits(idTable)) {
-    Result result{std::move(generator), {0}};
+    Result result{std::move(generator), sortOrder({0})};
     result.cacheDuringConsumption(
         [predictedSize = 0](const std::optional<IdTableVocabPair>& aggregator,
                             const IdTableVocabPair& newTable) mutable {
@@ -416,7 +426,7 @@ TEST(Result, verifyCacheDuringConsumptionRespectsPassedParameters) {
   // Test negative case
   for (auto& generator : getAllSubSplits(idTable)) {
     uint32_t callCounter = 0;
-    Result result{std::move(generator), {}};
+    Result result{std::move(generator), sortOrder()};
     result.cacheDuringConsumption(
         [&](const std::optional<IdTableVocabPair>& aggregator,
             const IdTableVocabPair&) {
@@ -441,7 +451,7 @@ TEST(Result, cacheDuringConsumptionAbortsValueWhenRunningIntoMemoryLimit) {
                   co_yield {std::move(idTable), LocalVocab{}};
                   innerFlag = true;
                 }(flag),
-                {0}};
+                sortOrder({0})};
   result.cacheDuringConsumption(
       [](const std::optional<IdTableVocabPair>&, const IdTableVocabPair&) {
         return true;
@@ -464,7 +474,7 @@ TEST(
                   co_yield {std::move(idTable), LocalVocab{}};
                   innerFlag = true;
                 }(flag),
-                {0}};
+                sortOrder({0})};
   result.cacheDuringConsumption(
       [](const std::optional<IdTableVocabPair>&, const IdTableVocabPair&) {
         return true;
@@ -489,15 +499,15 @@ TEST(Result, verifyApplyLimitOffsetDoesCorrectlyApplyLimitAndOffset) {
       ++callCounter;
     };
     {
-      Result result{idTable.clone(), {}, LocalVocab{}};
+      Result result{idTable.clone(), sortOrder(), LocalVocab{}};
       result.applyLimitOffset(limitOffset, callback);
       EXPECT_EQ(callCounter, 1);
       EXPECT_EQ(result.idTableView(), comparisonTable);
     }
     {
       // Now test the limit offset application for shared results;
-      Result result2{
-          std::make_shared<const IdTable>(idTable.clone()), {}, LocalVocab{}};
+      Result result2{std::make_shared<const IdTable>(idTable.clone()),
+                     sortOrder(), LocalVocab{}};
       result2.applyLimitOffset(limitOffset, callback);
       EXPECT_EQ(callCounter, 2);
       EXPECT_EQ(result2.idTableView(), comparisonTable);
@@ -507,7 +517,7 @@ TEST(Result, verifyApplyLimitOffsetDoesCorrectlyApplyLimitAndOffset) {
   for (auto& generator : getAllSubSplits(idTable)) {
     std::vector<size_t> colSizes{};
     uint32_t totalRows = 0;
-    Result result{std::move(generator), {}};
+    Result result{std::move(generator), sortOrder()};
     result.applyLimitOffset(limitOffset, [&](std::chrono::microseconds,
                                              const IdTableView<0>& innerTable) {
       // NOTE: duration can't be tested here, processors are too fast
@@ -546,7 +556,7 @@ TEST(Result, verifyApplyLimitOffsetHandlesZeroLimitCorrectly) {
   LimitOffsetClause limitOffset{0, 1};
   {
     uint32_t callCounter = 0;
-    Result result{idTable.clone(), {}, LocalVocab{}};
+    Result result{idTable.clone(), sortOrder(), LocalVocab{}};
     result.applyLimitOffset(limitOffset, [&](std::chrono::microseconds,
                                              const IdTableView<0>& innerTable) {
       EXPECT_EQ(innerTable.numRows(), 0);
@@ -557,7 +567,7 @@ TEST(Result, verifyApplyLimitOffsetHandlesZeroLimitCorrectly) {
 
   for (auto& generator : getAllSubSplits(idTable)) {
     uint32_t callCounter = 0;
-    Result result{std::move(generator), {}};
+    Result result{std::move(generator), sortOrder()};
     result.applyLimitOffset(
         limitOffset, [&](std::chrono::microseconds, const IdTableView<0>&) {
           ++callCounter;
@@ -575,7 +585,7 @@ TEST(Result, verifyApplyLimitOffsetHandlesNonZeroOffsetWithoutLimitCorrectly) {
   LimitOffsetClause limitOffset{std::nullopt, 1};
   {
     uint32_t callCounter = 0;
-    Result result{idTable.clone(), {}, LocalVocab{}};
+    Result result{idTable.clone(), sortOrder(), LocalVocab{}};
     result.applyLimitOffset(limitOffset, [&](std::chrono::microseconds,
                                              const IdTableView<0>& innerTable) {
       EXPECT_EQ(innerTable.numRows(), 3);
@@ -586,7 +596,7 @@ TEST(Result, verifyApplyLimitOffsetHandlesNonZeroOffsetWithoutLimitCorrectly) {
 
   for (auto& generator : getAllSubSplits(idTable)) {
     uint32_t callCounter = 0;
-    Result result{std::move(generator), {}};
+    Result result{std::move(generator), sortOrder()};
     result.applyLimitOffset(limitOffset, [&](std::chrono::microseconds,
                                              const IdTableView<0>& innerTable) {
       for (const auto& row : innerTable) {
@@ -611,7 +621,7 @@ TEST(Result, verifyApplyLimitOffsetIsNoOpWhenLimitClauseIsRedundant) {
   LimitOffsetClause limitOffset{std::nullopt, 0};
   uint32_t callCounter = 0;
   {
-    Result result{idTable.clone(), {}, LocalVocab{}};
+    Result result{idTable.clone(), sortOrder(), LocalVocab{}};
     result.applyLimitOffset(
         limitOffset, [&](std::chrono::microseconds, const IdTableView<0>&) {
           ++callCounter;
@@ -620,7 +630,7 @@ TEST(Result, verifyApplyLimitOffsetIsNoOpWhenLimitClauseIsRedundant) {
   }
 
   for (auto& generator : getAllSubSplits(idTable)) {
-    Result result{std::move(generator), {}};
+    Result result{std::move(generator), sortOrder()};
     result.applyLimitOffset(
         limitOffset, [&](std::chrono::microseconds, const IdTableView<0>&) {
           ++callCounter;
@@ -640,7 +650,7 @@ TEST_P(ResultLimitTest,
        verifyAssertThatLimitWasRespectedDoesNotThrowIfLimitWasRespected) {
   auto idTable = makeIdTableFromVector({{0, 7}, {1, 6}, {2, 5}, {3, 4}});
   {
-    Result result{idTable.clone(), {}, LocalVocab{}};
+    Result result{idTable.clone(), sortOrder(), LocalVocab{}};
     if (std::get<0>(GetParam())) {
       EXPECT_NO_THROW(
           result.assertThatLimitWasRespected(std::get<1>(GetParam())));
@@ -651,7 +661,7 @@ TEST_P(ResultLimitTest,
   }
 
   for (auto& generator : getAllSubSplits(idTable)) {
-    Result result{std::move(generator), {}};
+    Result result{std::move(generator), sortOrder()};
     result.assertThatLimitWasRespected(std::get<1>(GetParam()));
 
     if (std::get<0>(GetParam())) {
@@ -694,7 +704,7 @@ TEST_P(ResultDefinednessTest,
       {Variable{"?b"}, {1, ColumnIndexAndTypeInfo::PossiblyUndefined}}};
 
   {
-    Result result{std::get<1>(GetParam())->clone(), {}, LocalVocab{}};
+    Result result{std::get<1>(GetParam())->clone(), sortOrder(), LocalVocab{}};
     if (std::get<0>(GetParam())) {
       EXPECT_NO_THROW(result.checkDefinedness(map));
     } else {
@@ -702,7 +712,7 @@ TEST_P(ResultDefinednessTest,
     }
   }
   for (auto& generator : getAllSubSplits(*std::get<1>(GetParam()))) {
-    Result result{std::move(generator), {}};
+    Result result{std::move(generator), sortOrder()};
     result.checkDefinedness(map);
     if (std::get<0>(GetParam())) {
       EXPECT_NO_THROW(consumeGenerator(result.idTables()));
@@ -723,7 +733,8 @@ INSTANTIATE_TEST_SUITE_P(
 
 // _____________________________________________________________________________
 TEST(Result, assertionOnNullptrConstruction) {
-  EXPECT_ANY_THROW(Result(Result::IdTablePtr(nullptr), {}, LocalVocab{}));
+  EXPECT_ANY_THROW(
+      Result(Result::IdTablePtr(nullptr), sortOrder(), LocalVocab{}));
 }
 
 // _____________________________________________________________________________
@@ -733,7 +744,7 @@ TEST(Result, assertionOnNullptrConstruction) {
 TEST(Result, viewBackedResultIsFullyMaterialized) {
   auto idTable = makeIdTableFromVector({{1, 2}, {3, 4}, {5, 6}});
   IdTableView<0> view = idTable.asStaticView<0>();
-  Result result{view, {}, LocalVocab{}};
+  Result result{view, sortOrder(), LocalVocab{}};
   EXPECT_TRUE(result.isFullyMaterialized());
   // The returned view must alias the original data, not a copy.
   EXPECT_EQ(&result.idTableView()(0, 0), &idTable(0, 0));
@@ -744,7 +755,7 @@ TEST(Result, viewBackedResultIsFullyMaterialized) {
 TEST(Result, viewBackedResultCloneIdTable) {
   auto idTable = makeIdTableFromVector({{1, 2}, {3, 4}});
   IdTableView<0> view = idTable.asStaticView<0>();
-  Result result{view, {}, LocalVocab{}};
+  Result result{view, sortOrder(), LocalVocab{}};
   IdTable cloned = result.cloneIdTable();
   EXPECT_EQ(cloned, idTable);
   // Must be a deep copy, not an alias into the original data.
@@ -754,7 +765,7 @@ TEST(Result, viewBackedResultCloneIdTable) {
 // _____________________________________________________________________________
 TEST(Result, viewBackedResultThrowsOnIdTables) {
   auto idTable = makeIdTableFromVector({{1, 2}});
-  Result result{idTable.asStaticView<0>(), {}, LocalVocab{}};
+  Result result{idTable.asStaticView<0>(), sortOrder(), LocalVocab{}};
   EXPECT_THROW(result.idTables(), ad_utility::Exception);
 }
 
@@ -767,7 +778,7 @@ TEST(Result, viewBackedApplyLimitOffset) {
   LimitOffsetClause limitOffset{2, 2};
   auto comparisonTable = makeIdTableFromVector({{2, 7}, {3, 6}});
   uint32_t callCounter = 0;
-  Result result{view, {}, LocalVocab{}};
+  Result result{view, sortOrder(), LocalVocab{}};
   result.applyLimitOffset(limitOffset, [&](std::chrono::microseconds,
                                            const IdTableView<0>& innerTable) {
     EXPECT_EQ(innerTable, comparisonTable);
@@ -789,71 +800,10 @@ TEST(Result, viewBackedSortOrderIsRespected) {
   // Sorted by column 0 — must not throw.
   auto idTable = makeIdTableFromVector({{1, 6}, {2, 5}, {3, 4}});
   IdTableView<0> view = idTable.asStaticView<0>();
-  EXPECT_NO_THROW((Result{view, {0}, LocalVocab{}}));
+  EXPECT_NO_THROW((Result{view, sortOrder({0}), LocalVocab{}}));
 
   // Not sorted by column 1 — must throw.
-  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE((Result{view, {1}, LocalVocab{}}),
-                                        HasSubstr("compareRowsBySortColumns"),
-                                        ad_utility::Exception);
-}
-
-// Test the `std::vector` and `std::initializer_list` overloads of the `Result`
-// constructors for materialized results (they convert to a
-// `qlm::vector<ColumnIndex>`).
-TEST(Result, sortedByOverloadsForMaterializedResults) {
-  using CI = std::vector<ColumnIndex>;
-  auto makeTable = [] {
-    return makeIdTableFromVector({{1, 6}, {2, 5}, {3, 4}});
-  };
-  auto expect = [](const Result& result, const CI& expected) {
-    EXPECT_THAT(result.sortedBy(), ::testing::ElementsAreArray(expected));
-  };
-
-  // `IdTable` with `SharedLocalVocabWrapper`.
-  Result source{makeTable(), CI{}, LocalVocab{}};
-  expect(Result{makeTable(), CI{0}, source.getSharedLocalVocab()}, {0});
-  expect(Result{makeTable(), {0}, source.getSharedLocalVocab()}, {0});
-  // `IdTable` with `LocalVocab&&`.
-  expect(Result{makeTable(), CI{0}, LocalVocab{}}, {0});
-  expect(Result{makeTable(), {0}, LocalVocab{}}, {0});
-  // `IdTableView` with `LocalVocab&&`.
-  auto table = makeTable();
-  expect(Result{table.asStaticView<0>(), CI{0}, LocalVocab{}}, {0});
-  expect(Result{table.asStaticView<0>(), {0}, LocalVocab{}}, {0});
-  // `IdTablePtr` with `LocalVocab&&`.
-  auto ptr = std::make_shared<const IdTable>(makeTable());
-  expect(Result{ptr, CI{0}, LocalVocab{}}, {0});
-  expect(Result{ptr, {0}, LocalVocab{}}, {0});
-  // `IdTableVocabPair`.
-  expect(Result{IdTableVocabPair{makeTable(), LocalVocab{}}, CI{0}}, {0});
-  expect(Result{IdTableVocabPair{makeTable(), LocalVocab{}}, {0}}, {0});
-}
-
-#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
-namespace {
-// A free function instead of a lambda, as GCC 13 crashes on the latter.
-Result::Generator makeSingleChunkGenerator() {
-  IdTableVocabPair pair{makeIdTableFromVector({{1, 6}, {2, 5}}), LocalVocab{}};
-  co_yield pair;
-}
-}  // namespace
-#endif
-
-// Test the `std::initializer_list` overloads of the `Result` constructors for
-// lazy results.
-TEST(Result, sortedByInitializerListOverloadsForLazyResults) {
-  auto makeLazy = [] {
-    std::vector<IdTableVocabPair> pairs;
-    pairs.emplace_back(makeIdTableFromVector({{1, 6}, {2, 5}}), LocalVocab{});
-    return Result::LazyResult{std::move(pairs)};
-  };
-  Result lazy{makeLazy(), {0}};
-  EXPECT_THAT(lazy.sortedBy(), ::testing::ElementsAre(0));
-  consumeGenerator(lazy.idTables());
-
-#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
-  Result fromGenerator{makeSingleChunkGenerator(), {0}};
-  EXPECT_THAT(fromGenerator.sortedBy(), ::testing::ElementsAre(0));
-  consumeGenerator(fromGenerator.idTables());
-#endif
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      (Result{view, sortOrder({1}), LocalVocab{}}),
+      HasSubstr("compareRowsBySortColumns"), ad_utility::Exception);
 }

@@ -18,6 +18,7 @@
 #include "engine/Result.h"
 #include "index/Index.h"
 #include "rdfTypes/Iri.h"
+#include "util/ContainersWithAllocator.h"
 
 using namespace std::string_literals;
 using ::testing::Optional;
@@ -32,7 +33,9 @@ auto iriV = Iri::fromIrirefValidated;
 struct ContextWrapper {
   Index _index{ad_utility::makeUnlimitedAllocator<Id>()};
   Result _resultTable{
-      IdTable{ad_utility::testing::makeAllocator()}, {}, LocalVocab{}};
+      IdTable{ad_utility::testing::makeAllocator()},
+      qlm::vector<ColumnIndex>{ad_utility::testing::makeAllocator()},
+      LocalVocab{}};
   // TODO<joka921> `VariableToColumnMap`
   VariableToColumnMap _hashMap;
 
@@ -48,7 +51,9 @@ struct ContextWrapper {
 
   void setIdTable(IdTable&& table) {
     _resultTable =
-        Result{std::move(table), {}, _resultTable.getSharedLocalVocab()};
+        Result{std::move(table),
+               qlm::vector<ColumnIndex>{ad_utility::testing::makeAllocator()},
+               _resultTable.getSharedLocalVocab()};
   }
 };
 

@@ -20,6 +20,7 @@
 #include "global/RuntimeParameters.h"
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "util/ChunkedForLoop.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/Exception.h"
 #include "util/Timer.h"
 
@@ -244,6 +245,13 @@ Result LibspatialjoinAlgorithm::run() {
   // Setup.
   IdTable result{numColumns, qec_->getAllocator()};
   size_t NUM_THREADS = getNumThreads();
+  // The per-thread result buffers are plain `std::vector`s, so their memory is
+  // not counted against the memory limit (the pairs are counted when they are
+  // copied into `result` below).
+  //
+  // NOTE: The buffers are filled by the callbacks below on the worker threads
+  // of `libspatialjoin`, which do not forward exceptions, so an allocation that
+  // exceeds the memory limit there would terminate the server.
   std::vector<std::vector<std::pair<size_t, size_t>>> results(NUM_THREADS);
   std::vector<std::vector<double>> resultDists(NUM_THREADS);
   AD_CORRECTNESS_CHECK(config_.getJoinType().has_value());
@@ -404,6 +412,7 @@ Result LibspatialjoinAlgorithm::run() {
       "time-for-collecting-results-from-threads", tCollect.msecs().count());
 
   // Return the result.
-  return Result(std::move(result), std::vector<ColumnIndex>{},
+  return Result(std::move(result),
+                qlm::vector<ColumnIndex>{qec_->getAllocator()},
                 Result::getMergedLocalVocab(*resultLeft, *resultRight));
 }

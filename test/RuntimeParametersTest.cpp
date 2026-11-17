@@ -149,13 +149,13 @@ TEST(RuntimeParameters, allParametersAreRegistered) {
         << parameter.name();
   };
   check(params.stripColumns_);
+  check(params.memoryForQueries_);
   check(params.cacheMaxNumEntries_);
   check(params.cacheMaxSize_);
   check(params.cacheMaxSizeSingleEntry_);
   check(params.lazyIndexScanNumBlocksInFlight_);
   check(params.maxNumThreadsPerQuery_);
-  check(params.rebuildIndexScanNumThreads_);
-  check(params.rebuildPermutationWriterNumThreads_);
+  check(params.rebuildIndexMaxNumThreads_);
   check(params.rebuildMaxConcurrentPermutationPairs_);
   check(params.lazyIndexScanMaxSizeMaterialization_);
   check(params.useBinsearchTransitivePath_);
@@ -184,7 +184,7 @@ TEST(RuntimeParameters, allParametersAreRegistered) {
   check(params.spatialJoinTmpDir_);
   check(params.enableDistributiveUnion_);
   check(params.treatDefaultGraphAsNamedGraph_);
-  check(params.sparqlResultsJsonWithTime_);
+  check(params.sparqlResultsJsonWithMeta_);
   check(params.materializedViewWriterMemory_);
   check(params.defaultQueryTimeout_);
   check(params.sortInMemoryThreshold_);
@@ -198,6 +198,8 @@ TEST(RuntimeParameters, allParametersAreRegistered) {
   check(params.disableCaching_);
   check(params.logLevel_);
   check(params.constructDeduplication_);
+  check(params.binaryServiceEnabled_);
+  check(params.serviceMaxBinaryBatchSize_);
   EXPECT_EQ(totalSize,
             static_cast<size_t>(reinterpret_cast<char*>(&params.runtimeMap_) -
                                 reinterpret_cast<char*>(&params)));

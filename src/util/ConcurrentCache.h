@@ -10,11 +10,12 @@
 #include <utility>
 
 #include "backports/keywords.h"
+#include "util/EnumSize.h"
 #include "util/Forward.h"
 #include "util/HashMap.h"
 #include "util/Log.h"
-#include "util/MemorySize/MemorySize.h"
 #include "util/Synchronized.h"
+#include "util/memorySize/MemorySize.h"
 
 namespace ad_utility {
 
@@ -40,6 +41,7 @@ enum struct CacheStatus {
   computed,
   notInCacheAndNotComputed
 };
+QLEVER_ENUM_SIZE(CacheStatus, 4);
 
 // Convert a `CacheStatus` to a human-readable string. We mostly use it for
 // JSON exports, so we use a hyphenated format.
@@ -160,7 +162,7 @@ class ConcurrentCache {
   /// Constructor: all arguments are forwarded to the underlying cache type.
   CPP_template(typename CacheArg, typename... CacheArgs)(requires(
       !ql::concepts::same_as<ConcurrentCache, ql::remove_cvref_t<CacheArg>>))
-      ConcurrentCache(CacheArg&& cacheArg, CacheArgs&&... cacheArgs)
+  ConcurrentCache(CacheArg&& cacheArg, CacheArgs&&... cacheArgs)
       : _cacheAndInProgressMap{AD_FWD(cacheArg), AD_FWD(cacheArgs)...} {}
 
   struct ResultAndCacheStatus {

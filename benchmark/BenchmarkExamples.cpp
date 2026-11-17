@@ -9,9 +9,9 @@
 #include "../benchmark/infrastructure/Benchmark.h"
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 #include "../benchmark/infrastructure/BenchmarkMetadata.h"
-#include "util/ConfigManager/ConfigManager.h"
-#include "util/ConfigManager/ConfigOption.h"
 #include "util/Random.h"
+#include "util/configManager/ConfigManager.h"
+#include "util/configManager/ConfigOption.h"
 
 using namespace std::string_literals;
 

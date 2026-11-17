@@ -22,8 +22,10 @@ size_t Distinct::getResultWidth() const { return subtree_->getResultWidth(); }
 // _____________________________________________________________________________
 Distinct::Distinct(QueryExecutionContext* qec,
                    std::shared_ptr<QueryExecutionTree> subtree,
-                   const std::vector<ColumnIndex>& keepIndices)
-    : Operation{qec}, subtree_{std::move(subtree)}, keepIndices_{keepIndices} {
+                   ql::span<const ColumnIndex> keepIndices)
+    : Operation{qec},
+      subtree_{std::move(subtree)},
+      keepIndices_{keepIndices.begin(), keepIndices.end(), allocator()} {
   AD_CORRECTNESS_CHECK(subtree_);
   subtree_ = QueryExecutionTree::createSortedTreeAnyPermutation(
       std::move(subtree_), keepIndices_);
@@ -31,7 +33,7 @@ Distinct::Distinct(QueryExecutionContext* qec,
 
 // _____________________________________________________________________________
 bool Distinct::isDistinctByImpl(
-    const std::vector<ColumnIndex>& distinctIndices) const {
+    ql::span<const ColumnIndex> distinctIndices) const {
   // The result is distinct wrt `distinctIndices` iff `keepIndices_` is a subset
   // of `distinctIndices` (a superset of the deduplicated columns cannot
   // reintroduce duplicates).

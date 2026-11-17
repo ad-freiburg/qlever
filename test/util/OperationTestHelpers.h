@@ -6,14 +6,27 @@
 #define QLEVER_OPERATIONTESTHELPERS_H
 
 #include <chrono>
+#include <initializer_list>
 #include <vector>
 
+#include "./AllocatorTestHelpers.h"
 #include "./GTestHelpers.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 #include "util/ContainersWithAllocator.h"
 
 using namespace std::chrono_literals;
+
+namespace ad_utility::testing {
+// Create a `qlm::vector<ColumnIndex>` with the given `columns`, for the sort
+// and distinct columns of an operation. The allocator is unimportant in the
+// tests, so it defaults to the unlimited test allocator.
+inline constexpr auto colIndices =
+    [](std::initializer_list<ColumnIndex> columns,
+       const qlever::Allocator<ColumnIndex>& allocator = makeAllocator()) {
+      return qlm::vector<ColumnIndex>{columns, allocator};
+    };
+}  // namespace ad_utility::testing
 
 class StallForeverOperation : public Operation {
   qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
@@ -30,7 +43,9 @@ class StallForeverOperation : public Operation {
   uint64_t getSizeEstimateBeforeLimit() override { return 0; }
   float getMultiplicity([[maybe_unused]] size_t) override { return 0; }
   bool knownEmptyResult() override { return false; }
-  std::vector<ColumnIndex> resultSortedOn() const override { return {}; }
+  qlm::vector<ColumnIndex> resultSortedOn() const override {
+    return qlm::vector<ColumnIndex>{allocator()};
+  }
   VariableToColumnMap computeVariableToColumnMap() const override { return {}; }
 
  public:
@@ -70,7 +85,9 @@ class ShallowParentOperation : public Operation {
   uint64_t getSizeEstimateBeforeLimit() override { return 0; }
   float getMultiplicity([[maybe_unused]] size_t) override { return 0; }
   bool knownEmptyResult() override { return false; }
-  std::vector<ColumnIndex> resultSortedOn() const override { return {}; }
+  qlm::vector<ColumnIndex> resultSortedOn() const override {
+    return qlm::vector<ColumnIndex>{allocator()};
+  }
   VariableToColumnMap computeVariableToColumnMap() const override { return {}; }
   qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
     return {{child_.get()}, allocator()};
@@ -116,7 +133,9 @@ class AlwaysFailOperation : public Operation {
   uint64_t getSizeEstimateBeforeLimit() override { return 0; }
   float getMultiplicity([[maybe_unused]] size_t) override { return 0; }
   bool knownEmptyResult() override { return false; }
-  std::vector<ColumnIndex> resultSortedOn() const override { return {0}; }
+  qlm::vector<ColumnIndex> resultSortedOn() const override {
+    return {{0}, allocator()};
+  }
   VariableToColumnMap computeVariableToColumnMap() const override {
     if (!variable_.has_value()) {
       return {};
@@ -166,7 +185,9 @@ class CustomGeneratorOperation : public Operation {
   uint64_t getSizeEstimateBeforeLimit() override { return 0; }
   float getMultiplicity([[maybe_unused]] size_t) override { return 0; }
   bool knownEmptyResult() override { return false; }
-  std::vector<ColumnIndex> resultSortedOn() const override { return {}; }
+  qlm::vector<ColumnIndex> resultSortedOn() const override {
+    return qlm::vector<ColumnIndex>{allocator()};
+  }
   VariableToColumnMap computeVariableToColumnMap() const override { return {}; }
 
  public:

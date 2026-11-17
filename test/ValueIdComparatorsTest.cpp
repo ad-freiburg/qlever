@@ -262,10 +262,10 @@ TEST_F(ValueIdComparators, IndexTypes) {
   // TODO<joka921> The tests for local vocab and VocabIndex now have to be more
   // complex....
   using ad_utility::use_value_identity::vi;
-  testImpl(vi<Datatype::VocabIndex>, &getVocabIndex);
-  testImpl(vi<Datatype::TextRecordIndex>, &getTextRecordIndex);
-  testImpl(vi<Datatype::LocalVocabIndex>, &getLocalVocabIndex);
-  testImpl(vi<Datatype::WordVocabIndex>, &getWordVocabIndex);
+  testImpl(vi<Datatype::VocabIndex>, &getVocabIndex<>);
+  testImpl(vi<Datatype::TextRecordIndex>, &getTextRecordIndex<>);
+  testImpl(vi<Datatype::LocalVocabIndex>, &getLocalVocabIndex<>);
+  testImpl(vi<Datatype::WordVocabIndex>, &getWordVocabIndex<>);
 }
 
 // _______________________________________________________________________
@@ -284,5 +284,6 @@ TEST_F(ValueIdComparators, undefinedWithItself) {
 TEST_F(ValueIdComparators, contractViolations) {
   auto u = ValueId::makeUndefined();
   // Invalid value for the `Comparison` enum.
-  ASSERT_ANY_THROW((compareIds(u, u, static_cast<Comparison>(542))));
+  ASSERT_ANY_THROW((
+      compareIds(u, u, static_cast<Comparison>(qlever::enumSize<Comparison>))));
 }

@@ -11,6 +11,7 @@
 #include "rdfTypes/GeometryInfo.h"
 
 #include <absl/base/casts.h>
+#include <absl/strings/str_cat.h>
 
 #include <array>
 #include <cmath>
@@ -25,6 +26,10 @@
 #include "util/Log.h"
 
 namespace ad_utility {
+
+// Check that the constant `crsTypeUnsupported` of `GeometryInfo.h` (which only
+// forward-declares `CRSType`) is the enum value it stands for.
+static_assert(crsTypeUnsupported == ::util::geo::CRSType::UNSUPPORTED);
 
 // ____________________________________________________________________________
 GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
@@ -44,15 +49,16 @@ GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
                     sizeof(numGeometries_) + sizeof(sourceCrs_) +
                     sizeof(serializationType_) + sizeof(metricLength_) +
                     sizeof(metricArea_));
-  // The WktType only has 8 different values and we have 4 unused bits for the
-  // ValueId datatype of the centroid (it is always a point). Therefore we fold
-  // the attributes together. On OSM planet this will save approx. 1 GiB in
-  // index size.
+  // The WKT type has only 8 different values, and the bit representation of a
+  // `GeoPoint` leaves its upper `GeoPoint::numTypeBits` bits free (they hold
+  // the datatype when the point is stored as an `Id`). Therefore we fold the
+  // two attributes together, which saves about 1 GB of index size on OSM
+  // planet.
   AD_CORRECTNESS_CHECK(
-      wktType <= 7 && wktType < (1 << ValueId::numDatatypeBits) - 1,
+      wktType <= 7 && wktType < (1 << GeoPoint::numTypeBits) - 1,
       "WKT Type out of range");
   AD_CORRECTNESS_CHECK(wktType > 0, "WKT Type indicates invalid geometry");
-  uint64_t typeBits = static_cast<uint64_t>(wktType) << ValueId::numDataBits;
+  uint64_t typeBits = static_cast<uint64_t>(wktType) << GeoPoint::numDataBits;
   uint64_t centroidBits = centroid.centroid().toBitRepresentation();
   AD_CORRECTNESS_CHECK((centroidBits & bitMaskGeometryType) == 0,
                        "Centroid bit representation exceeds available bits.");
@@ -192,7 +198,7 @@ GeometryInfo GeometryInfo::fromGeoPoint(const GeoPoint& point) {
 GeometryType GeometryInfo::getWktType() const {
   return GeometryType{
       static_cast<uint8_t>((geometryTypeAndCentroid_ & bitMaskGeometryType) >>
-                           ValueId::numDataBits)};
+                           GeoPoint::numDataBits)};
 }
 
 // ____________________________________________________________________________
@@ -211,6 +217,14 @@ std::optional<std::string_view> GeometryType::asIri() const {
 // ____________________________________________________________________________
 std::optional<std::string_view> SourceCrsType::asIri() const {
   return detail::crsTypeToIri(type_);
+}
+
+// _____________________________________________________________________________
+::util::geo::CRSType SourceCrsType::iriToCrsType(std::string_view uri) {
+  // Wrap the IRI in angle brackets, because `getCRSType` parses the CRS
+  // prefix of a WKT literal (`<http://...> POINT(...)`) and treats a missing
+  // opening bracket as "no CRS given", which is CRS84 and not `UNSUPPORTED`.
+  return ::util::geo::getCRSType(absl::StrCat("<", uri, ">"));
 }
 
 // ____________________________________________________________________________
@@ -374,6 +388,10 @@ std::optional<RequestedInfo> GeometryInfo::getRequestedInfo() const {
     return getMetricArea();
   } else if constexpr (std::is_same_v<RequestedInfo, SerializationType>) {
     return getSerializationType();
+  } else if constexpr (isInstantiation<RequestedInfo, WithSourceCrs>) {
+    return detail::getWithSourceCrs(
+        getRequestedInfo<typename RequestedInfo::InfoType>(),
+        getSourceCrsType());
   } else {
     static_assert(ad_utility::alwaysFalse<RequestedInfo>);
   }
@@ -398,6 +416,10 @@ template std::optional<MetricArea> GeometryInfo::getRequestedInfo<MetricArea>()
     const;
 template std::optional<SerializationType>
 GeometryInfo::getRequestedInfo<SerializationType>() const;
+template std::optional<WithSourceCrs<Centroid>>
+GeometryInfo::getRequestedInfo<WithSourceCrs<Centroid>>() const;
+template std::optional<WithSourceCrs<BoundingBox>>
+GeometryInfo::getRequestedInfo<WithSourceCrs<BoundingBox>>() const;
 
 // ____________________________________________________________________________
 CPP_template_def(typename RequestedInfo)(
@@ -422,6 +444,9 @@ std::optional<RequestedInfo> GeometryInfo::getRequestedInfo(
     return GeometryInfo::getMetricArea(wkt);
   } else if constexpr (std::is_same_v<RequestedInfo, SerializationType>) {
     return GeometryInfo::getSerializationType(wkt);
+  } else if constexpr (isInstantiation<RequestedInfo, WithSourceCrs>) {
+    return detail::getWithSourceCrsFromWkt<typename RequestedInfo::InfoType>(
+        wkt);
   } else {
     static_assert(ad_utility::alwaysFalse<RequestedInfo>);
   }
@@ -446,5 +471,10 @@ template std::optional<MetricArea> GeometryInfo::getRequestedInfo<MetricArea>(
     std::string_view wkt);
 template std::optional<SerializationType>
 GeometryInfo::getRequestedInfo<SerializationType>(std::string_view wkt);
+template std::optional<WithSourceCrs<Centroid>>
+GeometryInfo::getRequestedInfo<WithSourceCrs<Centroid>>(std::string_view wkt);
+template std::optional<WithSourceCrs<BoundingBox>>
+GeometryInfo::getRequestedInfo<WithSourceCrs<BoundingBox>>(
+    std::string_view wkt);
 
 }  // namespace ad_utility

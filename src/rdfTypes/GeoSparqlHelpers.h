@@ -34,7 +34,7 @@
 //
 // Defined here (rather than in `parser/SpatialQuery.{h,cpp}`, its original
 // home) because it is called both from `SpatialQuery.cpp` (part of the
-// `sparqlParser` library) and from `GeoExpression.cpp` (part of the
+// `sparqlParser` library) and from `GeoRelationExpression.cpp` (part of the
 // `sparqlExpressions` library); `sparqlParser` depends on `sparqlExpressions`,
 // not the other way around, so no single one of those libraries can hold the
 // only definition. `rdfTypes`, which this header belongs to, is a dependency

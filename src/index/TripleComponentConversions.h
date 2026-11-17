@@ -68,13 +68,11 @@ using IdOrLocalVocabEntry = std::variant<Id, LocalVocabEntry>;
 
 // Convert `word` to an `Id` if it is an IRI that can be encoded directly in an
 // `Id` (see `LocalVocabContext::encodeAsId`), and else wrap it in a
-// `LocalVocabEntry`. Every `LocalVocabEntry` that stores an IRI has to be
-// created via this function (or `toValueId` above), so that no
+// `LocalVocabEntry`. This is the only way to create a `LocalVocabEntry` that
+// stores an IRI (apart from `toValueId` above), which guarantees that no
 // `LocalVocabEntry` stores an encodable IRI. The index only contains the
 // encoded `Id` of such an IRI, so a `LocalVocabEntry` of it would not match it,
 // e.g. in joins.
-// TODO<RobinTF> Make the constructors of `LocalVocabEntry` that can store an
-// IRI private, so that this is enforced.
 //
 // NOTE: This does not look up `word` in the vocabularies of the index, use
 // `toValueId` for that.

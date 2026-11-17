@@ -197,7 +197,12 @@ LiteralOrIri getLiteralOrIriFromVocabIndex(const IndexImpl& index, Id id,
                                            const LocalVocab& localVocab) {
   switch (id.getDatatype()) {
     case Datatype::LocalVocabIndex:
-      return localVocab.getWord(id.getLocalVocabIndex()).asLiteralOrIri();
+      // TODO<RobinTF> Avoid this copy, e.g. by returning a
+      // `LiteralOrIriView` (which is only valid as long as the `localVocab`)
+      // where the callers allow it.
+      return localVocab.getWord(id.getLocalVocabIndex())
+          .asLiteralOrIri()
+          .toOwned();
     case Datatype::VocabIndex: {
       auto getEntity = [&index, id]() {
         return index.indexToString(id.getVocabIndex());
