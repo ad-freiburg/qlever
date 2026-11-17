@@ -192,6 +192,13 @@ class WktCentroid {
 
     Centroid centroid = geom.value().info_;
 
+    AD_CORRECTNESS_CHECK(sourceCrs.value().type() > 0);
+    // If the `sourceCrs` is the default CRS (CRS84), return as `GeoPoint`.
+    if (sourceCrs.value().type() == 1) {
+      return ValueId::makeFromGeoPoint(centroid.centroid());
+    }
+    // For all other CRS (`type` > 1) return as WKT literal (with the
+    // appropriate CRS IRI).
     auto resultWkt = ad_utility::detail::geoPointToWktInCrs(centroid.centroid(),
                                                             sourceCrs.value());
     if (!resultWkt.has_value()) {

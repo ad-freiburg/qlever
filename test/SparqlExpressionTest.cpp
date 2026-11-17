@@ -2145,7 +2145,7 @@ TEST(SparqlExpression, geoSparqlExpressions) {
 
   checkLat(v, vLat);
   checkLong(v, vLng);
-  checkCentroid(v, geoLit("POINT(24.3 26.8)"));
+  checkCentroid(v, IdOrLocalVocabEntry{ValueId::makeFromGeoPoint(p)});
   checkIsGeoPoint(v, B(true));
   checkDist(D(0.0), v, v);
   checkLat(idOrLitOrStringVec({"NotAPoint", I(12)}), Ids{U, U});
@@ -2164,10 +2164,17 @@ TEST(SparqlExpression, geoSparqlExpressions) {
           "^^<http://www.opengis.net/ont/geosparql#wktLiteral>")},
       geoLit("<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(26.8 24.3)"));
 
+  auto crs84CentroidId = ValueId::makeFromGeoPoint(GeoPoint{20, 50});
   checkCentroid(IdOrLocalVocabEntry{lit(
                     "\"POLYGON((40 10, 40 30, 60 30, 60 10))\"",
                     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>")},
-                geoLit("POINT(50 20)"));
+                IdOrLocalVocabEntry{crs84CentroidId});
+
+  checkCentroid(IdOrLocalVocabEntry{lit(
+                    "\"<http://www.opengis.net/def/crs/OGC/1.3/CRS84> "
+                    "POLYGON((40 10, 40 30, 60 30, 60 10))\"",
+                    "^^<http://www.opengis.net/ont/geosparql#wktLiteral>")},
+                IdOrLocalVocabEntry{crs84CentroidId});
 
   checkCentroid(
       IdOrLocalVocabEntry{
@@ -2181,7 +2188,7 @@ TEST(SparqlExpression, geoSparqlExpressions) {
                              geoLit("LINESTRING(2 4, 8 8)"),
                              geoLit("<http://www.opengis.net/def/crs/EPSG/0/"
                                     "4326> LINESTRING(4 2, 8 8)")},
-      IdOrLocalVocabEntryVec{U, U, geoLit("POLYGON((2 4,2 4,2 4,2 4))"),
+      IdOrLocalVocabEntryVec{U, U, geoLit("POLYGON((2 4,2 4,2 4,2 4,2 4))"),
                              geoLit("POLYGON((2 4,8 4,8 8,2 8,2 4))"),
                              geoLit("<http://www.opengis.net/def/crs/EPSG/0/"
                                     "4326> POLYGON((4 2,4 8,8 8,8 2,4 2))")});
