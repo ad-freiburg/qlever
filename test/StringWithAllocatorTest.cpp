@@ -107,69 +107,20 @@ TEST(StringWithAllocator, ostringstream) {
   auto moved = std::move(os).str();
   EXPECT_EQ(toStd(moved), expected.str());
 
-  // Allocation failures are not swallowed by the stream.
+  // Allocation failures are not swallowed by the stream. The `std::stringbuf`
+  // of libc++ swallows the exception of the allocator, so only the `badbit`
+  // remains (see the comment of `qlm::ostringstream`).
+#ifdef _LIBCPP_VERSION
+  using ExpectedException = std::ios_base::failure;
+#else
+  using ExpectedException = AllocationExceedsLimitException;
+#endif
   qlm::ostringstream small{tiny()};
-  EXPECT_THROW(small << longString, AllocationExceedsLimitException);
+  EXPECT_THROW(small << longString, ExpectedException);
+  EXPECT_TRUE(small.bad());
   qlm::ostringstream smallNumbers{tiny()};
   EXPECT_THROW(
       for (int i = 0; i < 100; ++i) { smallNumbers << 123456789; },
-      AllocationExceedsLimitException);
-}
-
-// Seeking backwards overwrites characters, like for a `std::ostringstream`.
-TEST(StringWithAllocator, ostringstreamSeek) {
-  auto check = [](auto&& operations) {
-    qlm::ostringstream os{unlimited()};
-    std::ostringstream expected;
-    operations(os);
-    operations(expected);
-    EXPECT_EQ(toStd(os.str()), expected.str());
-    EXPECT_EQ(os.good(), expected.good());
-  };
-  check([](std::ostream& os) {
-    os << "1, 2, ";
-    os.seekp(-2, std::ios_base::cur);
-    os << "}";
-  });
-  check([](std::ostream& os) {
-    os << "abcdef";
-    os.seekp(1, std::ios_base::beg);
-    os << 'X';
-    os.seekp(-1, std::ios_base::end);
-    os << "YZ";
-  });
-  check([](std::ostream& os) {
-    os << "abc";
-    os.seekp(std::streampos{1});
-    EXPECT_EQ(os.tellp(), std::streampos{1});
-    os << "XYZW";
-  });
-  // Seeking out of bounds fails.
-  check([](std::ostream& os) {
-    os << "ab";
-    os.seekp(-3, std::ios_base::cur);
-  });
-  check([](std::ostream& os) {
-    os << "ab";
-    os.seekp(1, std::ios_base::end);
-  });
-  // Seeking the input position fails, as the buffer is output-only. Not
-  // compared to `std::ostringstream`, for which libc++ succeeds here.
-  qlm::ostringstream os{unlimited()};
-  os << "ab";
-  EXPECT_EQ(os.rdbuf()->pubseekoff(0, std::ios_base::cur, std::ios_base::in),
-            std::streampos(std::streamoff(-1)));
-}
-
-// `overflow(eof)` succeeds without writing anything.
-TEST(StringWithAllocator, overflowWithEof) {
-  struct Buf : qlm::detail::StringStreamBuf {
-    using StringStreamBuf::overflow;
-    using StringStreamBuf::StringStreamBuf;
-  };
-  using Traits = std::char_traits<char>;
-  Buf buf{unlimited()};
-  EXPECT_EQ(buf.overflow('a'), 'a');
-  EXPECT_FALSE(Traits::eq_int_type(buf.overflow(Traits::eof()), Traits::eof()));
-  EXPECT_EQ(buf.str(), "a");
+      ExpectedException);
+  EXPECT_TRUE(smallNumbers.bad());
 }

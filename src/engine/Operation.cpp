@@ -683,6 +683,7 @@ void Operation::createRuntimeInfoFromEstimates(
     _runtimeInfo->addDetail("warnings", *warnings);
   }
 
+  // TODO<RobinTF> Avoid the copy of the cache key, see `QueryCacheKey`.
   auto cachedResult = _executionContext->getQueryTreeCache().getIfContained(
       {std::string{getCacheKey()}, locatedTriplesState().index_});
   if (cachedResult.has_value()) {

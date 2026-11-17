@@ -229,6 +229,7 @@ bool QueryExecutionTree::readFromCache() {
     return false;
   }
   auto& cache = qec_->getQueryTreeCache();
+  // TODO<RobinTF> Avoid the copy of the cache key, see `QueryCacheKey`.
   auto res = cache.getIfContained(
       {std::string{getCacheKey()}, qec_->locatedTriplesState().index_});
   if (res.has_value()) {
