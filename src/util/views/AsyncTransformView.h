@@ -10,6 +10,8 @@
 #ifndef QLEVER_SRC_UTIL_VIEWS_ASYNCTRANSFORMVIEW_H
 #define QLEVER_SRC_UTIL_VIEWS_ASYNCTRANSFORMVIEW_H
 
+#include <absl/functional/function_ref.h>
+
 #include <boost/asio/post.hpp>
 #include <chrono>
 #include <condition_variable>
@@ -158,7 +160,7 @@ class AsyncTransformView
   // The destructor of the view therefore empties the queue and waits until no
   // runner holds a slot, so that nothing that refers to resources of the
   // caller (elements, results, or the transformation) survives the view.
-  struct Shared {
+  struct Shared : std::enable_shared_from_this<Shared> {
     // Owned by the view. A runner only uses it while it holds a slot.
     const Transformation& transformation_;
     ql::any_io_executor executor_;
@@ -196,7 +198,11 @@ class AsyncTransformView
     }
 
     // Return true if one more runner should be posted, and count it as
-    // running and queued. Requires that `mutex_` is held.
+    // running and queued. Requires that `mutex_` is held. One more runner is
+    // wanted if the unfinished slots are more than the current runners handle
+    // (`numSlotsPerRunner_` each) and `maxNumRunners_` isn't reached yet. To
+    // adapt to the load of the `executor_`, at most one runner is queued at a
+    // time (see the class comment).
     bool reserveRunnerIfWanted() {
       // The slots that busy runners hold count as well, as these runners
       // can't take a queued slot. Popping a slot thus never lowers `wanted`.
@@ -211,35 +217,35 @@ class AsyncTransformView
       return true;
     }
 
-    // Queue the `slots` and return true if the caller has to post one runner
-    // (which is already counted in `numRunners_` and `numQueuedRunners_`).
-    template <typename Slots>
-    bool enqueue(const Slots& slots) {
-      std::lock_guard lock{mutex_};
-      ql::ranges::copy(slots, std::back_inserter(todo_));
-      return reserveRunnerIfWanted();
-    }
-
-    // Post one runner for the `shared` state to its `executor_`; the runner
-    // has to be counted already (see `reserveRunnerIfWanted`). If posting
-    // fails (which is only possible if memory runs out), the runner is not
-    // counted anymore, and the consumer transforms the queued elements itself.
-    static void post(const std::shared_ptr<Shared>& shared) noexcept {
+    // Apply `update` to the members that are guarded by `mutex_`, and then
+    // post one more runner if it is wanted (see `reserveRunnerIfWanted`).
+    void updateAndPostRunnerIfWanted(absl::FunctionRef<void()> update) {
+      {
+        std::lock_guard lock{mutex_};
+        update();
+        if (!reserveRunnerIfWanted()) {
+          return;
+        }
+      }
       try {
-        boost::asio::post(shared->executor_,
-                          [shared]() { Shared::run(shared); });
+        boost::asio::post(executor_,
+                          [self = this->shared_from_this()]() { self->run(); });
       } catch (...) {
-        std::lock_guard lock{shared->mutex_};
-        --shared->numRunners_;
-        --shared->numQueuedRunners_;
+        // Posting can only fail if memory runs out. Then the runner isn't
+        // counted anymore, and the consumer transforms the queued elements
+        // itself.
+        std::lock_guard lock{mutex_};
+        --numRunners_;
+        --numQueuedRunners_;
       }
     }
 
-    // Called when a runner starts. Return true if it has to post the next one.
-    bool startRunner() {
-      std::lock_guard lock{mutex_};
-      --numQueuedRunners_;
-      return reserveRunnerIfWanted();
+    // Enqueue the `slots`, and post one more runner if they need it.
+    template <typename Slots>
+    void enqueue(const Slots& slots) {
+      updateAndPostRunnerIfWanted([this, &slots]() {
+        ql::ranges::copy(slots, std::back_inserter(todo_));
+      });
     }
 
     // Pop the next queued slot, which the calling runner then holds. If there
@@ -256,40 +262,33 @@ class AsyncTransformView
       return slot;
     }
 
-    // Release the `slot` that the calling runner holds. If `retire` is true,
-    // the calling runner also ends, and the return value tells whether it has
-    // to post a runner for the remaining slots.
-    bool release(std::shared_ptr<Slot> slot, bool retire) noexcept {
+    // Release the `slot` that the calling runner holds.
+    void release(std::shared_ptr<Slot> slot) noexcept {
       slot.reset();
       std::lock_guard lock{mutex_};
       --numBusyRunners_;
       slotReleased_.notify_all();
-      if (!retire) {
-        return false;
-      }
-      --numRunners_;
-      return reserveRunnerIfWanted();
     }
 
     // The body of a runner. It must not throw, because the destructor of the
     // view would then wait forever for the runner to release its slot. The
     // transformation can't throw here, because the `task_` stores its
     // exceptions in the future.
-    static void run(const std::shared_ptr<Shared>& shared) noexcept {
-      if (shared->startRunner()) {
-        post(shared);
-      }
-      auto deadline =
-          std::chrono::steady_clock::now() + shared->maxRunnerDuration_;
-      while (auto slot = shared->popOrRetire()) {
+    void run() noexcept {
+      // This runner isn't queued anymore, so the next one may be queued.
+      updateAndPostRunnerIfWanted([this]() { --numQueuedRunners_; });
+      auto deadline = std::chrono::steady_clock::now() + maxRunnerDuration_;
+      while (auto slot = popOrRetire()) {
         // A slot that the consumer has already claimed costs no time, so the
         // runner doesn't end because of it.
-        bool timeIsUp = slot->runIfUnclaimed(shared->transformation_) &&
+        bool timeIsUp = slot->runIfUnclaimed(transformation_) &&
                         std::chrono::steady_clock::now() >= deadline;
-        if (shared->release(std::move(slot), timeIsUp)) {
-          post(shared);
-        }
+        release(std::move(slot));
         if (timeIsUp) {
+          // End this runner, and continue the remaining work in a new runner
+          // at the end of the queue of the `executor_`. This yields the thread
+          // to the other users of the `executor_`.
+          updateAndPostRunnerIfWanted([this]() { --numRunners_; });
           return;
         }
       }
@@ -328,6 +327,8 @@ class AsyncTransformView
  public:
   // By default, the number of runners is only bounded by the number of
   // elements in flight and the load of the `executor` (see the class comment).
+  // As at most one runner is queued at a time, this effectively caps it at the
+  // parallelism of the `executor` plus one.
   static constexpr size_t defaultMaxNumRunners =
       std::numeric_limits<size_t>::max();
   // The default time after which a runner ends and requeues the remaining
@@ -388,10 +389,8 @@ class AsyncTransformView
       pending_.emplace_back(std::make_shared<Slot>(std::move(*it)));
       ++it;
     }
-    if (shared_->enqueue(pending_ | ql::views::drop(numPendingBefore) |
-                         ql::views::transform(&Pending::slot_))) {
-      Shared::post(shared_);
-    }
+    shared_->enqueue(pending_ | ql::views::drop(numPendingBefore) |
+                     ql::views::transform(&Pending::slot_));
   }
 };
 
