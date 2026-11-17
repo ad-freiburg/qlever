@@ -16,7 +16,6 @@
 #include <boost/asio/use_future.hpp>
 #include <chrono>
 #include <future>
-#include <thread>
 #include <tuple>
 
 #include "../../util/AllocatorTestHelpers.h"
@@ -1836,7 +1835,6 @@ TEST(CompressedExternalIdTable, asyncPushBlock) {
   testAsyncPushBlock(tables, 100'000, 20);
 }
 
-// _____________________________________________________________________________
 // The callback of `makeAsyncPushBlockCallback` pushes its blocks via
 // `asyncPushBlock` (also from several threads at the same time), keeps them
 // alive until the push has completed, and reports the completion to its `done`
@@ -1856,29 +1854,33 @@ TEST(CompressedExternalIdTable, makeAsyncPushBlockCallback) {
   auto callback = sorter.makeAsyncPushBlockCallback();
 
   IdTable expected{NUM_COLS, alloc};
-  std::vector<std::future<std::exception_ptr>> results;
-  std::vector<std::thread> threads;
-  for (size_t i = 0; i < 8; ++i) {
-    auto table = createRandomlyFilledIdTable(200 + 37 * i, NUM_COLS);
-    expected.insertAtEnd(table);
-    // Only the callback holds on to the block, so it has to keep it alive.
-    auto block = std::make_shared<const IdTableStatic<0>>(std::move(table));
-    std::promise<std::exception_ptr> promise;
-    results.push_back(promise.get_future());
-    absl::AnyInvocable<void(std::exception_ptr) &&> done =
-        [promise = std::move(promise)](std::exception_ptr e) mutable {
-          promise.set_value(std::move(e));
-        };
-    threads.emplace_back([&callback, block = std::move(block),
-                          done = std::move(done)]() mutable {
-      callback(std::move(block), std::move(done));
-    });
-  }
-  for (auto& thread : threads) {
-    thread.join();
+  std::vector<std::future<void>> results;
+  {
+    std::vector<ad_utility::JThread> threads;
+    for (size_t i = 0; i < 8; ++i) {
+      auto table = createRandomlyFilledIdTable(200 + 37 * i, NUM_COLS);
+      expected.insertAtEnd(table);
+      // Only the callback holds on to the block, so it has to keep it alive.
+      auto block = std::make_shared<const IdTableStatic<0>>(std::move(table));
+      // The `done` callback rethrows the exception of the push (if any) into
+      // the future of the task.
+      std::packaged_task<void(std::exception_ptr)> done{
+          [](std::exception_ptr e) {
+            if (e) {
+              std::rethrow_exception(e);
+            }
+          }};
+      results.push_back(done.get_future());
+      threads.emplace_back([&callback, block = std::move(block),
+                            done = std::move(done)]() mutable {
+        callback(
+            std::move(block),
+            absl::AnyInvocable<void(std::exception_ptr) &&>{std::move(done)});
+      });
+    }
   }
   for (auto& result : results) {
-    EXPECT_EQ(result.get(), nullptr);
+    EXPECT_NO_THROW(result.get());
   }
   EXPECT_EQ(sorter.size(), expected.numRows());
   ql::ranges::sort(expected, SortByOSP{});

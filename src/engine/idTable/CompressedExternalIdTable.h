@@ -1356,7 +1356,8 @@ class CompressedExternalIdTableSorter
       using Holder = std::pair<decltype(block), IdTableView<0>>;
       auto holder =
           std::make_shared<Holder>(block, block->template asStaticView<0>());
-      std::shared_ptr<const IdTableView<0>> view{holder, &holder->second};
+      auto* viewPtr = &holder->second;
+      std::shared_ptr<const IdTableView<0>> view{std::move(holder), viewPtr};
       asyncPushBlock(std::move(view),
                      [done = std::move(done)](std::exception_ptr e) mutable {
                        std::move(done)(std::move(e));

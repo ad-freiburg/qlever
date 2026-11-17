@@ -1026,16 +1026,18 @@ class IndexImpl {
   // `index/chunkwisePermutationWriter/ChunkwisePermutationWriter.h`. The
   // callbacks for such an input are invoked concurrently and in an arbitrary
   // order of the blocks (see `createPermutationPairImpl`). With
-  // `removeDuplicates_` set, consecutive duplicate rows are removed first (like
-  // `ad_utility::uniqueBlockView` does for a sequential input).
+  // `removeDuplicates_` set to `RemoveDuplicates::True`, consecutive duplicate
+  // rows are removed first (like `ad_utility::uniqueBlockView` does for a
+  // sequential input).
+  enum struct RemoveDuplicates { False, True };
   template <typename Sorter>
   struct ChunkwiseInput {
     Sorter& sorter_;
-    bool removeDuplicates_;
+    RemoveDuplicates removeDuplicates_;
 
     // NOTE: This constructor enables the class template argument deduction,
     // which C++17 doesn't support for aggregates.
-    ChunkwiseInput(Sorter& sorter, bool removeDuplicates)
+    ChunkwiseInput(Sorter& sorter, RemoveDuplicates removeDuplicates)
         : sorter_{sorter}, removeDuplicates_{removeDuplicates} {}
   };
 

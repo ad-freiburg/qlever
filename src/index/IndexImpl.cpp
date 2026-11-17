@@ -513,11 +513,6 @@ void IndexImpl::createFromFilesAfterPreparation(
         createInternalPSOandPOS(*indexBuilderData.sorter_.internalTriplesPso_);
   };
 
-  // The first sorter may yield duplicate triples, which are removed by the
-  // writer of the first pair of permutations.
-  constexpr bool removeDuplicates = true;
-  constexpr bool keepDuplicates = false;
-
   // The `firstSorter` is type-erased, because it sorts by PSO if only two
   // permutations are built, and by SPO otherwise (see
   // `IndexBuilderDataAsFirstPermutationSorter`). The chunkwise writer needs
@@ -528,8 +523,10 @@ void IndexImpl::createFromFilesAfterPreparation(
     // PSO sorter, and `createPSOAndPOS` creates PSO/POS permutations.
     auto& firstSorterPso =
         dynamic_cast<ExternalSorter<SortByPSO>&>(firstSorter);
+    // The first sorter may yield duplicate triples, which are removed by the
+    // writer of the first pair of permutations (also below).
     createPSOAndPOS(NumColumnsIndexBuilding,
-                    ChunkwiseInput{firstSorterPso, removeDuplicates});
+                    ChunkwiseInput{firstSorterPso, RemoveDuplicates::True});
     configurationJson_["has-all-permutations"] = false;
   } else if (!usePatterns_) {
     createInternalPsoAndPosAndSetMetadata();
@@ -539,18 +536,19 @@ void IndexImpl::createFromFilesAfterPreparation(
     auto& firstSorterSpo =
         dynamic_cast<ExternalSorter<FirstPermutation>&>(firstSorter);
     auto secondSorter = makeSorter<SecondPermutation>("second");
-    createFirstPermutationPair(NumColumnsIndexBuilding,
-                               ChunkwiseInput{firstSorterSpo, removeDuplicates},
-                               secondSorter);
+    createFirstPermutationPair(
+        NumColumnsIndexBuilding,
+        ChunkwiseInput{firstSorterSpo, RemoveDuplicates::True}, secondSorter);
     firstSorter.clearUnderlying();
 
     auto thirdSorter = makeSorter<ThirdPermutation>("third");
-    createSecondPermutationPair(NumColumnsIndexBuilding,
-                                ChunkwiseInput{secondSorter, keepDuplicates},
-                                thirdSorter);
+    createSecondPermutationPair(
+        NumColumnsIndexBuilding,
+        ChunkwiseInput{secondSorter, RemoveDuplicates::False}, thirdSorter);
     secondSorter.clear();
-    createThirdPermutationPair(NumColumnsIndexBuilding,
-                               ChunkwiseInput{thirdSorter, keepDuplicates});
+    createThirdPermutationPair(
+        NumColumnsIndexBuilding,
+        ChunkwiseInput{thirdSorter, RemoveDuplicates::False});
     configurationJson_["has-all-permutations"] = true;
   } else {
     // Load all permutations and also load the patterns. In this case the
@@ -571,8 +569,9 @@ void IndexImpl::createFromFilesAfterPreparation(
         buildOspWithPatterns(std::move(patternOutput.value()),
                              *indexBuilderData.sorter_.internalTriplesPso_);
     createInternalPsoAndPosAndSetMetadata();
-    createThirdPermutationPair(NumColumnsIndexBuilding + 2,
-                               ChunkwiseInput{*thirdSorterPtr, keepDuplicates});
+    createThirdPermutationPair(
+        NumColumnsIndexBuilding + 2,
+        ChunkwiseInput{*thirdSorterPtr, RemoveDuplicates::False});
     configurationJson_["has-all-permutations"] = true;
   }
 
@@ -872,6 +871,11 @@ auto liftCallback(Callback callback) {
 // A callback for `IndexImpl::createPermutationPairImpl` that pushes each block
 // of the input to the external sorter for the next pair of permutations, see
 // `pushToNextSorter` below.
+//
+// NOTE: This struct only holds a reference, so `std::reference_wrapper` could
+// be used instead. It is used as a tag for the overload resolution of the
+// callbacks (see `toSequentialBlockCallback` and `toConcurrentBlockCallback`),
+// which we want to be explicitly visible.
 template <typename Sorter>
 struct PushToNextSorter {
   Sorter& sorter_;
@@ -924,13 +928,13 @@ chunkwisePermutationWriter::ConcurrentBlockCallback toConcurrentBlockCallback(
 }
 
 // Return the blocks of the `input` as a sequential range, with the duplicates
-// removed if `removeDuplicates_` is set.
+// removed if `removeDuplicates_` is `RemoveDuplicates::True`.
 template <typename Sorter>
 IndexImpl::BlocksOfTriples toSequentialInput(
     const IndexImpl::ChunkwiseInput<Sorter>& input) {
   IndexImpl::BlocksOfTriples blocks =
       input.sorter_.template getSortedBlocks<0>();
-  if (input.removeDuplicates_) {
+  if (input.removeDuplicates_ == IndexImpl::RemoveDuplicates::True) {
     blocks = ad_utility::uniqueBlockView(std::move(blocks));
   }
   return blocks;
@@ -1006,16 +1010,18 @@ IndexImpl::createPermutationPairImpl(size_t numColumns,
            toConcurrentBlockCallback(AD_FWD(callbacks))),
        ...);
       chunkwisePermutationWriter::Options options;
-      options.removeDuplicates_ = sortedTriples.removeDuplicates_;
+      options.removeDuplicates_ =
+          sortedTriples.removeDuplicates_ == RemoveDuplicates::True;
       // The twin sorters of the chunks share the memory of the sorter that is
       // being consumed, and the consolidation of the boundary relations (which
-      // runs while the chunks are suspended) may use all of it.
+      // runs while the chunks are suspended) may use all of it, see
+      // `CHUNKWISE_WRITER_MIN_TWIN_SORTER_MEMORY_PER_CHUNK`.
       const auto sorterMemory =
           memoryLimitIndexBuilding() / NUM_EXTERNAL_SORTERS_AT_SAME_TIME;
       options.twinSorterMemoryPerChunk_ =
           std::clamp(sorterMemory / ad_utility::globalExecutorNumThreads(),
-                     ad_utility::MemorySize::megabytes(64),
-                     ad_utility::MemorySize::gigabytes(1));
+                     CHUNKWISE_WRITER_MIN_TWIN_SORTER_MEMORY_PER_CHUNK,
+                     CHUNKWISE_WRITER_MAX_TWIN_SORTER_MEMORY_PER_CHUNK);
       options.boundaryTwinMergeMemory_ = sorterMemory;
       return chunkwisePermutationWriter::createPermutationPair(
           fileName1, std::move(writerAndCallback1),
