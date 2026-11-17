@@ -186,4 +186,51 @@ TEST(GeoSparqlHelpers, WktTypeIri) {
   EXPECT_EQ(WktCrsType{}(SourceCrsType{4}), undef);
 }
 
+// TODO: this does not compile yet.
+// Test that the bounding coordinates of a WKT literal are first projected to
+// the given `SourceCrsType` and then returned as a `double`.
+TEST(GeoSparqlHelpers, WktBoundingCoordinate) {
+  using namespace ad_utility::triple_component;
+  using ad_utility::SourceCrsType;
+  using ad_utility::WktBoundingCoordinate;
+  using enum ad_utility::BoundingCoordinate;
+
+  sparqlExpression::IdOrLiteralOrIri undef = ValueId::makeUndefined();
+
+  BoundingBox bb1{{2, 1}, {4, 3}};
+  SourceCrsType defaultCrs{util::geo::CRSType::CRS84};
+  SourceCrsType wgs84{util::geo::CRSType::WGS84};
+
+  auto matchIdExpression = [](Id id) {
+    return matchPtr<sparqlExpression::IdExpression>(
+        AD_PROPERTY(IdExpression, value, ::testing::Eq(id)));
+  };
+
+  // No projection (defaultCrs).
+  EXPECT_THAT(WktBoundingCoordinate<MIN_X>{}(WithSourceCrs{bb1, defaultCrs}),
+              matchIdExpression(ValueId::makeFromDouble(1)));
+  EXPECT_THAT(WktBoundingCoordinate<MIN_Y>{}(WithSourceCrs{bb1, defaultCrs}),
+              matchIdExpression(ValueId::makeFromDouble(2)));
+  EXPECT_THAT(WktBoundingCoordinate<MAX_X>{}(WithSourceCrs{bb1, defaultCrs}),
+              matchIdExpression(ValueId::makeFromDouble(3)));
+  EXPECT_THAT(WktBoundingCoordinate<MAX_Y>{}(WithSourceCrs{bb1, defaultCrs}),
+              matchIdExpression(ValueId::makeFromDouble(4)));
+
+  // Projection to WGS84.
+  EXPECT_THAT(WktBoundingCoordinate<MIN_X>{}(WithSourceCrs{bb1, wgs84}),
+              matchIdExpression(ValueId::makeFromDouble(2)));
+  EXPECT_THAT(WktBoundingCoordinate<MIN_Y>{}(WithSourceCrs{bb1, wgs84}),
+              matchIdExpression(ValueId::makeFromDouble(1)));
+  EXPECT_THAT(WktBoundingCoordinate<MAX_X>{}(WithSourceCrs{bb1, wgs84}),
+              matchIdExpression(ValueId::makeFromDouble(4)));
+  EXPECT_THAT(WktBoundingCoordinate<MAX_Y>{}(WithSourceCrs{bb1, wgs84}),
+              matchIdExpression(ValueId::makeFromDouble(3)));
+
+  // No info with source CRS given.
+  EXPECT_EQ(WktBoundingCoordinate<MIN_X>{}(std::nullopt), undef);
+  EXPECT_EQ(WktBoundingCoordinate<MIN_Y>{}(std::nullopt), undef);
+  EXPECT_EQ(WktBoundingCoordinate<MAX_X>{}(std::nullopt), undef);
+  EXPECT_EQ(WktBoundingCoordinate<MAX_Y>{}(std::nullopt), undef);
+}
+
 }  // namespace
