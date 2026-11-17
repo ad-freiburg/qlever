@@ -836,10 +836,11 @@ class IndexImpl {
                      const std::string& filename) const;
 
   template <typename SortedTriplesType, typename... CallbackTypes>
-  [[nodiscard]] size_t createPermutationPair(
-      size_t numColumns, SortedTriplesType&& sortedTriples,
-      const Permutation& p1, const Permutation& p2,
-      CallbackTypes&&... perTripleCallbacks);
+  [[nodiscard]] size_t createPermutationPair(size_t numColumns,
+                                             SortedTriplesType&& sortedTriples,
+                                             const Permutation& p1,
+                                             const Permutation& p2,
+                                             CallbackTypes&&... callbacks);
 
   // wrapper for createPermutation that saves a lot of code duplications
   // Writes the permutation that is specified by argument permutation
@@ -853,7 +854,7 @@ class IndexImpl {
   template <typename T, typename... Callbacks>
   std::tuple<size_t, IndexMetaData, IndexMetaData> createPermutations(
       size_t numColumns, T&& sortedTriples, const Permutation& p1,
-      const Permutation& p2, Callbacks&&... perTripleCallbacks);
+      const Permutation& p2, Callbacks&&... callbacks);
 
  public:
   // Write a single permutation to disk. `numColumns` specifies the number of
