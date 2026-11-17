@@ -162,9 +162,11 @@ TEST(FilterFactsCanonicalizer, CollectDefinitions) {
   EXPECT_THAT(defs.constants_,
               UnorderedElementsAre(Key(V{"?r"}), Key(V{"?c"})));
 
-  // A variable of several `VALUES` clauses has the values in all of them.
+  // A variable of several `VALUES` clauses has the values in all of them
+  // without `UNDEF` in its column.
   auto values = ad_utility::testing::parseQuery(
-      "SELECT * { VALUES ?r { 1 2 3 } VALUES ?r { 3 4 2 } }");
+      "SELECT * { VALUES ?r { 1 2 3 } VALUES ?r { UNDEF 1 4 } "
+      "VALUES ?r { 3 4 2 } }");
   EXPECT_THAT(
       collectDefinitions(values._rootGraphPattern._graphPatterns).constants_,
       UnorderedElementsAre(::testing::Pair(
