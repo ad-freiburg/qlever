@@ -48,6 +48,8 @@ using Re2Parser = RdfStringParser<TurtleParser<Tokenizer>>;
 using CtreParser = RdfStringParser<TurtleParser<TokenizerCtre>>;
 using NQuadRe2Parser = RdfStringParser<NQuadParser<Tokenizer>>;
 using NQuadCtreParser = RdfStringParser<NQuadParser<TokenizerCtre>>;
+using TriGRe2Parser = RdfStringParser<TriGParser<Tokenizer>>;
+using TriGCtreParser = RdfStringParser<TriGParser<TokenizerCtre>>;
 
 namespace {
 auto lit = ad_utility::testing::tripleComponentLiteral;
@@ -1857,6 +1859,60 @@ TEST(RdfParserTest, nQuadParser) {
 }
 
 // _____________________________________________________________________________
+TEST(RdfParserTest, trigParser) {
+  auto runTestsForParser = [](auto parser) {
+    parser.setBlankNodePrefixOnlyForTesting(42);
+    parser.setInputStream(
+        "<s1> <p1> <o1> . "
+        "GRAPH <g1> { <s2> <p2> <o2> . } "
+        "<s3> <p3> <o3> . "
+        "<g2> { <s4> <p4> <o4> . <s5> <p5> <o5> } "
+        "{ <s6> <p6> <o6> . } "
+        "_:b1 <p7> <o7> .");
+    auto triples = parser.parseAndReturnAllTriples();
+    auto internalGraphId =
+        qlever::specialIds().at(std::string{DEFAULT_GRAPH_IRI});
+    std::vector<TurtleTriple> expected;
+    // A plain triple without any graph keyword lives in the default graph.
+    expected.emplace_back(iri("<s1>"), iri("<p1>"), iri("<o1>"),
+                          internalGraphId);
+    // `GRAPH <label> { ... }` switches to the named graph for its block.
+    expected.emplace_back(iri("<s2>"), iri("<p2>"), iri("<o2>"), iri("<g1>"));
+    // The default graph is restored once the `GRAPH` block ends.
+    expected.emplace_back(iri("<s3>"), iri("<p3>"), iri("<o3>"),
+                          internalGraphId);
+    // The `GRAPH` keyword is optional; a label directly followed by `{...}`
+    // also switches to that named graph.
+    expected.emplace_back(iri("<s4>"), iri("<p4>"), iri("<o4>"), iri("<g2>"));
+    // The trailing dot before the closing `}` is optional.
+    expected.emplace_back(iri("<s5>"), iri("<p5>"), iri("<o5>"), iri("<g2>"));
+    // An anonymous (label-less) `{...}` block uses the default graph.
+    expected.emplace_back(iri("<s6>"), iri("<p6>"), iri("<o6>"),
+                          internalGraphId);
+    // Blank node labels include the parser prefix (42) for cross-file
+    // uniqueness, same as for plain Turtle and N-Quads.
+    expected.emplace_back("_:u_42_b1", iri("<p7>"), iri("<o7>"),
+                          internalGraphId);
+    EXPECT_THAT(triples, ::testing::ElementsAreArray(expected));
+
+    auto expectParsingFails = [](const std::string& input) {
+      auto parser = RdfStringParser<TriGParser<Tokenizer>>(encodedIriManager());
+      parser.setInputStream(input);
+      EXPECT_ANY_THROW(parser.parseAndReturnAllTriples());
+    };
+
+    // `GRAPH` must be followed by a label.
+    expectParsingFails("GRAPH { <x> <y> <z> . }");
+    // The label after `GRAPH` must be followed by a `{...}` block.
+    expectParsingFails("GRAPH <g> <x> <y> <z> .");
+    // Missing closing brace.
+    expectParsingFails("<g> { <x> <y> <z> .");
+  };
+  runTestsForParser(TriGRe2Parser{encodedIriManager()});
+  runTestsForParser(TriGCtreParser{encodedIriManager()});
+}
+
+// _____________________________________________________________________________
 TEST(RdfParserTest, noGetBatchInStringParser) {
   auto runTestsForParser = [](auto parser) {
     parser.setInputStream("<x> <p> <o> .");
@@ -1864,6 +1920,8 @@ TEST(RdfParserTest, noGetBatchInStringParser) {
   };
   runTestsForParser(NQuadRe2Parser{encodedIriManager()});
   runTestsForParser(NQuadCtreParser{encodedIriManager()});
+  runTestsForParser(TriGRe2Parser{encodedIriManager()});
+  runTestsForParser(TriGCtreParser{encodedIriManager()});
   runTestsForParser(re2Parser());
   runTestsForParser(ctreParser());
 }

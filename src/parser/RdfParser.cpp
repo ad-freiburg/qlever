@@ -689,7 +689,7 @@ bool TriGParser<T>::triplesOrGraph() {
 // _____________________________________________________________________________
 template <typename T>
 bool TriGParser<T>::labelOrSubject() {
-  if (!(Base::iri() || Base::blankNodeLabel())) {
+  if (!(Base::blankNodeLabel() || Base::iri())) {
     return false;
   }
   this->activeSubject_ = this->lastParseResult_;
