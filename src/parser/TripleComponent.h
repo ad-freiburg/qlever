@@ -7,7 +7,6 @@
 #define QLEVER_SRC_PARSER_TRIPLECOMPONENT_H
 
 #include <cstdint>
-#include <memory>
 #include <string>
 #include <variant>
 
@@ -18,6 +17,7 @@
 #include "global/Id.h"
 #include "global/SpecialIds.h"
 #include "parser/LiteralOrIri.h"
+#include "parser/ParsedTripleTerm.h"
 #include "rdfTypes/RdfEscaping.h"
 #include "rdfTypes/Variable.h"
 #include "util/Date.h"
@@ -34,35 +34,6 @@ CPP_concept MoveAssignableWith =
     CPP_requires_ref(MoveAssignableWithRequires, T, U);
 
 }  // namespace ad_utility::detail
-
-class TripleComponent;
-
-// Immutable, recursively owned parsed contents. Sharing keeps copies cheap;
-// equality and hashing compare contents rather than allocation addresses.
-// The RDF parser enforces the permitted component kinds. This syntactic type
-// does not assign IDs or define SPARQL value equality.
-class ParsedTripleTerm {
-  struct Components;
-  std::shared_ptr<const Components> components_;
-
- public:
-  ParsedTripleTerm(TripleComponent subject, TripleComponent predicate,
-                   TripleComponent object);
-  // Access requires a non-moved-from term. Copies share immutable contents;
-  // moves transfer ownership, and a moved-from term can be assigned again.
-  const TripleComponent& subject() const;
-  const TripleComponent& predicate() const;
-  const TripleComponent& object() const;
-  friend bool operator==(const ParsedTripleTerm& a, const ParsedTripleTerm& b);
-  friend bool operator!=(const ParsedTripleTerm& a, const ParsedTripleTerm& b) {
-    return !(a == b);
-  }
-  template <typename H>
-  friend H AbslHashValue(H h, const ParsedTripleTerm& term) {
-    return H::combine(std::move(h), term.subject(), term.predicate(),
-                      term.object());
-  }
-};
 
 // A wrapper around a `std::variant` that can hold the different types that the
 // subject, predicate, or object of a triple can have in the Turtle Parser.

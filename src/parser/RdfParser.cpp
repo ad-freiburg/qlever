@@ -10,6 +10,7 @@
 
 #include "parser/RdfParser.h"
 
+#include <absl/cleanup/cleanup.h>
 #include <absl/functional/bind_front.h>
 #include <absl/strings/charconv.h>
 
@@ -169,6 +170,7 @@ void TurtleParser<Tokenizer_T>::clear() {
   tok_.reset(nullptr, 0);
   triples_.clear();
   numBlankNodes_ = 0;
+  tripleTermDepth_ = 0;
   isParserExhausted_ = false;
 }
 
@@ -350,11 +352,17 @@ bool TurtleParser<T>::predicateSpecialA() {
 
 // ____________________________________________________________________
 template <class T>
-bool TurtleParser<T>::subject() {
+void TurtleParser<T>::rejectTripleTermInNonObjectPosition() {
   tok_.skipWhitespaceAndComments();
   if (ql::starts_with(tok_.view(), "<<")) {
     raise("Triple terms are only allowed in object position");
   }
+}
+
+// ____________________________________________________________________
+template <class T>
+bool TurtleParser<T>::subject() {
+  rejectTripleTermInNonObjectPosition();
   if (blankNode() || iri() || collection()) {
     activeSubject_ = lastParseResult_;
     return true;
@@ -366,10 +374,7 @@ bool TurtleParser<T>::subject() {
 // ____________________________________________________________________
 template <class T>
 bool TurtleParser<T>::predicate() {
-  tok_.skipWhitespaceAndComments();
-  if (ql::starts_with(tok_.view(), "<<")) {
-    raise("Triple terms are only allowed in object position");
-  }
+  rejectTripleTermInNonObjectPosition();
   if (iri()) {
     activePredicate_ = lastParseResult_;
     return true;
@@ -380,50 +385,63 @@ bool TurtleParser<T>::predicate() {
 
 // ____________________________________________________________________
 template <class T>
-bool TurtleParser<T>::tripleTerm(bool nquad, size_t depth) {
+bool TurtleParser<T>::ttSubject(TripleTermSyntax syntax) {
+  rejectTripleTermInNonObjectPosition();
+  return syntax == TripleTermSyntax::NQuads ? (blankNodeLabel() || iriref())
+                                            : (blankNode() || iri());
+}
+
+// ____________________________________________________________________
+template <class T>
+bool TurtleParser<T>::ttObject(TripleTermSyntax syntax) {
+  return tripleTerm(syntax) ||
+         (syntax == TripleTermSyntax::NQuads
+              ? (blankNodeLabel() || rdfLiteralImpl(false) || iriref())
+              : (blankNode() || literal() || iri()));
+}
+
+// ____________________________________________________________________
+template <class T>
+bool TurtleParser<T>::tripleTerm(TripleTermSyntax syntax) {
   tok_.skipWhitespaceAndComments();
   if (!ql::starts_with(tok_.view(), "<<")) {
     return false;
   }
   if (!ql::starts_with(tok_.view(), "<<(")) {
     raise(
-        "Expected <<( for a triple term; reification shorthand is not "
-        "supported");
+        "Expected <<( for a triple term; reification shorthand "
+        "such as << <s> <p> <o> >> is not supported");
   }
   // Bound recursion to avoid exhausting the stack on deeply nested input.
-  if (depth >= 128) {
-    raise("Triple-term nesting exceeds the supported limit of 128");
+  if (tripleTermDepth_ >= MAX_TRIPLE_TERM_NESTING_DEPTH) {
+    raise(absl::StrCat("Triple-term nesting exceeds the supported limit of ",
+                       MAX_TRIPLE_TERM_NESTING_DEPTH));
   }
+  ++tripleTermDepth_;
+  absl::Cleanup restoreDepth = [this] { --tripleTermDepth_; };
   tok_.remove_prefix(3);
-  auto rejectTripleTerm = [this]() {
-    tok_.skipWhitespaceAndComments();
-    if (ql::starts_with(tok_.view(), "<<")) {
-      raise("Triple terms are only allowed in object position");
-    }
-  };
-  // Keep IRIs unencoded inside terms, including IRIs covered by the
-  // `EncodedIriManager`. The later conversion to IDs is deliberately deferred.
-  auto parseIri = [this, nquad]() {
-    return iriref() || (!nquad && prefixedName());
-  };
-  rejectTripleTerm();
-  if (!(nquad ? blankNodeLabel() : blankNode()) && !parseIri()) {
+  if (!ttSubject(syntax)) {
     raise("Expected an IRI or blank node as triple-term subject");
   }
   auto subject = std::move(lastParseResult_);
-  rejectTripleTerm();
-  if (ql::starts_with(tok_.view(), "_:") || !parseIri()) {
-    if (!nquad && parseTerminal<TurtleTokenId::A>()) {
-      lastParseResult_ = TripleComponent::Iri::fromIriref(
-          "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>");
-    } else {
+  TripleComponent predicate;
+  {
+    // `verb()` stores its result in `activePredicate_`. Keep that change local
+    // to this rule, including if parsing raises an exception.
+    auto savedPredicate = std::move(activePredicate_);
+    absl::Cleanup restorePredicate = [this, &savedPredicate] {
+      activePredicate_ = std::move(savedPredicate);
+    };
+    rejectTripleTermInNonObjectPosition();
+    if (ql::starts_with(tok_.view(), "_:") ||
+        !(syntax == TripleTermSyntax::NQuads ? iriref() : verb())) {
       raise("Expected an IRI as triple-term predicate");
     }
+    predicate = syntax == TripleTermSyntax::NQuads
+                    ? std::move(lastParseResult_)
+                    : std::move(activePredicate_);
   }
-  auto predicate = std::move(lastParseResult_);
-  if (!(tripleTerm(nquad, depth + 1) ||
-        (nquad ? blankNodeLabel() : blankNode()) ||
-        (nquad ? rdfLiteralImpl(false) : literal()) || parseIri())) {
+  if (!ttObject(syntax)) {
     raise(
         "Expected an IRI, blank node, literal, or triple term as triple-term "
         "object");
@@ -653,10 +671,7 @@ bool NQuadParser<T>::nQuadLiteral() {
 // _____________________________________________________________________________
 template <typename T>
 bool NQuadParser<T>::nQuadSubject() {
-  this->tok_.skipWhitespaceAndComments();
-  if (ql::starts_with(this->tok_.view(), "<<")) {
-    this->raise("Triple terms are only allowed in object position");
-  }
+  this->rejectTripleTermInNonObjectPosition();
   if (Base::iriref() || Base::blankNodeLabel()) {
     this->activeSubject_ = std::move(this->lastParseResult_);
     return true;
@@ -668,10 +683,7 @@ bool NQuadParser<T>::nQuadSubject() {
 
 template <typename T>
 bool NQuadParser<T>::nQuadPredicate() {
-  this->tok_.skipWhitespaceAndComments();
-  if (ql::starts_with(this->tok_.view(), "<<")) {
-    this->raise("Triple terms are only allowed in object position");
-  }
+  this->rejectTripleTermInNonObjectPosition();
   if (Base::iriref()) {
     this->activePredicate_ = std::move(this->lastParseResult_);
     return true;
@@ -681,8 +693,8 @@ bool NQuadParser<T>::nQuadPredicate() {
 
 template <typename T>
 bool NQuadParser<T>::nQuadObject() {
-  if (Base::tripleTerm(true) || Base::iriref() || Base::blankNodeLabel() ||
-      nQuadLiteral()) {
+  if (Base::tripleTerm(TripleTermSyntax::NQuads) || Base::iriref() ||
+      Base::blankNodeLabel() || nQuadLiteral()) {
     this->activeObject_ = std::move(this->lastParseResult_);
     return true;
   }
@@ -692,10 +704,7 @@ bool NQuadParser<T>::nQuadObject() {
 // _____________________________________________________________________________
 template <typename T>
 bool NQuadParser<T>::nQuadGraphLabel() {
-  this->tok_.skipWhitespaceAndComments();
-  if (ql::starts_with(this->tok_.view(), "<<")) {
-    this->raise("Triple terms are only allowed in object position");
-  }
+  this->rejectTripleTermInNonObjectPosition();
   if (Base::iriref() || Base::blankNodeLabel()) {
     activeGraphLabel_ = std::move(this->lastParseResult_);
     return true;

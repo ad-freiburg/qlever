@@ -39,6 +39,9 @@
 #include "util/TaskQueue.h"
 #include "util/ThreadSafeQueue.h"
 
+// Syntax used for parsing the components of an RDF triple term.
+enum class TripleTermSyntax { Turtle, NQuads };
+
 enum class TurtleParserIntegerOverflowBehavior {
   Error,
   OverflowingToDouble,
@@ -293,6 +296,9 @@ class TurtleParser : public RdfParserBase {
   TripleComponent defaultGraphIri_ = qlever::specialIds().at(DEFAULT_GRAPH_IRI);
   size_t numBlankNodes_ = 0;
 
+  // Number of nested `tripleTerm()` calls currently parsing a term.
+  size_t tripleTermDepth_ = 0;
+
   bool currentTripleIgnoredBecauseOfInvalidLiteral_ = false;
 
   // Make sure that each blank nodes is unique, even across different parser
@@ -361,9 +367,13 @@ class TurtleParser : public RdfParserBase {
   bool blankNodePropertyList();
   bool objectList();
   bool object();
-  // Parse without asserting the embedded triple or changing the active subject
-  // and predicate. `nquad` selects the stricter N-Triples component rules.
-  bool tripleTerm(bool nquad = false, size_t depth = 0);
+  // Parse the triple-term grammar rules without asserting embedded triples.
+  // `syntax` selects the Turtle or stricter N-Triples/N-Quads component rules.
+  bool tripleTerm(TripleTermSyntax syntax = TripleTermSyntax::Turtle);
+  bool ttSubject(TripleTermSyntax syntax);
+  bool ttObject(TripleTermSyntax syntax);
+  // Reject a triple term where the grammar does not allow one.
+  void rejectTripleTermInNonObjectPosition();
   bool verb();
   bool predicateSpecialA();
   bool predicate();

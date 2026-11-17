@@ -7,7 +7,7 @@ add_subdirectory(data)
 # `sparqlParser` -> `index` -> `basicParser`. They therefore have to live in
 # their own library instead of in `sparqlParser`.
 add_library(basicParser Tokenizer.cpp LiteralOrIri.cpp WordsAndDocsFileParser.cpp AsyncBlockSource.cpp
-        TripleComponent.cpp PropertyPath.cpp PayloadVariables.cpp)
+        TripleComponent.cpp ParsedTripleTerm.cpp PropertyPath.cpp PayloadVariables.cpp)
 qlever_target_link_libraries(basicParser qlever_util rdfTypes parserData)
 
 # The parser for the RDF input formats. It is used by `index` (which builds an

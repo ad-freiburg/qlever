@@ -473,6 +473,27 @@ TEST(TripleComponent, recursiveTripleTerm) {
 }
 
 // _____________________________________________________________________________
+TEST(TripleComponent, tripleTermEqualityAfterMove) {
+  using Term = TripleComponent::TripleTerm;
+  Term first{iri("<s>"), iri("<p>"), iri("<o>")};
+  Term second{iri("<s>"), iri("<p>"), iri("<o>")};
+  auto valid = std::move(first);
+  auto otherValid = std::move(second);
+  EXPECT_EQ(first, second);
+  EXPECT_NE(first, valid);
+  EXPECT_NE(valid, first);
+  EXPECT_NE(second, otherValid);
+  EXPECT_EQ(valid, otherValid);
+
+  first = valid;
+  EXPECT_EQ(first, valid);
+  EXPECT_NE(first, second);
+  second = std::move(first);
+  EXPECT_EQ(second, valid);
+  EXPECT_NE(first, second);
+}
+
+// _____________________________________________________________________________
 TEST(TripleComponent, tripleTermConversionsAreUnsupported) {
   TripleComponent term =
       TripleComponent::TripleTerm{iri("<s>"), iri("<p>"), lit("object")};
