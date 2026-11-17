@@ -14,7 +14,7 @@
 #include "util/ExceptionHandling.h"
 #include "util/MmapVector.h"
 #include "util/File.h"
-#include "util/Serializer/Serializer.h"
+#include "util/serializer/Serializer.h"
 
 // A `TensorDataVocabulary` holds tensor data literals. In contrast to the
 // regular vocabulary classes it does not only store the strings. Instead it

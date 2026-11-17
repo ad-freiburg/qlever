@@ -114,7 +114,6 @@ inline constexpr LogLevel::Enum compileTimeLogLevel =
 #define AD_LOG_TIME_END(marker)
 #endif
 
-using enum LogLevel;
 }  // namespace ad_utility
 
 // Global type alias so that `LogLevel::Enum::FATAL` etc. can be written
