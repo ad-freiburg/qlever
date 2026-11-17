@@ -3528,10 +3528,12 @@ void QueryPlanner::GraphPatternPlanner::visitSpatialSearch(
       // The version using the child graph pattern
       addCandidateSpatialJoin(false);
     } else {
-      // The version without using the child graph pattern
-      if (!std::holds_alternative<NearestNeighborsConfig>(config.task_)) {
-        addCandidateSpatialJoin(true);
-      }
+      // The version without using the child graph pattern (a nearest neighbors
+      // search without child graph pattern is already rejected by
+      // `SpatialQuery::toSpatialJoinConfiguration`).
+      AD_CORRECTNESS_CHECK(
+          !std::holds_alternative<NearestNeighborsConfig>(config.task_));
+      addCandidateSpatialJoin(true);
     }
   }
   visitGroupOptionalOrMinus(std::move(candidatesOut));
