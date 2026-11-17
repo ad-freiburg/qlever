@@ -6,7 +6,7 @@
 #ifndef QLEVER_SRC_ENGINE_LOCALVOCAB_H
 #define QLEVER_SRC_ENGINE_LOCALVOCAB_H
 
-#include <absl/hash/hash.h>
+#include <absl/container/hash_container_defaults.h>
 
 #include <atomic>
 #include <cstddef>
@@ -82,8 +82,9 @@ class LocalVocab {
     // the insertion of an element throws (in particular, when the memory limit
     // of the allocator is exceeded), see `backports/unordered.h`.
     using Words = ql::NodeHashSetTemplate<
-        LocalVocabEntryView, absl::Hash<LocalVocabEntryView>,
-        std::equal_to<LocalVocabEntryView>,
+        LocalVocabEntryView,
+        absl::DefaultHashContainerHash<LocalVocabEntryView>,
+        absl::DefaultHashContainerEq<LocalVocabEntryView>,
         ql::pmr::polymorphic_allocator<LocalVocabEntryView>>;
     Words words_{Words::allocator_type{&arena_}};
 
