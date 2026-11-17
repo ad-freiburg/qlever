@@ -88,9 +88,8 @@ std::optional<std::string> geometryNAsWkt(GeoPointOrWkt wkt, int64_t n) {
 }
 
 // _____________________________________________________________________________
-std::optional<std::string> transformAsWkt(const GeoPointOrWkt& wkt,
-                                          const std::string& iri) {
-  ::util::geo::CRSType targetCrs = ::util::geo::getCRSType(iri);
+std::optional<std::string> transformAsWkt(
+    const GeoPointOrWkt& wkt, const ::util::geo::CRSType& targetCrs) {
   if (targetCrs == ::util::geo::CRSType::UNSUPPORTED) {
     return std::nullopt;
   }
@@ -101,6 +100,8 @@ std::optional<std::string> transformAsWkt(const GeoPointOrWkt& wkt,
   }
   // This projects the coordinates of `wkt` to `targetCrs` during parsing.
   auto parseResult = parseGeoPointOrWkt(wkt, targetCrs);
+  // TODO<yarox-1> this can be shortened after the geo-functions PR is merged ->
+  // `utilGeomToWkt(parseResult.parsedWkt_, targetCrs)`.
   auto wktResult = utilGeomToWkt(parseResult.parsedWkt_);
   if (!wktResult.has_value()) {
     return std::nullopt;

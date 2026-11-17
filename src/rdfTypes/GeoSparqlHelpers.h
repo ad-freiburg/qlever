@@ -57,6 +57,16 @@ std::optional<De9imFilterString> parseDe9imFilterString(
 // `F`, the pattern could match a disjoint pair.
 bool de9imFilterCanMatchDisjoint(const De9imFilterString& filter);
 
+// Forward declaration of `libspatialjoin`'s `CRSType` (the util is not
+// included in this header).
+//
+// NOTE: The underlying type must match the definition in the util's
+// `geo/Geo.h`. A mismatch does not compile, because `GeoSparqlHelpers.cpp`
+// includes both declarations.
+namespace util::geo {
+enum class CRSType : uint8_t;
+}
+
 namespace ad_utility {
 
 namespace detail {
@@ -77,11 +87,11 @@ double wktDistImpl(GeoPoint point1, GeoPoint point2);
 std::optional<std::string> geometryNAsWkt(GeoPointOrWkt wkt, int64_t n);
 
 // Helper to avoid including `GeometryInfoHelpersImpl.h`
-// Project geometry contained in `wkt` to CRS defined in `iri` and return as
+// Project geometry contained in `wkt` to CRS defined in `crs` and return as
 // WKT. Returns `std::nullopt` for invalid `wkt` or invalid/unsupported CRS
 // `iri`.
-std::optional<std::string> transformAsWkt(const GeoPointOrWkt& wkt,
-                                          const std::string& iri);
+std::optional<std::string> transformAsWkt(
+    const GeoPointOrWkt& wkt, const ::util::geo::CRSType& targetCrs);
 
 // Simplify a WKT geometry using `pb_util`. The returned WKT string has neither
 // quotation marks nor a datatype yet.
@@ -284,9 +294,9 @@ class WktTransform {
  public:
   sparqlExpression::IdOrLiteralOrIri operator()(
       const std::optional<GeoPointOrWkt>& wkt,
-      const std::optional<triple_component::Iri>& iri) const {
+      const ::util::geo::CRSType& crs) const {
     using namespace triple_component;
-    if (!wkt.has_value() || !iri.has_value()) {
+    if (!wkt.has_value()) {
       return ValueId::makeUndefined();
     }
 
@@ -294,8 +304,7 @@ class WktTransform {
     // not mathematically possible. (Currently, all transformations between the
     // supported coordinate reference systems are possible, so this case cannot
     // occur yet.)
-    auto resultWkt = detail::transformAsWkt(
-        wkt.value(), iri.value().toStringRepresentation());
+    auto resultWkt = detail::transformAsWkt(wkt.value(), crs);
 
     if (!resultWkt.has_value()) {
       return ValueId::makeUndefined();
