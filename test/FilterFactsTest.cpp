@@ -136,6 +136,13 @@ TEST(FilterFactsCanonicalizer, Definitions) {
          500);
   expect("BIND(geof:metricDistance(?ga, ?gb) AS ?d)", "?d <= 500",
          Comparison::LE, 500);
+
+  // A variable with several values is not replaced.
+  auto several =
+      canonical("geof:metricDistance(?ga, ?gb) <= ?r", "VALUES ?r { 500 600 }");
+  EXPECT_THAT(several.conjuncts_,
+              ElementsAre(opaque(several.query_._rootGraphPattern._filters[0]
+                                     .expression_.getPimpl())));
 }
 
 // Test that only the columns of `VALUES` without `UNDEF`, the `BIND`s of
