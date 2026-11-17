@@ -10,8 +10,6 @@
 #include <util/geo/Geo.h>
 #include <util/log/Log.h>
 
-#include <exception>
-
 #include "global/Id.h"
 #include "index/Index.h"
 
@@ -72,10 +70,6 @@ class WKTParser : public sj::WKTParserBase<SpatialJoinParseJob> {
   // without `done()`, for example because the query was cancelled.
   ~WKTParser();
 
-  // Like `done()` of the base class (wait for all worker threads to finish),
-  // but also rethrow the first exception of a worker thread, if any.
-  void done();
-
   // If a worker thread has failed, wait for all worker threads to finish and
   // rethrow its exception (see `done()`). Otherwise, do nothing.
   void throwIfWorkerFailed();
@@ -116,9 +110,6 @@ class WKTParser : public sj::WKTParserBase<SpatialJoinParseJob> {
   // that were skipped by prefilter or actually parsed for each of the threads.
   std::vector<size_t> _numSkipped;
   std::vector<size_t> _numParsed;
-
-  // The first exception of each worker thread, rethrown by `done()`.
-  std::vector<std::exception_ptr> _exceptions;
 
   // See `takeStoredRows`, per thread.
   bool _usePersistedGeometries;
