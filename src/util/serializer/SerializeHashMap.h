@@ -13,7 +13,8 @@
 namespace ad_utility::serialization {
 
 AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
-    (ad_utility::similarToInstantiation<T, ad_utility::HashMap>)) {
+    (ad_utility::similarToInstantiation<T, ql::FlatHashMapTemplate> ||
+     ad_utility::similarToInstantiation<T, ql::NodeHashMapTemplate>)) {
   using K = typename std::decay_t<T>::key_type;
   using M = typename std::decay_t<T>::mapped_type;
   if constexpr (WriteSerializer<S>) {
