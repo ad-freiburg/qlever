@@ -542,7 +542,7 @@ class SparqlQleverVisitor {
   GraphTerm visit(Parser::VarOrTermContext* ctx);
 
   // Recognize `tripleTerm` syntax and explicitly reject its translation.
-  GraphTerm visit(Parser::TripleTermContext* ctx);
+  [[noreturn]] static GraphTerm visit(const Parser::TripleTermContext* ctx);
 
   VarOrIri visit(Parser::VarOrIriContext* ctx);
 

@@ -2685,7 +2685,7 @@ GraphTerm Visitor::visit(Parser::VarOrTermContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-GraphTerm Visitor::visit(Parser::TripleTermContext* ctx) {
+GraphTerm Visitor::visit(const Parser::TripleTermContext* ctx) {
   // TODO<Prashanth0703> Translate the triple term once `GraphTerm` can
   // represent one. A triple term in a pattern only matches a triple term in
   // the data, it does not assert the contained triple. A triple term in the
