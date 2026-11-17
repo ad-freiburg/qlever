@@ -122,7 +122,9 @@ struct GetColsFromTable {
       return ::ranges::views::zip(table.getColumn(I)...) |
              ::ranges::views::transform([](auto&& tuple) {
                return std::apply(
-                   [](const auto&... refs) { return std::array{refs...}; },
+                   [](const auto&... refs) {
+                     return std::array<Id, numCols>{static_cast<Id>(refs)...};
+                   },
                    AD_FWD(tuple));
              });
     }(std::make_index_sequence<numCols>());
