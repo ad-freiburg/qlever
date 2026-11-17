@@ -30,6 +30,7 @@ enum class MediaType {
   tsv,
   csv,
   turtle,
+  trig,
   ntriples,
   nquads,
   octetStream,

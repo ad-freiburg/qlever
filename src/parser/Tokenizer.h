@@ -32,10 +32,13 @@ struct TurtleToken {
         TurtleBase(grp("@base")),
         // TODO: this also
         SparqlBase(grp("BASE")),
+        SparqlGraph(grp("GRAPH")),
 
         Dot(grp("\\.")),
         Comma(grp(",")),
         Semicolon(grp(";")),
+        OpenCurly(grp("\\{")),
+        CloseCurly(grp("\\}")),
         OpenSquared(grp("\\[")),
         CloseSquared(grp("\\]")),
         OpenRound(grp("\\(")),
@@ -76,10 +79,13 @@ struct TurtleToken {
   const RE2 SparqlPrefix;
   const RE2 TurtleBase;
   const RE2 SparqlBase;
+  const RE2 SparqlGraph;
 
   const RE2 Dot;
   const RE2 Comma;
   const RE2 Semicolon;
+  const RE2 OpenCurly;
+  const RE2 CloseCurly;
   const RE2 OpenSquared;
   const RE2 CloseSquared;
   const RE2 OpenRound;

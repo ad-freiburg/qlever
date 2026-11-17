@@ -30,9 +30,12 @@ struct TurtleTokenCtre {
   static constexpr auto SparqlPrefix = grp(fixed_string("PREFIX"));
   static constexpr auto TurtleBase = grp(fixed_string("@base"));
   static constexpr auto SparqlBase = grp(fixed_string("BASE"));
+  static constexpr auto SparqlGraph = grp(fixed_string("GRAPH"));
   static constexpr auto Dot = grp(fixed_string("\\."));
   static constexpr auto Comma = grp(fixed_string(","));
   static constexpr auto Semicolon = grp(fixed_string(";"));
+  static constexpr auto OpenCurly = grp(fixed_string("\\{"));
+  static constexpr auto CloseCurly = grp(fixed_string("\\}"));
   static constexpr auto OpenSquared = grp(fixed_string("\\["));
   static constexpr auto CloseSquared = grp(fixed_string("\\]"));
   static constexpr auto OpenRound = grp(fixed_string("\\("));
@@ -260,12 +263,18 @@ class TokenizerCtre : public SkipWhitespaceAndCommentsMixin<TokenizerCtre> {
           return F::template process<TurtleTokenCtre::TurtleBase>(_data);
         case TurtleTokenId::SparqlBase:
           return F::template process<TurtleTokenCtre::SparqlBase>(_data);
+        case TurtleTokenId::SparqlGraph:
+          return F::template process<TurtleTokenCtre::SparqlGraph>(_data);
         case TurtleTokenId::Dot:
           return F::template process<TurtleTokenCtre::Dot>(_data);
         case TurtleTokenId::Comma:
           return F::template process<TurtleTokenCtre::Comma>(_data);
         case TurtleTokenId::Semicolon:
           return F::template process<TurtleTokenCtre::Semicolon>(_data);
+        case TurtleTokenId::OpenCurly:
+          return F::template process<TurtleTokenCtre::OpenCurly>(_data);
+        case TurtleTokenId::CloseCurly:
+          return F::template process<TurtleTokenCtre::CloseCurly>(_data);
         case TurtleTokenId::OpenSquared:
           return F::template process<TurtleTokenCtre::OpenSquared>(_data);
         case TurtleTokenId::CloseSquared:

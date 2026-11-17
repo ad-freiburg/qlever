@@ -66,7 +66,8 @@ EMSCRIPTEN_BINDINGS(qlever) {
 
   enum_<qlever::Filetype>("Filetype")
       .value("Turtle", qlever::Filetype::Turtle)
-      .value("NQuad", qlever::Filetype::NQuad);
+      .value("NQuad", qlever::Filetype::NQuad)
+      .value("TriG", qlever::Filetype::TriG);
 
   enum_<ad_utility::VocabularyType::Enum>("VocabularyType")
       .value("InMemoryUncompressed",
