@@ -231,17 +231,19 @@ struct RasterFile::Impl {
   GeoPoint pixelCenter(int column, int row);
 
   // Return the pixels under `envelope`, which is in the CRS of the file,
-  // clipped to the grid. Return nothing if `envelope` misses the grid.
-  std::optional<PixelWindow> pixelWindow(const OGREnvelope& envelope) const;
+  // clipped to the grid. Return nothing if `envelope` misses the grid. Not
+  // `const`, because older GDAL versions take the geotransform as non-const.
+  std::optional<PixelWindow> pixelWindow(const OGREnvelope& envelope);
 
   // Return one byte per pixel of `window`, row by row. A byte is 1 if its
   // pixel belongs to `geometry`, which is in the CRS of the file, by GDAL's
   // default rule: the pixel center lies inside a polygon, the pixel is on the
   // thin line drawn along a line, or the pixel contains a point. `geometry`
-  // is not `const`, because GDAL takes the geometries as non-const handles.
-  qlm::vector<uint8_t> rasterizeMask(
-      OGRGeometry& geometry, const PixelWindow& window,
-      const qlm::Allocator<char>& allocator) const;
+  // and this method are not `const`, because GDAL takes the geometries as
+  // non-const handles and (in older versions) the geotransform as non-const.
+  qlm::vector<uint8_t> rasterizeMask(OGRGeometry& geometry,
+                                     const PixelWindow& window,
+                                     const qlm::Allocator<char>& allocator);
 
   // Return the pixels that belong to `geometry`, which is in CRS84 (see
   // `rasterizeMask`), with their values in `bands`. With a `radius` in metres,
@@ -399,7 +401,7 @@ GeoPoint RasterFile::Impl::pixelCenter(int column, int row) {
 
 // _____________________________________________________________________________
 std::optional<RasterFile::Impl::PixelWindow> RasterFile::Impl::pixelWindow(
-    const OGREnvelope& envelope) const {
+    const OGREnvelope& envelope) {
   // The window must contain all four corners. In a rotated grid, any corner
   // can have the smallest or largest column or row.
   std::array<double, 4> cornersX{envelope.MinX, envelope.MinX, envelope.MaxX,
@@ -446,7 +448,7 @@ std::optional<RasterFile::Impl::PixelWindow> RasterFile::Impl::pixelWindow(
 // _____________________________________________________________________________
 qlm::vector<uint8_t> RasterFile::Impl::rasterizeMask(
     OGRGeometry& geometry, const PixelWindow& window,
-    const qlm::Allocator<char>& allocator) const {
+    const qlm::Allocator<char>& allocator) {
   // An image in memory that covers exactly the window, all pixels 0.
   GDALDriver* memDriver = GetGDALDriverManager()->GetDriverByName("MEM");
   GDALDatasetUniquePtr mask{memDriver->Create("", window.width_, window.height_,
