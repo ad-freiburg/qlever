@@ -13,6 +13,7 @@
 #include "backports/algorithm.h"
 #include "engine/NamedResultCache.h"
 #include "engine/NamedResultCacheFormatVersion.h"
+#include "engine/idTable/splitLayout/IdColumn.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/ContainersWithAllocator.h"
 #include "util/Exception.h"
@@ -99,10 +100,10 @@ void readValue(Serializer& serializer, NamedResultCache::Value& arg,
     // Zero-copy path: build a non-owning `IdTableView<0>` directly from
     // views of the columns in the serializer's buffer, without copying the
     // column data.
-    // Since the writing side (see above) rejects any entry that contains a
-    // `LocalVocabIndex` id, `mapping` can never actually apply to any id in
-    // the columns, so skipping `deserializeIds`'s remapping step here is
-    // safe. We still defensively re-check the invariant.
+    //
+    // NOTE: The `mapping` is not applied here. The writing side (see above)
+    // rejects any entry with a `LocalVocabIndex` id, so the `mapping` can
+    // never apply to any id in the columns, which is checked again below.
     IdTableView<0>::ViewSpans columns;
     columns.reserve(numColumns);
     for (size_t i = 0; i < numColumns; ++i) {
