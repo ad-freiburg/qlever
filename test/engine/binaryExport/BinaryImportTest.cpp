@@ -437,7 +437,9 @@ TEST_F(BinaryExportRoundTrip, invalidHeader) {
   ++wrongVersion[versionOffset];
   AD_EXPECT_THROW_WITH_MESSAGE(
       import(wrongVersion),
-      ::testing::HasSubstr("only version 1 is supported"));
+      ::testing::HasSubstr(absl::StrCat("only version ",
+                                        ad_utility::binaryQleverExportVersion,
+                                        " is supported")));
 
   auto notBinaryFormat =
       ::testing::HasSubstr("not in QLever's binary export format");
