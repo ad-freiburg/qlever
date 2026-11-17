@@ -94,8 +94,9 @@ class GeoVocabularyUnderlyingVocabTypedTest : public ::testing::Test {
       for (size_t i = 0; i < testLiterals.size(); i++) {
         ASSERT_EQ(geoVocab[i], testLiterals[i]);
         ASSERT_EQ(geoVocab.getUnderlyingVocabulary()[i], testLiterals[i]);
-        EXPECT_GEOMETRYINFO(geoVocab.getGeoInfo(i),
-                            GeometryInfo::fromWktLiteral(testLiterals[i]));
+        EXPECT_THAT(
+            geoVocab.getGeoInfo(i),
+            geoInfoMatcher(GeometryInfo::fromWktLiteral(testLiterals[i])));
       }
     };
 
@@ -208,7 +209,8 @@ TYPED_TEST(GeoVocabularyUnderlyingVocabTypedTest, LookupBatchesStreamed) {
   this->testLookupBatchesStreamed();
 }
 
-// _____________________________________________________________________________
+// Test that a `PolymorphicVocabulary` returns the precomputed `GeometryInfo`
+// of a WKT literal iff its underlying vocabulary is a `GeoVocabulary`.
 TEST(GeoVocabularyTest, VocabularyGetGeoInfoFromUnderlyingGeoVocab) {
   const VocabularyType geoSplitVocabType{
       VocabularyType::Enum::OnDiskCompressedGeoSplit};
@@ -241,7 +243,7 @@ TEST(GeoVocabularyTest, VocabularyGetGeoInfoFromUnderlyingGeoVocab) {
                    SourceCrsType{util::geo::CRSType::CRS84},
                    getLengthForTesting(exampleGeoLit),
                    getAreaForTesting(exampleGeoLit)};
-  EXPECT_GEOMETRYINFO(gi.value(), exp);
+  EXPECT_THAT(gi.value(), geoInfoMatcher(exp));
 
   // Cannot get `GeometryInfo` from `PolymorphicVocabulary` with no underlying
   // `GeoVocabulary`
