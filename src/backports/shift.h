@@ -40,7 +40,7 @@ struct ShiftLeftFn {
       if (n == 0 || mid == last) {
         return first;
       }
-      // Unlike the classic `std::move`, this also works for proxy references.
+      // Move the elements (through the proxy, if `*it` returns one).
       return ql::ranges::move(mid, last, first).out;
     }
   }

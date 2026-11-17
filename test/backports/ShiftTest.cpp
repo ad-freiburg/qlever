@@ -94,8 +94,7 @@ TYPED_TEST(ShiftTest, ShiftLeftPartialRange) {
 
 namespace {
 // A forward iterator over `int`s whose `*it` returns a proxy and not an `int&`,
-// like the iterator of a split column. Its `reference` is `int&` on purpose,
-// so that the classic `std::move` rejects it.
+// like the iterator of a split column.
 struct ProxyIterator {
   struct Proxy {
     int* ptr_;
@@ -110,7 +109,7 @@ struct ProxyIterator {
   using iterator_category = std::forward_iterator_tag;
   using difference_type = std::ptrdiff_t;
   using value_type = int;
-  using reference = int&;
+  using reference = Proxy;
   using pointer = void;
 
   int* ptr_ = nullptr;
