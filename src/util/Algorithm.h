@@ -191,7 +191,7 @@ auto removeDuplicates(const Range& input)
 // of the elements of the `input`.
 CPP_template(typename Array, typename Function)(
     requires ad_utility::isArray<std::decay_t<Array>> &&
-    ql::concepts::invocable<Function, typename Array::value_type>)
+    ql::concepts::invocable<Function, typename std::decay_t<Array>::value_type>)
 auto transformArray(Array&& input, Function function) {
   return std::apply(
       [&function](auto&&... vals) {

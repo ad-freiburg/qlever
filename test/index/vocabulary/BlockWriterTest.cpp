@@ -14,7 +14,7 @@
 
 #include <fstream>
 #include <future>
-#include <iterator>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -55,7 +55,11 @@ std::vector<std::pair<std::string, bool>> makeWords(size_t numWords) {
 std::string readFile(const std::string& filename) {
   std::ifstream file{filename, std::ios::binary};
   EXPECT_TRUE(file.is_open()) << filename;
-  return std::string{std::istreambuf_iterator<char>{file}, {}};
+  // Copy the whole buffer at once, reading char by char via
+  // `std::istreambuf_iterator` is very slow in Debug builds.
+  std::ostringstream contents;
+  contents << file.rdbuf();
+  return std::move(contents).str();
 }
 
 // Write the `words` with the word-by-word writer of a vocabulary of the given
