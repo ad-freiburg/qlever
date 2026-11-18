@@ -11,6 +11,7 @@
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_split.h>
 #include <gmock/gmock.h>
+#include <zstd.h>
 
 #include <fstream>
 #include <iostream>
@@ -421,6 +422,61 @@ TEST(BlobDiffProducer, stepWithoutChangesGivesTinyDiff) {
   // Observed: about 120 bytes, mostly the header of the diff file.
   EXPECT_LT(unchanged.diffFile_.size(), 1000u);
   EXPECT_EQ(decompress(unchanged.blob_), decompress(weeks.blobs_[1]));
+}
+
+// _____________________________________________________________________________
+TEST(BlobDiffProducer, diffBetweenSkipsWeeks) {
+  auto config = snapshotConfig();
+  std::string stateDir = freshDirectory();
+  absl::Cleanup cleanup = [&] { fs::remove_all(stateDir); };
+  auto weeks = runWeeks(config, stateDir, 3);
+
+  // A consumer with the blob of week 0 directly obtains the blob of week 2 or
+  // 3, byte for byte.
+  for (size_t target : {2, 3}) {
+    auto result = BlobDiffProducer::diffBetween(config, weeks.blobs_[0],
+                                                weeks.blobs_[target]);
+    EXPECT_EQ(result.blob_, weeks.blobs_[target]);
+    EXPECT_EQ(applyOrFail(weeks.blobs_[0], result.diffFile_),
+              weeks.blobs_[target])
+        << target;
+    EXPECT_EQ(result.statistics_, blobDiff::describeBlobDiff(result.diffFile_));
+    EXPECT_EQ(result.numInsertedTriples_, 0u);
+    EXPECT_EQ(result.numDeletedTriples_, 0u);
+    // The diff only applies to the blob of week 0.
+    auto wrongBase = blobDiff::applyBlobDiffToCompressedBase(
+        weeks.blobs_[1], result.diffFile_,
+        ad_utility::MemorySize::gigabytes(1));
+    EXPECT_TRUE(std::holds_alternative<blobDiff::BlobDiffError>(wrongBase));
+  }
+
+  // The diff of consecutive weeks is the same as the one of `step`, and the
+  // diff options of the config are used.
+  EXPECT_EQ(
+      BlobDiffProducer::diffBetween(config, weeks.blobs_[2], weeks.blobs_[3])
+          .diffFile_,
+      weeks.diffs_[3]);
+  auto withChecksums = config;
+  withChecksums.diffChecksumType_ = blobDiff::BlobChecksumType::crc32c;
+  auto checked = BlobDiffProducer::diffBetween(withChecksums, weeks.blobs_[3],
+                                               weeks.blobs_[1]);
+  EXPECT_THAT(checked.statistics_, HasSubstr("checksums: crc32c"));
+  EXPECT_EQ(applyOrFail(weeks.blobs_[3], checked.diffFile_), weeks.blobs_[1]);
+
+  // Blobs that cannot be decompressed, or a target without a blob index, are
+  // rejected.
+  std::vector<char> garbage(200, 'x');
+  EXPECT_ANY_THROW(
+      BlobDiffProducer::diffBetween(config, garbage, weeks.blobs_[1]));
+  EXPECT_ANY_THROW(
+      BlobDiffProducer::diffBetween(config, weeks.blobs_[1], garbage));
+  auto withoutIndex =
+      NamedCachedQueryBlobManager::compressBlob(decompress(weeks.blobs_[1]));
+  withoutIndex.resize(
+      ZSTD_findFrameCompressedSize(withoutIndex.data(), withoutIndex.size()));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      BlobDiffProducer::diffBetween(config, weeks.blobs_[0], withoutIndex),
+      HasSubstr("no blob index"));
 }
 
 // _____________________________________________________________________________

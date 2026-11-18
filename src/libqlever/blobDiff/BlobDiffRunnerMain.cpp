@@ -36,6 +36,7 @@ constexpr std::string_view usage =
     "  init     --config C --turtle T --state-dir S [--blob-out FILE]\n"
     "  diff     --config C --state-dir S --turtle T --diff-out FILE\n"
     "           [--blob-out FILE] [--compact]\n"
+    "  diff-blobs --config C --base BLOB --target BLOB --diff-out FILE\n"
     "  apply    --base BLOB --diff DIFF --out BLOB\n"
     "  inspect  --blob BLOB [--diff DIFF]\n";
 
@@ -105,6 +106,26 @@ int runDiff(int argc, char** argv) {
   return 0;
 }
 
+int runDiffBlobs(int argc, char** argv) {
+  std::string configFile, base, target, diffOut;
+  po::options_description options{"diff-blobs options"};
+  options.add_options()("config", po::value(&configFile)->required(),
+                        "The YAML config (for the options of the diff).")(
+      "base", po::value(&base)->required(),
+      "The blob that the diff applies to.")("target",
+                                            po::value(&target)->required(),
+                                            "The blob that the diff yields.")(
+      "diff-out", po::value(&diffOut)->required(), "Write the diff file here.");
+  parse(options, argc, argv);
+  auto config = BlobDiffConfig::fromFile(configFile);
+  auto result = BlobDiffProducer::diffBetween(config, readBinaryFile(base),
+                                              readBinaryFile(target));
+  writeFileAtomically(diffOut, result.diffFile_);
+  std::cout << result.statistics_ << "\n";
+  printSizes(result.blob_.size(), result.diffFile_.size());
+  return 0;
+}
+
 int runApply(int argc, char** argv) {
   std::string base, diff, out;
   po::options_description options{"apply options"};
@@ -161,6 +182,8 @@ int main(int argc, char** argv) {
       return runInit(argc, argv);
     } else if (command == "diff") {
       return runDiff(argc, argv);
+    } else if (command == "diff-blobs") {
+      return runDiffBlobs(argc, argv);
     } else if (command == "apply") {
       return runApply(argc, argv);
     } else if (command == "inspect") {

@@ -71,14 +71,15 @@ T read(ql::span<const char> bytes, size_t position) {
 // The header of a block of a ZSTD frame (see the ZSTD format specification).
 struct BlockHeader {
   static constexpr size_t size = 3;
-  static constexpr uint32_t compressedBlock = 2;
+  static constexpr uint32_t rleBlock = 1;
+  static constexpr uint32_t reservedBlockType = 3;
   bool isLast_;
   uint32_t type_;
   uint32_t blockSize_;
   // The number of bytes of the block including its header.
   size_t totalSize() const {
-    // A block of type 1 (RLE) only stores a single byte.
-    return size + (type_ == 1 ? 1 : blockSize_);
+    // An RLE block only stores a single byte.
+    return size + (type_ == rleBlock ? 1 : blockSize_);
   }
 };
 
@@ -94,7 +95,8 @@ std::optional<BlockHeader> readBlockHeader(ql::span<const char> bytes,
   };
   uint32_t value = byte(0) | byte(1) << 8 | byte(2) << 16;
   BlockHeader header{(value & 1) != 0, (value >> 1) & 3, value >> 3};
-  if (header.type_ == 3 || position + header.totalSize() > end) {
+  if (header.type_ == BlockHeader::reservedBlockType ||
+      position + header.totalSize() > end) {
     return std::nullopt;
   }
   return header;
