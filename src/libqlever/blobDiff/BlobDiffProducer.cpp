@@ -147,26 +147,27 @@ std::vector<char> serializeWithoutBase(const Qlever& qlever,
       serializationConfig);
 }
 
-// Compute the diff file that turns the compressed `baseBlob` into the
-// compressed `targetBlob` with the diff options of `config`, and verify it:
-// applying it to the `baseBlob` has to yield the `targetBlob` byte for byte
-// (otherwise throw). NOTE: `applyBlobDiffToCompressedBase` verifies the
-// checksum of the decompressed result, so the comparison of the compressed
-// bytes only checks that the recompression is deterministic (it is, because
-// the same ZSTD version compresses the same bytes with the same parameters in
-// this process, and copying the stable prefix of the base yields the same
-// bytes as compressing it again).
-std::vector<char> computeVerifiedDiff(const BlobDiffConfig& config,
-                                      ql::span<const char> baseBlob,
-                                      ql::span<const char> targetBlob) {
-  auto baseBytes = decompressOrThrow(baseBlob);
-  auto targetBytes = decompressOrThrow(targetBlob);
+// Compute the diff file that turns the `compressedBaseBlob` into the
+// `compressedTargetBlob` with the diff options of `config`, and verify it:
+// applying it to the `compressedBaseBlob` has to yield the
+// `compressedTargetBlob` byte for byte (otherwise throw). NOTE:
+// `applyBlobDiffToCompressedBase` verifies the checksum of the decompressed
+// result, so the comparison of the compressed bytes only checks that the
+// recompression is deterministic (it is, because the same ZSTD version
+// compresses the same bytes with the same parameters in this process, and
+// copying the stable prefix of the base yields the same bytes as compressing it
+// again).
+std::vector<char> computeVerifiedDiff(
+    const BlobDiffConfig& config, ql::span<const char> compressedBaseBlob,
+    ql::span<const char> compressedTargetBlob) {
+  auto baseBytes = decompressOrThrow(compressedBaseBlob);
+  auto targetBytes = decompressOrThrow(compressedTargetBlob);
   blobDiff::BlobDiffOptions diffOptions;
   diffOptions.compressionLevel_ = config.diffCompressionLevel_;
   diffOptions.checksumType_ = config.diffChecksumType_;
   // The blobs of the producer are written with an index (see
   // `blobCompression`), which stores their encoding.
-  auto targetIndex = blobCompression::readBlobIndex(targetBlob);
+  auto targetIndex = blobCompression::readBlobIndex(compressedTargetBlob);
   if (!targetIndex.has_value()) {
     throw std::runtime_error{
         "The target blob has no blob index (it was not written by "
@@ -179,14 +180,15 @@ std::vector<char> computeVerifiedDiff(const BlobDiffConfig& config,
       ql::span<const char>{targetBytes.data(), targetBytes.size()},
       diffOptions);
   auto applied = blobDiff::applyBlobDiffToCompressedBase(
-      baseBlob, diffFile, ad_utility::MemorySize::bytes(targetBytes.size()));
+      compressedBaseBlob, diffFile,
+      ad_utility::MemorySize::bytes(targetBytes.size()));
   if (const auto* error = std::get_if<blobDiff::BlobDiffError>(&applied)) {
     throw std::runtime_error{absl::StrCat(
         "Self-check failed: the diff file cannot be applied to the base "
         "compressed blob: ",
         error->message_)};
   }
-  if (!sameBytes(std::get<std::vector<char>>(applied), targetBlob)) {
+  if (!sameBytes(std::get<std::vector<char>>(applied), compressedTargetBlob)) {
     throw std::runtime_error{
         "Self-check failed: applying the diff file to the base compressed "
         "blob does not yield the target compressed blob byte for byte."};
@@ -321,11 +323,12 @@ BlobDiffProducer::WeeklyResult BlobDiffProducer::step(
 
 // _____________________________________________________________________________
 BlobDiffProducer::WeeklyResult BlobDiffProducer::diffBetween(
-    const BlobDiffConfig& config, ql::span<const char> baseBlob,
-    ql::span<const char> targetBlob) {
+    const BlobDiffConfig& config, ql::span<const char> compressedBaseBlob,
+    ql::span<const char> compressedTargetBlob) {
   WeeklyResult result;
-  result.blob_.assign(targetBlob.begin(), targetBlob.end());
-  result.diffFile_ = computeVerifiedDiff(config, baseBlob, targetBlob);
+  result.blob_.assign(compressedTargetBlob.begin(), compressedTargetBlob.end());
+  result.diffFile_ =
+      computeVerifiedDiff(config, compressedBaseBlob, compressedTargetBlob);
   result.statistics_ = blobDiff::describeBlobDiff(result.diffFile_);
   return result;
 }

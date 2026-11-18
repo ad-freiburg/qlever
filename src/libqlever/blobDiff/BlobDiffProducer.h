@@ -96,22 +96,22 @@ class BlobDiffProducer {
                            const std::string& stateDir,
                            bool forceCompaction = false);
 
-  // Compute the diff file that turns the compressed `baseBlob` into the
-  // compressed `targetBlob`, where both are results of `init` or `step` (for
+  // Compute the diff file that turns the `compressedBaseBlob` into the
+  // `compressedTargetBlob`, where both are results of `init` or `step` (for
   // example the blobs of week 80 and week 82, for a consumer that skips week
-  // 81). Applying the diff to the `baseBlob` (see
-  // `blobDiff::applyBlobDiffToCompressedBase`) yields the `targetBlob` byte for
-  // byte; this is verified (otherwise throw). Only the diff options of
-  // `config` are used (its compression level and checksum type), no state
-  // directory is needed or changed. The diff is a plain ZSTD "patch from" of
-  // the decompressed blobs, so it is small if the blobs stem from the same
-  // state directory (in which case the target is usually the later blob, but
-  // any order works). The `blob_` of the result is a copy of the `targetBlob`,
-  // and the numbers of inserted and deleted triples are zero (they are not
-  // known).
+  // 81). Applying the diff to the `compressedBaseBlob` (see
+  // `blobDiff::applyBlobDiffToCompressedBase`) yields the
+  // `compressedTargetBlob` byte for byte; this is verified (otherwise throw).
+  // Only the diff options of `config` are used (its compression level and
+  // checksum type), no state directory is needed or changed. The diff is a
+  // plain ZSTD "patch from" of the decompressed blobs, so it is small if the
+  // blobs stem from the same state directory (in which case the target is
+  // usually the later blob, but any order works). The `blob_` of the result is
+  // a copy of the `compressedTargetBlob`, and the numbers of inserted and
+  // deleted triples are zero (they are not known).
   static WeeklyResult diffBetween(const BlobDiffConfig& config,
-                                  ql::span<const char> baseBlob,
-                                  ql::span<const char> targetBlob);
+                                  ql::span<const char> compressedBaseBlob,
+                                  ql::span<const char> compressedTargetBlob);
 
   // Return a description of `blob` (its sizes and checksum), and, if a
   // `diffFile` is given, of the diff and whether it yields or applies to the
