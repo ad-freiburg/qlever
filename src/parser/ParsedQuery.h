@@ -114,8 +114,10 @@ class ParsedQuery {
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   // A function to modify the HTTP response for this operation before it is
   // sent. It can be used to set up responses (status code, body, ...) that
-  // depend on the operation result. Held by pointer, so that the parser doesn't
-  // depend on the HTTP library, nullptr means no middleware.
+  // depend on the operation result. A `nullptr` means no middleware.
+  //
+  // NOTE: This is a pointer (and not an `std::optional`), so that the parser
+  // doesn't depend on the HTTP library, see the forward declaration above.
   std::shared_ptr<const ResponseMiddleware> responseMiddleware_;
 #endif
 

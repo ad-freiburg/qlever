@@ -1,6 +1,6 @@
 // Copyright 2026 The QLever Authors, in particular:
 //
-// 2026 Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>, UFR
+// 2026 Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
@@ -19,9 +19,11 @@
 
 namespace ad_utility {
 
-// Generate random UUIDs as strings. This lives in its own header (and not in
-// `util/Random.h`), because `Random.h` is included almost everywhere (via
-// `EnumWithStrings.h` and `Log.h`), and the Boost.Uuid headers are expensive.
+// Generate random UUIDs as strings.
+//
+// NOTE: This class lives in its own header (and not in `util/Random.h`),
+// because `Random.h` is included almost everywhere (via `EnumWithStrings.h`
+// and `Log.h`) and the Boost.Uuid headers are expensive to compile.
 class UuidGenerator {
  public:
   explicit UuidGenerator(
