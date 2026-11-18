@@ -1350,7 +1350,7 @@ class CompressedExternalIdTableSorter
   // invoked concurrently for several blocks (it is for example used as a
   // `chunkwisePermutationWriter::ConcurrentBlockCallback`).
   auto makeAsyncPushBlockCallback() {
-    // Note: `self = this` instead of `this` circumvents a false-positive
+    // NOTE: `self = this` instead of `this` circumvents a false-positive
     // `-Wunused-lambda-capture` warning of Clang for generic lambdas.
     return [self = this](auto block, auto done) {
       // The view (and the rows that it refers to) has to stay alive until the
