@@ -87,7 +87,7 @@ std::optional<GeometryInfo> GeometryInfo::fromWktLiteral(std::string_view wkt) {
   }
 
   auto boundingBox = boundingBoxAsGeoPoints(parsed.value());
-  auto centroid = centroidAsGeoPoint(parsed.value());
+  auto centroid = centroidAsGeoPoint(parsed.value(), sourceCrs);
   auto numGeom = countChildGeometries(parsed.value());
   auto metricLength = computeMetricLength(parsed.value());
   if (!boundingBox.has_value() || !centroid.has_value()) {
@@ -226,7 +226,8 @@ std::optional<Centroid> GeometryInfo::getCentroid(std::string_view wkt) {
   if (!parseResult.parsedWkt_.has_value()) {
     return std::nullopt;
   }
-  return detail::centroidAsGeoPoint(parseResult.parsedWkt_.value());
+  return detail::centroidAsGeoPoint(parseResult.parsedWkt_.value(),
+                                    parseResult.sourceCrs_);
 }
 
 // ____________________________________________________________________________

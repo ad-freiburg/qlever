@@ -597,7 +597,7 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
   ASSERT_TRUE(parseRes1.parsedWkt_.has_value());
   auto parsed1 = parseRes1.parsedWkt_.value();
 
-  auto centroid1 = centroidAsGeoPoint(parsed1);
+  auto centroid1 = centroidAsGeoPoint(parsed1, parseRes1.sourceCrs_);
   Centroid centroidExp1{{4, 3}};
   EXPECT_CENTROID_NEAR(centroid1, centroidExp1);
 
