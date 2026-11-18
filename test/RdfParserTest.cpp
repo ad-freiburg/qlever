@@ -1896,9 +1896,9 @@ TEST(RdfParserTest, trigParser) {
     EXPECT_THAT(triples, ::testing::ElementsAreArray(expected));
 
     auto expectParsingFails = [](const std::string& input) {
-      auto parser = RdfStringParser<TriGParser<Tokenizer>>(encodedIriManager());
-      parser.setInputStream(input);
-      EXPECT_ANY_THROW(parser.parseAndReturnAllTriples());
+      auto failingParser = decltype(parser)(encodedIriManager());
+      failingParser.setInputStream(input);
+      EXPECT_ANY_THROW(failingParser.parseAndReturnAllTriples());
     };
 
     // `GRAPH` must be followed by a label.
@@ -1910,6 +1910,46 @@ TEST(RdfParserTest, trigParser) {
   };
   runTestsForParser(TriGRe2Parser{encodedIriManager()});
   runTestsForParser(TriGCtreParser{encodedIriManager()});
+}
+
+// Test that a `GRAPH` block that doesn't fit into a single parser buffer is
+// still parsed correctly: the stream parser backs up to the start of the
+// block and retries with a larger buffer (see
+// `RdfStreamParser::resetStateAndRead`), the same mechanism that already
+// handles any other oversized Turtle statement.
+// _____________________________________________________________________________
+TEST(RdfParserTest, trigGraphBlockLargerThanTheBuffer) {
+  std::string filename{gtestCurrentTestName()};
+  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
+  std::string statement = "<s0> <p0> <o0> .\n";
+  std::string graphBlock =
+      "GRAPH <g> {\n<s1> <p1> <o1> .\n<s2> <p2> <o2> .\n}\n";
+  ad_utility::makeOfstream(filename) << statement << graphBlock << statement;
+
+  auto internalGraphId =
+      qlever::specialIds().at(std::string{DEFAULT_GRAPH_IRI});
+  std::vector<TurtleTriple> expected{
+      {iri("<s0>"), iri("<p0>"), iri("<o0>"), internalGraphId},
+      {iri("<s1>"), iri("<p1>"), iri("<o1>"), iri("<g>")},
+      {iri("<s2>"), iri("<p2>"), iri("<o2>"), iri("<g>")},
+      {iri("<s0>"), iri("<p0>"), iri("<o0>"), internalGraphId}};
+
+  // `graphBlock` alone is larger than this, so parsing it needs several
+  // buffer refills while still inside the block.
+  auto bufferSize = 20_B;
+  auto testWithParser = [&](auto t) {
+    using Parser = typename decltype(t)::type;
+    Parser parser{qlever::InputFileSpecification{
+                      filename, qlever::Filetype::TriG, std::nullopt},
+                  bufferSize, encodedIriManager()};
+    std::vector<TurtleTriple> result;
+    while (auto batch = parser.getBatch()) {
+      result.insert(result.end(), batch.value().begin(), batch.value().end());
+    }
+    EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
+  };
+  testWithParser(ti<RdfStreamParser<TriGParser<Tokenizer>>>);
+  testWithParser(ti<RdfStreamParser<TriGParser<TokenizerCtre>>>);
 }
 
 // _____________________________________________________________________________
