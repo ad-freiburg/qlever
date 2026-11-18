@@ -177,7 +177,12 @@ constexpr inline std::string_view CACHED_RESULT_WITH_NAME_PREFIX =
 constexpr inline std::pair<std::string_view, std::string_view> GEOF_PREFIX = {
     "geof", "http://www.opengis.net/def/function/geosparql/"};
 constexpr inline std::pair<std::string_view, std::string_view> MATH_PREFIX = {
-    "math", "http://www.w3.org/2005/xpath-functions/math#"};
+    "math:", "http://www.w3.org/2005/xpath-functions/math#"};
+constexpr inline std::pair<std::string_view, std::string_view>
+    TENSOR_FUNCTION_PREFIX = {"dtf:", "https://w3id.org/rdf-tensor/functions#"};
+constexpr inline std::pair<std::string_view, std::string_view>
+    TENSOR_AGGREGATE_PREFIX = {"dta:",
+                               "https://w3id.org/rdf-tensor/aggregates#"};
 constexpr inline std::pair<std::string_view, std::string_view> XSD_PREFIX = {
     "xsd", "http://www.w3.org/2001/XMLSchema#"};
 constexpr inline std::pair<std::string_view, std::string_view> QL_PREFIX = {
@@ -261,14 +266,32 @@ constexpr inline char RDF_LANGTAG_STRING[] =
 
 constexpr inline std::string_view GEO_WKT_LITERAL =
     "http://www.opengis.net/ont/geosparql#wktLiteral";
+
+constexpr inline std::string_view TENSOR_NUMERIC_LITERAL =
+    "https://w3id.org/rdf-tensor/datatypes#NumericDataTensor";
+constexpr inline std::string_view TENSOR_LITERAL =
+    "https://w3id.org/rdf-tensor/datatypes#DataTensor";
+
 constexpr inline std::string_view GEO_JSON_LITERAL =
     "http://www.opengis.net/ont/geosparql#geoJSONLiteral";
 namespace string_constants::detail {
 constexpr inline std::string_view geo_literal_prefix = "\"^^<";
+constexpr inline std::string_view tensor_literal_prefix = "\"^^<";
 }  // namespace string_constants::detail
 static constexpr std::string_view GEO_LITERAL_SUFFIX =
     ad_utility::constexprStrCat<string_constants::detail::geo_literal_prefix,
                                 GEO_WKT_LITERAL,
+                                string_constants::detail::closeAngle>();
+
+// The suffixes of the string representations of tensor literals (used to
+// split them off into a separate vocabulary).
+constexpr inline std::string_view TENSOR_LITERAL_SUFFIX =
+    ad_utility::constexprStrCat<string_constants::detail::tensor_literal_prefix,
+                                TENSOR_LITERAL,
+                                string_constants::detail::closeAngle>();
+constexpr inline std::string_view TENSOR_NUMERIC_LITERAL_SUFFIX =
+    ad_utility::constexprStrCat<string_constants::detail::tensor_literal_prefix,
+                                TENSOR_NUMERIC_LITERAL,
                                 string_constants::detail::closeAngle>();
 
 constexpr std::string_view SF_PREFIX = "http://www.opengis.net/ont/sf#";

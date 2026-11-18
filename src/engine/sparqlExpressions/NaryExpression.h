@@ -190,6 +190,36 @@ SparqlExpression::Ptr makeIsBlankExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeIsGeoPointExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeBoundExpression(SparqlExpression::Ptr child);
 
+// Tensor functions (`dtf:*`, see `TensorExpression.cpp`). They return UNDEF if
+// an argument is not a tensor or if the shapes of the arguments differ.
+SparqlExpression::Ptr makeTensorFromStringExpression(
+    SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeTensorAddExpression(SparqlExpression::Ptr child1,
+                                              SparqlExpression::Ptr child2);
+SparqlExpression::Ptr makeTensorSubtractExpression(
+    SparqlExpression::Ptr child1, SparqlExpression::Ptr child2);
+SparqlExpression::Ptr makeTensorMultiplyExpression(
+    SparqlExpression::Ptr child1, SparqlExpression::Ptr child2);
+SparqlExpression::Ptr makeTensorDivideExpression(SparqlExpression::Ptr child1,
+                                                 SparqlExpression::Ptr child2);
+SparqlExpression::Ptr makeTensorDotProductExpression(
+    SparqlExpression::Ptr child1, SparqlExpression::Ptr child2);
+SparqlExpression::Ptr makeTensorEuclideanDistanceExpression(
+    SparqlExpression::Ptr child1, SparqlExpression::Ptr child2);
+SparqlExpression::Ptr makeTensorCosineSimilarityExpression(
+    SparqlExpression::Ptr child1, SparqlExpression::Ptr child2);
+SparqlExpression::Ptr makeTensorNormExpression(SparqlExpression::Ptr child);
+
+// Tensor aggregates (`dta:*`, see `engine/tensor/aggregate/TensorAggregate.h`).
+SparqlExpression::Ptr makeTensorSumExpr(SparqlExpression::Ptr child,
+                                        bool distinct = false);
+SparqlExpression::Ptr makeTensorAvgExpr(SparqlExpression::Ptr child,
+                                        bool distinct = false);
+SparqlExpression::Ptr makeTensorVarExpr(SparqlExpression::Ptr child,
+                                        bool distinct = false);
+SparqlExpression::Ptr makeTensorStdExpr(SparqlExpression::Ptr child,
+                                        bool distinct = false);
+
 namespace detail {
 template <auto function>
 struct VariadicExpressionFactory {

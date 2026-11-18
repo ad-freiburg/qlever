@@ -280,7 +280,7 @@ class GroupByImpl : public Operation {
     MAX,
     SUM,
     GROUP_CONCAT,
-    SAMPLE
+    SAMPLE,
   };
 
   // `GROUP_CONCAT` requires additional data.

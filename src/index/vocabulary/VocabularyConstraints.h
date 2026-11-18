@@ -7,6 +7,7 @@
 
 #include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/SplitVocabulary.h"
+#include "index/vocabulary/TensorDataVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyInMemoryBinSearch.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
@@ -80,12 +81,13 @@ CPP_concept MaybeProvidesGeoCellGrid =
 // two are semantically different (a vocabulary with holes needs a special
 // `getPositionOfWord`, but still never provides geometry information).
 template <typename T>
-CPP_concept NeverProvidesGeometryInfo =
-    ad_utility::SameAsAny<T, VocabularyInMemory, VocabularyInternalExternal,
-                          VocabularyInMemoryBinSearch,
-                          CompressedVocabulary<VocabularyInMemory>,
-                          CompressedVocabulary<VocabularyInternalExternal>,
-                          CompressedVocabulary<VocabularyInMemoryBinSearch>>;
+CPP_concept NeverProvidesGeometryInfo = ad_utility::SameAsAny<
+    T, VocabularyInMemory, VocabularyInternalExternal,
+    VocabularyInMemoryBinSearch, CompressedVocabulary<VocabularyInMemory>,
+    CompressedVocabulary<VocabularyInternalExternal>,
+    CompressedVocabulary<VocabularyInMemoryBinSearch>,
+    TensorDataVocabulary<CompressedVocabulary<VocabularyInternalExternal>>,
+    TensorDataVocabulary<VocabularyInMemory>>;
 
 // A variadic version of `NeverProvidesGeometryInfo` that guarantees the
 // semantics of the named concept for all of its template parameters `Ts...`.
@@ -93,6 +95,38 @@ template <typename... Ts>
 CPP_concept AllNeverProvideGeometryInfo =
     (... && NeverProvidesGeometryInfo<Ts>);
 
+// Do the same for the TensorDataVocabulary
+
+// This concept states that the given vocabulary implementation `T` might
+// provide precomputed `TensorData` via a `getTensorData` method (for example,
+// because an underlying vocabulary might be a `TensorDataVocabulary`). This
+// does not guarantee that such information is actually available. However, if a
+// class `T` satisfies this concept it is required to have a member function
+// `isTensorDataAvailable` to determine for sure.
+template <typename T>
+CPP_concept MaybeProvidesTensorData =
+    std::is_same_v<T, PolymorphicVocabulary> || isSplitVocabulary<T> ||
+    ad_utility::isInstantiation<T, TensorDataVocabulary>;
+
+// As a safeguard for the future: This concept states that a vocabulary
+// implementation will never provide precomputed `TensorData` via a
+// `getTensorData` method. A vocabulary class should only be added if it can be
+// GUARANTEED that this will be the case.
+// Note: This mirrors `NeverProvidesGeometryInfo` (with the roles of the
+// `GeoVocabulary` and the `TensorDataVocabulary` swapped).
+template <typename T>
+CPP_concept NeverProvidesTensorData = ad_utility::SameAsAny<
+    T, VocabularyInMemory, VocabularyInternalExternal,
+    VocabularyInMemoryBinSearch, CompressedVocabulary<VocabularyInMemory>,
+    CompressedVocabulary<VocabularyInternalExternal>,
+    CompressedVocabulary<VocabularyInMemoryBinSearch>,
+    GeoVocabulary<CompressedVocabulary<VocabularyInternalExternal>>,
+    GeoVocabulary<VocabularyInMemory>>;
+
+// A variadic version of `NeverProvidesTensorData` that guarantees the
+// semantics of the named concept for all of its template parameters `Ts...`.
+template <typename... Ts>
+CPP_concept AllNeverProvideTensorData = (... && NeverProvidesTensorData<Ts>);
 // A vocabulary implementation supports "zero-copy" (de)serialization if it (or,
 // recursively, its underlying vocabulary) provides a static
 // `fromZeroCopyDeserializer` factory. This currently holds for

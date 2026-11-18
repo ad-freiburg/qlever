@@ -52,7 +52,7 @@ struct BasicGraphPatternsInvariantTo {
         ad_utility::SimilarToAny<
             T, pq::Optional, pq::Union, pq::Subquery, pq::TransPath,
             pq::BasicGraphPattern, pq::Service, pq::PathQuery, pq::SpatialQuery,
-            pq::TextSearchQuery, pq::Minus, pq::GroupGraphPattern, pq::Describe,
+            pq::TensorIndexQuery, pq::TextSearchQuery, pq::Minus, pq::GroupGraphPattern, pq::Describe,
             pq::Load, pq::NamedCachedResult, pq::MaterializedViewQuery,
             pq::ExternalValuesQuery, pq::RowNumberQuery>);
     return false;

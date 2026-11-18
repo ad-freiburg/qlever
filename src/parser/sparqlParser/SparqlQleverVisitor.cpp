@@ -257,8 +257,10 @@ ExpressionPtr Visitor::processIriFunctionCall(
   std::string_view prefixName;
 
   // Only a custom aggregate may have `DISTINCT` before its argument list
-  // (SPARQL 1.1 grammar note 15), and `ql:stdev` is currently the only one.
-  if (distinct && functionName != absl::StrCat(QL_PREFIX.second, "stdev")) {
+  // (SPARQL 1.1 grammar note 15). These are `ql:stdev` and the tensor
+  // aggregates `dta:*`.
+  if (distinct && functionName != absl::StrCat(QL_PREFIX.second, "stdev") &&
+      !ql::starts_with(functionName, TENSOR_AGGREGATE_PREFIX.second)) {
     reportNotSupported(ctx,
                        "DISTINCT for the argument list of an IRI function "
                        "that is not an aggregate is");
@@ -301,11 +303,10 @@ ExpressionPtr Visitor::processIriFunctionCall(
   auto createTernary = createNaryExpression<3>(argList, checkNumArgs);
   // Create `SparqlExpression` with two or three children (currently used for
   // backward-compatible geof:distance function)
-  auto createBinaryOrTernary =
-      CPP_template_lambda(&argList)(typename F)(F function)(
-          requires std::is_invocable_r_v<ExpressionPtr, F, ExpressionPtr,
-                                         ExpressionPtr,
-                                         std::optional<ExpressionPtr>>) {
+  auto createBinaryOrTernary = CPP_template_lambda(&argList)(typename F)(
+      F function)(requires std::is_invocable_r_v<
+                  ExpressionPtr, F, ExpressionPtr, ExpressionPtr,
+                  std::optional<ExpressionPtr>>) {
     if (argList.size() == 2) {
       return function(std::move(argList[0]), std::move(argList[1]),
                       std::nullopt);
@@ -382,6 +383,44 @@ ExpressionPtr Visitor::processIriFunctionCall(
     } else if (functionName == "pow") {
       return createBinary(&makePowExpression);
     }
+  }
+  // Tensor functions (see `TensorExpression.cpp`).
+  static const UnaryFuncTable tensorUnaryFuncs{
+      {"tensor", &makeTensorFromStringExpression},
+      {"norm2", &makeTensorNormExpression},
+  };
+  static const BinaryFuncTable tensorBinaryFuncs{
+      {"add", &makeTensorAddExpression},
+      {"subtract", &makeTensorSubtractExpression},
+      {"multiply", &makeTensorMultiplyExpression},
+      {"divide", &makeTensorDivideExpression},
+      {"cosineSimilarity", &makeTensorCosineSimilarityExpression},
+      {"dotProduct", &makeTensorDotProductExpression},
+      {"euclideanDistance", &makeTensorEuclideanDistanceExpression},
+  };
+  if (checkPrefix(TENSOR_FUNCTION_PREFIX)) {
+    if (ad_utility::contains(tensorUnaryFuncs, functionName)) {
+      return createUnary(tensorUnaryFuncs.at(functionName));
+    } else if (ad_utility::contains(tensorBinaryFuncs, functionName)) {
+      return createBinary(tensorBinaryFuncs.at(functionName));
+    }
+  }
+
+  // Tensor aggregates (see `TensorAggregate.h`), which support `DISTINCT`.
+  using TensorAggFactory = Ptr (*)(Ptr, bool);
+  static const std::unordered_map<std::string_view, TensorAggFactory>
+      tensorAggFuncs{
+          {"sum", &makeTensorSumExpr},
+          {"avg", &makeTensorAvgExpr},
+          {"var", &makeTensorVarExpr},
+          {"std", &makeTensorStdExpr},
+      };
+  if (checkPrefix(TENSOR_AGGREGATE_PREFIX) &&
+      ad_utility::contains(tensorAggFuncs, functionName)) {
+    auto factory = tensorAggFuncs.at(functionName);
+    return createUnary([factory, distinct](Ptr child) -> Ptr {
+      return factory(std::move(child), distinct);
+    });
   }
 
   // XSD conversion functions.
@@ -1444,6 +1483,8 @@ GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
     return visitMagicServiceQuery<parsedQuery::PathQuery>(ctx);
   } else if (serviceIri.toStringRepresentation() == SPATIAL_SEARCH_IRI) {
     return visitMagicServiceQuery<parsedQuery::SpatialQuery>(ctx);
+  } else if (serviceIri.toStringRepresentation() == TENSOR_INDEX_IRI) {
+    return visitMagicServiceQuery<parsedQuery::TensorIndexQuery>(ctx);
   } else if (serviceIri.toStringRepresentation() == TEXT_SEARCH_IRI) {
     return visitMagicServiceQuery<parsedQuery::TextSearchQuery>(ctx);
   } else if (serviceIri.toStringRepresentation() == ROW_NUMBER_IRI) {
@@ -3008,22 +3049,24 @@ ExpressionPtr Visitor::visit(Parser::BuiltInCallContext* ctx) {
   using namespace sparqlExpression;
   // Create the expression using the matching factory function from
   // `NaryExpression.h`.
-  auto createUnary = CPP_template_lambda(&argList)(typename F)(F function)(
-      requires std::is_invocable_r_v<ExpressionPtr, F, ExpressionPtr>) {
+  auto createUnary = CPP_template_lambda(&argList)(typename F)(
+      F function)(requires std::is_invocable_r_v<ExpressionPtr, F,
+                                                 ExpressionPtr>) {
     AD_CORRECTNESS_CHECK(argList.size() == 1, argList.size());
     return function(std::move(argList[0]));
   };
 
-  auto createBinary = CPP_template_lambda(&argList)(typename F)(F function)(
-      requires std::is_invocable_r_v<ExpressionPtr, F, ExpressionPtr,
-                                     ExpressionPtr>) {
+  auto createBinary = CPP_template_lambda(&argList)(typename F)(
+      F function)(requires std::is_invocable_r_v<
+                  ExpressionPtr, F, ExpressionPtr, ExpressionPtr>) {
     AD_CORRECTNESS_CHECK(argList.size() == 2);
     return function(std::move(argList[0]), std::move(argList[1]));
   };
 
-  auto createTernary = CPP_template_lambda(&argList)(typename F)(F function)(
-      requires std::is_invocable_r_v<ExpressionPtr, F, ExpressionPtr,
-                                     ExpressionPtr, ExpressionPtr>) {
+  auto createTernary = CPP_template_lambda(&argList)(typename F)(
+      F function)(requires std::is_invocable_r_v<ExpressionPtr, F,
+                                                 ExpressionPtr, ExpressionPtr,
+                                                 ExpressionPtr>) {
     AD_CORRECTNESS_CHECK(argList.size() == 3);
     return function(std::move(argList[0]), std::move(argList[1]),
                     std::move(argList[2]));

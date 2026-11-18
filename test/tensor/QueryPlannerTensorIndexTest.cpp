@@ -1,0 +1,676 @@
+// Copyright 2025 The QLever Authors, in particular:
+//
+// 2025 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+#include <absl/strings/str_cat.h>
+#include <gmock/gmock.h>
+
+#include "engine/tensor/TensorIndex.h"
+#include "../QueryPlannerTestHelpers.h"
+#include "../printers/PayloadVariablePrinters.h"
+#include "../util/TripleComponentTestHelpers.h"
+#include "engine/tensor/TensorIndexConfig.h"
+#include "parser/MagicServiceQuery.h"
+#include "parser/PayloadVariables.h"
+
+namespace h = queryPlannerTestHelpers;
+namespace {
+using Var = Variable;
+constexpr auto iri = ad_utility::testing::iri;
+using queryPlannerTestHelpers::NamedTag;
+}  // namespace
+using ::testing::HasSubstr;
+
+// _____________________________________________________________________________
+TEST(QueryTensorIndexPlanner, TensorIndexService) {
+  auto scan = h::IndexScanFromStrings;
+  using V = Variable;
+  PayloadVariables emptyPayload{};
+
+  // Simple base cases
+  h::expect(
+      "PREFIX tensorIndex: <https://qlever.cs.uni-freiburg.de/tensorIndex/>"
+      "SELECT * WHERE {"
+      "?x <p> ?y."
+      "SERVICE tensorIndex: {"
+      "_:config tensorIndex:numNN 1 ; "
+      "tensorIndex:left ?y ;"
+      "tensorIndex:right ?b . "
+      "{ ?a <p> ?b } }}",
+      h::tensorIndex(1, std::nullopt, std::nullopt, TENSOR_INDEX_DEFAULT_ALGORITHM,
+                      TENSOR_INDEX_DEFAULT_DISTANCE, V{"?y"}, V{"?b"},
+                      std::nullopt, emptyPayload, scan("?x", "<p>", "?y"),
+                      scan("?a", "<p>", "?b")));
+  h::expect(
+      "PREFIX tensorIndex: <https://qlever.cs.uni-freiburg.de/tensorIndex/>"
+      "SELECT * WHERE {"
+      "?x <p> ?y."
+      "SERVICE tensorIndex: {"
+      "_:config tensorIndex:algorithm tensorIndex:naive ;"
+      "tensorIndex:numNN 1 ; "
+      "tensorIndex:left ?y ;"
+      "tensorIndex:right ?b ."
+      "{ ?a <p> ?b } }}",
+      h::tensorIndex(1, std::nullopt, std::nullopt, TensorIndexAlgorithm::NAIVE,
+                      TENSOR_INDEX_DEFAULT_DISTANCE, V{"?y"}, V{"?b"},
+                      std::nullopt, emptyPayload, scan("?x", "<p>", "?y"),
+                      scan("?a", "<p>", "?b")));
+  h::expect(
+      "PREFIX tensorIndex: <https://qlever.cs.uni-freiburg.de/tensorIndex/>"
+      "SELECT * WHERE {"
+      "?x <p> ?y."
+      "SERVICE tensorIndex: {"
+      "_:config tensorIndex:algorithm tensorIndex:ivf ;"
+      "tensorIndex:numNN 1 ; "
+      "tensorIndex:left ?y ;"
+      "tensorIndex:right ?b ."
+      "{ ?a <p> ?b } }}",
+      h::tensorIndex(1, std::nullopt, std::nullopt, TensorIndexAlgorithm::FAISS_IVF,
+                      TENSOR_INDEX_DEFAULT_DISTANCE, V{"?y"}, V{"?b"},
+                      std::nullopt, emptyPayload, scan("?x", "<p>", "?y"),
+                      scan("?a", "<p>", "?b")));
+  h::expect(
+      "PREFIX tensorIndex: <https://qlever.cs.uni-freiburg.de/tensorIndex/>"
+      "SELECT * WHERE {"
+      "?x <p> ?y."
+      "SERVICE tensorIndex: {"
+      "_:config tensorIndex:algorithm tensorIndex:ivf ;"
+      "tensorIndex:numNN 100 ; "
+      "tensorIndex:left ?y ;"
+      "tensorIndex:right ?b . "
+      "{ ?a <p> ?b } }}",
+      h::tensorIndex(100, std::nullopt, std::nullopt, TensorIndexAlgorithm::FAISS_IVF,
+                      TENSOR_INDEX_DEFAULT_DISTANCE, V{"?y"}, V{"?b"},
+                      std::nullopt, emptyPayload, scan("?x", "<p>", "?y"),
+                      scan("?a", "<p>", "?b")));
+  h::expect(
+      "PREFIX tensorIndex: <https://qlever.cs.uni-freiburg.de/tensorIndex/>"
+      "SELECT * WHERE {"
+      "?x <p> ?y."
+      "SERVICE tensorIndex: {"
+      "_:config tensorIndex:algorithm tensorIndex:ivf ;"
+      "tensorIndex:searchK 20 ; "
+      "tensorIndex:left ?y ;"
+      "tensorIndex:right ?b ."
+      "{ ?a <p> ?b } }}",
+      h::tensorIndex(100, 20, std::nullopt, TensorIndexAlgorithm::FAISS_IVF,
+                      TENSOR_INDEX_DEFAULT_DISTANCE, V{"?y"}, V{"?b"},
+                      std::nullopt, emptyPayload, scan("?x", "<p>", "?y"),
+                      scan("?a", "<p>", "?b")));
+  h::expect(
+      "PREFIX tensorIndex: <https://qlever.cs.uni-freiburg.de/tensorIndex/>"
+      "SELECT * WHERE {"
+      "?x <p> ?y."
+      "SERVICE tensorIndex: {"
+      "_:config tensorIndex:algorithm tensorIndex:ivf ;"
+      "tensorIndex:kIVF 20 ; "
+      "tensorIndex:left ?y ;"
+      "tensorIndex:right ?b ."
+      "{ ?a <p> ?b } }}",
+      h::tensorIndex(100, std::nullopt, 20, TensorIndexAlgorithm::FAISS_IVF,
+                      TENSOR_INDEX_DEFAULT_DISTANCE, V{"?y"}, V{"?b"},
+                      std::nullopt, emptyPayload, scan("?x", "<p>", "?y"),
+                      scan("?a", "<p>", "?b")));
+  h::expect(
+      "PREFIX tensorIndex: <https://qlever.cs.uni-freiburg.de/tensorIndex/>"
+      "SELECT * WHERE {"
+      "?x <p> ?y."
+      "SERVICE tensorIndex: {"
+      "_:config tensorIndex:distance tensorIndex:cosine ;"
+      "tensorIndex:numNN 1 ; "
+      "tensorIndex:left ?y ;"
+      "tensorIndex:right ?b ."
+      "{ ?a <p> ?b } }}",
+      h::tensorIndex(1, std::nullopt, std::nullopt, TENSOR_INDEX_DEFAULT_ALGORITHM,
+                      TensorDistanceAlgorithm::COSINE_SIMILARITY, V{"?y"},
+                      V{"?b"}, std::nullopt, emptyPayload,
+                      scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+  h::expect(
+      "PREFIX tensorIndex: <https://qlever.cs.uni-freiburg.de/tensorIndex/>"
+      "SELECT * WHERE {"
+      "?x <p> ?y."
+      "SERVICE tensorIndex: {"
+      "_:config tensorIndex:distance tensorIndex:angular ;"
+      "tensorIndex:numNN 1 ; "
+      "tensorIndex:left ?y ;"
+      "tensorIndex:right ?b . "
+      "{ ?a <p> ?b } }}",
+      h::tensorIndex(1, std::nullopt, std::nullopt, TENSOR_INDEX_DEFAULT_ALGORITHM,
+                      TensorDistanceAlgorithm::ANGULAR_DISTANCE, V{"?y"},
+                      V{"?b"}, std::nullopt, emptyPayload,
+                      scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+  h::expect(
+      "PREFIX tensorIndex: <https://qlever.cs.uni-freiburg.de/tensorIndex/>"
+      "SELECT * WHERE {"
+      "?x <p> ?y."
+      "SERVICE tensorIndex: {"
+      "_:config tensorIndex:distance tensorIndex:dot ;"
+      "tensorIndex:numNN 1 ; "
+      "tensorIndex:left ?y ;"
+      "tensorIndex:right ?b . "
+      "{ ?a <p> ?b } }}",
+      h::tensorIndex(1, std::nullopt, std::nullopt, TENSOR_INDEX_DEFAULT_ALGORITHM,
+                      TensorDistanceAlgorithm::DOT_PRODUCT, V{"?y"}, V{"?b"},
+                      std::nullopt, emptyPayload, scan("?x", "<p>", "?y"),
+                      scan("?a", "<p>", "?b")));
+}
+
+// _____________________________________________________________________________
+TEST(QueryTensorIndexPlanner, TensorIndexServicePayloadVars) {
+  // Test the <payload> option which allows selecting columns from the graph
+  // pattern inside the service.
+
+  auto scan = h::IndexScanFromStrings;
+  using V = Variable;
+  using PV = PayloadVariables;
+
+  h::expect(
+      "PREFIX tensorIndex:<https://qlever.cs.uni-freiburg.de/tensorIndex/>"
+      "SELECT * WHERE {"
+      "?x <p> ?y."
+      "SERVICE tensorIndex: {"
+      "_:config tensorIndex:distance tensorIndex:dot ;"
+      "tensorIndex:numNN 1 ; "
+      "tensorIndex:right ?b ;"
+      "tensorIndex:bindDistance ?dist ."
+      "_:config tensorIndex:left ?y ."
+      "_:config tensorIndex:payload ?a ."
+      "{ ?a <p> ?b } }}",
+      h::tensorIndex(1, std::nullopt, std::nullopt, TENSOR_INDEX_DEFAULT_ALGORITHM,
+                      TensorDistanceAlgorithm::DOT_PRODUCT, V{"?y"}, V{"?b"},
+                      V{"?dist"}, PV{std::vector<V>{V{"?a"}}},
+                      scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+  h::expect(
+      "PREFIX tensorIndex:<https://qlever.cs.uni-freiburg.de/tensorIndex/>"
+      "SELECT * WHERE {"
+      "?x <p> ?y."
+      "SERVICE tensorIndex: {"
+      "_:config tensorIndex:distance tensorIndex:dot ;"
+      "tensorIndex:numNN 1 ; "
+      "tensorIndex:right ?b ;"
+      "tensorIndex:bindDistance ?dist ."
+      "_:config tensorIndex:left ?y ."
+      "_:config tensorIndex:payload ?a , ?a2 ."
+      "{ ?a <p> ?a2 . ?a2 <p> ?b } }}",
+      h::tensorIndex(
+          1, std::nullopt, std::nullopt, TENSOR_INDEX_DEFAULT_ALGORITHM,
+          TensorDistanceAlgorithm::DOT_PRODUCT, V{"?y"}, V{"?b"}, V{"?dist"},
+          PV{std::vector<V>{V{"?a"}, V{"?a2"}}}, scan("?x", "<p>", "?y"),
+          h::Join(scan("?a", "<p>", "?a2"), scan("?a2", "<p>", "?b"))));
+
+  // Right variable and duplicates are possible (silently deduplicated during
+  // query result computation)
+  h::expect(
+      "PREFIX tensorIndex:<https://qlever.cs.uni-freiburg.de/tensorIndex/>"
+      "SELECT * WHERE {"
+      "?x <p> ?y."
+      "SERVICE tensorIndex: {"
+      "_:config tensorIndex:distance tensorIndex:dot ;"
+      "tensorIndex:numNN 1 ; "
+      "tensorIndex:right ?b ;"
+      "tensorIndex:bindDistance ?dist ."
+      "_:config tensorIndex:left ?y ."
+      "_:config tensorIndex:payload ?a, ?a, ?b, ?a2 ."
+      "{ ?a <p> ?a2 . ?a2 <p> ?b } }}",
+      h::tensorIndex(
+          1, std::nullopt, std::nullopt, TENSOR_INDEX_DEFAULT_ALGORITHM,
+          TensorDistanceAlgorithm::DOT_PRODUCT, V{"?y"}, V{"?b"}, V{"?dist"},
+          PV{std::vector<V>{V{"?a"}, V{"?a"}, V{"?b"}, V{"?a2"}}},
+          scan("?x", "<p>", "?y"),
+          h::Join(scan("?a", "<p>", "?a2"), scan("?a2", "<p>", "?b"))));
+
+  // Selecting all payload variables using "all"
+  h::expect(
+      "PREFIX tensorIndex:<https://qlever.cs.uni-freiburg.de/tensorIndex/>"
+      "SELECT * WHERE {"
+      "?x <p> ?y."
+      "SERVICE tensorIndex: {"
+      "_:config tensorIndex:distance tensorIndex:dot ;"
+      "tensorIndex:numNN 1 ; "
+      "tensorIndex:right ?b ;"
+      "tensorIndex:bindDistance ?dist ."
+      "_:config tensorIndex:left ?y ."
+      "_:config tensorIndex:payload <all> ."
+      "{ ?a <p> ?a2 . ?a2 <p> ?b } }}",
+      h::tensorIndex(
+          1, std::nullopt, std::nullopt, TENSOR_INDEX_DEFAULT_ALGORITHM,
+          TensorDistanceAlgorithm::DOT_PRODUCT, V{"?y"}, V{"?b"}, V{"?dist"},
+          PayloadVariables::all(), scan("?x", "<p>", "?y"),
+          h::Join(scan("?a", "<p>", "?a2"), scan("?a2", "<p>", "?b"))));
+  h::expect(
+      "PREFIX tensorIndex:<https://qlever.cs.uni-freiburg.de/tensorIndex/>"
+      "SELECT * WHERE {"
+      "?x <p> ?y."
+      "SERVICE tensorIndex: {"
+      "_:config tensorIndex:distance tensorIndex:dot ;"
+      "tensorIndex:numNN 1 ; "
+      "tensorIndex:right ?b ;"
+      "tensorIndex:bindDistance ?dist ."
+      "_:config tensorIndex:left ?y ."
+      "_:config tensorIndex:payload tensorIndex:all ."
+      "{ ?a <p> ?a2 . ?a2 <p> ?b } }}",
+      h::tensorIndex(
+          1, std::nullopt, std::nullopt, TENSOR_INDEX_DEFAULT_ALGORITHM,
+          TensorDistanceAlgorithm::DOT_PRODUCT, V{"?y"}, V{"?b"}, V{"?dist"},
+          PayloadVariables::all(), scan("?x", "<p>", "?y"),
+          h::Join(scan("?a", "<p>", "?a2"), scan("?a2", "<p>", "?b"))));
+
+  // All and explicitly named ones just select all
+  h::expect(
+      "PREFIX tensorIndex:<https://qlever.cs.uni-freiburg.de/tensorIndex/>"
+      "SELECT * WHERE {"
+      "?x <p> ?y."
+      "SERVICE tensorIndex: {"
+      "_:config tensorIndex:distance tensorIndex:dot ;"
+      "tensorIndex:numNN 1 ; "
+      "tensorIndex:right ?b ;"
+      "tensorIndex:bindDistance ?dist ."
+      "_:config tensorIndex:left ?y ."
+      "_:config tensorIndex:payload <all> ."
+      "_:config tensorIndex:payload ?a ."
+      "{ ?a <p> ?a2 . ?a2 <p> ?b } }}",
+      h::tensorIndex(
+          1, std::nullopt, std::nullopt, TENSOR_INDEX_DEFAULT_ALGORITHM,
+          TensorDistanceAlgorithm::DOT_PRODUCT, V{"?y"}, V{"?b"}, V{"?dist"},
+          PayloadVariables::all(), scan("?x", "<p>", "?y"),
+          h::Join(scan("?a", "<p>", "?a2"), scan("?a2", "<p>", "?b"))));
+}
+// _____________________________________________________________________________
+TEST(QueryTensorIndexPlanner, TensorIndexMultipleServiceSharedLeft) {
+  auto scan = h::IndexScanFromStrings;
+  using V = Variable;
+  using PV = PayloadVariables;
+
+  // Two SERVICE tensorIndex blocks that both declare the same left variable
+  h::expect(
+      "PREFIX tensorIndex: <https://qlever.cs.uni-freiburg.de/tensorIndex/>"
+      "SELECT * WHERE {"
+      "?x <p> ?y ."
+      "SERVICE tensorIndex: {"
+      "  _:config tensorIndex:algorithm tensorIndex:ivf ;"
+      "    tensorIndex:left ?y ;"
+      "    tensorIndex:right ?b ;"
+      "    tensorIndex:numNN 5 ;"
+      "    tensorIndex:bindDistance ?db ."
+      "  { ?ab <p1> ?b }"
+      "}"
+      "SERVICE tensorIndex: {"
+      "  _:config2 tensorIndex:algorithm tensorIndex:ivf ;"
+      "    tensorIndex:left ?y ;"
+      "    tensorIndex:right ?c ;"
+      "    tensorIndex:numNN 3 ;"
+      "    tensorIndex:payload ?ac ;"
+      "    tensorIndex:bindDistance ?dc ."
+      "  { ?ac <p2> ?c }"
+      " }"
+      "}",
+      // Both orders of assembling the two tensor-search children are allowed
+      ::testing::AnyOf(
+          h::tensorIndex(
+              3, std::nullopt, std::nullopt, TENSOR_INDEX_DEFAULT_ALGORITHM,
+              TENSOR_INDEX_DEFAULT_DISTANCE, V{"?y"}, V{"?c"}, V{"?dc"},
+              PV{std::vector<V>{V{"?ac"}}},
+              h::tensorIndex(5, std::nullopt, std::nullopt, TENSOR_INDEX_DEFAULT_ALGORITHM,
+                              TENSOR_INDEX_DEFAULT_DISTANCE, V{"?y"}, V{"?b"},
+                              V{"?db"}, PV{}, scan("?x", "<p>", "?y"),
+                              scan("?ab", "<p1>", "?b")),
+              scan("?ac", "<p2>", "?c")),
+          h::tensorIndex(
+              5, std::nullopt, std::nullopt, TENSOR_INDEX_DEFAULT_ALGORITHM,
+              TENSOR_INDEX_DEFAULT_DISTANCE, V{"?y"}, V{"?b"}, V{"?db"}, PV{},
+              h::tensorIndex(3, std::nullopt, std::nullopt, TENSOR_INDEX_DEFAULT_ALGORITHM,
+                              TENSOR_INDEX_DEFAULT_DISTANCE, V{"?y"}, V{"?c"},
+                              V{"?dc"}, PV{std::vector<V>{V{"?ac"}}},
+                              scan("?x", "<p>", "?y"),
+                              scan("?ac", "<p2>", "?c")),
+              scan("?ab", "<p1>", "?b"))));
+}
+//
+// _____________________________________________________________________________
+TEST(QueryTensorIndexPlanner, TensorIndexMissingConfig) {
+  // Tests with incomplete config
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX tensorIndex: "
+                "<https://qlever.cs.uni-freiburg.de/tensorIndex/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE tensorIndex: {"
+                "_:config tensorIndex:right ?b ;"
+                "tensorIndex:numNN 5 . "
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::ContainsRegex("Missing parameter `<left>`"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX tensorIndex: "
+                "<https://qlever.cs.uni-freiburg.de/tensorIndex/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE tensorIndex: {"
+                "_:config tensorIndex:right ?b ;"
+                "tensorIndex:numNN 5 . "
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::ContainsRegex("Missing parameter `<left>`"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX tensorIndex: "
+                "<https://qlever.cs.uni-freiburg.de/tensorIndex/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE tensorIndex: {"
+                "_:config tensorIndex:left ?y ;"
+                "tensorIndex:numNN 5 . "
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::ContainsRegex("Missing parameter `<right>`"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX tensorIndex: "
+                "<https://qlever.cs.uni-freiburg.de/tensorIndex/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE tensorIndex: {"
+                "_:config tensorIndex:left ?y ;"
+                "tensorIndex:numNN 5 . "
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::ContainsRegex("Missing parameter `<right>`"));
+}
+
+// _____________________________________________________________________________
+TEST(QueryTensorIndexPlanner, TensorIndexInvalidOperationsInService) {
+  // Test that unallowed operations inside the SERVICE statement throw
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX tensorIndex: "
+                "<https://qlever.cs.uni-freiburg.de/tensorIndex/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y."
+                "SERVICE tensorIndex: {"
+                "_:config tensorIndex:left ?y ;"
+                "tensorIndex:right ?b ;"
+                "tensorIndex:numNN 1 . "
+                "{ ?a <p> ?b }"
+                "SERVICE <http://example.com/> { ?a <something> <else> }"
+                " }}",
+                ::testing::_),
+      ::testing::ContainsRegex("Unsupported element in a magic service query "
+                               "of type `tensor search`"));
+}
+
+// _____________________________________________________________________________
+TEST(QueryTensorIndexPlanner, TensorIndexServiceMultipleGraphPatterns) {
+  // Test that the SERVICE statement may only contain at most one graph
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX tensorIndex: "
+                "<https://qlever.cs.uni-freiburg.de/tensorIndex/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y."
+                "SERVICE tensorIndex: {"
+                "_:config tensorIndex:left ?y ;"
+                "tensorIndex:right ?b ;"
+                "tensorIndex:numNN 1 . "
+                "{ ?a <p> ?b }"
+                "{ ?a <p2> ?c } }}",
+                ::testing::_),
+      ::testing::ContainsRegex("A magic SERVICE query must not contain more "
+                               "than one nested group graph pattern"));
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, TensorIndexIncorrectConfigValues) {
+  // Tests with mistakes in the config
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX tensorIndex: "
+                "<https://qlever.cs.uni-freiburg.de/tensorIndex/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE tensorIndex: {"
+                "_:config tensorIndex:right ?b ;"
+                "tensorIndex:left ?y ;"
+                "tensorIndex:numNN \"5\" . "
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::ContainsRegex("`<numNN>` expects a non-negative integer"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX tensorIndex: "
+                "<https://qlever.cs.uni-freiburg.de/tensorIndex/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE tensorIndex: {"
+                "_:config tensorIndex:right ?b ;"
+                "tensorIndex:left ?y ;"
+                "tensorIndex:searchK \"1\" ."
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::ContainsRegex("`<searchK>` expects a non-negative integer"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX tensorIndex: "
+                "<https://qlever.cs.uni-freiburg.de/tensorIndex/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE tensorIndex: {"
+                "_:config tensorIndex:right ?b ;"
+                "tensorIndex:left ?y ;"
+                "tensorIndex:kIVF \"1\" ."
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::ContainsRegex("`<kIVF>` expects a non-negative integer"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX tensorIndex: "
+                "<https://qlever.cs.uni-freiburg.de/tensorIndex/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE tensorIndex: {"
+                "_:config tensorIndex:right ?b ;"
+                "tensorIndex:left ?y ;"
+                "tensorIndex:numNN 5 ;"
+                "tensorIndex:algorithm \"1\" ."
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::ContainsRegex("parameter `<algorithm>` needs an IRI"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX tensorIndex: "
+                "<https://qlever.cs.uni-freiburg.de/tensorIndex/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE tensorIndex: {"
+                "_:config tensorIndex:right ?b ;"
+                "tensorIndex:left ?y ;"
+                "tensorIndex:numNN 5 ;"
+                "tensorIndex:algorithm <http://example.com/some-nonsense> ."
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::ContainsRegex("`<algorithm>` does not refer to a supported "
+                               "tensor search algorithm"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX tensorIndex: "
+                "<https://qlever.cs.uni-freiburg.de/tensorIndex/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE tensorIndex: {"
+                "_:config tensorIndex:right ?b ;"
+                "tensorIndex:left ?y ;"
+                "tensorIndex:numNN 5 ;"
+                "<http://example.com/some-nonsense> 123 ."
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::ContainsRegex("Unsupported argument"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX tensorIndex: "
+                "<https://qlever.cs.uni-freiburg.de/tensorIndex/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE tensorIndex: {"
+                "_:config tensorIndex:right ?b ;"
+                "tensorIndex:left ?y ;"
+                "tensorIndex:numNN 5 ;"
+                "tensorIndex:bindDistance 123 ."
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::ContainsRegex("`<bindDistance>` has to be a variable"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX tensorIndex: "
+                "<https://qlever.cs.uni-freiburg.de/tensorIndex/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE tensorIndex: {"
+                "_:config tensorIndex:right ?b ;"
+                "tensorIndex:left ?y ;"
+                "tensorIndex:numNN 5 ;"
+                "tensorIndex:payload 123 ."
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::ContainsRegex(
+          "`<payload>` parameter must be either a variable "
+          "to be selected or `<all>`"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX tensorIndex: "
+                "<https://qlever.cs.uni-freiburg.de/tensorIndex/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE tensorIndex: {"
+                "_:config tensorIndex:right ?b ;"
+                "tensorIndex:left ?y ;"
+                "tensorIndex:numNN 5 ;"
+                "tensorIndex:payload <http://some.iri.that.is.not.all> ."
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::ContainsRegex(
+          "`<payload>` parameter must be either a variable "
+          "to be selected or `<all>`"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX tensorIndex: "
+                "<https://qlever.cs.uni-freiburg.de/tensorIndex/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE tensorIndex: {"
+                "_:config tensorIndex:right ?b ;"
+                "tensorIndex:left ?y ;"
+                "tensorIndex:numNN 5 ;"
+                "tensorIndex:bindDistance ?dist_a ;"
+                "tensorIndex:bindDistance ?dist_b ."
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::ContainsRegex("`<bindDistance>` has already been set"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX tensorIndex: "
+                "<https://qlever.cs.uni-freiburg.de/tensorIndex/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE tensorIndex: {"
+                "_:config tensorIndex:right 123 ;"
+                "tensorIndex:left ?y ;"
+                "tensorIndex:numKnn 5 ."
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::ContainsRegex("`<right>` has to be a variable"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX tensorIndex: "
+                "<https://qlever.cs.uni-freiburg.de/tensorIndex/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE tensorIndex: {"
+                "_:config tensorIndex:right ?b ;"
+                "tensorIndex:left \"abc\" ;"
+                "tensorIndex:numKnn 5 ."
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::ContainsRegex("`<left>` has to be a variable"));
+}
+
+// _____________________________________________________________________________
+TEST(QueryTensorIndexPlanner, TensorIndexLegacyPredicateSupport) {
+  auto scan = h::IndexScanFromStrings;
+  using V = Variable;
+
+  // Test that the nearest neighbors special predicate is still accepted but
+  // produces a warning
+  h::expect(
+      "SELECT ?x ?y WHERE {"
+      "?x <p> ?y."
+      "?a <p> ?b."
+      "?y <tensor-nearest-neighbors:500> ?b }",
+      h::QetWithWarnings(
+          {"special predicate <tensor-nearest-neighbors:...> is deprecated"},
+          h::tensorIndex(500, std::nullopt, std::nullopt, TENSOR_INDEX_DEFAULT_ALGORITHM,
+                          TENSOR_INDEX_DEFAULT_DISTANCE, V{"?y"}, V{"?b"},
+                          std::nullopt, PayloadVariables::all(),
+                          scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b"))));
+  h::expect(
+      "SELECT ?x ?y WHERE {"
+      "?x <p> ?y."
+      "?a <p> ?b."
+      "?y <tensor-nearest-neighbors:20> ?b }",
+      h::QetWithWarnings(
+          {"special predicate <tensor-nearest-neighbors:...> is deprecated"},
+          h::tensorIndex(20, std::nullopt, std::nullopt, TENSOR_INDEX_DEFAULT_ALGORITHM,
+                          TENSOR_INDEX_DEFAULT_DISTANCE, V{"?y"}, V{"?b"},
+                          std::nullopt, PayloadVariables::all(),
+                          scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b"))));
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("SELECT ?x ?y WHERE {"
+                "?x <p> ?y."
+                "?a <p> ?b."
+                "?y <tensor-nearest-neighbors:1:-200> ?b. "
+                "}",
+                ::testing::_),
+      ::testing::ContainsRegex("unknown triple"));
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("SELECT ?x ?y WHERE {"
+                "?x <p> ?y."
+                "?a <p> ?b."
+                "?y <tensor-nearest-neighbors:0:-1> ?b .}",
+                ::testing::_),
+      ::testing::ContainsRegex("unknown triple"));
+
+  EXPECT_ANY_THROW(
+      h::expect("SELECT ?x ?y WHERE {"
+                "?x <p> ?y."
+                "?a <p> ?b."
+                "?y <tensor-nearest-neighbors:500> ?b ."
+                "?y <a> ?b}",
+                ::testing::_));
+
+  EXPECT_ANY_THROW(
+      h::expect("SELECT ?x ?y WHERE {"
+                "?y <p> ?b."
+                "?y <tensor-nearest-neighbors:1> ?b }",
+                ::testing::_));
+
+  EXPECT_ANY_THROW(
+      h::expect("SELECT ?x ?y WHERE {"
+                "?x <p> ?y."
+                "?y <tensor-nearest-neighbors:2> <a> }",
+                ::testing::_));
+
+  EXPECT_ANY_THROW(
+      h::expect("SELECT ?x ?y WHERE {"
+                "?x <p> ?y."
+                "<a> <tensor-nearest-neighbors:2> ?y }",
+                ::testing::_));
+
+  EXPECT_ANY_THROW(
+      h::expect("SELECT ?x ?y WHERE {"
+                "?x <p> ?y."
+                "?a <p> ?b."
+                "?y <tensor-nearest-neighbors:> ?b }",
+                ::testing::_));
+}

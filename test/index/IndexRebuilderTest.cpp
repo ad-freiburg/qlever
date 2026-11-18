@@ -103,6 +103,19 @@ std::vector<std::string> getVocabSuffixesForType(
               ".geometry.words.external.offsets",
               ".geometry.words.internal",
               ".geometry.words.internal.ids"};
+    case OnDiskCompressedTensorSplit:
+      return {".codebooks",
+              ".words.external",
+              ".words.external.offsets",
+              ".words.internal",
+              ".words.internal.ids",
+              ".tensors.codebooks",
+              ".tensors.words.external",
+              ".tensors.words.external.offsets",
+              ".tensors.words.internal",
+              ".tensors.words.internal.ids",
+              ".tensors.tensors",
+              ".tensors.tensors.offsets"};
     default:
       AD_FAIL();
   }

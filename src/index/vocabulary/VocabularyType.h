@@ -26,6 +26,7 @@ enum struct VocabularyTypeEnum {
   InMemoryCompressed,
   OnDiskCompressed,
   OnDiskCompressedGeoSplit,
+  OnDiskCompressedTensorSplit,
   // NOTE: The "with holes" variants are not used for regular index building
   // (they cannot even be built word by word, see
   // `VocabularyInMemoryBinSearch`). They are only used for vocabularies that
@@ -34,7 +35,7 @@ enum struct VocabularyTypeEnum {
   InMemoryUncompressedWithHoles,
   InMemoryCompressedWithHoles
 };
-QLEVER_ENUM_SIZE(VocabularyTypeEnum, 7);
+QLEVER_ENUM_SIZE(VocabularyTypeEnum, 8);
 }  // namespace detail
 class VocabularyType
     : public EnumWithStrings<VocabularyType, detail::VocabularyTypeEnum> {
@@ -43,29 +44,32 @@ class VocabularyType
   using Enum = detail::VocabularyTypeEnum;
 
   static constexpr std::array<std::pair<Enum, std::string_view>,
-                              qlever::enumSize<Enum>>
+                              qlever::enumSize<Enum> >
       descriptions_{
           {{Enum::InMemoryUncompressed, "in-memory-uncompressed"},
            {Enum::OnDiskUncompressed, "on-disk-uncompressed"},
            {Enum::InMemoryCompressed, "in-memory-compressed"},
            {Enum::OnDiskCompressed, "on-disk-compressed"},
            {Enum::OnDiskCompressedGeoSplit, "on-disk-compressed-geo-split"},
+           {Enum::OnDiskCompressedTensorSplit,
+            "on-disk-compressed-tensor-split"},
            {Enum::InMemoryUncompressedWithHoles,
             "in-memory-uncompressed-with-holes"},
            {Enum::InMemoryCompressedWithHoles,
             "in-memory-compressed-with-holes"}}};
   // The vocabulary types that can be used to build a regular index, i.e. all
   // types but the "with holes" variants (see above).
-  static constexpr std::array<Enum, 5> allForIndexBuilding_{
-      Enum::InMemoryUncompressed, Enum::OnDiskUncompressed,
-      Enum::InMemoryCompressed, Enum::OnDiskCompressed,
-      Enum::OnDiskCompressedGeoSplit};
+  static constexpr std::array<Enum, 6> allForIndexBuilding_{
+      Enum::InMemoryUncompressed,     Enum::OnDiskUncompressed,
+      Enum::InMemoryCompressed,       Enum::OnDiskCompressed,
+      Enum::OnDiskCompressedGeoSplit, Enum::OnDiskCompressedTensorSplit};
 
   static const VocabularyType InMemoryUncompressed;
   static const VocabularyType OnDiskUncompressed;
   static const VocabularyType InMemoryCompressed;
   static const VocabularyType OnDiskCompressed;
   static const VocabularyType OnDiskCompressedGeoSplit;
+  static const VocabularyType OnDiskCompressedTensorSplit;
   static const VocabularyType InMemoryUncompressedWithHoles;
   static const VocabularyType InMemoryCompressedWithHoles;
 
@@ -112,6 +116,8 @@ const inline VocabularyType VocabularyType::OnDiskCompressed{
     VocabularyType::Enum::OnDiskCompressed};
 const inline VocabularyType VocabularyType::OnDiskCompressedGeoSplit{
     VocabularyType::Enum::OnDiskCompressedGeoSplit};
+const inline VocabularyType VocabularyType::OnDiskCompressedTensorSplit{
+    VocabularyType::Enum::OnDiskCompressedTensorSplit};
 const inline VocabularyType VocabularyType::InMemoryUncompressedWithHoles{
     VocabularyType::Enum::InMemoryUncompressedWithHoles};
 const inline VocabularyType VocabularyType::InMemoryCompressedWithHoles{

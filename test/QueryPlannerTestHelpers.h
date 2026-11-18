@@ -11,6 +11,8 @@
 #include <optional>
 #include <variant>
 
+#include "../src/engine/tensor/TensorIndex.h"
+#include "../src/engine/TextIndexScanForEntity.h"
 #include "./util/GTestHelpers.h"
 #include "./util/ParsedQueryTestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
@@ -40,7 +42,6 @@
 #include "engine/QueryPlanner.h"
 #include "engine/Sort.h"
 #include "engine/SpatialJoin.h"
-#include "engine/TextIndexScanForEntity.h"
 #include "engine/TextIndexScanForWord.h"
 #include "engine/TextLimit.h"
 #include "engine/TransitivePathBase.h"
@@ -460,6 +461,44 @@ struct SpatialJoinMatcher {
 };
 constexpr inline SpatialJoinMatcher spatialJoin;
 constexpr inline SpatialJoinMatcher<true> spatialJoinFilterSubstitute;
+
+// Match a TensorIndex operation, similar to above
+template <bool Substitute = false>
+struct TensorIndexMatcher {
+  template <
+      QL_CONCEPT_OR_TYPENAME(ql::concepts::same_as<QetMatcher>)... ChildArgs>
+  auto operator()(ssize_t maxResults, 
+                  std::optional<size_t> searchK, 
+                  std::optional<size_t> nTrees, 
+                  TensorIndexAlgorithm algorithm,
+                  TensorDistanceAlgorithm distanceAlgorithm,                  
+                  Variable left,
+                  Variable right, 
+                  std::optional<Variable> distanceVariable,
+                  PayloadVariables payloadVariables,
+                  const ChildArgs&... childMatchers) const {
+    return RootOperation<::TensorIndex>(AllOf(
+        children(childMatchers...),
+        AD_PROPERTY(::TensorIndex, onlyForTestingGetMaxResults,
+                    Eq(maxResults)),
+        AD_PROPERTY(::TensorIndex, onlyForTestingGetSearchK,
+                    Eq(searchK)),
+        AD_PROPERTY(::TensorIndex, onlyForTestingGetNTrees,
+                    Eq(nTrees)),
+        AD_PROPERTY(::TensorIndex, getAlgorithm,
+                    Eq(algorithm)),
+        AD_PROPERTY(::TensorIndex, getDistanceFunction,
+                    Eq(distanceAlgorithm)),
+        AD_PROPERTY(::TensorIndex, onlyForTestingGetVariables,
+                    Eq(std::pair(left, right))),
+        AD_PROPERTY(::TensorIndex, onlyForTestingGetDistanceVariable,
+                    Eq(distanceVariable)),
+        AD_PROPERTY(::TensorIndex, onlyForTestingGetPayloadVariables,
+                    Eq(payloadVariables))));
+  }
+};
+constexpr inline TensorIndexMatcher tensorIndex;
+constexpr inline TensorIndexMatcher<true> tensorIndexFilterSubstitute;
 
 // Match a GroupBy operation
 static constexpr auto GroupBy =

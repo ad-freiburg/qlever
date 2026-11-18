@@ -511,6 +511,22 @@ std::optional<ad_utility::GeoPointOrWkt> GeoPointOrWktValueGetter::operator()(
 }
 
 //______________________________________________________________________________
+std::optional<ad_utility::TensorData> TensorValueGetter::operator()(
+    const LiteralOrIri& litOrIri, const EvaluationContext*) const {
+  return ql::exportIds::literalOrIriToTensorData(litOrIri);
+}
+
+//______________________________________________________________________________
+std::optional<ad_utility::TensorData> TensorValueGetter::operator()(
+    ValueId id, const EvaluationContext* context) const {
+  // Fast path for the words of a `TensorDataVocabulary` (precomputed tensors),
+  // otherwise the literal is fetched and parsed, see
+  // `ql::exportIds::idToTensorData`.
+  return ql::exportIds::idToTensorData(context->_qec.getIndex(), id,
+                                       context->_localVocab);
+}
+
+//______________________________________________________________________________
 CPP_template(typename T, typename ValueGetter)(
     requires(concepts::same_as<sparqlExpression::IdOrLiteralOrIri, T> ||
              concepts::same_as<std::optional<std::string>, T>))

@@ -30,6 +30,7 @@
 #include "engine/ResponseJson.h"
 #include "engine/SparqlProtocol.h"
 #include "engine/UpdateMetadata.h"
+#include "engine/tensor/TensorIndex.h"
 #include "global/RuntimeParameters.h"
 #include "libqlever/Qlever.h"
 #include "parser/ParsedQuery.h"
@@ -87,6 +88,7 @@ Server::Server(
     AD_LOG_INFO << "Access token for restricted API calls is \"" << accessToken_
                 << "\"" << std::endl;
   }
+  TensorIndexImpl::initializeGlobalRuntimeParameters();
 }
 
 // _____________________________________________________________________________
@@ -1308,9 +1310,12 @@ Awaitable<void> Server::processQuery(
 
   // This actually processes the query and sends the result in the
   // requested format.
+  AD_LOG_TIME_START(processQueryAndSendResult);
   co_await sendStreamableResponse(request, AD_FWD(send), mediaType,
                                   plannedQuery.value(), requestTimer,
                                   cancellationHandle);
+
+  AD_LOG_TIME_END(processQueryAndSendResult);
   // Print the runtime info. This needs to be done after the query
   // was computed.
   AD_LOG_INFO << "Done processing query and sending result"

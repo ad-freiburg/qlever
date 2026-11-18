@@ -22,6 +22,7 @@
 #include "parser/PathQuery.h"
 #include "parser/RowNumberQuery.h"
 #include "parser/SpatialQuery.h"
+#include "parser/TensorIndexQuery.h"
 #include "parser/TextSearchQuery.h"
 #include "parser/TripleComponent.h"
 #include "rdfTypes/Variable.h"
@@ -227,8 +228,9 @@ struct Bind {
 using GraphPatternOperationVariant =
     std::variant<Optional, Union, Subquery, TransPath, Bind, BasicGraphPattern,
                  Values, Service, PathQuery, SpatialQuery, TextSearchQuery,
-                 Minus, GroupGraphPattern, Describe, Load, NamedCachedResult,
-                 MaterializedViewQuery, ExternalValuesQuery, RowNumberQuery>;
+                 TensorIndexQuery, Minus, GroupGraphPattern, Describe, Load,
+                 NamedCachedResult, MaterializedViewQuery, ExternalValuesQuery,
+                 RowNumberQuery>;
 struct GraphPatternOperation
     : public GraphPatternOperationVariant,
       public VisitMixin<GraphPatternOperation, GraphPatternOperationVariant> {

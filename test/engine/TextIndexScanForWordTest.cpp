@@ -7,6 +7,7 @@
 
 #include <boost/iostreams/filter/zlib.hpp>
 
+#include "engine/TextIndexScanForWord.h"
 #include "../WordsAndDocsFileLineCreator.h"
 #include "../printers/VariablePrinters.h"
 #include "../util/GTestHelpers.h"
@@ -15,7 +16,6 @@
 #include "../util/OperationTestHelpers.h"
 #include "./TextIndexScanTestHelpers.h"
 #include "engine/IndexScan.h"
-#include "engine/TextIndexScanForWord.h"
 #include "parser/ParsedQuery.h"
 
 using namespace ad_utility::testing;

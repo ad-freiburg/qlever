@@ -1,0 +1,38 @@
+{
+    "version": 8,
+    "configurePresets": [
+        {
+            "name": "QLever Conda configure preset",
+            "displayName": "QLever Conda configure preset",
+            "description": "Sets Ninja generator, build and install directory using the Qlever conda environment",
+            "generator": "Ninja",
+            "environment": {
+                "PATH": "$penv{HOME}/miniconda3/envs/qlever/bin:$penv{PATH}",
+                "LD_LIBRARY_PATH": "$penv{HOME}/miniconda3/envs/qlever/lib",
+                "CMAKE_PREFIX_PATH": "$penv{CMAKE_PREFIX_PATH}:/home/kantz/miniconda3/envs/qlever"
+            },
+            "binaryDir": "${sourceDir}/build/vs",
+            "cmakeExecutable": "/home/kantz/miniconda3/envs/qlever/bin/cmake",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_MODULE_PATH": "${sourceDir}/build/Debug/generators",
+                "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}",
+                "CMAKE_C_COMPILER": "gcc",
+                "CMAKE_CXX_COMPILER": "g++",
+                "CMAKE_AR": "x86_64-conda-linux-gnu-ar",
+                "DONT_UPDATE_COMPILATION_INFO": "true",
+                "USE_PARALLEL": "true",
+                "QLEVER_USE_TENSOR_BLAS": "true"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "QLever Conda configure preset",
+            "displayName": "QLever Conda configure preset",
+            "description": "Sets Ninja generator, build and install directory using the Qlever conda environment",
+            "jobs": 20,
+            "configurePreset": "QLever Conda configure preset"
+        }
+    ]
+}

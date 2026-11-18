@@ -56,8 +56,6 @@
 #include "engine/Service.h"
 #include "engine/Sort.h"
 #include "engine/SpatialJoin.h"
-#include "engine/TextIndexScanForEntity.h"
-#include "engine/TextIndexScanForWord.h"
 #include "engine/TextLimit.h"
 #include "engine/TransitivePathBase.h"
 #include "engine/Union.h"
@@ -74,7 +72,11 @@
 #include "parser/MaterializedViewQuery.h"
 #include "parser/PayloadVariables.h"
 #include "parser/SparqlParserHelpers.h"
+#include "parser/TensorIndexQuery.h"
 #include "rdfTypes/Variable.h"
+#include "engine/tensor/TensorIndex.h"
+#include "engine/TextIndexScanForEntity.h"
+#include "engine/TextIndexScanForWord.h"
 #include "util/CompilerWarnings.h"
 #include "util/Exception.h"
 #include "util/Log.h"
@@ -126,6 +128,70 @@ void assignNodesFilterAndTextLimitIds(QueryPlanner::SubtreePlan& target,
   target.idsOfIncludedTextLimits_ = source.idsOfIncludedTextLimits_;
   target.containsFilterSubstitute_ = source.containsFilterSubstitute_;
   target.containsBindSubstitute_ = source.containsBindSubstitute_;
+}
+
+using JoinColumns = QueryPlanner::JoinColumns;
+// _____________________________________________________________________________________________________________________
+// Helper that returns `true` for each of the subtree plans `a` and `b` iff
+// the subtree plan is an operation and it is not yet fully constructed
+// (it does not have both children set)
+template <typename JoinType>
+std::pair<bool, bool> checkJoin(const SubtreePlan& a, const SubtreePlan& b) {
+  auto isIncompleteJoin = [](const SubtreePlan& ts) {
+    auto tsCasted =
+        std::dynamic_pointer_cast<const JoinType>(ts._qet->getRootOperation());
+    return tsCasted != nullptr && !tsCasted->isConstructed();
+  };
+  return {isIncompleteJoin(a), isIncompleteJoin(b)};
+}
+
+// _____________________________________________________________________________
+template <typename JoinType>
+auto createJoin(const SubtreePlan& a, const SubtreePlan& b,
+                const JoinColumns& jcs) -> std::optional<SubtreePlan> {
+  auto [aIs, bIs] = checkJoin<JoinType>(a, b);
+
+  // Exactly one of the inputs must be a SpatialJoin.
+  if (aIs == bIs) {
+    return std::nullopt;
+  }
+
+  const SubtreePlan& joinSubtreePlan = aIs ? a : b;
+  const SubtreePlan& otherSubtreePlan = aIs ? b : a;
+
+  std::shared_ptr<Operation> op = joinSubtreePlan._qet->getRootOperation();
+  auto join = static_cast<JoinType*>(op.get());
+
+  if (join->isConstructed()) {
+    return std::nullopt;
+  }
+
+  if (jcs.size() > 1) {
+    // If a spatial join operation substitutes a geometric relation filter,
+    // we might have multiple spatial joins for different pairs of variables
+    // that share some variable.
+    if (join->getSubstitutesFilterOp()) {
+      return std::nullopt;
+    }
+    // TODO<ullingerc> Handle this case for a non-substitute spatial join (e.g.
+    // a `SpatialQuery` as `SERVICE qlss:`, explicitly given by the user's
+    // query): If multiple such spatial joins occur on the same pair of
+    // variables, all except for one should be rewritten to a FILTER if they
+    // request a maximum distance search (for nearest neighbor search this is
+    // not possible). This however requires changes to `geof:distance` first.
+    AD_THROW(
+        "Currently, if both sides of a SpatialJoin are variables, then the"
+        "SpatialJoin must be the only connection between these variables");
+  }
+  ColumnIndex ind = aIs ? jcs[0][1] : jcs[0][0];
+  const Variable& var =
+      otherSubtreePlan._qet->getVariableAndInfoByColumnIndex(ind).first;
+
+  auto newJoin = join->addChild(otherSubtreePlan._qet, var);
+
+  SubtreePlan plan = makeSubtreePlan<JoinType>(std::move(newJoin));
+  mergeSubtreePlanIds(plan, a, b);
+  return plan;
 }
 }  // namespace
 
@@ -899,6 +965,23 @@ auto QueryPlanner::seedWithScansAndText(
             " { ... }'. For more information, please see the QLever Docs "
             "(https://docs.qlever.dev/geosparql/)."));
       }
+      pushPlan(plan);
+      continue;
+    }
+
+    // Backward compatibility with the tensor nearest neighbors predicate.
+    if (ql::starts_with(input, TENSOR_NEAREST_NEIGHBORS) &&
+        ql::ends_with(input, '>')) {
+      parsedQuery::TensorIndexQuery config{node.triple_};
+      auto plan = makeSubtreePlan<TensorIndex>(
+          _qec, config.toTensorIndexConfiguration(), std::nullopt,
+          std::nullopt);
+      plan._qet->getRootOperation()->addWarning(absl::StrCat(
+          "The special predicate <tensor-nearest-neighbors:...> is "
+          "deprecated due to confusing semantics. Please upgrade your query "
+          "to the new syntax 'SERVICE ",
+          TENSOR_INDEX_IRI,
+          " { ... }'. For more information, please see the QLever Wiki."));
       pushPlan(plan);
       continue;
     }
@@ -2348,7 +2431,11 @@ SubtreePlanVec QueryPlanner::createJoinCandidates(
   // If both sides are spatial joins that are still missing children, return
   // immediately to prevent a regular join on the variables, which would lead to
   // the spatial join never having children.
-  if (checkSpatialJoin(a, b) == std::pair<bool, bool>{true, true}) {
+  if (checkJoin<SpatialJoin>(a, b) == std::pair<bool, bool>{true, true}) {
+    return candidates;
+  }
+  // The same holds for tensor searches.
+  if (checkJoin<TensorIndex>(a, b) == std::pair<bool, bool>{true, true}) {
     return candidates;
   }
 
@@ -2358,7 +2445,12 @@ SubtreePlanVec QueryPlanner::createJoinCandidates(
   // return immediately instead of creating a normal join below as well.
   // Note, that this if statement should be evaluated first, such that no other
   // join options get considered, when one of the candidates is a SpatialJoin.
-  if (auto opt = createSpatialJoin(a, b, jcs)) {
+  if (auto opt = createJoin<SpatialJoin>(a, b, jcs)) {
+    candidates.push_back(std::move(opt.value()));
+    return candidates;
+  }
+  // The same holds for an incomplete `TensorIndex` operation.
+  if (auto opt = createJoin<TensorIndex>(a, b, jcs)) {
     candidates.push_back(std::move(opt.value()));
     return candidates;
   }
@@ -2427,68 +2519,6 @@ SubtreePlanVec QueryPlanner::createJoinCandidates(
 
   return candidates;
 }
-
-// _____________________________________________________________________________
-std::pair<bool, bool> QueryPlanner::checkSpatialJoin(const SubtreePlan& a,
-                                                     const SubtreePlan& b) {
-  auto isIncompleteSpatialJoin = [](const SubtreePlan& sj) {
-    auto sjCasted = std::dynamic_pointer_cast<const SpatialJoin>(
-        sj._qet->getRootOperation());
-    return sjCasted != nullptr && !sjCasted->isConstructed();
-  };
-  return {isIncompleteSpatialJoin(a), isIncompleteSpatialJoin(b)};
-}
-
-// _____________________________________________________________________________
-auto QueryPlanner::createSpatialJoin(const SubtreePlan& a, const SubtreePlan& b,
-                                     const JoinColumns& jcs)
-    -> std::optional<SubtreePlan> {
-  auto [aIs, bIs] = checkSpatialJoin(a, b);
-
-  // Exactly one of the inputs must be a SpatialJoin.
-  if (aIs == bIs) {
-    return std::nullopt;
-  }
-
-  const SubtreePlan& spatialSubtreePlan = aIs ? a : b;
-  const SubtreePlan& otherSubtreePlan = aIs ? b : a;
-
-  std::shared_ptr<Operation> op = spatialSubtreePlan._qet->getRootOperation();
-  auto spatialJoin = static_cast<SpatialJoin*>(op.get());
-
-  if (spatialJoin->isConstructed()) {
-    return std::nullopt;
-  }
-
-  if (jcs.size() > 1) {
-    // If a spatial join operation substitutes a geometric relation filter,
-    // we might have multiple spatial joins for different pairs of variables
-    // that share some variable.
-    if (spatialJoin->getSubstitutesFilterOp()) {
-      return std::nullopt;
-    }
-    // TODO<ullingerc> Handle this case for a non-substitute spatial join (e.g.
-    // a `SpatialQuery` as `SERVICE qlss:`, explicitly given by the user's
-    // query): If multiple such spatial joins occur on the same pair of
-    // variables, all except for one should be rewritten to a FILTER if they
-    // request a maximum distance search (for nearest neighbor search this is
-    // not possible). This however requires changes to `geof:distance` first.
-    AD_THROW(
-        "Currently, if both sides of a SpatialJoin are variables, then the"
-        "SpatialJoin must be the only connection between these variables");
-  }
-  ColumnIndex ind = aIs ? jcs[0][1] : jcs[0][0];
-  const Variable& var =
-      otherSubtreePlan._qet->getVariableAndInfoByColumnIndex(ind).first;
-
-  auto newSpatialJoin = spatialJoin->addChild(otherSubtreePlan._qet, var);
-
-  SubtreePlan plan = makeSubtreePlan<SpatialJoin>(std::move(newSpatialJoin));
-  mergeSubtreePlanIds(plan, a, b);
-  return plan;
-}
-
-// _____________________________________________________________________________________________________________________
 
 namespace {
 // Helper function that maps the indices from the unions' columns to the
@@ -3326,6 +3356,8 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     visitDescribe(arg);
   } else if constexpr (std::is_same_v<T, p::SpatialQuery>) {
     visitSpatialSearch(arg);
+  } else if constexpr (std::is_same_v<T, p::TensorIndexQuery>) {
+    visitTensorIndex(arg);
   } else if constexpr (std::is_same_v<T, p::TextSearchQuery>) {
     visitTextSearch(arg);
   } else if constexpr (std::is_same_v<T, p::ExternalValuesQuery>) {
@@ -3532,6 +3564,49 @@ void QueryPlanner::GraphPatternPlanner::visitSpatialSearch(
       if (std::holds_alternative<MaxDistanceConfig>(config.task_)) {
         addCandidateSpatialJoin(true);
       }
+    }
+  }
+  visitGroupOptionalOrMinus(std::move(candidatesOut));
+}
+// copied from visitSpatialSearch and adapted for tensor search
+void QueryPlanner::GraphPatternPlanner::visitTensorIndex(
+    parsedQuery::TensorIndexQuery& tensorIndexQuery) {
+  auto config = tensorIndexQuery.toTensorIndexConfiguration();
+
+  // If there is no child graph pattern, we need to construct a neutral element
+  SubtreePlanVec candidatesIn{allocator()};
+  if (tensorIndexQuery.childGraphPattern_.has_value()) {
+    candidatesIn =
+        planner_.optimize(&tensorIndexQuery.childGraphPattern_.value());
+  } else {
+    candidatesIn =
+        singlePlanVec(makeSubtreePlan<NeutralElementOperation>(qec_));
+  }
+  SubtreePlanVec candidatesOut{allocator()};
+
+  for (auto& sub : candidatesIn) {
+    // This helper function adds a subtree plan to the output candidates, which
+    // either has the child graph pattern as a right child or no child at all.
+    // If it has no child at all, the query planner may look for the right child
+    // of the TensorIndex outside of the SERVICE. This is only allowed for
+    // implicit joins.
+    auto addCandidateTensorIndex = [this, &sub, &config,
+                                     &candidatesOut](bool rightVarOutside) {
+      std::optional<std::shared_ptr<QueryExecutionTree>> right = std::nullopt;
+      if (!rightVarOutside) {
+        right = std::move(sub._qet);
+      }
+      auto tensorIndex =
+          qec_->makeShared<TensorIndex>(qec_, config, std::nullopt, right);
+      auto plan = makeSubtreePlan<TensorIndex>(std::move(tensorIndex));
+      candidatesOut.push_back(std::move(plan));
+    };
+
+    if (tensorIndexQuery.childGraphPattern_.has_value()) {
+      // The version using the child graph pattern
+      addCandidateTensorIndex(false);
+    } else {
+      addCandidateTensorIndex(true);
     }
   }
   visitGroupOptionalOrMinus(std::move(candidatesOut));

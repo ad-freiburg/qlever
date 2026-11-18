@@ -431,7 +431,8 @@ static nlohmann::json stringAndTypeToBinding(std::string_view entitystr,
         b["xml:lang"] = entitystr.substr(quotePos + 2);
       } else if (quotePos < entitystr.size() - 2 &&
                  // TODO<joka921> This can be a `AD_CONTRACT_CHECK` once the
-                 // fulltext index vocabulary is stored in a consistent format.
+                 // fulltext index vocabulary is stored in a consistent
+                 // format.
                  entitystr[quotePos + 1] == '^') {
         AD_CONTRACT_CHECK(entitystr[quotePos + 2] == '^');
         std::string_view datatype{entitystr};
@@ -625,7 +626,8 @@ static std::string idToXMLBinding(std::string_view variable, Id id,
           append("<literal datatype=\""sv, escape(datatype), "\">"sv,
                  escape(innerValue), "</literal>"sv);
         } else {
-          // A plain literal that contains neither a language tag nor a datatype
+          // A plain literal that contains neither a language tag nor a
+          // datatype
           append("<literal>"sv, escape(innerValue), "</literal>"sv);
         }
       }
@@ -876,7 +878,8 @@ ExportQueryExecutionTrees::convertStreamGeneratorForChunkedTransfer(
         static constexpr std::string_view prefix =
             "\n !!!!>># An error has occurred while exporting the query "
             "result. Unfortunately due to limitations in the HTTP 1.1 "
-            "protocol, there is no better way to report this than to append it "
+            "protocol, there is no better way to report this than to append "
+            "it "
             "to the incomplete result. The error message was:\n";
         return LoopControl::breakWithValue(
             absl::StrCat(prefix, exceptionMessage.value()));

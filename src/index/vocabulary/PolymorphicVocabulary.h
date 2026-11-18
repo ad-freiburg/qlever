@@ -51,6 +51,8 @@ class PolymorphicVocabulary {
   using InMemoryCompressed = CompressedVocabulary<InMemoryUncompressed>;
   using OnDiskCompressed = CompressedVocabulary<OnDiskUncompressed>;
   using OnDiskCompressedGeoSplit = SplitGeoVocabulary<OnDiskCompressed>;
+  using OnDiskCompressedTensorSplit = SplitTensorVocabulary<OnDiskCompressed>;
+
   // The vocabularies with "holes", which are only used for vocabularies that
   // were exported from a larger vocabulary with some of the entries excluded
   // (see `VocabularyInMemoryBinSearch` and `VocabularyType.h`).
@@ -60,7 +62,8 @@ class PolymorphicVocabulary {
   using Variant =
       std::variant<InMemoryUncompressed, OnDiskUncompressed, OnDiskCompressed,
                    InMemoryCompressed, OnDiskCompressedGeoSplit,
-                   InMemoryUncompressedWithHoles, InMemoryCompressedWithHoles>;
+                   InMemoryUncompressedWithHoles, InMemoryCompressedWithHoles,
+                   OnDiskCompressedTensorSplit>;
 
   // In this variant we store the actual vocabulary.
   Variant vocab_;
@@ -88,6 +91,8 @@ class PolymorphicVocabulary {
         [&grid](OnDiskCompressedGeoSplit& vocab) {
           vocab.setGeoCellGrid(grid);
         },
+        // The tensor split vocabulary holds no `GeoVocabulary`.
+        [](OnDiskCompressedTensorSplit&) {},
         [](const auto& vocab) {
           static_assert(
               NeverProvidesGeometryInfo<std::decay_t<decltype(vocab)>>);
@@ -102,6 +107,8 @@ class PolymorphicVocabulary {
         [](const OnDiskCompressedGeoSplit& vocab) {
           return vocab.getGeoCellGrid();
         },
+        [](const OnDiskCompressedTensorSplit&)
+            -> std::optional<ad_utility::GeoCellGrid> { return std::nullopt; },
         [](const auto& vocab) -> std::optional<ad_utility::GeoCellGrid> {
           static_assert(
               NeverProvidesGeometryInfo<std::decay_t<decltype(vocab)>>);
@@ -233,6 +240,41 @@ class PolymorphicVocabulary {
             return vocab.isGeoInfoAvailable();
           } else {
             static_assert(NeverProvidesGeometryInfo<T>);
+            return false;
+          }
+        },
+        vocab_);
+  }
+
+  // Retrieve `TensorData` from an underlying vocabulary, if it is a
+  // `TensorDataVocabulary`.
+  std::optional<ad_utility::TensorData> getTensorData(uint64_t index) const {
+    return std::visit(
+        [&](const auto& vocab) -> std::optional<ad_utility::TensorData> {
+          using T = std::decay_t<decltype(vocab)>;
+          // For more details, please see the definition of these concepts
+          // in `VocabularyConstraints.h`.
+          if constexpr (MaybeProvidesTensorData<T>) {
+            return vocab.getTensorData(index);
+          } else {
+            static_assert(NeverProvidesTensorData<T>);
+            return std::nullopt;
+          }
+        },
+        vocab_);
+  }
+
+  // Checks if any of the underlying vocabularies is a `TensorDataVocabulary`.
+  bool isTensorDataAvailable() const {
+    return std::visit(
+        [](const auto& vocab) {
+          using T = std::decay_t<decltype(vocab)>;
+          // For more details, please see the definition of these concepts
+          // in `VocabularyConstraints.h`.
+          if constexpr (MaybeProvidesTensorData<T>) {
+            return vocab.isTensorDataAvailable();
+          } else {
+            static_assert(NeverProvidesTensorData<T>);
             return false;
           }
         },

@@ -10,7 +10,7 @@
 add_library(vocabulary VocabularyInMemory.h VocabularyInMemory.cpp
                        VocabularyInMemoryBinSearch.cpp VocabularyInternalExternal.cpp
                        BuildFilteredVocabulary.cpp
-                       VocabularyOnDisk.cpp SplitVocabulary.cpp GeoVocabulary.cpp PolymorphicVocabulary.cpp
+                       VocabularyOnDisk.cpp SplitVocabulary.cpp GeoVocabulary.cpp PolymorphicVocabulary.cpp TensorDataVocabulary.cpp
                        Vocabulary.cpp EncodedIriManager.cpp
                        EncodedIriPattern.cpp PrefixHeuristic.cpp
                        SecondaryVocabulary.cpp)

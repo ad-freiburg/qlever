@@ -24,6 +24,8 @@ constexpr inline std::string_view SPATIAL_SEARCH_IRI =
 constexpr inline std::string_view TEXT_SEARCH_IRI =
     "<https://qlever.cs.uni-freiburg.de/textSearch/>";
 
+constexpr inline std::string_view TENSOR_INDEX_IRI =
+    "<https://qlever.cs.uni-freiburg.de/tensorIndex/>";
 constexpr inline std::string_view ROW_NUMBER_IRI =
     "<https://qlever.cs.uni-freiburg.de/rowNumber/>";
 
@@ -57,8 +59,14 @@ constexpr inline std::string_view MATERIALIZED_VIEW_IRI =
 static const std::string MAX_DIST_IN_METERS = "<max-distance-in-meters:";
 static const std::string NEAREST_NEIGHBORS = "<nearest-neighbors:";
 static constexpr auto MAX_DIST_IN_METERS_REGEX =
-    ctll::fixed_string{"<max-distance-in-meters:(?<dist>[0-9]+)>"};
+ctll::fixed_string{"<max-distance-in-meters:(?<dist>[0-9]+)>"};
 static constexpr auto NEAREST_NEIGHBORS_REGEX = ctll::fixed_string{
     "<nearest-neighbors:(?<results>[0-9]+)(:(?<dist>[0-9]+))?>"};
 
+// For convenience: invocation of a tensor nearest neighbour search via the
+// special predicate `<tensor-nearest-neighbors:K>` (see `TensorIndexQuery`).
+constexpr inline std::string_view TENSOR_NEAREST_NEIGHBORS =
+    "<tensor-nearest-neighbors:";
+static constexpr auto TENSOR_NEAREST_NEIGHBORS_REGEX =
+    ctll::fixed_string{"<tensor-nearest-neighbors:(?<results>[0-9]+)>"};
 #endif  // QLEVER_SRC_PARSER_MAGICSERVICEIRICONSTANTS_H

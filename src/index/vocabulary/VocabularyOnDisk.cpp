@@ -231,6 +231,7 @@ VocabularyOnDisk::~VocabularyOnDisk() = default;
 
 // _____________________________________________________________________________
 std::string VocabularyOnDisk::operator[](uint64_t idx) const {
+  AD_LOG_TIME_START(readWordFromDisk);
   AD_CONTRACT_CHECK(idx < size());
   // `getOrCreate` only returns `nullptr` if the values of the
   // `ThreadLocalMember`s of the calling thread were already destroyed because
@@ -238,7 +239,9 @@ std::string VocabularyOnDisk::operator[](uint64_t idx) const {
   // another `thread_local` object that is destroyed after them. In that case,
   // read the word without read-ahead.
   ReadAheadState* state = readAheadStates_->getOrCreate();
-  return state != nullptr ? state->lookup(*this, idx) : readWord(idx);
+  auto rval = state != nullptr ? state->lookup(*this, idx) : readWord(idx);
+  AD_LOG_TIME_END(readWordFromDisk);
+  return rval;
 }
 
 // _____________________________________________________________________________

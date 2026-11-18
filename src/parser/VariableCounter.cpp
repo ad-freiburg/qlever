@@ -130,6 +130,17 @@ void VariableCounter::operator()(const SpatialQuery& op) {
 }
 
 // _____________________________________________________________________________
+void VariableCounter::operator()(const TensorIndexQuery& op) {
+  (*this)(op.distanceVariable_);
+  if (!op.payloadVariables_.isAll()) {
+    (*this)(op.payloadVariables_.getVariables());
+  }
+  (*this)(op.left_);
+  (*this)(op.right_);
+  (*this)(op.childGraphPattern_);
+}
+
+// _____________________________________________________________________________
 void VariableCounter::operator()(const TextSearchQuery& op) {
   (*this)(op.configVarToConfigs_ | ql::views::keys);
   (*this)(op.configVarToConfigs_ | ql::views::values);

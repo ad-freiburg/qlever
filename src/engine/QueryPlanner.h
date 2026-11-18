@@ -27,6 +27,9 @@
 #include "parser/data/Types.h"
 #include "util/ContainersWithAllocator.h"
 
+
+
+
 class QueryPlanner {
   using TextLimitMap =
       ad_utility::HashMap<Variable, parsedQuery::TextLimitMetaObject>;
@@ -484,19 +487,6 @@ class QueryPlanner {
   static std::optional<SubtreePlan> createJoinWithPathSearch(
       const SubtreePlan& a, const SubtreePlan& b, const JoinColumns& jcs);
 
-  // Helper that returns `true` for each of the subtree plans `a` and `b` iff
-  // the subtree plan is a spatial join and it is not yet fully constructed
-  // (it does not have both children set)
-  static std::pair<bool, bool> checkSpatialJoin(const SubtreePlan& a,
-                                                const SubtreePlan& b);
-
-  // if one of the inputs is a spatial join which is compatible with the other
-  // input, then add that other input to the spatial join as a child instead of
-  // creating a normal join.
-  static std::optional<SubtreePlan> createSpatialJoin(const SubtreePlan& a,
-                                                      const SubtreePlan& b,
-                                                      const JoinColumns& jcs);
-
   // Helper that generates `IndexScan` query plans on materialized views if they
   // can be used to avoid joins between some of the `triples`. The resulting
   // plans for part of the `triples` are given in a vector of query planning
@@ -744,6 +734,7 @@ class QueryPlanner {
     void visitTransitivePath(parsedQuery::TransPath& transitivePath);
     void visitPathSearch(parsedQuery::PathQuery& config);
     void visitSpatialSearch(parsedQuery::SpatialQuery& config);
+    void visitTensorIndex(parsedQuery::TensorIndexQuery& config);
     void visitTextSearch(const parsedQuery::TextSearchQuery& config);
     void visitExternalValues(const parsedQuery::ExternalValuesQuery& config);
     void visitRowNumber(parsedQuery::RowNumberQuery& config);

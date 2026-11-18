@@ -27,6 +27,7 @@
 #include "index/IndexImpl.h"
 #include "index/LocalVocab.h"
 #include "parser/LiteralOrIri.h"
+#include "rdfTypes/TensorData.h"
 #include "util/Algorithm.h"
 #include "util/CompilerExtensions.h"
 #include "util/Exception.h"
@@ -121,6 +122,21 @@ std::optional<std::string_view> blankNodeIriToString(
 // (see `IndexImpl::secondaryVocab`), which is checked.
 LiteralOrIri getLiteralOrIriFromVocabIndex(const IndexImpl& index, Id id,
                                            const LocalVocab& localVocab);
+
+// Parse a `LiteralOrIri` as a tensor. Returns `std::nullopt` if `word` is not a
+// literal with one of the tensor datatypes (`TENSOR_LITERAL`,
+// `TENSOR_NUMERIC_LITERAL`), or if its content is not a valid tensor.
+std::optional<ad_utility::TensorData> literalOrIriToTensorData(
+    const LiteralOrIri& word);
+
+// Resolve the `id` to a `TensorData`. For a `VocabIndex` the precomputed tensor
+// of an underlying `TensorDataVocabulary` is used if the index has one (no
+// string lookup or JSON parsing). Otherwise the word is fetched from the
+// (local) vocabulary and parsed via `literalOrIriToTensorData`. For all other
+// datatypes (numbers, blank nodes, `Undefined`, ...) `std::nullopt` is
+// returned.
+std::optional<ad_utility::TensorData> idToTensorData(
+    const IndexImpl& index, Id id, const LocalVocab& localVocab);
 
 // Convert an ID whose value is encoded in the ID bits to (string, XSD-type).
 // Returns std::nullopt for Undefined. Throws for non-encoded-value datatypes.

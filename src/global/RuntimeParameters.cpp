@@ -56,6 +56,7 @@ RuntimeParameters::RuntimeParameters() {
   add(patternTrickNumTasksInFlight_);
   add(sortNumTasksInFlight_);
   add(spatialJoinPrefilterMaxSize_);
+  add(tensorIndexMaxNumThreads_);
   add(spatialJoinTmpDir_);
   add(enableDistributiveUnion_);
   add(treatDefaultGraphAsNamedGraph_);

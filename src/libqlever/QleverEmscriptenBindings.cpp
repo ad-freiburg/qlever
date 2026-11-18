@@ -78,7 +78,9 @@ EMSCRIPTEN_BINDINGS(qlever) {
       .value("OnDiskCompressed",
              ad_utility::VocabularyType::Enum::OnDiskCompressed)
       .value("OnDiskCompressedGeoSplit",
-             ad_utility::VocabularyType::Enum::OnDiskCompressedGeoSplit);
+             ad_utility::VocabularyType::Enum::OnDiskCompressedGeoSplit)
+      .value("OnDiskCompressedTensorSplit",
+             ad_utility::VocabularyType::Enum::OnDiskCompressedTensorSplit);
 
   // The formats in which query results can be exported.
   enum_<ad_utility::MediaType>("MediaType")

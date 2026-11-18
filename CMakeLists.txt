@@ -264,6 +264,18 @@ endif ()
 ###############################################################################
 include(FetchContent)
 
+# CMAKE_POLICY_VERSION_MINIMUM (set in the Dockerfile) clamps the effective
+# policy version of vendored dependencies with an old cmake_minimum_required
+# (e.g. RapidJSON) below 3.13, so CMP0077 defaults to OLD for them and
+# option() ignores our `set(RAPIDJSON_BUILD_TESTS OFF)` below. Force NEW so
+# option() honors pre-set variables regardless of a dependency's own minimum
+# CMake version, preventing RapidJSON from pulling in its vendored googletest
+# and clashing with the googletest target fetched below.
+set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
+
+MESSAGE(STATUS "Using CMake version ${CMAKE_VERSION}")
+MESSAGE(STATUS "PATH: $ENV{PATH}")
+
 ################################
 # GTEST AND GMOCK
 ################################
@@ -340,6 +352,50 @@ add_compile_definitions(SPATIALJOIN_NO_BZIP2=1 SPATIALJOIN_NO_ZLIB=1)
 ################################
 find_package(Threads REQUIRED)
 
+################################
+# Annoy (for approximate nearest neighbor search) - DISABLE, ANNOY is broken...
+################################
+# MESSAGE(STATUS "Using Annoy for the dense tensor index")
+# FetchContent_Declare(
+#         annoy
+#         GIT_REPOSITORY https://github.com/spotify/annoy
+#         GIT_TAG 379f744667aba6b40ba3db8a07678df173a88f74
+#         EXCLUDE_FROM_ALL
+# )
+# add_compile_definitions(ANNOYLIB_MULTITHREADED_BUILD)
+################################
+# FAISS (for approximate nearest neighbor search)
+################################
+MESSAGE(STATUS "Using FAISS for the dense tensor index")
+FetchContent_Declare(
+        faiss
+        GIT_REPOSITORY https://github.com/facebookresearch/faiss.git
+        GIT_TAG 5622e93733b64b2e033362dbdfda019b2ab33ef0
+        EXCLUDE_FROM_ALL
+
+)
+# enable C API
+set(FAISS_ENABLE_C_API ON CACHE BOOL "Enable the C API for FAISS")
+# disable everything else (for now?)
+set(FAISS_ENABLE_GPU OFF CACHE BOOL "Disable GPU support for FAISS")
+set(FAISS_ENABLE_MKL OFF CACHE BOOL "Disable MKL support for FAISS")
+set(FAISS_ENABLE_PYTHON  OFF CACHE BOOL "Disable MKL support for FAISS")
+set(FAISS_ENABLE_EXTRAS  OFF CACHE BOOL "Disable MKL support for FAISS")
+set(BUILD_TESTING  OFF CACHE BOOL "Disable testing for FAISS")
+
+################################
+# RapidJSON (for fast JSON parsing in the tensor loading code)
+# Use own fork as the upstream has cmake issues
+################################
+set(RAPIDJSON_BUILD_TESTS OFF CACHE BOOL "Disable tests for RapidJSON" FORCE)
+set(RAPIDJSON_BUILD_EXAMPLES OFF CACHE BOOL "Disable examples for RapidJSON" FORCE)
+MESSAGE(STATUS "Using RapidJSON for very fast JSON parsing in the tensor loading code.")
+FetchContent_Declare(
+        rapidjson
+        GIT_REPOSITORY https://github.com/Tencent/rapidjson.git
+        GIT_TAG 24b5e7a8b27f42fa16b96fc70aade9106cf7102f
+        EXCLUDE_FROM_ALL
+)
 #################################
 # ICU (for proper collation
 ################################
@@ -679,6 +735,34 @@ FetchContent_Declare(
         EXCLUDE_FROM_ALL
 )
 
+if (QLEVER_USE_TENSOR_BLAS)
+    set(BLA_VENDOR "OpenBLAS")
+    find_package(BLAS REQUIRED)
+    find_package(LAPACK REQUIRED)
+    set(LINK_BLAS_LIBRARIES ${BLAS_LIBRARIES} ${LAPACK_LIBRARIES})
+    add_compile_definitions(QLEVER_USE_TENSOR_BLAS)
+    message(STATUS "QLEVER_USE_TENSOR_BLAS is enabled")
+else ()
+    set(LINK_BLAS_LIBRARIES "")
+endif ()
+
+
+if (USE_PARALLEL)
+    include(FindOpenMP)
+    if (OPENMP_FOUND)
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
+        add_compile_definitions(_PARALLEL_SORT)
+        add_compile_definitions(QLEVER_TENSOR_PARALLEL)
+        endif ()
+endif ()
+if (OPENMP_FOUND)
+
+    message(STATUS "OpenMP found, enabling parallel features")
+else ()
+    message(STATUS "OpenMP not found, parallel features will be disabled")
+endif ()
 
 OPTION(_NO_TIMING_TESTS "Disable timing tests on platforms where `sleep` is unreliable" OFF)
 if (_NO_TIMING_TESTS)
@@ -784,6 +868,8 @@ FetchContent_Declare(
 ################################
 # Apply FetchContent
 ################################
+FetchContent_MakeAvailable(googletest ctre abseil re2 fsst s2 nlohmann-json antlr range-v3 spatialjoin faiss RapidJSON)
+
 # On Emscripten, gtest's CMake compiles its own libraries with `GTEST_HAS_PTHREAD=1`,
 # but its headers "auto-detect" =0, an ODR mismatch, so we have to set this explicitly.
 # See https://github.com/google/googletest/issues/5015
@@ -840,6 +926,8 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
         target_compile_options(gmock INTERFACE -Wno-uninitialized)
     endif ()
 endif ()
+
+include_directories(${RapidJSON_SOURCE_DIR}/include)
 include_directories(SYSTEM ${ctre_SOURCE_DIR}/single-header)
 target_compile_options(fsst PRIVATE -Wno-extra -Wno-all -Wno-error)
 target_compile_options(fsst12 PRIVATE -Wno-extra -Wno-all -Wno-error)

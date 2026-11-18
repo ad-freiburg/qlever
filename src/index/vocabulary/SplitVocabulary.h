@@ -24,6 +24,7 @@
 #include "backports/type_traits.h"
 #include "global/Id.h"
 #include "index/vocabulary/GeoVocabulary.h"
+#include "index/vocabulary/TensorDataVocabulary.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "rdfTypes/GeoCellGrid.h"
 #include "rdfTypes/GeometryInfo.h"
@@ -487,6 +488,14 @@ class SplitVocabulary {
   // Checks if any of the underlying vocabularies is a `GeoVocabulary`.
   static bool isGeoInfoAvailable();
 
+  // Retrieve TensorData from an underlying vocabulary, if it is a
+  // TensorDataVocabulary.
+  std::optional<ad_utility::TensorData> getTensorData(
+      uint64_t indexWithMarker) const;
+
+  // Checks if any of the underlying vocabularies is a `TensorDataVocabulary`.
+  static bool isTensorDataAvailable();
+
   // Generic serialization support.
   AD_SERIALIZE_FRIEND_FUNCTION(SplitVocabulary) {
     (void)serializer;
@@ -512,6 +521,22 @@ struct GeoSplitFunc {
 inline constexpr std::array<std::string_view, 2> geoFilenameSuffixes{
     "", ".geometry"};
 
+// Split function for Tensor Data Literals: All words are written to
+// vocabulary 0 except Tensor Data literals, which go to vocabulary 1.
+struct TensorDataSplitFunc {
+  uint8_t operator()(std::string_view word) const {
+    return ql::starts_with(word, "\"") &&
+           (ql::ends_with(word, TENSOR_LITERAL_SUFFIX) ||
+            ql::ends_with(word, TENSOR_NUMERIC_LITERAL_SUFFIX));
+  }
+};
+
+// Filename suffixes for Tensor Data literals: The vocabulary 0 is saved under
+// the base filename and Tensor Data literals are saved with the suffix
+// ".tensors".
+inline constexpr std::array<std::string_view, 2> tensorFilenameSuffixes{
+    "", ".tensors"};
+
 }  // namespace detail::splitVocabulary
 
 // A SplitGeoVocabulary splits only Well-Known Text literals to their own
@@ -521,5 +546,15 @@ using SplitGeoVocabulary =
     SplitVocabulary<detail::splitVocabulary::GeoSplitFunc,
                     detail::splitVocabulary::geoFilenameSuffixes,
                     UnderlyingVocabulary, GeoVocabulary<UnderlyingVocabulary>>;
+
+// A SplitTensorVocabulary splits only Tensor Data literals (see
+// `TensorDataSplitFunc`) to their own `TensorDataVocabulary`, which stores the
+// parsed tensors for fast access.
+template <class UnderlyingVocabulary>
+using SplitTensorVocabulary =
+    SplitVocabulary<detail::splitVocabulary::TensorDataSplitFunc,
+                    detail::splitVocabulary::tensorFilenameSuffixes,
+                    UnderlyingVocabulary,
+                    TensorDataVocabulary<UnderlyingVocabulary>>;
 
 #endif  // QLEVER_SRC_INDEX_VOCABULARY_SPLITVOCABULARY_H

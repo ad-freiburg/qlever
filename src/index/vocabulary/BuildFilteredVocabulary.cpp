@@ -72,6 +72,15 @@ ad_utility::VocabularyType targetVocabularyType(
               "filtering them would simply yield a vocabulary with more holes. "
               "It is deliberately not implemented (and hence also not tested), "
               "because there currently is no use case for it.");
+        } else if constexpr (ad_utility::SameAsAny<
+                                 T, SplitTensorVocabulary<CompressedVocabulary<
+                                        VocabularyInternalExternal>>>) {
+          AD_THROW(
+              "Filtering a vocabulary of type "
+              "\"on-disk-compressed-tensor-split\" is not supported, because "
+              "its marker-encoded vocabulary indices are not ascending in the "
+              "order of the sorted words, and because its precomputed tensor "
+              "data cannot be represented by a vocabulary with holes");
         } else {
           static_assert(
               ad_utility::SameAsAny<T, SplitGeoVocabulary<CompressedVocabulary<

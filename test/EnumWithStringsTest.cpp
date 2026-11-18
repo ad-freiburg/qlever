@@ -40,6 +40,7 @@ TEST(EnumWithStrings, VocabularyTypeEnum) {
       ::testing::ElementsAre(
           V::InMemoryUncompressed, V::OnDiskUncompressed, V::InMemoryCompressed,
           V::OnDiskCompressed, V::OnDiskCompressedGeoSplit,
+          V::OnDiskCompressedTensorSplit,
           V::InMemoryUncompressedWithHoles, V::InMemoryCompressedWithHoles));
 
   // Each of the values has to be drawn roughly equally often.

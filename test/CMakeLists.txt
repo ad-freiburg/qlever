@@ -179,6 +179,7 @@ add_subdirectory(backports)
 add_subdirectory(rdfTypes)
 add_subdirectory(joinAlgorithms)
 add_subdirectory(libqlever)
+add_subdirectory(tensor)
 add_subdirectory(parallelBlockMerge)
 add_subdirectory(blockSort)
 

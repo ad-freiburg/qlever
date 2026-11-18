@@ -523,8 +523,8 @@ bool ParsedQuery::GraphPattern::isDeterministic() const {
       return op._expression.isDeterministic();
     } else if constexpr (ad_utility::SimilarToAny<
                              T, PathQuery, SpatialQuery, TextSearchQuery,
-                             NamedCachedResult, MaterializedViewQuery,
-                             RowNumberQuery>) {
+                             TensorIndexQuery, NamedCachedResult,
+                             MaterializedViewQuery, RowNumberQuery>) {
       return isMagicServiceQueryDeterministic(op);
     } else if constexpr (std::is_same_v<T, Service>) {
       // Mirror `Service::isDeterministicImpl()`.

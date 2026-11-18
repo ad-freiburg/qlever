@@ -17,6 +17,7 @@
 #include "global/Id.h"
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeometryInfo.h"
+#include "rdfTypes/TensorData.h"
 #include "util/ConstexprSmallString.h"
 #include "util/Iterators.h"
 #include "util/LruCache.h"
@@ -309,6 +310,17 @@ struct GeoPointValueGetter : Mixin<GeoPointValueGetter> {
   Opt operator()(const LiteralOrIri&, const EvaluationContext*) const {
     return std::nullopt;
   }
+};
+
+// Value getter for tensors (dense vectors stored as literals with the datatype
+// `TENSOR_LITERAL` or `TENSOR_NUMERIC_LITERAL`). Returns `std::nullopt` for all
+// values that are not a valid tensor.
+struct TensorValueGetter : Mixin<TensorValueGetter> {
+  using Value = std::optional<ad_utility::TensorData>;
+  using Mixin<TensorValueGetter>::operator();
+  Value operator()(ValueId id, const EvaluationContext* context) const;
+  Value operator()(const LiteralOrIri& litOrIri,
+                   const EvaluationContext* context) const;
 };
 
 // If the `id` points to a literal, return the contents of that literal (without

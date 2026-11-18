@@ -46,6 +46,10 @@ class NamedResultCache {
     LocalVocab localVocab_;
     std::string cacheKey_;
     std::optional<SpatialJoinCachedIndex> cachedGeoIndex_;
+    // NOTE: FAISS indices for the `TensorIndex` operation are not stored here,
+    // but in the separate (thread-safe) cache of `TensorIndexCachedIndex`,
+    // keyed by the `experimentalRightCacheName` and validated against the
+    // right input on every lookup.
 
     // The following two members (`Allocator` and `LocalVocabContext`) are only
     // used when reading a `Value` from a serializer.

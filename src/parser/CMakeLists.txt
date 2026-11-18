@@ -37,6 +37,7 @@ add_library(sparqlParser
         NamedCachedResult.cpp
         PathQuery.cpp
         SpatialQuery.cpp
+        TensorIndexQuery.cpp
         data/SparqlFilter.cpp
         SelectClause.cpp
         GraphPatternOperation.cpp

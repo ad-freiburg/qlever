@@ -94,6 +94,26 @@ class LogLevel : public EnumWithStrings<LogLevel, detail::LogLevelEnum> {
 inline constexpr LogLevel::Enum compileTimeLogLevel =
     static_cast<LogLevel::Enum>(QLEVER_COMPILETIME_LOGLEVEL);
 
+// #define ENABLE_TIME_DIFF 1
+#ifdef ENABLE_TIME_DIFF
+#define AD_LOG_TIME_START(marker)                                  \
+  AD_LOG(LogLevel::INFO) << "--TIMING (" << #marker << ") START--" \
+                         << std::endl;                             \
+  auto start_##marker = std::chrono::high_resolution_clock::now();
+
+#define AD_LOG_TIME_END(marker)                                               \
+  auto end_##marker = std::chrono::high_resolution_clock::now();              \
+  auto duration_##marker =                                                    \
+      std::chrono::duration_cast<std::chrono::nanoseconds>(end_##marker -    \
+                                                            start_##marker);  \
+  AD_LOG(LogLevel::INFO) << "--TIMING (" << #marker                           \
+                         << ") END: " << duration_##marker.count() << " ns--" \
+                         << std::endl;
+#else
+#define AD_LOG_TIME_START(marker)
+#define AD_LOG_TIME_END(marker)
+#endif
+
 }  // namespace ad_utility
 
 // Global type alias so that `LogLevel::Enum::FATAL` etc. can be written
