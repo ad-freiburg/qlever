@@ -42,6 +42,7 @@
 #include "util/QueryEventLog.h"
 #include "util/ResourceMonitor.h"
 #include "util/TimeTracer.h"
+#include "util/TransparentFunctors.h"
 #include "util/TypeTraits.h"
 #include "util/http/HttpServer.h"
 #include "util/http/HttpUtils.h"
@@ -1406,8 +1407,7 @@ Awaitable<void> Server::processUpdate(
 
   auto responseMiddlewares =
       updates | ql::views::transform(&ParsedQuery::responseMiddleware_) |
-      ql::views::filter([](const auto& ptr) { return ptr != nullptr; }) |
-      ::ranges::to<std::vector>();
+      ql::views::filter(ad_utility::toBool) | ::ranges::to<std::vector>();
 
   std::vector<UpdateMetadata> metadatas;
 
