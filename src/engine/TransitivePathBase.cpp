@@ -624,39 +624,7 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
   // Note: The `variable` in the following structured binding is `const`, even
   // if we bind by value. We deliberately make one unnecessary copy of the
   // `variable` to keep the code simpler.
-  for (auto [variable, columnIndexWithType] :
-       leftOrRightOp->getVariableColumns()) {
-    ColumnIndex columnIndex = columnIndexWithType.columnIndex_;
-    if (columnIndex == inputCol || variable == graphVariable_) {
-      continue;
-    }
-
-    columnIndexWithType.columnIndex_ += columnIndex > inputCol ? 1 : 2;
-
-    // When we have a graph variable, we write it last, so we have to account
-    // for that.
-    if (graphVariable_.has_value()) {
-      auto optGraphIndex =
-          leftOrRightOp->getVariableColumnOrNullopt(graphVariable_.value());
-      if (columnIndex >
-          optGraphIndex.value_or(std::numeric_limits<size_t>::max())) {
-        columnIndexWithType.columnIndex_ -= 1;
-      }
-    }
-
-    AD_CORRECTNESS_CHECK(!p->variableColumns_.contains(variable));
-    p->variableColumns_[variable] = columnIndexWithType;
-  }
-  p->resultWidth_ += leftOrRightOp->getResultWidth() -
-                     numJoinColumnsWith(leftOrRightOp, inputCol);
-  // Make sure mapping actually points to the last column if it's not one of the
-  // regular variables.
-  if (graphVariable_.has_value()) {
-    auto& graphIndex = p->variableColumns_[graphVariable_.value()].columnIndex_;
-    if (graphIndex == 2) {
-      graphIndex = p->resultWidth_ - 1;
-    }
-  }
+  p->addPayloadColumns(leftOrRightOp, inputCol);
   return std::move(p);
 }
 
@@ -793,6 +761,8 @@ void TransitivePathBase::addPayloadColumns(
 
     columnIndexWithType.columnIndex_ += columnIndex > joinColumn ? 1 : 2;
 
+    // When we have a graph variable, we write it last, so we have to account
+    // for that.
     if (graphVariable_.has_value()) {
       auto graphColumn = startTree->getVariableColumnOrNullopt(*graphVariable_);
 
@@ -809,6 +779,8 @@ void TransitivePathBase::addPayloadColumns(
   resultWidth_ +=
       startTree->getResultWidth() - numJoinColumnsWith(startTree, joinColumn);
 
+  // Make sure mapping actually points to the last column if it's not one of the
+  // regular variables.
   if (graphVariable_.has_value()) {
     auto& graphIndex = variableColumns_[*graphVariable_].columnIndex_;
     if (graphIndex == 2) {

@@ -13,8 +13,10 @@
 #include <memory>
 
 #include "backports/functional.h"
+#include "engine/ColumnStrippingHelpers.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/StripColumns.h"
 #include "util/ContainersWithAllocator.h"
 
 using TreeAndCol = std::pair<std::shared_ptr<QueryExecutionTree>, size_t>;
@@ -197,7 +199,7 @@ class TransitivePathBase : public Operation {
   std::string getCacheKeyImpl() const override;
 
   void addPayloadColumns(const std::shared_ptr<QueryExecutionTree>& startTree,
-    ColumnIndex joinColumn);
+                         ColumnIndex joinColumn);
 
   /**
    * @brief Decide on which transitive path side the hull computation should
@@ -262,15 +264,41 @@ class TransitivePathBase : public Operation {
 
   float getMultiplicity(size_t col) override;
 
-  virtual std::optional<std::shared_ptr<QueryExecutionTree>> createWithStrippedColumns(
-    const std::set<Variable>& requestedVariables,
-    std::shared_ptr<QueryExecutionTree> subtree,
-    const TransitivePathSide& lhs,
-    const TransitivePathSide& rhs) const = 0;
-
   std::optional<std::shared_ptr<QueryExecutionTree>>
   makeTreeWithStrippedColumns(
       const std::set<Variable>& requestedVariables) const override;
+
+ protected:
+  virtual std::optional<std::shared_ptr<QueryExecutionTree>>
+  createWithStrippedColumns(const std::set<Variable>& requestedVariables,
+                            std::shared_ptr<QueryExecutionTree> subtree,
+                            const TransitivePathSide& lhs,
+                            const TransitivePathSide& rhs) const = 0;
+
+  template <typename TransitivePathOperation>
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  createWithStrippedColumnsImpl(const std::set<Variable>& requestedVariables,
+                                std::shared_ptr<QueryExecutionTree> subtree,
+                                const TransitivePathSide& lhs,
+                                const TransitivePathSide& rhs) const {
+    auto tree = ad_utility::makeExecutionTree<TransitivePathOperation>(
+        getExecutionContext(), subtree, lhs, rhs, minDist_, maxDist_,
+        activeGraphs_, graphVariable_);
+    auto& operation =
+        dynamic_cast<TransitivePathOperation&>(*tree->getRootOperation());
+    auto& startSide = operation.decideDirection().first;
+
+    if (startSide.isBoundVariable()) {
+      const auto& [startTree, joinColumn] = startSide.treeAndCol_.value();
+      operation.addPayloadColumns(startTree, joinColumn);
+    }
+    if (columnStrippingHelpers::allVariablesAreRequired(*tree,
+                                                        requestedVariables)) {
+      return tree;
+    }
+    return ad_utility::makeExecutionTree<StripColumns>(
+        getExecutionContext(), std::move(tree), requestedVariables);
+  }
 
  private:
   uint64_t getSizeEstimateBeforeLimit() override;

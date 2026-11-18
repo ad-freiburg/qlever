@@ -11,7 +11,6 @@
 #include <memory>
 
 #include "engine/CallFixedSize.h"
-#include "engine/ColumnStrippingHelpers.h"
 #include "engine/TransitivePathBase.h"
 
 // _____________________________________________________________________________
@@ -110,26 +109,8 @@ TransitivePathHashMap::createWithStrippedColumns(
     const std::set<Variable>& requestedVariables,
     std::shared_ptr<QueryExecutionTree> subtree, const TransitivePathSide& lhs,
     const TransitivePathSide& rhs) const {
-  auto tree = ad_utility::makeExecutionTree<TransitivePathHashMap>(
-      getExecutionContext(), subtree, lhs, rhs, minDist_, maxDist_,
-      activeGraphs_, graphVariable_);
-
-  auto& operation =
-      dynamic_cast<TransitivePathHashMap&>(*tree->getRootOperation());
-  auto [startSide, targetSide] = operation.decideDirection();
-
-  if (startSide.isBoundVariable()) {
-    const auto& [startTree, joinColumn] = startSide.treeAndCol_.value();
-    operation.addPayloadColumns(startTree, joinColumn);
-  }
-
-  if (columnStrippingHelpers::allVariablesAreRequired(*tree,
-                                                      requestedVariables)) {
-    return tree;
-  }
-
-  return ad_utility::makeExecutionTree<StripColumns>(
-      getExecutionContext(), std::move(tree), requestedVariables);
+  return createWithStrippedColumnsImpl<TransitivePathHashMap>(
+      requestedVariables, subtree, lhs, rhs);
 }
 
 #endif

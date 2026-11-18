@@ -11,7 +11,6 @@
 #include <memory>
 #include <utility>
 
-#include "engine/ColumnStrippingHelpers.h"
 #include "engine/TransitivePathBase.h"
 
 // _____________________________________________________________________________
@@ -180,26 +179,8 @@ TransitivePathBinSearch::createWithStrippedColumns(
     const std::set<Variable>& requestedVariables,
     std::shared_ptr<QueryExecutionTree> subtree, const TransitivePathSide& lhs,
     const TransitivePathSide& rhs) const {
-  auto tree = ad_utility::makeExecutionTree<TransitivePathBinSearch>(
-      getExecutionContext(), subtree, lhs, rhs, minDist_, maxDist_,
-      activeGraphs_, graphVariable_);
-
-  auto& operation =
-      dynamic_cast<TransitivePathBinSearch&>(*tree->getRootOperation());
-  auto [startSide, targetSide] = operation.decideDirection();
-
-  if (startSide.isBoundVariable()) {
-    const auto& [startTree, joinColumn] = startSide.treeAndCol_.value();
-    operation.addPayloadColumns(startTree, joinColumn);
-  }
-
-  if (columnStrippingHelpers::allVariablesAreRequired(*tree,
-                                                      requestedVariables)) {
-    return tree;
-  }
-
-  return ad_utility::makeExecutionTree<StripColumns>(
-      getExecutionContext(), std::move(tree), requestedVariables);
+  return createWithStrippedColumnsImpl<TransitivePathBinSearch>(
+      requestedVariables, subtree, lhs, rhs);
 }
 
 #endif
