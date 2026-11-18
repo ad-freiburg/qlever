@@ -613,6 +613,73 @@ struct ParseGeoPointOrWktVisitor {
 
 static constexpr ParseGeoPointOrWktVisitor parseGeoPointOrWkt;
 
+// Helper to extract the longitude or latitude coordinate from an instance of
+// the `GeoPointOrWkt` variant.
+enum class Coordinate { Longitude, Latitude };
+template <Coordinate C>
+struct CoordinateFromGeoPointOrWktVisitor {
+  double operator()(const GeoPoint& point) const {
+    if constexpr (C == Coordinate::Longitude) {
+      return point.getLng();
+    } else if constexpr (C == Coordinate::Latitude) {
+      return point.getLat();
+    } else {
+      return std::numeric_limits<double>::quiet_NaN();
+    }
+  }
+
+  double operator()(const std::string& wkt) const {
+    ParseResult parseResult = parseWkt(wkt);
+
+    if (!parseResult.parsedWkt_.has_value()) {
+      return std::numeric_limits<double>::quiet_NaN();
+    }
+    return std::visit(
+        [](const auto& value) -> double {
+          // Only compute longitude/latitude if the WKT literal describes a
+          // `POINT`.
+          if constexpr (std::is_same_v<std::decay_t<decltype(value)>,
+                                       Point<CoordType>>) {
+            return CoordinateFromGeoPointOrWktVisitor<C>{}(value);
+          } else {
+            return std::numeric_limits<double>::quiet_NaN();
+          }
+        },
+        parseResult.parsedWkt_.value());
+  }
+
+  double operator()(const Point<CoordType>& point) const {
+    if constexpr (C == Coordinate::Longitude) {
+      return point.getX();
+    } else if constexpr (C == Coordinate::Latitude) {
+      return point.getY();
+    } else {
+      return std::numeric_limits<double>::quiet_NaN();
+    }
+  }
+
+  double operator()(const GeoPointOrWkt& geoPointOrWkt) const {
+    return std::visit(
+        [](const auto& value) {
+          return CoordinateFromGeoPointOrWktVisitor<C>{}(value);
+        },
+        geoPointOrWkt);
+  }
+
+  template <typename T>
+  double operator()(const std::optional<T>& geoPointOrWkt) const {
+    if (!geoPointOrWkt.has_value()) {
+      return std::numeric_limits<double>::quiet_NaN();
+    }
+    return CoordinateFromGeoPointOrWktVisitor<C>{}(geoPointOrWkt.value());
+  }
+};
+
+static constexpr CoordinateFromGeoPointOrWktVisitor<Coordinate::Longitude>
+    longitudeFromGeoPointOrWkt;
+static constexpr CoordinateFromGeoPointOrWktVisitor<Coordinate::Latitude>
+    latitudeFromGeoPointOrWkt;
+
 // Helper to convert a geometry from `pb_util` to a WKT string.
 struct UtilGeomToWktVisitor {
   // Visitor for `std::optional` inputs.

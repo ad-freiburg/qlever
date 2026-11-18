@@ -78,6 +78,52 @@ TEST(GeoSparqlHelpers, ParseWktPoint) {
   testWktPointInvalid("POINT(42e3 7.8)");
 }
 
+// Test that `WktLongitude` and `WktLatitude` work correctly (with all supported
+// coordinate reference systems).
+TEST(GeoSparqlHelpers, WktLongitudeLatitude) {
+  auto testWktPointCorrect = [](const std::string& pointWkt,
+                                double expected_lng, double expected_lat) {
+    ASSERT_DOUBLE_EQ(expected_lng, WktLongitude()(pointWkt));
+    ASSERT_DOUBLE_EQ(expected_lat, WktLatitude()(pointWkt));
+  };
+
+  // Test that the given WKT point is invalid (with all three of
+  // parseWktPoint, wktLongitude, and wktLatitude).
+  auto testWktPointInvalid = [](const std::string& pointWkt) {
+    auto lng = WktLongitude()(pointWkt);
+    auto lat = WktLatitude()(pointWkt);
+    ASSERT_TRUE(std::isnan(lng));
+    ASSERT_TRUE(std::isnan(lat));
+  };
+
+  // Test same point in different coordinate reference systems.
+  testWktPointCorrect(
+      "\"POINT(7 8)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+      7, 8);
+  testWktPointCorrect(
+      "\"<http://www.opengis.net/def/crs/OGC/1.3/CRS84> POINT(7 8)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+      7, 8);
+  testWktPointCorrect(
+      "\"<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(8 7)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+      7, 8);
+  testWktPointCorrect(
+      "\"<http://www.opengis.net/def/crs/EPSG/0/3857> POINT(779236.435552915 "
+      "893463.751012646)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+      7, 8);
+
+  // Test invalid or unsupported coordinate reference systems.
+  testWktPointInvalid(
+      "\"<http://www.opengis.net/def/crs/EPSG/0/2154> POINT(7 8)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
+  testWktPointInvalid(
+      "\"<http://www.opengis.net/invalid> POINT(7 8)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
+}
+
 // _____________________________________________________________________________
 TEST(GeoSparqlHelpers, WktDist) {
   using enum UnitOfMeasurement;
