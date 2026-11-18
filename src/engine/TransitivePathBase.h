@@ -281,24 +281,32 @@ class TransitivePathBase : public Operation {
                                 std::shared_ptr<QueryExecutionTree> subtree,
                                 const TransitivePathSide& lhs,
                                 const TransitivePathSide& rhs) const {
-    auto tree = ad_utility::makeExecutionTree<TransitivePathOperation>(
-        getExecutionContext(), subtree, lhs, rhs, minDist_, maxDist_,
-        activeGraphs_, graphVariable_);
-    auto& operation =
-        dynamic_cast<TransitivePathOperation&>(*tree->getRootOperation());
-    auto& startSide = operation.decideDirection().first;
+    auto* qec = getExecutionContext();
 
-    if (startSide.isBoundVariable()) {
-      const auto& [startTree, joinColumn] = startSide.treeAndCol_.value();
-      operation.addPayloadColumns(startTree, joinColumn);
-    }
-    if (columnStrippingHelpers::allVariablesAreRequired(*tree,
-                                                        requestedVariables)) {
-      return tree;
-    }
-    return ad_utility::makeExecutionTree<StripColumns>(
-        getExecutionContext(), std::move(tree), requestedVariables);
+  // First create the operation, without wrapping it in a QueryExecutionTree.
+  auto operation = qec->makeShared<TransitivePathOperation>(
+      qec, subtree, lhs, rhs, minDist_, maxDist_, activeGraphs_,
+      graphVariable_);
+
+  // Add the payload columns of the start side before creating the tree.
+  auto& startSide = operation->decideDirection().first;
+  if (startSide.isBoundVariable()) {
+    const auto& [startTree, joinColumn] = startSide.treeAndCol_.value();
+    operation->addPayloadColumns(startTree, joinColumn);
   }
+
+  // Only now create the QueryExecutionTree, so its variable map is complete.
+  auto tree = qec->makeShared<QueryExecutionTree>(
+      qec, std::move(operation));
+
+  if (columnStrippingHelpers::allVariablesAreRequired(
+          *tree, requestedVariables)) {
+    return tree;
+  }
+
+  return ad_utility::makeExecutionTree<StripColumns>(
+    qec, std::move(tree), requestedVariables);
+}
 
  private:
   uint64_t getSizeEstimateBeforeLimit() override;
