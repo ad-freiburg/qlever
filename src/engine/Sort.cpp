@@ -19,7 +19,7 @@
 #include "index/ExternalSortFunctors.h"
 #include "index/IdTableUtils.h"
 #include "util/Algorithm.h"
-#include "util/Random.h"
+#include "util/UuidGenerator.h"
 
 // Type alias for the external sorter.
 //
