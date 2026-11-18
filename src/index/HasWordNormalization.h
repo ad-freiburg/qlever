@@ -25,7 +25,8 @@ QLEVER_ENUM_SIZE(HasWordNormalizationEnum, 2);
 // (option `--has-word-normalization` of `qlever-index`). In all modes, literals
 // are split at non-alphanumeric characters and the words are lowercased. With
 // `LowercaseNoAccents`, additionally all combining marks (Unicode category
-// `Mn`) are removed from the words, e.g. "Café" becomes "cafe".
+// `Mn`) are removed from the words, e.g. "Café" becomes "cafe". The SPARQL
+// function `ql:normalize` applies the same normalization to words in queries.
 //
 // NOTE: `LowercaseNoAccents` is meant for text in the Latin, Greek or Cyrillic
 // script. In other scripts, it also removes marks that are not accents, for

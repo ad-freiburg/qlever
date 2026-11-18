@@ -288,8 +288,34 @@ std::shared_ptr<QueryExecutionTree> QueryPlanner::createExecutionTree(
   }
 }
 
+// Fold each `ql:normalize` with a string literal as its argument in the
+// `FILTER`s and `BIND`s of `pattern` to that string literal, see
+// `sparqlExpression::foldNormalizeExpressions`. The nested groups of `pattern`
+// are folded when `QueryPlanner::optimize` is called for them.
+static void foldNormalizeExpressions(ParsedQuery::GraphPattern& pattern,
+                                     const Index& index) {
+  auto fold = [&index](sparqlExpression::SparqlExpressionPimpl& expression) {
+    if (auto folded = sparqlExpression::foldNormalizeExpressions(
+            *expression.getPimpl(), index)) {
+      expression = sparqlExpression::SparqlExpressionPimpl{
+          std::move(folded), expression.getDescriptor()};
+    }
+  };
+  for (auto& filter : pattern._filters) {
+    fold(filter.expression_);
+  }
+  for (auto& operation : pattern._graphPatterns) {
+    if (auto* bind = std::get_if<p::Bind>(&operation)) {
+      fold(bind->_expression);
+    }
+  }
+}
+
 // _____________________________________________________________________________
 SubtreePlanVec QueryPlanner::optimize(ParsedQuery::GraphPattern* rootPattern) {
+  if (_qec != nullptr) {
+    foldNormalizeExpressions(*rootPattern, _qec->getIndex());
+  }
   QueryPlanner::GraphPatternPlanner optimizer{*this, rootPattern};
   for (auto& child : rootPattern->_graphPatterns) {
     child.visit([&optimizer](auto& arg) {

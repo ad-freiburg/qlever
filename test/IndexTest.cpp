@@ -941,6 +941,31 @@ TEST(IndexTest, ZeroCopyVocabularyBlob) {
   }
 }
 
+// Test that the normalization of the `ql:has-word` triples is stored in the
+// configuration of the index, so that `getNormalizedWords` (used by
+// `ql:normalize`) also applies it after the index has been loaded.
+TEST(IndexTest, hasWordNormalizationIsStored) {
+  // A function that builds and loads an index with the given normalization and
+  // returns the words of a string with "café" composed and decomposed in
+  // uppercase plural.
+  auto getWords = [](ad_utility::HasWordNormalization normalization) {
+    TestIndexConfig config{"<a> <b> \"Café\" ."};
+    config.addHasWordTriples = true;
+    config.hasWordNormalization = normalization;
+    return getQec(std::move(config))
+        ->getIndex()
+        .getImpl()
+        .getNormalizedWords("Café CAFE\xcc\x81s!");
+  };
+
+  // With `Lowercase`, the accents are kept and the combining mark splits the
+  // decomposed word; with `LowercaseNoAccents`, they are removed.
+  EXPECT_THAT(getWords(ad_utility::HasWordNormalization::Lowercase),
+              ::testing::ElementsAre("café", "cafe", "s"));
+  EXPECT_THAT(getWords(ad_utility::HasWordNormalization::LowercaseNoAccents),
+              ::testing::ElementsAre("cafe", "cafes"));
+}
+
 TEST(IndexTest, NumDistinctEntities) {
   std::string turtleInput =
       "<x> <label> \"alpha\" . <x> <label> \"älpha\" . <x> <label> \"A\" . "
