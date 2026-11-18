@@ -51,9 +51,9 @@ TEST(Tie, tieElement) {
   static_assert(!qlever::isProxy<int>);
 }
 
-// Test that `tieElementsByIndexSequence` on a row of an `IdTable` with columns
-// of whole `Id`s (also with `USE_SPLIT_LAYOUT`), whose elements are lvalue
-// references, behaves like `std::tie`.
+// Test that `tieElementsByIndexSequence` on a row of an `IdTable` whose columns
+// are `std::vector<Id>` (so its elements are `Id&` in both layouts) behaves
+// like `std::tie`.
 TEST(Tie, lvalueReferences) {
   using TableOfIds = columnBasedIdTable::IdTable<Id, 0>;
   TableOfIds table{3};
