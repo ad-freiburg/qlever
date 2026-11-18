@@ -93,9 +93,10 @@ auto resultGeneratorImpl(T&& vector, size_t numItems,
   AD_CONTRACT_CHECK(numItems == vector.size());
   if constexpr (qlever::isProxy<
                     std::decay_t<ql::ranges::range_reference_t<T>>>) {
-    // The elements of a split column are passed on as the `Id`s they refer to.
-    // The value getters take a `ValueId` or an `IdOrLocalVocabEntry`, and the
-    // proxy converts to both, so a call with the proxy would be ambiguous.
+    // If the elements are `IdRef`s (elements of a split column), pass on the
+    // `Id`s they refer to, because an `IdRef` converts to both `ValueId` and
+    // `IdOrLocalVocabEntry`, so the call to the value getter would be
+    // ambiguous.
     return AD_FWD(vector) |
            ql::views::transform([transformation = std::move(transformation)](
                                     Id id) { return transformation(id); });
