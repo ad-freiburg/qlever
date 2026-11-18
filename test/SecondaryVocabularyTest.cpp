@@ -484,6 +484,7 @@ TEST(SecondaryVocabIndex, sortsDirectlyAfterTheMainVocabulary) {
                       Id::makeFromWordVocabIndex(WordVocabIndex::make(3)),
                       Id::makeFromBlankNodeIndex(BlankNodeIndex::make(3)),
                       Id::makeFromEncodedVal(7),
+                      Id::makeFromTripleTermIndex(TripleTermIndex::make(3)),
                       secondaryVocabId(0),
                       secondaryVocabId(1)};
   for (Datatype datatype : qlever::allEnumValues<Datatype>) {
