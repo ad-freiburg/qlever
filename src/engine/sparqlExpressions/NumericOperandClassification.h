@@ -117,7 +117,8 @@ CPP_template(bool IncludeDates = false, typename IdRange)(
     requires ql::ranges::random_access_range<IdRange> &&
     ad_utility::isSimilar<ql::ranges::range_value_t<IdRange>, Id>)
 inline NumericOperandClassification
-    classifyNumericValues(IdRange values, const EvaluationContext* context) {
+    classifyNumericValues(const IdRange& values,
+                          const EvaluationContext* context) {
   if (values.empty()) {
     return {};
   }
@@ -224,8 +225,7 @@ inline NumericOperandClassification classifyNumericOperand(ValueId value) {
 }
 
 // Classify a supported operand representation. Constants are classified
-// directly. Vectors of `ValueId` are viewed as spans, so that they share one
-// instantiation, and the columns of the split layout are passed on as they are.
+// directly, vectors and columns of `ValueId` are passed on as they are.
 template <bool IncludeDates = false, typename Operand>
 inline NumericOperandClassification classifyNumericOperand(
     const Operand& operand, const EvaluationContext* context) {
@@ -237,9 +237,6 @@ inline NumericOperandClassification classifyNumericOperand(
 
   if constexpr (ad_utility::isSimilar<OperandType, ValueId>) {
     return classifyNumericOperand<IncludeDates>(operand);
-  } else if constexpr (ql::ranges::contiguous_range<OperandType>) {
-    return classifyNumericValues<IncludeDates>(ql::span<const ValueId>{operand},
-                                               context);
   } else {
     return classifyNumericValues<IncludeDates>(operand, context);
   }
