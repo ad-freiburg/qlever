@@ -15,18 +15,16 @@
 
 class TripleComponent;
 
-// Immutable, recursively owned parsed contents. `TripleComponent` contains a
-// `ParsedTripleTerm`, whose `Components` contain three `TripleComponent`s.
-// Pointer indirection breaks this recursive type dependency and allows
-// `Components` to be defined out of line.
+// The representation of an RDF 1.2 triple term.
+// Since there is a cyclic dependency between `TripleComponent` and
+// `ParsedTripleTerm` we need to use a pointer indirection to break this
+// dependency.
 //
-// The implicitly generated copy and move operations are safe because the
-// contents are immutable and this class only grants const access to them.
-// Copies share ownership; moves transfer ownership. Equality and hashing
-// compare contents rather than allocation addresses.
-//
-// The RDF parser enforces the permitted component kinds. This syntactic type
-// does not assign IDs or define SPARQL value equality.
+// Although we store the contents via `shared_ptr`, the implicitly generated
+// copy and move operations are safe because the contents are immutable and this
+// class only grants const access to them. Copies share ownership; moves
+// transfer ownership. Equality and hashing compare contents rather than
+// allocation addresses.
 class ParsedTripleTerm {
   struct Components;
   std::shared_ptr<const Components> components_;
@@ -40,9 +38,11 @@ class ParsedTripleTerm {
   const TripleComponent& predicate() const;
   const TripleComponent& object() const;
   friend bool operator==(const ParsedTripleTerm& a, const ParsedTripleTerm& b);
+#ifdef QLEVER_CPP_17
   friend bool operator!=(const ParsedTripleTerm& a, const ParsedTripleTerm& b) {
     return !(a == b);
   }
+#endif
   template <typename H>
   friend H AbslHashValue(H h, const ParsedTripleTerm& term) {
     return H::combine(std::move(h), term.subject(), term.predicate(),

@@ -369,11 +369,9 @@ class TurtleParser : public RdfParserBase {
   bool object();
   // Parse the triple-term grammar rules without asserting embedded triples.
   // `syntax` selects the Turtle or stricter N-Triples/N-Quads component rules.
-  bool tripleTerm(TripleTermSyntax syntax = TripleTermSyntax::Turtle);
+  bool tripleTerm(TripleTermSyntax syntax);
   bool ttSubject(TripleTermSyntax syntax);
   bool ttObject(TripleTermSyntax syntax);
-  // Reject a triple term where the grammar does not allow one.
-  void rejectTripleTermInNonObjectPosition();
   bool verb();
   bool predicateSpecialA();
   bool predicate();
@@ -439,6 +437,13 @@ class TurtleParser : public RdfParserBase {
   // Enforce that the argument is true: if it is false, a parse Exception is
   // thrown this helps formulating the LL1 property in easily readable code
   bool check(bool result) const;
+
+  // Reject a triple term where the grammar does not allow one.
+  void rejectTripleTermInNonObjectPosition();
+
+  // Parse a predicate into `lastParseResult_` without changing
+  // `activePredicate_`.
+  bool verbImpl();
 
   // map a turtle prefix to its expanded form. Throws if the prefix was not
   // properly registered before

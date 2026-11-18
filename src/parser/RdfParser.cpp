@@ -335,14 +335,25 @@ bool TurtleParser<T>::objectList() {
 // ______________________________________________________
 template <class T>
 bool TurtleParser<T>::verb() {
-  return predicate() || predicateSpecialA();
+  if (!verbImpl()) {
+    return false;
+  }
+  activePredicate_ = lastParseResult_;
+  return true;
+}
+
+// ____________________________________________________________________
+template <class T>
+bool TurtleParser<T>::verbImpl() {
+  rejectTripleTermInNonObjectPosition();
+  return iri() || predicateSpecialA();
 }
 
 // ___________________________________________________________________
 template <class T>
 bool TurtleParser<T>::predicateSpecialA() {
   if (parseTerminal<TurtleTokenId::A>()) {
-    activePredicate_ = TripleComponent::Iri::fromIriref(
+    lastParseResult_ = TripleComponent::Iri::fromIriref(
         "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>");
     return true;
   } else {
@@ -355,7 +366,7 @@ template <class T>
 void TurtleParser<T>::rejectTripleTermInNonObjectPosition() {
   tok_.skipWhitespaceAndComments();
   if (ql::starts_with(tok_.view(), "<<")) {
-    raise("Triple terms are only allowed in object position");
+    raise("Triple terms are only allowed as the object of a triple or quad");
   }
 }
 
@@ -424,23 +435,11 @@ bool TurtleParser<T>::tripleTerm(TripleTermSyntax syntax) {
     raise("Expected an IRI or blank node as triple-term subject");
   }
   auto subject = std::move(lastParseResult_);
-  TripleComponent predicate;
-  {
-    // `verb()` stores its result in `activePredicate_`. Keep that change local
-    // to this rule, including if parsing raises an exception.
-    auto savedPredicate = std::move(activePredicate_);
-    absl::Cleanup restorePredicate = [this, &savedPredicate] {
-      activePredicate_ = std::move(savedPredicate);
-    };
-    rejectTripleTermInNonObjectPosition();
-    if (ql::starts_with(tok_.view(), "_:") ||
-        !(syntax == TripleTermSyntax::NQuads ? iriref() : verb())) {
-      raise("Expected an IRI as triple-term predicate");
-    }
-    predicate = syntax == TripleTermSyntax::NQuads
-                    ? std::move(lastParseResult_)
-                    : std::move(activePredicate_);
+  rejectTripleTermInNonObjectPosition();
+  if (!(syntax == TripleTermSyntax::NQuads ? iriref() : verbImpl())) {
+    raise("Expected an IRI as triple-term predicate");
   }
+  auto predicate = std::move(lastParseResult_);
   if (!ttObject(syntax)) {
     raise(
         "Expected an IRI, blank node, literal, or triple term as triple-term "
@@ -462,8 +461,8 @@ template <class T>
 bool TurtleParser<T>::object() {
   // these produce a single object that becomes part of a triple
   // check blank Node first because _: also could look like a prefix
-  if (tripleTerm() || blankNode() || literal() || iri() || collection() ||
-      blankNodePropertyList()) {
+  if (tripleTerm(TripleTermSyntax::Turtle) || blankNode() || literal() ||
+      iri() || collection() || blankNodePropertyList()) {
     emitTriple();
     return true;
   } else {
