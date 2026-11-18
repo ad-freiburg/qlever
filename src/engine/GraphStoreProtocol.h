@@ -134,7 +134,8 @@ class GraphStoreProtocol {
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
   static ParsedQuery
       transformPost(const RequestT& rawRequest, const GraphOrDefault& graph,
-                    const Index& index) {
+                    const Index& index,
+                    const qlever::Allocator<Id>& allocator) {
     throwIfRequestBodyEmpty(rawRequest);
     auto triples =
         parseTriples(rawRequest.body(), extractMediatype(rawRequest));
@@ -145,8 +146,8 @@ class GraphStoreProtocol {
     auto convertedTriples =
         convertTriples(effectiveGraph, std::move(triples), bn);
     updateClause::GraphUpdate up{std::move(convertedTriples), {}};
-    ParsedQuery res;
-    res._clause = parsedQuery::UpdateClause{std::move(up)};
+    ParsedQuery res{allocator};
+    res._clause = parsedQuery::UpdateClause{allocator, std::move(up)};
     if (insertIntoNewGraph) {
       AD_CORRECTNESS_CHECK(
           std::holds_alternative<ad_utility::triple_component::Iri>(
@@ -168,15 +169,16 @@ class GraphStoreProtocol {
       requires ad_utility::httpUtils::HttpRequest<RequestT>)
   static ParsedQuery
       transformTsop(const RequestT& rawRequest, const GraphOrDefault& graph,
-                    const Index& index) {
+                    const Index& index,
+                    const qlever::Allocator<Id>& allocator) {
     throwIfRequestBodyEmpty(rawRequest);
     auto triples =
         parseTriples(rawRequest.body(), extractMediatype(rawRequest));
     BlankNodeAdder bn{index.getBlankNodeManager()};
     auto convertedTriples = convertTriples(graph, std::move(triples), bn);
     updateClause::GraphUpdate up{{}, std::move(convertedTriples)};
-    ParsedQuery res;
-    res._clause = parsedQuery::UpdateClause{std::move(up)};
+    ParsedQuery res{allocator};
+    res._clause = parsedQuery::UpdateClause{allocator, std::move(up)};
     res._originalString = truncatedStringRepresentation("TSOP", rawRequest);
     return res;
   }
@@ -216,7 +218,8 @@ class GraphStoreProtocol {
     };
 
     ParsedQuery drop = ad_utility::getSingleElement(SparqlParser::parseUpdate(
-        index.getBlankNodeManager(), &index.encodedIriManager(), getDrop()));
+        index.getBlankNodeManager(), &index.encodedIriManager(), allocator,
+        getDrop()));
     drop._originalString = stringRepresentation;
 
     auto triples =
@@ -224,7 +227,7 @@ class GraphStoreProtocol {
     BlankNodeAdder bn{index.getBlankNodeManager()};
     auto convertedTriples = convertTriples(graph, std::move(triples), bn);
     updateClause::GraphUpdate up{std::move(convertedTriples), {}};
-    ParsedQuery insertData;
+    ParsedQuery insertData{allocator};
     // Interpretation of the very vague GSP 5.3:
     // - 201 Created if a new graph is created
     // - 200 Ok or 204 No Content if an existing graph is modified
@@ -243,7 +246,7 @@ class GraphStoreProtocol {
           }
           return response;
         });
-    insertData._clause = parsedQuery::UpdateClause{std::move(up)};
+    insertData._clause = parsedQuery::UpdateClause{allocator, std::move(up)};
     insertData._originalString = stringRepresentation;
     return {std::move(drop), std::move(insertData)};
   }
@@ -275,11 +278,11 @@ class GraphStoreProtocol {
     } else if (method == "DELETE") {
       return {transformDelete(operation.graph_, index)};
     } else if (method == "POST") {
-      return {transformPost(rawRequest, operation.graph_, index)};
+      return {transformPost(rawRequest, operation.graph_, index, allocator)};
     } else if (method == "TSOP") {
       // TSOP (`POST` backwards) does the inverse of `POST`. It does a `DELETE
       // DATA` of the payload.
-      return {transformTsop(rawRequest, operation.graph_, index)};
+      return {transformTsop(rawRequest, operation.graph_, index, allocator)};
     } else if (method == "HEAD") {
       return {transformHead(operation.graph_, &index.encodedIriManager())};
     } else if (method == "PATCH") {

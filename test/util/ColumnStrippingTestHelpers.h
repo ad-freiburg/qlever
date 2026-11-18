@@ -13,6 +13,7 @@
 #include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 
+#include "./AllocatorTestHelpers.h"
 #include "backports/algorithm.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
@@ -82,7 +83,7 @@ size_t countOperations(const QueryExecutionTree& tree) {
 // `ExistsJoin` writes the result of the `EXISTS` to.
 inline std::pair<sparqlExpression::SparqlExpressionPimpl, Variable>
 makeExistsExpression(const std::string& predicate) {
-  ParsedQuery query;
+  ParsedQuery query{ad_utility::testing::makeAllocator()};
   query._rootGraphPattern._graphPatterns.push_back(
       parsedQuery::BasicGraphPattern{{SparqlTriple{
           TripleComponent{Variable{"?a"}},

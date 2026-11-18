@@ -1122,7 +1122,8 @@ TEST(ParserTest, isDeterministic) {
     AD_EXPECT_THROW_WITH_MESSAGE(std::ignore = pattern.isDeterministic(),
                                  ::testing::HasSubstr("unreachable"));
   };
-  expectUnreachable(p::Describe{});
+  expectUnreachable(
+      p::Describe{{}, {}, p::Subquery{ad_utility::testing::makeAllocator()}});
   expectUnreachable(p::TransPath{});
   expectUnreachable(p::Load{
       TripleComponent::Iri::fromIriref("<https://example.org>"), false});

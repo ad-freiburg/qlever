@@ -16,6 +16,7 @@
 
 #include "backports/three_way_comparison.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
+#include "global/Id.h"
 #include "parser/Alias.h"
 #include "parser/ConstructClause.h"
 #include "parser/DatasetClauses.h"
@@ -28,6 +29,7 @@
 #include "parser/data/OrderKey.h"
 #include "parser/data/SolutionModifiers.h"
 #include "parser/data/SparqlFilter.h"
+#include "util/ContainersWithAllocator.h"
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include "util/http/ResponseMiddleware.h"
 #endif
@@ -68,18 +70,27 @@ class ParsedQuery {
 
   // ASK queries have no further context in the header, so we use an empty
   // struct
-  struct AskClause : public parsedQuery::ClauseBase {};
+  struct AskClause : public parsedQuery::ClauseBase {
+    using ClauseBase::ClauseBase;
+  };
 
-  ParsedQuery() = default;
+  // The containers of the query use the `allocator`.
+  explicit ParsedQuery(const qlever::Allocator<Id>& allocator)
+      : _havingClauses{allocator},
+        _orderBy{allocator},
+        _groupByVariables{allocator},
+        postQueryValuesBinds_{allocator},
+        internalAliasesWithoutSelectClause_{allocator},
+        _clause{SelectClause{allocator}} {}
 
   GraphPattern _rootGraphPattern;
-  std::vector<SparqlFilter> _havingClauses;
-  std::vector<VariableOrderKey> _orderBy;
+  qlm::vector<SparqlFilter> _havingClauses;
+  qlm::vector<VariableOrderKey> _orderBy;
   IsInternalSort _isInternalSort = IsInternalSort::False;
   // If true, the `QueryPlanner` throws for a variable of the `ORDER BY` clause
   // that is not bound, instead of ignoring it (required by `RowNumberQuery`).
   bool orderByVariablesMustBeBound_ = false;
-  std::vector<Variable> _groupByVariables;
+  qlm::vector<Variable> _groupByVariables;
   LimitOffsetClause _limitOffset{};
   std::string _originalString;
   // The trailing `VALUES` clause of a query with `GROUP BY`, which is joined by
@@ -89,12 +100,12 @@ class ParsedQuery {
   // The aliases of a query with `GROUP BY` that use a variable of the
   // `postQueryValuesClause_` and are thus computed by the `QueryPlanner` after
   // joining it, see `moveAliasesAfterPostQueryValues`.
-  std::vector<parsedQuery::Bind> postQueryValuesBinds_;
+  qlm::vector<parsedQuery::Bind> postQueryValuesBinds_;
   // The internal aliases (e.g. from `HAVING` and `ORDER BY` with `GROUP BY`,
   // or from `moveAliasesAfterPostQueryValues`) of a query without a `SELECT`
   // clause (`CONSTRUCT` or `ASK`). For a `SELECT` query, they are stored in the
   // `SelectClause`.
-  std::vector<Alias> internalAliasesWithoutSelectClause_;
+  qlm::vector<Alias> internalAliasesWithoutSelectClause_;
 
   // Contains warnings about queries that are valid according to the SPARQL
   // standard, but are probably semantically wrong.
@@ -102,9 +113,7 @@ class ParsedQuery {
 
   using HeaderClause =
       std::variant<SelectClause, ConstructClause, UpdateClause, AskClause>;
-  // Use explicit default initialization for `SelectClause` because its
-  // constructor is private.
-  HeaderClause _clause{SelectClause{}};
+  HeaderClause _clause;
 
   // The IRIs from the FROM and FROM NAMED clauses.
   DatasetClauses datasetClauses_;
@@ -179,7 +188,7 @@ class ParsedQuery {
   void addUnboundVariableWarningOrThrow(std::string warning);
 
   // Returns all variables that are visible in the Query Body.
-  const std::vector<Variable>& getVisibleVariables() const;
+  const qlm::vector<Variable>& getVisibleVariables() const;
 
   auto& children() { return _rootGraphPattern._graphPatterns; }
   [[nodiscard]] const auto& children() const {
@@ -218,7 +227,7 @@ class ParsedQuery {
   // (non-internal) targets stay selected (see
   // `SelectClause::deleteAliasesButKeepVariables`), otherwise
   // `internalAliasesWithoutSelectClause_` is cleared.
-  std::vector<Alias> takeAliases();
+  qlm::vector<Alias> takeAliases();
 
   // If the `variable` is neither visible in the query body nor contained in the
   // `additionalVisibleVariables`, add a warning or throw an exception (see
@@ -241,7 +250,7 @@ class ParsedQuery {
   // check whether all the variables are visible inside the query body. Uses
   // `internalVariableGenerator` to generate distinct internal variables as
   // required.
-  void addGroupByClause(std::vector<GroupKey> groupKeys,
+  void addGroupByClause(qlm::vector<GroupKey> groupKeys,
                         InternalVariableGenerator internalVariableGenerator);
 
   // Add the `havingClause` to the query. With an explicit or implicit
@@ -251,7 +260,7 @@ class ParsedQuery {
   // `addUnboundVariableWarningOrThrow`). `postQueryValues` is only used for the
   // warnings.
   void addHavingClause(
-      std::vector<SparqlFilter> havingClause, bool isGroupBy,
+      qlm::vector<SparqlFilter> havingClause, bool isGroupBy,
       InternalVariableGenerator internalVariableGenerator,
       const std::optional<parsedQuery::Values>& postQueryValues);
 
@@ -261,7 +270,7 @@ class ParsedQuery {
   // `postQueryValues` are bound only after `HAVING`, so the warning for an
   // unbound variable explains this.
   void addHavingClauseWithoutGroupBy(
-      std::vector<SparqlFilter> havingClauses,
+      qlm::vector<SparqlFilter> havingClauses,
       const std::optional<parsedQuery::Values>& postQueryValues);
 
   // Add the `orderClause` to the query. Throw an exception if the `orderClause`
@@ -298,7 +307,7 @@ class ParsedQuery {
 
   // Return all the aliases of the query, including the internal ones. For a
   // query without a `SELECT` clause, these are only internal aliases.
-  [[nodiscard]] const std::vector<Alias>& getAliases() const;
+  [[nodiscard]] ql::span<const Alias> getAliases() const;
 
   // Update the export limit based on the `send` parameter (historical name).
   // The limit controls the maximum number of bindings exported by

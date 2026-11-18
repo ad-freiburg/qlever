@@ -505,7 +505,7 @@ void SparqlQleverVisitor::resetStateForMultipleUpdates() {
     activeDatasetClauses_ = {};
   }
   prologueString_ = {};
-  parsedQuery_ = {};
+  parsedQuery_ = ParsedQuery{allocator()};
   treatBlankNodesAs_ = TreatBlankNodesAs::InternalVariables;
   allBlankNodeLabels_.clear();
   blankNodeLabelsInCurrentBasicGraphPattern_.clear();
@@ -513,7 +513,7 @@ void SparqlQleverVisitor::resetStateForMultipleUpdates() {
 
 // ____________________________________________________________________________________
 SelectClause Visitor::visit(Parser::SelectClauseContext* ctx) {
-  SelectClause select;
+  SelectClause select{allocator()};
 
   select.distinct_ = static_cast<bool>(ctx->DISTINCT());
   select.reduced_ = static_cast<bool>(ctx->REDUCED());
@@ -521,7 +521,7 @@ SelectClause Visitor::visit(Parser::SelectClauseContext* ctx) {
   if (ctx->asterisk) {
     select.setAsterisk();
   } else {
-    select.setSelected(visitVector(ctx->varOrAlias()));
+    select.setSelected(visitQlmVector(ctx->varOrAlias()));
   }
   return select;
 }
@@ -604,12 +604,12 @@ const parsedQuery::DatasetClauses& SparqlQleverVisitor::setAndGetDatasetClauses(
 
 // ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::ConstructQueryContext* ctx) {
-  ParsedQuery query;
+  ParsedQuery query{allocator()};
   query.datasetClauses_ =
       setAndGetDatasetClauses(visitVector(ctx->datasetClause()));
   if (ctx->constructTemplate()) {
     query._clause = visit(ctx->constructTemplate())
-                        .value_or(parsedQuery::ConstructClause{});
+                        .value_or(parsedQuery::ConstructClause{allocator()});
     visitWhereClause(ctx->whereClause(), query);
   } else {
     // For `CONSTRUCT WHERE`, the CONSTRUCT template and the WHERE clause are
@@ -617,7 +617,7 @@ ParsedQuery Visitor::visit(Parser::ConstructQueryContext* ctx) {
     // variables during `toGraphPattern`.
     auto cleanup = setBlankNodeTreatmentForScope(TreatBlankNodesAs::BlankNodes);
     query._clause = parsedQuery::ConstructClause{
-        visitOptional(ctx->triplesTemplate()).value_or(Triples{})};
+        allocator(), visitOptional(ctx->triplesTemplate()).value_or(Triples{})};
     query._rootGraphPattern._graphPatterns.emplace_back(
         toGraphPattern(query.constructClause().triples_));
   }
@@ -630,12 +630,13 @@ ParsedQuery Visitor::visit(Parser::ConstructQueryContext* ctx) {
 
 // ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
-  auto describeClause = parsedQuery::Describe{};
+  auto describeClause =
+      parsedQuery::Describe{{}, {}, parsedQuery::Subquery{allocator()}};
   auto describedResources = visitVector(ctx->varOrIri());
 
   // Convert the describe resources (variables or IRIs) from the format that the
   // parser delivers to the one that the `parsedQuery::Describe` struct expects.
-  std::vector<Variable> describedVariables;
+  qlm::vector<Variable> describedVariables{allocator()};
   for (VarOrIri& resource : describedResources) {
     std::visit(ad_utility::OverloadCallOperator{
                    [&describeClause, &describedVariables](const Variable& var) {
@@ -690,11 +691,11 @@ ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
   // DESCRIBE), and once in `parsedQuery_.describeClause_.datasetClauses_`
   // (which pertains to the SELECT query that computes the resources to be
   // described).
-  parsedQuery_ = ParsedQuery{};
+  parsedQuery_ = ParsedQuery{allocator()};
   parsedQuery_._rootGraphPattern._graphPatterns.emplace_back(
       std::move(describeClause));
   parsedQuery_.datasetClauses_ = activeDatasetClauses_;
-  auto constructClause = ParsedQuery::ConstructClause{};
+  auto constructClause = ParsedQuery::ConstructClause{allocator()};
   using G = GraphTerm;
   using V = Variable;
   constructClause.triples_.push_back(
@@ -706,7 +707,7 @@ ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
 
 // ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::AskQueryContext* ctx) {
-  parsedQuery_._clause = ParsedQuery::AskClause{};
+  parsedQuery_._clause = ParsedQuery::AskClause{allocator()};
   parsedQuery_.datasetClauses_ =
       setAndGetDatasetClauses(visitVector(ctx->datasetClause()));
   visitWhereClause(ctx->whereClause(), parsedQuery_);
@@ -842,8 +843,9 @@ std::vector<ParsedQuery> Visitor::visit(Parser::Update1Context* ctx) {
         ctx->create(), ctx->copy(), ctx->move(), ctx->add(), ctx->load());
   }
   AD_CORRECTNESS_CHECK(ctx->insertData() || ctx->deleteData());
-  parsedQuery_._clause = visitAlternative<parsedQuery::UpdateClause>(
-      ctx->insertData(), ctx->deleteData());
+  parsedQuery_._clause = parsedQuery::UpdateClause{
+      allocator(),
+      visitAlternative<GraphUpdate>(ctx->insertData(), ctx->deleteData())};
   parsedQuery_.datasetClauses_ = activeDatasetClauses_;
   return {std::move(parsedQuery_)};
 }
@@ -870,8 +872,8 @@ ParsedQuery Visitor::visit(Parser::LoadContext* ctx) {
       Quad{Variable("?s"), Variable("?p"), Variable("?o"),
            ctx->graphRef() ? Quad::Graph(visit(ctx->graphRef()))
                            : Quad::Graph(std::monostate{})}};
-  parsedQuery_._clause =
-      parsedQuery::UpdateClause{GraphUpdate{{toInsert, LocalVocab{}}, {}}};
+  parsedQuery_._clause = parsedQuery::UpdateClause{
+      allocator(), GraphUpdate{{toInsert, LocalVocab{}}, {}}};
   return parsedQuery_;
 }
 
@@ -954,8 +956,11 @@ ParsedQuery Visitor::makeClear(const GraphRefAll& graph) {
       graph);
   parsedQuery_._rootGraphPattern._graphPatterns.push_back(
       std::move(graphPattern));
-  parsedQuery_._clause = parsedQuery::UpdateClause{GraphUpdate{
-      {}, {{makeAllTripleTemplate(std::move(updatePattern))}, LocalVocab{}}}};
+  parsedQuery_._clause = parsedQuery::UpdateClause{
+      allocator(),
+      GraphUpdate{
+          {},
+          {{makeAllTripleTemplate(std::move(updatePattern))}, LocalVocab{}}}};
   parsedQuery_.datasetClauses_ = activeDatasetClauses_;
   return parsedQuery_;
 }
@@ -965,8 +970,10 @@ ParsedQuery Visitor::makeAdd(const GraphOrDefault& source,
                              const GraphOrDefault& target) {
   parsedQuery_._rootGraphPattern._graphPatterns.push_back(
       makeAllTripleGraphPattern(transformGraph(source)));
-  parsedQuery_._clause = parsedQuery::UpdateClause{GraphUpdate{
-      {{makeAllTripleTemplate(transformGraph(target))}, LocalVocab{}}, {}}};
+  parsedQuery_._clause = parsedQuery::UpdateClause{
+      allocator(),
+      GraphUpdate{
+          {{makeAllTripleTemplate(transformGraph(target))}, LocalVocab{}}, {}}};
   parsedQuery_.datasetClauses_ = activeDatasetClauses_;
   return parsedQuery_;
 }
@@ -1069,6 +1076,7 @@ ParsedQuery Visitor::visit(Parser::DeleteWhereContext* ctx) {
   visibleVariables_.clear();
   BlankNodeAdder bn{blankNodeManager_};
   parsedQuery_._clause = parsedQuery::UpdateClause{
+      allocator(),
       GraphUpdate{{}, triples.toTriplesWithGraph(std::monostate{}, bn)}};
   return parsedQuery_;
 }
@@ -1141,7 +1149,7 @@ ParsedQuery Visitor::visit(Parser::ModifyContext* ctx) {
         setBlankNodeTreatmentForScope(TreatBlankNodesAs::Illegal);
     visitTemplateClause(ctx->deleteClause(), &op.toDelete_, withGraph);
   }
-  parsedQuery_._clause = parsedQuery::UpdateClause{op};
+  parsedQuery_._clause = parsedQuery::UpdateClause{allocator(), op};
 
   return parsedQuery_;
 }
@@ -1258,7 +1266,8 @@ GraphPattern Visitor::visit(Parser::GroupGraphPatternContext* ctx) {
                                      visibleVariablesSoFar.end());
           });
   if (ctx->subSelect()) {
-    auto parsedQuerySoFar = std::exchange(parsedQuery_, ParsedQuery{});
+    auto parsedQuerySoFar =
+        std::exchange(parsedQuery_, ParsedQuery{allocator()});
     pattern._graphPatterns.emplace_back(visit(ctx->subSelect()));
     parsedQuery_ = std::move(parsedQuerySoFar);
     return pattern;
@@ -1538,7 +1547,10 @@ Visitor::PatternAndVisibleVariables Visitor::visit(
 
 // ____________________________________________________________________________________
 SolutionModifiers Visitor::visit(Parser::SolutionModifierContext* ctx) {
-  SolutionModifiers modifiers;
+  SolutionModifiers modifiers{
+      qlm::vector<GroupKey>{allocator()},
+      qlm::vector<SparqlFilter>{allocator()},
+      OrderClause{IsInternalSort::False, qlm::vector<OrderKey>{allocator()}}};
   visitIf(&modifiers.groupByVariables_, ctx->groupClause());
   visitIf(&modifiers.havingClauses_, ctx->havingClause());
   visitIf(&modifiers.orderBy_, ctx->orderClause());
@@ -1556,8 +1568,8 @@ LimitOffsetClause Visitor::visit(Parser::LimitOffsetClausesContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-std::vector<SparqlFilter> Visitor::visit(Parser::HavingClauseContext* ctx) {
-  return visitVector(ctx->havingCondition());
+qlm::vector<SparqlFilter> Visitor::visit(Parser::HavingClauseContext* ctx) {
+  return visitQlmVector(ctx->havingCondition());
 }
 
 // ____________________________________________________________________________________
@@ -1567,7 +1579,7 @@ SparqlFilter Visitor::visit(Parser::HavingConditionContext* ctx) {
 
 // ____________________________________________________________________________________
 OrderClause Visitor::visit(Parser::OrderClauseContext* ctx) {
-  auto orderKeys = visitVector(ctx->orderCondition());
+  auto orderKeys = visitQlmVector(ctx->orderCondition());
 
   if (ctx->internalSortBy) {
     auto isDescending = [](const auto& variant) {
@@ -1586,8 +1598,8 @@ OrderClause Visitor::visit(Parser::OrderClauseContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-std::vector<GroupKey> Visitor::visit(Parser::GroupClauseContext* ctx) {
-  return visitVector(ctx->groupCondition());
+qlm::vector<GroupKey> Visitor::visit(Parser::GroupClauseContext* ctx) {
+  return visitQlmVector(ctx->groupCondition());
 }
 
 // ____________________________________________________________________________________
@@ -1595,7 +1607,8 @@ std::optional<parsedQuery::ConstructClause> Visitor::visit(
     Parser::ConstructTemplateContext* ctx) {
   if (ctx->constructTriples()) {
     auto cleanup = setBlankNodeTreatmentForScope(TreatBlankNodesAs::BlankNodes);
-    return parsedQuery::ConstructClause{visit(ctx->constructTriples())};
+    return parsedQuery::ConstructClause{allocator(),
+                                        visit(ctx->constructTriples())};
   } else {
     return std::nullopt;
   }
@@ -1739,7 +1752,7 @@ template <typename Ctx>
 auto Visitor::visitInFreshQueryContext(Ctx* ctx)
     -> FreshQueryContextResult<
         decltype(std::declval<SparqlQleverVisitor&>().visit(ctx))> {
-  auto queryBackup = std::exchange(parsedQuery_, ParsedQuery{});
+  auto queryBackup = std::exchange(parsedQuery_, ParsedQuery{allocator()});
   auto variablesBackup = std::exchange(visibleVariables_, {});
   // The visited group starts a basic graph pattern of its own, but the basic
   // graph pattern of the outer query continues afterwards (an `EXISTS` is part
@@ -3426,6 +3439,20 @@ CPP_template_def(typename Ctx)(
 [[nodiscard]] auto Visitor::visitVector(const std::vector<Ctx*>& childContexts)
     -> std::vector<decltype(visit(childContexts[0]))> {
   std::vector<decltype(visit(childContexts[0]))> children;
+  for (const auto& child : childContexts) {
+    children.emplace_back(visit(child));
+  }
+  return children;
+}
+
+// ____________________________________________________________________________
+CPP_template_def(typename Ctx)(
+            requires CPP_NOT(Visitor::voidWhenVisited<Visitor, Ctx>))
+[[nodiscard]] auto Visitor::visitQlmVector(
+    const std::vector<Ctx*>& childContexts)
+    -> qlm::vector<decltype(visit(childContexts[0]))> {
+  qlm::vector<decltype(visit(childContexts[0]))> children{allocator()};
+  children.reserve(childContexts.size());
   for (const auto& child : childContexts) {
     children.emplace_back(visit(child));
   }

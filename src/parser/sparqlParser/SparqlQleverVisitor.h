@@ -132,7 +132,7 @@ class SparqlQleverVisitor {
 
   // This is the parsed query so far. Currently, this only contains information
   // about the number of internal variables that have already been assigned.
-  ParsedQuery parsedQuery_;
+  ParsedQuery parsedQuery_{allocator()};
 
   // The trailing `VALUES` clause of the top-level query. It is visited before
   // the query itself, because `ParsedQuery::addSolutionModifiers` needs it.
@@ -313,11 +313,11 @@ class SparqlQleverVisitor {
 
   SolutionModifiers visit(Parser::SolutionModifierContext* ctx);
 
-  std::vector<GroupKey> visit(Parser::GroupClauseContext* ctx);
+  qlm::vector<GroupKey> visit(Parser::GroupClauseContext* ctx);
 
   GroupKey visit(Parser::GroupConditionContext* ctx);
 
-  std::vector<SparqlFilter> visit(Parser::HavingClauseContext* ctx);
+  qlm::vector<SparqlFilter> visit(Parser::HavingClauseContext* ctx);
 
   SparqlFilter visit(Parser::HavingConditionContext* ctx);
 
@@ -739,6 +739,13 @@ class SparqlQleverVisitor {
               SparqlQleverVisitor::voidWhenVisited<SparqlQleverVisitor, Ctx>))
   auto visitVector(const std::vector<Ctx*>& childContexts)
       -> std::vector<decltype(visit(childContexts[0]))>;
+
+  // Like `visitVector`, but the result is a `qlm::vector` that uses the
+  // `allocator()` of the visitor.
+  CPP_template(typename Ctx)(requires CPP_NOT(
+              SparqlQleverVisitor::voidWhenVisited<SparqlQleverVisitor, Ctx>))
+  auto visitQlmVector(const std::vector<Ctx*>& childContexts)
+      -> qlm::vector<decltype(visit(childContexts[0]))>;
 
   // Check that exactly one of the `ctxs` is not `null`, visit that context,
   // cast the result to `Out` and return it. Requires that for all of the

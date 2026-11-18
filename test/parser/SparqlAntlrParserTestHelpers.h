@@ -20,6 +20,7 @@
 #include "../util/IndexTestHelpers.h"
 #include "../util/ParsedQueryTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
+#include "backports/span.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/Alias.h"
@@ -29,6 +30,7 @@
 #include "parser/TripleComponent.h"
 #include "parser/data/OrderKey.h"
 #include "rdfTypes/Variable.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/SourceLocation.h"
 #include "util/TypeTraits.h"
 
@@ -83,6 +85,19 @@ inline void PrintTo(const parsedQuery::GraphPattern& pattern,
 
 inline void PrintTo(const Alias& alias, std::ostream* os) {
   (*os) << alias.getDescriptor();
+}
+
+// Without this overload, gtest prints the `ql::span` of aliases (a `range-v3`
+// view in the C++17 backports) via an `operator<<` that requires that `Alias`
+// is streamable.
+inline void PrintTo(ql::span<const Alias> aliases, std::ostream* os) {
+  (*os) << "[";
+  std::string_view separator;
+  for (const Alias& alias : aliases) {
+    (*os) << separator << ::testing::PrintToString(alias);
+    separator = ", ";
+  }
+  (*os) << "]";
 }
 
 inline void PrintTo(const ParsedQuery& pq, std::ostream* os) {
@@ -400,7 +415,7 @@ inline auto VariableOrderKeyVariant =
 
 inline auto VariableOrderKeys =
     [](const std::vector<std::pair<::Variable, bool>>& orderKeys)
-    -> Matcher<const std::vector<::VariableOrderKey>&> {
+    -> Matcher<const qlm::vector<::VariableOrderKey>&> {
   std::vector<Matcher<const ::VariableOrderKey&>> matchers;
   for (auto [key, desc] : orderKeys) {
     matchers.push_back(VariableOrderKey(key, desc));
@@ -463,7 +478,7 @@ inline auto AliasGroupKey =
 inline auto GroupKeys =
     [](const std::vector<std::variant<
            std::string, std::pair<std::string, ::Variable>, ::Variable>>&
-           groupKeys) -> Matcher<const std::vector<GroupKey>&> {
+           groupKeys) -> Matcher<const qlm::vector<GroupKey>&> {
   std::vector<Matcher<const GroupKey&>> keyMatchers;
   auto variableGroupKey =
       [](const ::Variable& key) -> Matcher<const GroupKey&> {
@@ -656,15 +671,13 @@ inline auto stringMatchesFilter =
 };
 
 // Return a `Matcher` that tests whether the descriptors of the expressions of
-// the given `vector` of `SparqlFilter`s  matches the given
-// `expectedDescriptors`.
+// the given range of `SparqlFilter`s  matches the given `expectedDescriptors`.
 inline auto stringsMatchFilters =
-    [](const std::vector<std::string>& expectedDescriptors)
-    -> Matcher<const std::vector<SparqlFilter>&> {
-  auto matchers =
-      ad_utility::transform(expectedDescriptors, stringMatchesFilter);
-  return testing::ElementsAreArray(matchers);
-};
+    [](const std::vector<std::string>& expectedDescriptors) {
+      auto matchers =
+          ad_utility::transform(expectedDescriptors, stringMatchesFilter);
+      return testing::ElementsAreArray(matchers);
+    };
 
 inline auto SolutionModifier =
     [](const std::vector<std::variant<
@@ -966,7 +979,8 @@ inline auto Describe = [](const std::vector<p::Describe::VarOrIri>& resources,
 // _____________________________________________________________________________
 inline auto VisibleVariables =
     [](const std::vector<::Variable>& elems) -> Matcher<const ParsedQuery&> {
-  return AD_PROPERTY(ParsedQuery, getVisibleVariables, testing::Eq(elems));
+  return AD_PROPERTY(ParsedQuery, getVisibleVariables,
+                     testing::ElementsAreArray(elems));
 };
 
 using namespace updateClause;

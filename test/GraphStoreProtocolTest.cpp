@@ -126,12 +126,14 @@ TEST(GraphStoreProtocolTest, transformPostAndTsop) {
   auto index = ad_utility::testing::makeTestIndex(TestIndexConfig{});
   runTests(
       [&index](http::request<http::string_body> request, GraphOrDefault graph) {
-        return GraphStoreProtocol::transformPost(request, graph, index);
+        return GraphStoreProtocol::transformPost(request, graph, index,
+                                                 makeAllocator());
       },
       true);
   runTests(
       [&index](http::request<http::string_body> request, GraphOrDefault graph) {
-        return GraphStoreProtocol::transformTsop(request, graph, index);
+        return GraphStoreProtocol::transformTsop(request, graph, index,
+                                                 makeAllocator());
       },
       false);
 }
@@ -465,7 +467,8 @@ TEST(GraphStoreProtocolTest, EncodedIriManagerUsage) {
       ad_utility::source_location l = AD_CURRENT_SOURCE_LOC())(
       requires ad_utility::httpUtils::HttpRequest<RequestT>) {
     auto trace = generateLocationTrace(l);
-    EXPECT_THAT(GraphStoreProtocol::transformPost(request, graph, index),
+    EXPECT_THAT(GraphStoreProtocol::transformPost(request, graph, index,
+                                                  makeAllocator()),
                 matcher);
   };
 
