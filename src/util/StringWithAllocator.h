@@ -129,7 +129,7 @@ class StringBuf : public std::basic_stringbuf<char, std::char_traits<char>,
       : Base{string{std::move(allocator)},
              std::ios_base::out | std::ios_base::ate} {}
 
-  // NOTE: `std::move(*this).str()` and `str(string&&)` were only added in
+  // NOTE: `view()`, `get_allocator()`, and `str(string&&)` were only added in
   // C++20 (without them, `grow` would copy the string twice). In C++17 mode,
   // the libstdc++ implementation of `overflow` (the only standard library we
   // support for C++17) propagates the exceptions of the allocator anyway, so
@@ -148,19 +148,20 @@ class StringBuf : public std::basic_stringbuf<char, std::char_traits<char>,
   }
 
  private:
-  // Double the capacity of the underlying string. Moving the string out of and
-  // back into `Base` does not allocate, and `Base` uses the full capacity of
-  // the string as its output buffer.
+  // Replace the underlying string by a copy with twice the capacity, like a
+  // `std::string` does when it grows. `Base` uses the full capacity of the
+  // string as its output buffer. If the allocation fails, `Base` is unchanged.
+  //
+  // NOTE: We don't use `std::move(*this).str()` to reuse the string, because
+  // libc++ before version 18 default-constructs the allocator there.
   void grow() {
     static constexpr size_t minCapacity = 32;
-    string content = std::move(*this).str();
-    try {
-      content.reserve(std::max(2 * content.capacity(), minCapacity));
-    } catch (...) {
-      this->str(std::move(content));
-      throw;
-    }
-    this->str(std::move(content));
+    auto content = this->view();
+    string grown{this->get_allocator()};
+    grown.reserve(std::max(
+        2 * static_cast<size_t>(this->epptr() - this->pbase()), minCapacity));
+    grown.append(content.data(), content.size());
+    this->str(std::move(grown));
   }
 #endif
 };
@@ -171,8 +172,10 @@ class StringBuf : public std::basic_stringbuf<char, std::char_traits<char>,
 // exceeded) rethrow the exception of the allocator instead of only setting the
 // `badbit` (see `detail::StringBuf` above).
 //
-// NOTE: In C++17 mode, `std::move(os).str()` copies the string, because the
-// overload of `str()` for rvalues was only added in C++20.
+// NOTE: In C++17 mode and with libc++ before version 18, `std::move(os).str()`
+// copies the string, because the overload of `str()` for rvalues was only added
+// in C++20, and libc++ before version 18 default-constructs the allocator in
+// it.
 class ostringstream : public std::ostream {
   detail::StringBuf buffer_;
 
@@ -188,7 +191,13 @@ class ostringstream : public std::ostream {
   ostringstream& operator=(const ostringstream&) = delete;
 
   string str() const& { return buffer_.str(); }
-  string str() && { return std::move(buffer_).str(); }
+  string str() && {
+#if defined(_LIBCPP_VERSION) && _LIBCPP_VERSION < 180000
+    return buffer_.str();
+#else
+    return std::move(buffer_).str();
+#endif
+  }
 };
 
 }  // namespace qlm
