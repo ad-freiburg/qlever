@@ -69,7 +69,7 @@ RUN --mount=type=cache,target=/qlever/build \
 FROM base AS runtime
 WORKDIR /qlever
 ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update && apt-get install -y wget python3-yaml unzip curl bzip2 pkg-config libicu74 python3-icu uuid-runtime make lbzip2 libjemalloc2 liburing2 libzstd1 libboost-program-options1.83.0 libboost-iostreams1.83.0 libboost-url1.83.0 libopenblas0 pipx bash-completion vim sudo && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y wget python3-yaml unzip curl bzip2 pkg-config libicu74 python3-icu uuid-runtime make lbzip2 libjemalloc2 liburing2 libzstd1 libboost-program-options1.83.0 libboost-iostreams1.83.0 libboost-url1.83.0 libopenblas0 libgomp1 pipx bash-completion vim sudo && rm -rf /var/lib/apt/lists/*
 
 # Set up user `qlever` with temporary sudo rights (which will be removed again
 # by the `docker-entrypoint.sh` script, see there).

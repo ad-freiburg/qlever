@@ -4,10 +4,11 @@ conda activate qlever
 # conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r 
 # conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main  
 
-conda install -y -c conda-forge python pip
+conda install -y -c conda-forge python=3.10 pip
 conda install -y -c conda-forge cmake
 conda install -y -c conda-forge icu
-conda install -y -c conda-forge gcc=13 # 13 is twice as fast as 14?? source (?) https://www.reddit.com/r/cpp/comments/1cfzydb/gcc_14_twice_as_slow_as_gcc_13/
+# 13 is twice as fast as 14?? source (?) https://www.reddit.com/r/cpp/comments/1cfzydb/gcc_14_twice_as_slow_as_gcc_13/
+conda install -y -c conda-forge gcc=13 gxx=13
 conda install -y -c conda-forge gdb
 conda install -y -c conda-forge ninja
 conda install -y -c conda-forge libcxx
