@@ -107,20 +107,52 @@ TEST(StringWithAllocator, ostringstream) {
   auto moved = std::move(os).str();
   EXPECT_EQ(toStd(moved), expected.str());
 
-  // Allocation failures are not swallowed by the stream. The `std::stringbuf`
-  // of libc++ swallows the exception of the allocator, so only the `badbit`
-  // remains (see the comment of `qlm::ostringstream`).
-#ifdef _LIBCPP_VERSION
-  using ExpectedException = std::ios_base::failure;
-#else
-  using ExpectedException = AllocationExceedsLimitException;
-#endif
+  // Allocation failures are not swallowed by the stream, but the exception of
+  // the allocator is rethrown.
   qlm::ostringstream small{tiny()};
-  EXPECT_THROW(small << longString, ExpectedException);
+  EXPECT_THROW(small << longString, AllocationExceedsLimitException);
   EXPECT_TRUE(small.bad());
   qlm::ostringstream smallNumbers{tiny()};
   EXPECT_THROW(
       for (int i = 0; i < 100; ++i) { smallNumbers << 123456789; },
-      ExpectedException);
+      AllocationExceedsLimitException);
   EXPECT_TRUE(smallNumbers.bad());
+}
+
+// Writing a lot of data (which requires growing the buffer several times) and
+// seeking behave exactly like for a `std::ostringstream`.
+TEST(StringWithAllocator, ostringstreamGrowAndSeek) {
+  qlm::ostringstream os{unlimited()};
+  std::ostringstream expected;
+  auto write = [](std::ostream& stream) {
+    for (int i = 0; i < 1000; ++i) {
+      stream << i << ", ";
+    }
+    stream.seekp(-2, std::ios_base::cur);
+    stream << '!';
+    stream.seekp(0, std::ios_base::beg);
+    stream << "start";
+  };
+  write(os);
+  write(expected);
+  EXPECT_EQ(toStd(os.str()), expected.str());
+  EXPECT_EQ(toStd(std::move(os).str()), expected.str());
+}
+
+// When growing the buffer fails, the previously written content is kept.
+TEST(StringWithAllocator, ostringstreamKeepsContentOnFailure) {
+  auto allocator = qlever::makeAllocatorWithLimit<char>(1_kB);
+  qlm::ostringstream os{allocator};
+  std::string written;
+  EXPECT_THROW(
+      for (;;) {
+        os << longString;
+        written += longString;
+      },
+      AllocationExceedsLimitException);
+  EXPECT_FALSE(written.empty());
+  // Raise the limit, s.t. the content can also be copied out of the stream.
+  allocator.increaseMemoryLimit(1_kB);
+  EXPECT_THAT(toStd(os.str()), ::testing::StartsWith(written));
+  EXPECT_THAT(toStd(std::move(os).str()), ::testing::StartsWith(written));
 }

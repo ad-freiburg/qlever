@@ -13,9 +13,11 @@
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
 
+#include <algorithm>
 #include <array>
 #include <functional>
 #include <ios>
+#include <ostream>
 #include <range/v3/numeric/accumulate.hpp>
 #include <sstream>
 #include <string>
@@ -108,27 +110,85 @@ string StrJoin(Allocator<char> allocator, Range&& range,
       [](string& result, const auto& value) { StrAppend(&result, value); });
 }
 
+namespace detail {
+// A `std::basic_stringbuf` that writes to a `qlm::string`. Unlike the plain
+// `std::basic_stringbuf`, it grows the string itself, s.t. exceptions of the
+// allocator (e.g. an `AllocationExceedsLimitException` when the memory limit is
+// exceeded) propagate to the caller. libc++ catches all exceptions while
+// growing the string in `overflow` and only reports a failure, so the original
+// exception would otherwise be lost.
+class StringBuf : public std::basic_stringbuf<char, std::char_traits<char>,
+                                              Allocator<char>> {
+  using Base =
+      std::basic_stringbuf<char, std::char_traits<char>, Allocator<char>>;
+
+ public:
+  // NOTE: The `ate` mode makes `str(...)` (see `grow` below) place the output
+  // position at the end of the string instead of at its beginning.
+  explicit StringBuf(Allocator<char> allocator)
+      : Base{string{std::move(allocator)},
+             std::ios_base::out | std::ios_base::ate} {}
+
+  // NOTE: `std::move(*this).str()` and `str(string&&)` were only added in
+  // C++20 (without them, `grow` would copy the string twice). In C++17 mode,
+  // the libstdc++ implementation of `overflow` (the only standard library we
+  // support for C++17) propagates the exceptions of the allocator anyway, so
+  // the plain `overflow` of `Base` is used there. This intentionally checks the
+  // language version and not `QLEVER_CPP_17`, which is also defined for some
+  // C++20 builds (see `CMakeLists.txt`).
+#if __cplusplus >= 202002L
+ protected:
+  int_type overflow(int_type ch) override {
+    if (!traits_type::eq_int_type(ch, traits_type::eof()) &&
+        this->pptr() == this->epptr()) {
+      grow();
+    }
+    // There now is space for `ch`, so `Base::overflow` doesn't allocate.
+    return Base::overflow(ch);
+  }
+
+ private:
+  // Double the capacity of the underlying string. Moving the string out of and
+  // back into `Base` does not allocate, and `Base` uses the full capacity of
+  // the string as its output buffer.
+  void grow() {
+    static constexpr size_t minCapacity = 32;
+    string content = std::move(*this).str();
+    try {
+      content.reserve(std::max(2 * content.capacity(), minCapacity));
+    } catch (...) {
+      this->str(std::move(content));
+      throw;
+    }
+    this->str(std::move(content));
+  }
+#endif
+};
+}  // namespace detail
+
 // Like `std::ostringstream`, but the result uses `allocator`. Unlike for a
 // `std::ostringstream`, allocation failures (e.g. when the memory limit is
-// exceeded) throw instead of only setting the `badbit`. With libstdc++, the
-// exception of the allocator is rethrown. With libc++, whose `std::stringbuf`
-// swallows that exception, a `std::ios_base::failure` is thrown instead.
+// exceeded) rethrow the exception of the allocator instead of only setting the
+// `badbit` (see `detail::StringBuf` above).
 //
 // NOTE: In C++17 mode, `std::move(os).str()` copies the string, because the
 // overload of `str()` for rvalues was only added in C++20.
-class ostringstream
-    : public std::basic_ostringstream<char, std::char_traits<char>,
-                                      Allocator<char>> {
-  using Base =
-      std::basic_ostringstream<char, std::char_traits<char>, Allocator<char>>;
+class ostringstream : public std::ostream {
+  detail::StringBuf buffer_;
 
  public:
-  // NOTE: The constructor of `Base` that only takes an allocator was only added
-  // in C++20, so we pass an empty string with the `allocator` instead.
   explicit ostringstream(Allocator<char> allocator)
-      : Base{string{std::move(allocator)}} {
+      : std::ostream{nullptr}, buffer_{std::move(allocator)} {
+    rdbuf(&buffer_);
     exceptions(std::ios_base::badbit);
   }
+
+  // The base class stores a pointer to `buffer_`.
+  ostringstream(const ostringstream&) = delete;
+  ostringstream& operator=(const ostringstream&) = delete;
+
+  string str() const& { return buffer_.str(); }
+  string str() && { return std::move(buffer_).str(); }
 };
 
 }  // namespace qlm
