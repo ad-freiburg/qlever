@@ -90,8 +90,8 @@ TYPED_TEST_SUITE(ColumnStorageTraitsTest, AllColumns);
 
 // Test the contract of the types that the traits hand out: an element can be
 // written through a `Ref` but not through a `ConstRef`, both can be read as an
-// `Id`, a column can be viewed as a `ConstColumn` but a const column cannot be
-// viewed as a mutable `Column`.
+// `Id`, a column can be viewed as a `ConstColumnRef` but a const column cannot
+// be viewed as a mutable `ColumnRef`.
 TYPED_TEST(ColumnStorageTraitsTest, contractOfTheTypes) {
   using Storage = typename TypeParam::Storage;
   using Traits = TraitsOf<TypeParam>;
@@ -99,25 +99,25 @@ TYPED_TEST(ColumnStorageTraitsTest, contractOfTheTypes) {
   static_assert(!std::is_assignable_v<typename Traits::ConstRef, Id>);
   static_assert(std::is_convertible_v<typename Traits::Ref, Id>);
   static_assert(std::is_convertible_v<typename Traits::ConstRef, Id>);
-  static_assert(std::is_convertible_v<Storage&, typename Traits::Column>);
+  static_assert(std::is_convertible_v<Storage&, typename Traits::ColumnRef>);
   static_assert(
-      std::is_convertible_v<const Storage&, typename Traits::ConstColumn>);
+      std::is_convertible_v<const Storage&, typename Traits::ConstColumnRef>);
   static_assert(
-      !std::is_convertible_v<const Storage&, typename Traits::Column>);
-  static_assert(std::is_convertible_v<typename Traits::Column,
-                                      typename Traits::ConstColumn>);
-  static_assert(!std::is_convertible_v<typename Traits::ConstColumn,
-                                       typename Traits::Column>);
+      !std::is_convertible_v<const Storage&, typename Traits::ColumnRef>);
+  static_assert(std::is_convertible_v<typename Traits::ColumnRef,
+                                      typename Traits::ConstColumnRef>);
+  static_assert(!std::is_convertible_v<typename Traits::ConstColumnRef,
+                                       typename Traits::ColumnRef>);
 }
 
 // Test that only the columns of a `std::vector` give access to their memory as
 // one array of `Id`s. A split column has no such memory, so code that relies
 // on it (like a `memcpy` of a column) must not compile for it.
 TEST(ColumnStorageTraits, onlyVectorColumnsHaveContiguousIds) {
-  static_assert(HasData<TraitsOf<VectorColumns>::Column>::value);
-  static_assert(HasData<TraitsOf<VectorColumns>::ConstColumn>::value);
-  static_assert(!HasData<TraitsOf<SplitColumns>::Column>::value);
-  static_assert(!HasData<TraitsOf<SplitColumns>::ConstColumn>::value);
+  static_assert(HasData<TraitsOf<VectorColumns>::ColumnRef>::value);
+  static_assert(HasData<TraitsOf<VectorColumns>::ConstColumnRef>::value);
+  static_assert(!HasData<TraitsOf<SplitColumns>::ColumnRef>::value);
+  static_assert(!HasData<TraitsOf<SplitColumns>::ConstColumnRef>::value);
 }
 
 // Test that an `IdTable` hands out exactly the types of the traits of its
@@ -132,10 +132,10 @@ TYPED_TEST(ColumnStorageTraitsTest, idTableHandsOutTheTypesOfTheTraits) {
   static_assert(std::is_same_v<decltype(std::declval<Table&>().at(0, 0)),
                                typename Traits::Ref>);
   static_assert(std::is_same_v<decltype(std::declval<Table&>().getColumn(0)),
-                               typename Traits::Column>);
+                               typename Traits::ColumnRef>);
   static_assert(
       std::is_same_v<decltype(std::declval<const Table&>().getColumn(0)),
-                     typename Traits::ConstColumn>);
+                     typename Traits::ConstColumnRef>);
 }
 
 // Test that every `Id` keeps all its bits when it is stored in a column and

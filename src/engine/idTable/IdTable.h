@@ -134,12 +134,12 @@ class IdTable {
   using Traits = ColumnStorageTraits<ColumnStorage, T>;
   using reference = typename Traits::Ref;
   using const_reference = typename Traits::ConstRef;
-  using Column = typename Traits::Column;
-  using ConstColumn = typename Traits::ConstColumn;
+  using ColumnRef = typename Traits::ColumnRef;
+  using ConstColumnRef = typename Traits::ConstColumnRef;
 
   using Storage = detail::VectorWithElementwiseMove<
       ColumnStorage, absl::InlinedVector<ColumnStorage, numInlinedColumns>>;
-  using ViewSpans = absl::InlinedVector<ConstColumn, numInlinedColumns>;
+  using ViewSpans = absl::InlinedVector<ConstColumnRef, numInlinedColumns>;
   using Data = std::conditional_t<isView, ViewSpans, Storage>;
   using Allocator = decltype(std::declval<ColumnStorage&>().get_allocator());
 
@@ -674,7 +674,7 @@ class IdTable {
     AD_CONTRACT_CHECK(offset + size <= numRows_);
     auto viewSpans = ::ranges::to<ViewSpans>(
         ad_utility::allView(getColumns()) |
-        ql::views::transform([offset, size](const auto& col) -> ConstColumn {
+        ql::views::transform([offset, size](const auto& col) -> ConstColumnRef {
           return col.subspan(offset, size);
         }));
     return IdTable<T, NumColumns, ColumnStorage, IsView::True>{
@@ -924,21 +924,21 @@ class IdTable {
     return true;
   }
 
-  // Get the `i`-th column as a `Column` (see `ColumnStorageTraits`). For a
+  // Get the `i`-th column as a `ColumnRef` (see `ColumnStorageTraits`). For a
   // `std::vector` this is a `ql::span` of its contiguous `Id`s, for the split
   // columns a view of their two arrays (payloads and datatypes).
   CPP_template(typename = void)(requires(!isView))
-  Column getColumn(size_t i) {
-    return static_cast<Column>(data().at(i));
+  ColumnRef getColumn(size_t i) {
+    return static_cast<ColumnRef>(data().at(i));
   }
 
-  ConstColumn getColumn(size_t i) const {
-    return static_cast<ConstColumn>(data().at(i));
+  ConstColumnRef getColumn(size_t i) const {
+    return static_cast<ConstColumnRef>(data().at(i));
   }
 
   // Return all the columns as a `std::vector` (if `isDynamic`) or as a
-  // `std::array` (else). The elements of the vector/array are `Column`
-  // or `ConstColumn`, depending on whether `this` is const.
+  // `std::array` (else). The elements of the vector/array are `ColumnRef`
+  // or `ConstColumnRef`, depending on whether `this` is const.
   auto getColumns() { return getColumnsImpl(*this); }
   auto getColumns() const { return getColumnsImpl(*this); }
 
@@ -1098,8 +1098,8 @@ namespace detail {
 using IdVectorTraits = columnBasedIdTable::ColumnStorageTraits<IdVector, Id>;
 }  // namespace detail
 
-using IdColumnRef = detail::IdVectorTraits::Column;
-using ConstIdColumnRef = detail::IdVectorTraits::ConstColumn;
+using IdColumnRef = detail::IdVectorTraits::ColumnRef;
+using ConstIdColumnRef = detail::IdVectorTraits::ConstColumnRef;
 using IdRef = IdColumnRef::reference;
 using ConstIdRef = ConstIdColumnRef::reference;
 
