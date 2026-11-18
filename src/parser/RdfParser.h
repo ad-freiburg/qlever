@@ -545,7 +545,7 @@ class TriGParser : public TurtleParser<Tokenizer_T> {
   // restores the previous value when it is destroyed - including if an
   // exception unwinds through the caller, e.g. because the parser's buffer
   // ends mid-block (see `RdfStreamParser::resetStateAndRead`).
-  [[nodiscard]] auto switchDefaultGraph(TripleComponent newGraph) {
+  [[nodiscard]] auto switchDefaultGraph(TripleComponent&& newGraph) {
     auto savedGraph = std::move(this->defaultGraphIri_);
     this->defaultGraphIri_ = std::move(newGraph);
     absl::Cleanup restoreGraph = [this, savedGraph =
