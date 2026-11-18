@@ -366,6 +366,16 @@ inline constexpr auto CRS_TYPE_IRI = []() {
       crs84, wgs84, webMerc};
 }();
 
+// Check that the order of `CRS_TYPE_IRI` is the order of the `CRSType` enum.
+static_assert(
+    !CRS_TYPE_IRI[static_cast<size_t>(CRSType::UNSUPPORTED)].has_value());
+static_assert(CRS_TYPE_IRI[static_cast<size_t>(CRSType::CRS84)] ==
+              detail::crsStrings::crs84);
+static_assert(CRS_TYPE_IRI[static_cast<size_t>(CRSType::WGS84)] ==
+              detail::crsStrings::wgs84);
+static_assert(CRS_TYPE_IRI[static_cast<size_t>(CRSType::WEB_MERCATOR)] ==
+              detail::crsStrings::webMerc);
+
 // Lookup the IRI for a given CRS type in the array of prepared IRIs.
 inline std::optional<std::string_view> crsTypeToIri(uint16_t type) {
   if (type < CRS_TYPE_IRI.size()) {
