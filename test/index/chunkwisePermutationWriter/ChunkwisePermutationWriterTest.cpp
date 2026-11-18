@@ -251,6 +251,8 @@ TEST(ChunkwisePermutationWriter, failingOperationOfChunk) {
 TEST(ChunkwisePermutationWriter, toConcurrentBlockCallback) {
   using chunkwisePermutationWriter::Block;
   using chunkwisePermutationWriter::DoneCallback;
+
+  // Return a block with `numRows` rows.
   auto makeBlock = [](size_t numRows) {
     auto block = std::make_shared<Block>(
         NUM_COLUMNS, ad_utility::makeUnlimitedAllocator<Id>());
@@ -269,6 +271,8 @@ TEST(ChunkwisePermutationWriter, toConcurrentBlockCallback) {
         numRowsSeen += block.numRows();
       });
 
+  // Each `done` callback appends the exception that it is invoked with to
+  // `doneResults`.
   std::vector<std::exception_ptr> doneResults;
   auto makeDone = [&doneResults]() -> DoneCallback {
     return [&doneResults](std::exception_ptr e) {
@@ -276,6 +280,8 @@ TEST(ChunkwisePermutationWriter, toConcurrentBlockCallback) {
     };
   };
 
+  // Two successful invocations: both blocks are seen and each `done` is
+  // invoked with `nullptr`.
   callback(makeBlock(3), makeDone());
   callback(makeBlock(4), makeDone());
   EXPECT_EQ(numRowsSeen, 7);
@@ -283,6 +289,8 @@ TEST(ChunkwisePermutationWriter, toConcurrentBlockCallback) {
   EXPECT_EQ(doneResults[0], nullptr);
   EXPECT_EQ(doneResults[1], nullptr);
 
+  // A throwing invocation: the exception does not escape, but is passed to
+  // `done`.
   callback(makeBlock(0), makeDone());
   EXPECT_EQ(numRowsSeen, 7);
   ASSERT_EQ(doneResults.size(), 3);
