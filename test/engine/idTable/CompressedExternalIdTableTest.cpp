@@ -5,6 +5,7 @@
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 #include <absl/cleanup/cleanup.h>
+#include <absl/functional/any_invocable.h>
 #include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -1832,6 +1833,64 @@ TEST(CompressedExternalIdTable, asyncPushBlock) {
   // Mixing the concurrent pushes with sequential ones.
   testAsyncPushBlock(tables, 64, 20);
   testAsyncPushBlock(tables, 100'000, 20);
+}
+
+// Test that the callback of `makeAsyncPushBlockCallback` pushes its blocks via
+// `asyncPushBlock` (also from several threads at the same time), keeps them
+// alive until the push has completed, and reports the completion to its `done`
+// callback.
+TEST(CompressedExternalIdTable, makeAsyncPushBlockCallback) {
+  // A sorter with a merge executor (the pool has to outlive the sorter, see
+  // `setMergeExecutor`).
+  auto alloc = ad_utility::testing::makeAllocator();
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
+  std::string filename = absl::StrCat(gtestCurrentTestName(), ".dat");
+  absl::Cleanup cleanup = [&filename] {
+    ad_utility::deleteFile(filename, false);
+  };
+  net::thread_pool pool{4};
+  ad_utility::CompressedExternalIdTableSorter<SortByOSP, 0> sorter{
+      filename, NUM_COLS, memoryForBlocksize(64, NUM_COLS), alloc};
+  sorter.setMergeExecutor(pool.get_executor(), 4);
+  auto callback = sorter.makeAsyncPushBlockCallback();
+
+  // Push eight random blocks through the callback from eight threads at the
+  // same time.
+  IdTable expected{NUM_COLS, alloc};
+  std::vector<std::future<void>> results;
+  {
+    std::vector<ad_utility::JThread> threads;
+    for (size_t i = 0; i < 8; ++i) {
+      auto table = createRandomlyFilledIdTable(200 + 37 * i, NUM_COLS);
+      expected.insertAtEnd(table);
+      // Only the callback holds on to the block, so it has to keep it alive.
+      auto block = std::make_shared<const IdTableStatic<0>>(std::move(table));
+      // The `done` callback rethrows the exception of the push (if any) into
+      // the future of the task.
+      std::packaged_task<void(std::exception_ptr)> done{
+          [](std::exception_ptr e) {
+            if (e) {
+              std::rethrow_exception(e);
+            }
+          }};
+      results.push_back(done.get_future());
+      threads.emplace_back([&callback, block = std::move(block),
+                            done = std::move(done)]() mutable {
+        callback(
+            std::move(block),
+            absl::AnyInvocable<void(std::exception_ptr) &&>{std::move(done)});
+      });
+    }
+  }
+
+  // Every push completes without an exception, and the sorter holds exactly
+  // the pushed rows.
+  for (auto& result : results) {
+    EXPECT_NO_THROW(result.get());
+  }
+  EXPECT_EQ(sorter.size(), expected.numRows());
+  ql::ranges::sort(expected, SortByOSP{});
+  EXPECT_THAT(sortedOutput(sorter), ::testing::ElementsAreArray(expected));
 }
 
 // The tests below cover the output of the sorter as the input of an external

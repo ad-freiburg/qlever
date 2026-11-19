@@ -74,7 +74,7 @@ qlm::vector<ColumnIndex> Load::resultSortedOn() const {
 Result Load::computeResult(bool requestLaziness) {
   auto makeSilentResult = [this]() -> Result {
     return {IdTable{getResultWidth(), getExecutionContext()->getAllocator()},
-            resultSortedOn(), LocalVocab{}};
+            resultSortedOn(), LocalVocab{allocator()}};
   };
 
   // In the syntax test mode we don't even try to compute the result, as this
