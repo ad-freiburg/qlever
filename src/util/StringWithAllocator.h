@@ -111,12 +111,14 @@ string StrJoin(Allocator<char> allocator, Range&& range,
 }
 
 namespace detail {
-// A `std::basic_stringbuf` that writes to a `qlm::string`. Unlike the plain
-// `std::basic_stringbuf`, it grows the string itself, s.t. exceptions of the
-// allocator (e.g. an `AllocationExceedsLimitException` when the memory limit is
-// exceeded) propagate to the caller. libc++ catches all exceptions while
-// growing the string in `overflow` and only reports a failure, so the original
-// exception would otherwise be lost.
+// A `std::basic_stringbuf` that writes to a `qlm::string` and grows the string
+// itself, s.t. exceptions of the allocator (e.g. an
+// `AllocationExceedsLimitException` when the memory limit is exceeded)
+// propagate to the caller.
+//
+// NOTE: libc++ catches all exceptions while growing the string in `overflow`
+// and only reports a failure, so the original exception would otherwise be
+// lost.
 class StringBuf : public std::basic_stringbuf<char, std::char_traits<char>,
                                               Allocator<char>> {
   using Base =
@@ -129,13 +131,15 @@ class StringBuf : public std::basic_stringbuf<char, std::char_traits<char>,
       : Base{string{std::move(allocator)},
              std::ios_base::out | std::ios_base::ate} {}
 
-  // NOTE: `view()`, `get_allocator()`, and `str(string&&)` were only added in
-  // C++20 (without them, `grow` would copy the string twice). In C++17 mode,
-  // the libstdc++ implementation of `overflow` (the only standard library we
-  // support for C++17) propagates the exceptions of the allocator anyway, so
-  // the plain `overflow` of `Base` is used there. This intentionally checks the
-  // language version and not `QLEVER_CPP_17`, which is also defined for some
-  // C++20 builds (see `CMakeLists.txt`).
+  // In C++17 mode, the plain `overflow` of `Base` is used, which on libstdc++
+  // (the only standard library supported for C++17) propagates the exceptions
+  // of the allocator anyway.
+  //
+  // NOTE 1: `view()`, `get_allocator()` and `str(string&&)` were only added in
+  // C++20, without them `grow` would copy the string twice.
+  //
+  // NOTE 2: The check is on the language version and not on `QLEVER_CPP_17`,
+  // which is also defined for some C++20 builds (see `CMakeLists.txt`).
 #if __cplusplus >= 202002L
  protected:
   int_type overflow(int_type ch) override {
