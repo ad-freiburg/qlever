@@ -994,7 +994,6 @@ TEST(JoinAlgorithms, SpecialOptionalJoinComplexCombination) {
   testSpecialOptionalJoinWithSplits(leftTable, rightTable, expectedResult);
 }
 
-// _____________________________________________________________________________
 // Test that the special optional join respects the memory limit of the
 // allocator of its inputs when it materializes the blocks.
 TEST(JoinAlgorithms, SpecialOptionalJoinRespectsTheMemoryLimitOfTheInputs) {
