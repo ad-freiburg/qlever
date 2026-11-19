@@ -22,9 +22,9 @@
 #include "backports/functional.h"
 #endif
 #include "engine/idTable/IdTable.h"
+#include "engine/idTable/splitLayout/IdRef.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/Generator.h"
-#include "util/IsProxy.h"
 
 namespace sparqlExpression::detail {
 
@@ -91,12 +91,12 @@ CPP_template(typename T, typename Transformation = ql::identity)(
 auto resultGeneratorImpl(T&& vector, size_t numItems,
                          Transformation transformation = {}) {
   AD_CONTRACT_CHECK(numItems == vector.size());
-  if constexpr (qlever::isProxy<
-                    std::decay_t<ql::ranges::range_reference_t<T>>>) {
-    // If the elements are `IdRef`s (elements of a split column), pass on the
-    // `Id`s they refer to, because an `IdRef` converts to both `ValueId` and
-    // `IdOrLocalVocabEntry`, so the call to the value getter would be
-    // ambiguous.
+  if constexpr (ad_utility::SimilarToAny<
+                    ql::ranges::range_reference_t<T>,
+                    columnBasedIdTable::splitLayout::ConstIdRef::Base,
+                    columnBasedIdTable::splitLayout::IdRef::Base>) {
+    // An element of a split column converts to both `ValueId` and
+    // `IdOrLocalVocabEntry`, so it is passed on as the `Id` it refers to.
     return AD_FWD(vector) |
            ql::views::transform([transformation = std::move(transformation)](
                                     Id id) { return transformation(id); });

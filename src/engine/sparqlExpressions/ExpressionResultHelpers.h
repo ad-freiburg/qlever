@@ -12,11 +12,11 @@
 
 #include <type_traits>
 
+#include "engine/idTable/splitLayout/IdRef.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "util/Forward.h"
-#include "util/IsProxy.h"
 
 namespace sparqlExpression::detail {
 
@@ -69,11 +69,12 @@ auto makeIndexedValueGetter(Operand&& operand, EvaluationContext* context) {
     // getter as lvalues. This is irrelevant for the currently used value
     // getters, but should be revisited for move-sensitive value types.
     return [&operand, context](size_t i) {
-      if constexpr (qlever::isProxy<std::decay_t<decltype(operand[i])>>) {
-        // If the element is an `IdRef` (element of a split column), pass on
-        // the `Id` it refers to, because the `IdRef` converts to both
-        // `ValueId` and `IdOrLocalVocabEntry`, so the call to the value getter
-        // would be ambiguous.
+      if constexpr (ad_utility::SimilarToAny<
+                        decltype(operand[i]),
+                        columnBasedIdTable::splitLayout::ConstIdRef::Base,
+                        columnBasedIdTable::splitLayout::IdRef::Base>) {
+        // An element of a split column converts to both `ValueId` and
+        // `IdOrLocalVocabEntry`, so it is passed on as the `Id` it refers to.
         return ValueGetter{}(Id{operand[i]}, context);
       } else {
         return ValueGetter{}(operand[i], context);
