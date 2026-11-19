@@ -17,6 +17,8 @@
 #include "util/Algorithm.h"
 #include "util/ParseException.h"
 
+namespace qlever::queryPlanner {
+
 namespace {
 // Return the message for the `filter` of an OPTIONAL that uses the
 // `variables`, which are bound outside of the OPTIONAL, but not always inside
@@ -48,18 +50,32 @@ std::string makeMessage(const sparqlExpression::SparqlExpressionPimpl& filter,
       variableList, " outside of the OPTIONAL also inside of it.");
 }
 
-// Return the names of the `variables` for which `predicate` is true, without
-// duplicates and in the order of their first occurrence.
+// Return the names of the `variables` (pointers) for which `predicate` is
+// true, without duplicates and in the order of their first occurrence.
 template <typename Variables, typename Predicate>
 std::vector<std::string> getNamesOfVariables(const Variables& variables,
                                              const Predicate& predicate) {
   std::vector<std::string> names;
-  for (const Variable& variable : variables) {
-    if (predicate(variable) && !ad_utility::contains(names, variable.name())) {
-      names.push_back(variable.name());
+  for (const Variable* variable : variables) {
+    if (predicate(variable) && !ad_utility::contains(names, variable->name())) {
+      names.push_back(variable->name());
     }
   }
   return names;
+}
+
+// Return a predicate that is true for a `variable` iff it can have a different
+// value in the joined row than in the row of the group, that is, it is a
+// variable of the left side, and it is not always defined in the group
+// (possibly not even contained in it).
+auto makeGetsValueFromLeftSide(
+    const ad_utility::HashSet<Variable>& variablesOfLeftSide,
+    absl::FunctionRef<bool(const Variable&)> isAlwaysDefinedInGroup) {
+  return
+      [&variablesOfLeftSide, isAlwaysDefinedInGroup](const Variable* variable) {
+        return variablesOfLeftSide.contains(*variable) &&
+               !isAlwaysDefinedInGroup(*variable);
+      };
 }
 }  // namespace
 
@@ -68,10 +84,8 @@ bool isPartOfOptionalJoinCondition(
     const sparqlExpression::SparqlExpressionPimpl& filter,
     const ad_utility::HashSet<Variable>& variablesOfLeftSide,
     absl::FunctionRef<bool(const Variable&)> isAlwaysDefinedInGroup) {
-  auto getsValueFromLeftSide = [&](const Variable& variable) {
-    return variablesOfLeftSide.contains(variable) &&
-           !isAlwaysDefinedInGroup(variable);
-  };
+  auto getsValueFromLeftSide =
+      makeGetsValueFromLeftSide(variablesOfLeftSide, isAlwaysDefinedInGroup);
   // The contained variables of an `EXISTS` are only those that are also
   // visible in the group (see `ExistsExpression::selectVariables`), so a
   // variable that is only bound on the left side is not among them. We
@@ -80,15 +94,15 @@ bool isPartOfOptionalJoinCondition(
     const auto& exists =
         dynamic_cast<const sparqlExpression::ExistsExpression&>(*expression);
     auto variables = getNamesOfVariables(
-        exists.argument().getVisibleVariables(), getsValueFromLeftSide);
+        exists.argument().getVisibleVariables() |
+            ql::views::transform(
+                [](const Variable& variable) { return &variable; }),
+        getsValueFromLeftSide);
     if (!variables.empty()) {
       throw NotSupportedException{makeMessage(filter, true, variables)};
     }
   }
-  return ql::ranges::any_of(filter.containedVariables(),
-                            [&](const Variable* variable) {
-                              return getsValueFromLeftSide(*variable);
-                            });
+  return ql::ranges::any_of(filter.containedVariables(), getsValueFromLeftSide);
 }
 
 // _____________________________________________________________________________
@@ -97,13 +111,9 @@ std::string getOptionalJoinConditionWarning(
     const ad_utility::HashSet<Variable>& variablesOfLeftSide,
     absl::FunctionRef<bool(const Variable&)> isAlwaysDefinedInGroup) {
   auto variables = getNamesOfVariables(
-      filter.containedVariables() |
-          ql::views::transform([](const Variable* variable) -> const Variable& {
-            return *variable;
-          }),
-      [&](const Variable& variable) {
-        return variablesOfLeftSide.contains(variable) &&
-               !isAlwaysDefinedInGroup(variable);
-      });
+      filter.containedVariables(),
+      makeGetsValueFromLeftSide(variablesOfLeftSide, isAlwaysDefinedInGroup));
   return makeMessage(filter, false, variables);
 }
+
+}  // namespace qlever::queryPlanner
