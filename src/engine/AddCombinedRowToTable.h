@@ -86,6 +86,15 @@ class AddCombinedRowToIdTable {
   using CancellationHandle = ad_utility::SharedCancellationHandle;
   CancellationHandle cancellationHandle_;
 
+  // If set, then for each row of `resultTable_` the index of the left input
+  // row from which it was created is stored. Rows created by `addOptionalRow`
+  // are additionally marked with `OPTIONAL_ROW_FLAG`. See
+  // `trackLeftRowIndices`.
+  std::vector<uint64_t>* leftRowIndices_ = nullptr;
+  // The data and size of the left input for which the `leftRowIndices_` were
+  // stored so far. Used to check that the left input never changes.
+  std::optional<std::pair<const Id*, size_t>> trackedLeftInput_;
+
  public:
   // Construct from the number of join columns, the two inputs, and the output.
   // The `bufferSize` can be configured for testing.
@@ -126,6 +135,28 @@ class AddCombinedRowToIdTable {
         cancellationHandle_{std::move(cancellationHandle)} {
     AD_CONTRACT_CHECK(cancellationHandle_);
     indexBuffer_.reserve(bufferSize);
+  }
+
+  // Bit that marks rows in `leftRowIndices_` that were added by
+  // `addOptionalRow`.
+  static constexpr uint64_t OPTIONAL_ROW_FLAG = uint64_t{1} << 63;
+
+  // Store for each row of the result the index of the row of the left input
+  // from which it was created in `target`, and replace the blockwise callback
+  // by `callback`. This is used to apply the condition of an OPTIONAL join
+  // with a FILTER, see `OptionalJoin::ConditionFilter`. The indices are only
+  // meaningful if the left input doesn't change between calls to `setInput`.
+  // The `callback` may remove rows from the result, but then it has to remove
+  // the same rows from `target`, and it must not leave the result empty. The
+  // result needs at least one column, otherwise `addRows` doesn't store the
+  // indices.
+  void trackLeftRowIndices(std::vector<uint64_t>* target,
+                           BlockwiseCallback callback) {
+    AD_CONTRACT_CHECK(target != nullptr && nextIndex_ == 0 &&
+                      resultTable_.empty() && resultTable_.numColumns() > 0);
+    leftRowIndices_ = target;
+    leftRowIndices_->clear();
+    blockwiseCallback_ = std::move(callback);
   }
 
   // Return the number of UNDEF values per column.
@@ -297,6 +328,27 @@ class AddCombinedRowToIdTable {
     }
     AD_CORRECTNESS_CHECK(inputLeftAndRight_.has_value());
     result.resize(oldSize + nextIndex_);
+
+    if (leftRowIndices_ != nullptr) {
+      auto& rowIndices = *leftRowIndices_;
+      AD_CORRECTNESS_CHECK(rowIndices.size() == oldSize);
+      // The indices are only meaningful if all of them refer to the same left
+      // input. Some join algorithms copy parts of the left input to a
+      // temporary table, they must not be used together with this feature.
+      AD_CORRECTNESS_CHECK(inputLeft().numColumns() > 0);
+      std::pair leftInput{inputLeft().getColumn(0).data(),
+                          inputLeft().numRows()};
+      AD_CORRECTNESS_CHECK(!trackedLeftInput_.has_value() ||
+                           trackedLeftInput_.value() == leftInput);
+      trackedLeftInput_ = leftInput;
+      rowIndices.resize(oldSize + nextIndex_);
+      for (const auto& [targetIndex, sourceIndices] : indexBuffer_) {
+        rowIndices[oldSize + targetIndex] = sourceIndices[0];
+      }
+      for (const auto& [targetIndex, sourceIndex] : optionalIndexBuffer_) {
+        rowIndices[oldSize + targetIndex] = sourceIndex | OPTIONAL_ROW_FLAG;
+      }
+    }
 
     // Precondition: `a` and `b` compare equal or at least one of them is UNDEF
     // If exactly one of them is UNDEF, return the other one, else return any of
