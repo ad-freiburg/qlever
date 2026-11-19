@@ -638,18 +638,15 @@ TEST(OptionalJoin, lazyOptionalJoin) {
                        std::move(expected));
 }
 
-// _____________________________________________________________________________
-// Regression test for the block-wise zipper join. The right blocks are
-// [1] [1] [1] [1, 2] [3]. The join reads the first block and then
-// `FETCH_BLOCKS` (3) more blocks starting with 1, so the rows with 1 end in
-// the last fetched block without the join knowing it. Fetching again finds no
-// more rows with 1, and the left row must not be added again with UNDEF.
-// Without the block [3], all blocks are read at once.
+// Test that a left row is not added a second time with UNDEF when its matches
+// end inside the last of the `FETCH_BLOCKS` (3) right blocks fetched at once
+// and the right input continues beyond that block.
 TEST(OptionalJoin, lazyOptionalJoinMatchesEndInThirdFetchedBlock) {
-  std::vector<IdTable> expected;
-  expected.push_back(makeIdTableFromVector(
-      {{1, 11, 21}, {1, 11, 22}, {1, 11, 23}, {1, 11, 24}}));
-
+  // One left row and the right blocks [1] [1] [1] [1, 2] [3]. The join reads
+  // the first right block and then fetches three more, so the rows with 1 end
+  // in the last fetched block without the join knowing it, and the next fetch
+  // finds no more rows with 1. Without the block [3], all blocks are read at
+  // once.
   std::vector<IdTable> leftTables;
   leftTables.push_back(makeIdTableFromVector({{1, 11}}));
   std::vector<IdTable> rightTables;
@@ -658,6 +655,11 @@ TEST(OptionalJoin, lazyOptionalJoinMatchesEndInThirdFetchedBlock) {
   rightTables.push_back(makeIdTableFromVector({{1, 23}}));
   rightTables.push_back(makeIdTableFromVector({{1, 24}, {2, 25}}));
   rightTables.push_back(makeIdTableFromVector({{3, 26}}));
+
+  // The left row is joined with its four matches and nothing else.
+  std::vector<IdTable> expected;
+  expected.push_back(makeIdTableFromVector(
+      {{1, 11, 21}, {1, 11, 22}, {1, 11, 23}, {1, 11, 24}}));
 
   testLazyOptionalJoin(std::move(leftTables), std::move(rightTables),
                        std::move(expected));
