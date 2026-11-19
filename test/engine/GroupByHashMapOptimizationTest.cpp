@@ -17,7 +17,7 @@ class GroupByHashMapOptimizationTest : public ::testing::Test {
  protected:
   QueryExecutionContext* qec_ = ad_utility::testing::getQec();
   VariableToColumnMap varToColMap_;
-  LocalVocab localVocab_;
+  LocalVocab localVocab_{ad_utility::testing::makeAllocator()};
   IdTable table_{qec_->getAllocator()};
   sparqlExpression::EvaluationContext context_{
       *qec_,
