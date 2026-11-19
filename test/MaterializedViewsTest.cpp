@@ -443,7 +443,7 @@ TEST_F(MaterializedViewsTest, ColumnPermutation) {
     clearLog();
     const std::string presortedQuery =
         "SELECT * { SELECT ?p ?o (?s AS ?x) ?g { ?s ?p ?o . BIND(3 AS ?g) } "
-        "INTERNAL SORT BY ?p ?o ?x }";
+        "INTERNAL SORT BY ?p ?o ?x ?g }";
     manager.writeViewToDisk("testView4",
                             qlv().parseAndPlanQuery(presortedQuery));
     EXPECT_THAT(log_.str(),
@@ -1799,6 +1799,36 @@ TEST_F(MaterializedViewsTest, NoDuplicateRemovalOnScan) {
     auto expected = getQueryResultAsIdTable("SELECT (5 AS ?e) {}");
     EXPECT_THAT(res, matchesIdTable(expected));
   }
+}
+
+// Test that a view whose defining query is sorted on the first three columns
+// only is still stored sorted on its fourth column, which a scan of the view
+// reports as sorted.
+TEST_F(MaterializedViewsTest, FourthColumnSortedForResultSortedOnThree) {
+  // A view with four columns, the defining query of which is sorted on the
+  // first three columns only, with each row repeated for `?x` = 2, 1, 2.
+  qlv().writeMaterializedView(
+      "sortedOnThree",
+      "SELECT * { SELECT ?s ?p ?o ?x { ?s ?p ?o . VALUES ?x { 2 1 2 } } "
+      "INTERNAL SORT BY ?s ?p ?o }");
+
+  // A scan of all columns of the view returns the rows sorted by all four
+  // columns.
+  auto expected = getQueryResultAsIdTable(
+      "SELECT ?s ?p ?o ?x { ?s ?p ?o . VALUES ?x { 2 1 2 } } "
+      "INTERNAL SORT BY ?s ?p ?o ?x");
+  auto result = getQueryResultAsIdTable(R"(
+    PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+    SELECT * {
+      SERVICE view:sortedOnThree {
+        _:config view:column-s ?s ;
+                 view:column-p ?p ;
+                 view:column-o ?o ;
+                 view:column-x ?x .
+      }
+    }
+  )");
+  EXPECT_THAT(result, matchesIdTable(expected));
 }
 
 // _____________________________________________________________________________

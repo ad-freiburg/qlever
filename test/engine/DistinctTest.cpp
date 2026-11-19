@@ -6,6 +6,7 @@
 
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/LocalVocabTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
 #include "engine/operation/Distinct.h"
 #include "engine/operation/NeutralElementOperation.h"
@@ -143,7 +144,8 @@ TEST(Distinct, nonLazy) {
       qec, std::move(input),
       std::vector<std::optional<Variable>>{
           {V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}}},
-      false, colIndices({1, 2}), LocalVocab{}, std::nullopt, true);
+      false, colIndices({1, 2}), ad_utility::testing::makeLocalVocab(),
+      std::nullopt, true);
 
   Distinct distinct{qec, std::move(values), colIndices({1, 2})};
 

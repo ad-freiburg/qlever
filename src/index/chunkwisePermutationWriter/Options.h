@@ -14,6 +14,7 @@
 
 #include <exception>
 #include <memory>
+#include <utility>
 
 #include "engine/idTable/IdTable.h"
 #include "index/chunkwisePermutationWriter/ChunkWriter.h"
@@ -43,6 +44,27 @@ using PermutationPairResult = CompressedRelationWriter::PermutationPairResult;
 using DoneCallback = absl::AnyInvocable<void(std::exception_ptr) &&>;
 using ConcurrentBlockCallback =
     absl::AnyInvocable<void(SharedBlock, DoneCallback)>;
+
+// Turn the `callback`, which does all its work synchronously (it is invoked as
+// `callback(block)` with a `const Block&`), into a `ConcurrentBlockCallback`.
+// The `done` callback is invoked right after the `callback` has returned, with
+// the exception that the `callback` has thrown (or `nullptr`), so that the
+// exception is propagated by the writer instead of escaping from the thread of
+// the chunk. The `callback` has to be thread-safe, see
+// `ConcurrentBlockCallback`.
+template <typename Callback>
+ConcurrentBlockCallback toConcurrentBlockCallback(Callback callback) {
+  return [callback = std::move(callback)](SharedBlock block,
+                                          DoneCallback done) mutable {
+    std::exception_ptr exception;
+    try {
+      callback(*block);
+    } catch (...) {
+      exception = std::current_exception();
+    }
+    std::move(done)(std::move(exception));
+  };
+}
 
 // The tuning knobs of the writer.
 struct Options {

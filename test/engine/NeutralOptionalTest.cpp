@@ -279,7 +279,7 @@ TEST(NeutralOptional, ensureSingleRowWhenChildIsEmpty) {
 // _____________________________________________________________________________
 TEST(NeutralOptional, ensureResultIsProperlyPropagated) {
   auto* qec = ad_utility::testing::getQec();
-  LocalVocab localVocab{};
+  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
   localVocab.getIndexAndAddIfNotContained(
       ad_utility::testing::localVocabEntryFromStringRepresentation(
           "\"Test\"", qec->getLocalVocabContext()));

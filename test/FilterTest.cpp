@@ -153,7 +153,7 @@ TEST(Filter, verifyPredicateIsAppliedCorrectlyOnNonLazyEvaluation) {
                           {Variable{"?x"}},
                           false,
                           colIndices({}),
-                          LocalVocab{},
+                          ad_utility::testing::makeLocalVocab(),
                           std::nullopt,
                           true};
   QueryExecutionTree subTree{

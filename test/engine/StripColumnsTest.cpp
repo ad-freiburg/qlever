@@ -71,7 +71,7 @@ TEST(StripColumns, computeResult) {
   using V = Variable;
   auto qec = ad_utility::testing::getQec();
   auto makeOp = [&qec]() {
-    LocalVocab voc;
+    LocalVocab voc{ad_utility::testing::makeAllocator()};
     voc.getIndexAndAddIfNotContained(
         iriLocalVocabEntry("<kartoffel>", qec->getLocalVocabContext()));
     qec->clearCacheUnpinnedOnly();

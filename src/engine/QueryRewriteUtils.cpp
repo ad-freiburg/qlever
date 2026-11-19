@@ -7,6 +7,7 @@
 #include <stdexcept>
 
 #include "engine/QueryExecutionTree.h"
+#include "engine/filterFacts/Recognizers.h"
 #include "engine/operation/SpatialJoin.h"
 #include "engine/operation/Values.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
@@ -47,7 +48,9 @@ ResolvedGeoOperand resolveGeoOperand(
 static std::optional<
     std::pair<LibSpatialJoinConfig, sparqlExpression::GeoFunctionCall>>
 getSpatialJoinConfigForFilter(
-    const sparqlExpression::SparqlExpression& filterBody) {
+    const sparqlExpression::SparqlExpressionPimpl& filter) {
+  const auto& filterBody = *filter.getPimpl();
+
   // The filter body directly is an optimizable `geof:sf...` function.
   if (auto call = getGeoFunctionExpressionParameters(filterBody)) {
     return std::pair{LibSpatialJoinConfig{call.value().function_},
@@ -60,12 +63,19 @@ getSpatialJoinConfigForFilter(
                                 call.value().pattern_};
     return std::pair{std::move(config), std::move(call).value()};
   }
-  // The filter body is a maximum distance spatial search (direct body of
-  // filter is a comparison).
-  if (auto call = getGeoDistanceFilter(filterBody)) {
-    LibSpatialJoinConfig config{call.value().first.function_,
-                                call.value().second, std::nullopt};
-    return std::pair{std::move(config), std::move(call).value().first};
+  // The filter body bounds the distance between two geometries (see
+  // `filterFacts::recognizeDistanceBound`).
+  auto conjuncts = filterFacts::canonicalize(filter);
+  if (conjuncts.size() != 1) {
+    return std::nullopt;
+  }
+  if (auto bound = filterFacts::recognizeDistanceBound(conjuncts[0])) {
+    using enum SpatialJoinType::Enum;
+    return std::pair{
+        LibSpatialJoinConfig{WITHIN_DIST, bound->maxMeters_, std::nullopt},
+        sparqlExpression::GeoFunctionCall{WITHIN_DIST,
+                                          std::move(bound->distance_.a_),
+                                          std::move(bound->distance_.b_)}};
   }
   return std::nullopt;
 }
@@ -74,10 +84,8 @@ getSpatialJoinConfigForFilter(
 std::shared_ptr<SpatialJoin> rewriteFilterToSpatialJoin(
     const SparqlFilter& filter, QueryExecutionContext* qec,
     absl::FunctionRef<Variable()> generateUniqueVarName) {
-  const auto& filterBody = *filter.expression_.getPimpl();
-
   // Currently, we can only optimize GeoSPARQL filters.
-  auto configAndCall = getSpatialJoinConfigForFilter(filterBody);
+  auto configAndCall = getSpatialJoinConfigForFilter(filter.expression_);
   if (!configAndCall.has_value()) {
     return nullptr;
   }
@@ -109,4 +117,30 @@ std::shared_ptr<SpatialJoin> rewriteFilterToSpatialJoin(
           std::move(right.variable_), std::nullopt, PayloadVariables::all(),
           SpatialJoinAlgorithm::LIBSPATIALJOIN, std::nullopt},
       std::move(left.child_), std::move(right.child_), true);
+}
+
+// _____________________________________________________________________________
+void splitFiltersWithFacts(std::vector<SparqlFilter>& filters) {
+  std::vector<SparqlFilter> result;
+  for (auto& filter : filters) {
+    auto conjuncts = filterFacts::canonicalize(filter.expression_);
+    bool hasFact = ql::ranges::any_of(conjuncts, [](const auto& conjunct) {
+      return filterFacts::recognizeDistanceBound(conjunct).has_value();
+    });
+
+    // Split the FILTER only if one of its conjuncts is a fact.
+    //
+    // NOTE: This is for efficiency, not for correctness. Splitting every
+    // FILTER would also be correct (a FILTER holds iff all its conjuncts
+    // hold), but each conjunct would then become its own `Filter` operation
+    // and its own filter in the query planning, without any rewrite.
+    if (conjuncts.size() > 1 && hasFact) {
+      for (auto& conjunct : conjuncts) {
+        result.push_back(SparqlFilter{std::move(conjunct.expression_)});
+      }
+    } else {
+      result.push_back(std::move(filter));
+    }
+  }
+  filters = std::move(result);
 }

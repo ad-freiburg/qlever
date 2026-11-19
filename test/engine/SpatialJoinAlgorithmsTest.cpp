@@ -1958,6 +1958,42 @@ TEST(SpatialJoin, DistanceUnit) {
   }
 }
 
+// Compute a `libspatialjoin` join with `joinConfig` between the geometries of
+// the index of `qec` with the predicate `leftPredicate` and those with the
+// predicate `rightPredicate`. Return the subjects `a` (left) and `b` (right)
+// and the distance (in meters, `0` for join types other than `within-dist`)
+// of each row of the result.
+std::vector<std::tuple<std::string, std::string, double>> computeLibspatialjoin(
+    QueryExecutionContext* qec, LibSpatialJoinConfig joinConfig,
+    std::string leftPredicate, std::string rightPredicate) {
+  Variable distVar{"?dist"};
+  SpatialJoinConfiguration config{
+      std::move(joinConfig),   Variable{"?obj1"},
+      Variable{"?obj2"},       distVar,
+      PayloadVariables::all(), SpatialJoinAlgorithm::LIBSPATIALJOIN};
+  config.distanceUnit_ = UnitOfMeasurement::METERS;
+  auto spatialJoinTree = ad_utility::makeExecutionTree<SpatialJoin>(
+      qec, std::move(config),
+      buildIndexScan(qec, {"?s1", std::move(leftPredicate), "?obj1"}),
+      buildIndexScan(qec, {"?s2", std::move(rightPredicate), "?obj2"}));
+  auto result = spatialJoinTree->getResult();
+  auto toString = [&](Id id) {
+    return ql::exportIds::idToStringAndType(qec->getIndex(), id,
+                                            LocalVocab{qec->getAllocator()})
+        .value()
+        .first;
+  };
+  auto col1 = spatialJoinTree->getVariableColumn(Variable{"?s1"});
+  auto col2 = spatialJoinTree->getVariableColumn(Variable{"?s2"});
+  auto colDist = spatialJoinTree->getVariableColumn(distVar);
+  std::vector<std::tuple<std::string, std::string, double>> rows;
+  for (const auto& row : result->idTableView()) {
+    rows.emplace_back(toString(row[col1]), toString(row[col2]),
+                      row[colDist].getDouble());
+  }
+  return rows;
+}
+
 // Compute a `libspatialjoin` `within-dist` join with the given `maxDist`
 // between the geometries of `kg` with the predicate `leftPredicate` and those
 // with the predicate `rightPredicate`. Return the distance (in meters) for each
@@ -1971,35 +2007,14 @@ std::map<std::string, double> computeLibspatialjoinDistances(
   idxConfig.rowsPerBlock = 2'000'000;
   idxConfig.parserBufferSize = 100_kB;
   auto qec = ad_utility::testing::getQec(std::move(idxConfig));
-  Variable distVar{"?dist"};
-  SpatialJoinConfiguration config{
-      LibSpatialJoinConfig{SpatialJoinType::WITHIN_DIST, maxDist, std::nullopt},
-      Variable{"?obj1"},
-      Variable{"?obj2"},
-      distVar,
-      PayloadVariables::all(),
-      SpatialJoinAlgorithm::LIBSPATIALJOIN};
-  config.distanceUnit_ = UnitOfMeasurement::METERS;
-  auto spatialJoinTree = ad_utility::makeExecutionTree<SpatialJoin>(
-      qec, std::move(config),
-      buildIndexScan(qec, {"?s1", std::move(leftPredicate), "?obj1"}),
-      buildIndexScan(qec, {"?s2", std::move(rightPredicate), "?obj2"}));
-  auto result = spatialJoinTree->getResult();
-  auto toString = [&](Id id) {
-    return ql::exportIds::idToStringAndType(qec->getIndex(), id, {})
-        .value()
-        .first;
-  };
-  auto col1 = spatialJoinTree->getVariableColumn(Variable{"?s1"});
-  auto col2 = spatialJoinTree->getVariableColumn(Variable{"?s2"});
-  auto colDist = spatialJoinTree->getVariableColumn(distVar);
   std::map<std::string, double> dists;
-  for (const auto& row : result->idTableView()) {
-    auto a = toString(row[col1]);
-    auto b = toString(row[col2]);
+  for (const auto& [a, b, dist] : computeLibspatialjoin(
+           qec,
+           LibSpatialJoinConfig{SpatialJoinType::WITHIN_DIST, maxDist,
+                                std::nullopt},
+           std::move(leftPredicate), std::move(rightPredicate))) {
     if (a != b) {
-      dists[a < b ? absl::StrCat(a, " ", b) : absl::StrCat(b, " ", a)] =
-          row[colDist].getDouble();
+      dists[a < b ? absl::StrCat(a, " ", b) : absl::StrCat(b, " ", a)] = dist;
     }
   }
   return dists;
@@ -2114,6 +2129,55 @@ TEST(SpatialJoin, LibspatialJoinDistanceToDuplicateOfMultiGeometryMember) {
       computeLibspatialjoinDistances(kg, 1000, "<asWKTLeft>", "<asWKTRight>"),
       UnorderedElementsAre(Pair("<multi> <poly>", DoubleNear(33.4, 0.5)),
                            Pair("<poly> <single>", DoubleNear(757.0, 0.5))));
+}
+
+// Test that a `libspatialjoin` join on an index without a `GeoVocabulary`
+// considers all members of a multi-geometry, also a member that is far away
+// from all geometries of the other side (which decides `contains`).
+TEST(SpatialJoin, LibspatialJoinMultiGeometryWithFarMember) {
+  using ::testing::IsEmpty;
+  using ::testing::UnorderedElementsAre;
+
+  // On the left side a square. On the right side (the larger one) a point
+  // inside the square and a multipolygon with one member inside the square and
+  // one far away from it.
+  std::string kg = absl::StrCat(
+      "<square> <asWKTLeft> ", makeAreaLiteral("0 0,1 0,1 1,0 1,0 0"), " .\n",
+      "<point> <asWKTRight> ", makePointLiteral("0.5", "0.5"), " .\n",
+      "<multi> <asWKTRight> \"MULTIPOLYGON(((0.2 0.2,0.4 0.2,0.4 0.4,0.2 "
+      "0.4,0.2 0.2)),((5 5,6 5,6 6,5 6,5 5)))\"^^<",
+      GEO_WKT_LITERAL, "> .\n");
+
+  // An index without a `GeoVocabulary` (`buildQec` would choose a random
+  // vocabulary type, which may have one).
+  ad_utility::testing::TestIndexConfig indexConfig{kg};
+  indexConfig.vocabularyType = ad_utility::VocabularyType::OnDiskCompressed;
+  auto qec = ad_utility::testing::getQec(std::move(indexConfig));
+  ASSERT_FALSE(qec->getIndex().getVocab().isGeoInfoAvailable());
+
+  // Return the pairs of subjects in the result of a join of the given type,
+  // with the square on the left side, or on the right side if `swap` is set.
+  auto run = [&](SpatialJoinType type, bool swap = false) {
+    std::string left = swap ? "<asWKTRight>" : "<asWKTLeft>";
+    std::string right = swap ? "<asWKTLeft>" : "<asWKTRight>";
+    std::vector<std::string> pairs;
+    for (const auto& [a, b, dist] :
+         computeLibspatialjoin(qec, LibSpatialJoinConfig{type}, left, right)) {
+      pairs.push_back(absl::StrCat(a, " ", b));
+    }
+    return pairs;
+  };
+
+  // The square intersects both geometries, but only contains the point.
+  EXPECT_THAT(run(SpatialJoinType::INTERSECTS),
+              UnorderedElementsAre("<square> <point>", "<square> <multi>"));
+  EXPECT_THAT(run(SpatialJoinType::CONTAINS),
+              UnorderedElementsAre("<square> <point>"));
+
+  // Only the point is within the square (the square is within neither).
+  EXPECT_THAT(run(SpatialJoinType::WITHIN, true),
+              UnorderedElementsAre("<point> <square>"));
+  EXPECT_THAT(run(SpatialJoinType::WITHIN), IsEmpty());
 }
 
 // _____________________________________________________________________________
