@@ -1012,7 +1012,7 @@ TEST(JoinAlgorithms, SpecialOptionalJoinRespectsTheMemoryLimitOfTheInputs) {
         table(i, 2) = I(i);
       }
       std::vector<ad_utility::IdTableAndFirstCols<2, IdTable>> blocks;
-      blocks.emplace_back(std::move(table), LocalVocab{});
+      blocks.emplace_back(std::move(table), makeLocalVocab());
       return blocks;
     };
     IdJoinResult result;

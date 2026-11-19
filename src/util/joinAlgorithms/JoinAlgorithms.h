@@ -1746,7 +1746,8 @@ struct BlockZipperJoinImplForSpecialOptionalJoin
       // Note: It is crucial that we go through the `asStaticView` interface of
       // the `IdTableAndFirstCols` interface, because we need to copy ALL the
       // columns, not only the join columns, because the resultAdder needs them.
-      auto firstView = blocks.front().fullBlock().template asStaticView<0>();
+      const auto& firstView =
+          blocks.front().fullBlock().template asStaticView<0>();
       // Get allocator and number of columns from the first block.
       IdTable table(firstView.numColumns(), firstView.getAllocator());
       LocalVocab vocab{firstView.getAllocator()};
