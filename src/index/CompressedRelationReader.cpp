@@ -870,24 +870,21 @@ CompressedRelationReader::readAndDecompressBlock(
   }
 
   // If the block has no located triples and is not filtered by graph or
-  // because of duplicates, read only the `outputColumns_` (in particular not
-  // the graph column if it is deleted anyway).
+  // because of duplicates, read and decompress only the `outputColumns_` (in
+  // particular not the graph column if it is deleted anyway). Otherwise read
+  // all the `scanColumns_` and postprocess the block.
   bool needsPostprocessing =
       scanConfig.locatedTriples_.containsTriples(blockMetaData.blockIndex_) ||
       (useGraphPostProcessing_ &&
        scanConfig.graphFilter_.blockMightBeFiltered(blockMetaData));
-  if (!needsPostprocessing) {
-    CompressedBlock compressedColumns =
-        readCompressedBlockFromFile(blockMetaData, scanConfig.outputColumns_);
-    return DecompressedBlockAndMetadata{
-        decompressBlock(compressedColumns, blockMetaData.numRows_), false,
-        false};
-  }
-
-  // Otherwise read all the `scanColumns_` and postprocess the block.
-  CompressedBlock compressedColumns =
-      readCompressedBlockFromFile(blockMetaData, scanConfig.scanColumns_);
+  CompressedBlock compressedColumns = readCompressedBlockFromFile(
+      blockMetaData, needsPostprocessing ? scanConfig.scanColumns_
+                                         : scanConfig.outputColumns_);
   const auto numRowsToRead = blockMetaData.numRows_;
+  if (!needsPostprocessing) {
+    return DecompressedBlockAndMetadata{
+        decompressBlock(compressedColumns, numRowsToRead), false, false};
+  }
   return decompressAndPostprocessBlock(compressedColumns, numRowsToRead,
                                        scanConfig, blockMetaData);
 }
@@ -1103,7 +1100,26 @@ auto CompressedRelationReader::getScanConfig(
     const LocatedTriplesPerBlock& locatedTriples,
     std::optional<ColumnIndices> columnSubset) -> ScanImplConfig {
   auto columnIndices = prepareColumnIndices(scanSpec, additionalColumns);
-  auto outputColumns = columnIndices;
+
+  // Determine the columns of the result, that is, the `columnIndices` (which
+  // do not contain the graph column yet) restricted to the `columnSubset`.
+  auto outputColumns = [&]() -> ColumnIndices {
+    if (!columnSubset.has_value()) {
+      return columnIndices;
+    }
+    const auto& subset = columnSubset.value();
+    AD_CONTRACT_CHECK(
+        ql::ranges::adjacent_find(subset, std::greater_equal{}) ==
+                subset.end() &&
+            (subset.empty() || subset.back() < columnIndices.size()),
+        "The `columnSubset` of a scan must be strictly increasing and only "
+        "contain indices of result columns.");
+    return ::ranges::to<std::vector>(
+        subset | ql::views::transform([&columnIndices](ColumnIndex i) {
+          return columnIndices.at(i);
+        }));
+  }();
+
   // Determine the index of the graph column (which we need either for
   // filtering or for the output or both) and whether we we need it for
   // the output or not.
@@ -1124,22 +1140,6 @@ auto CompressedRelationReader::getScanConfig(
   }();
   FilterDuplicatesAndGraphs graphFilter{scanSpec.graphFilter(),
                                         graphColumnIndex, deleteGraphColumn};
-
-  // Restrict the `outputColumns` (which do not contain the graph column if it
-  // is deleted) to the `columnSubset`.
-  if (columnSubset.has_value()) {
-    const auto& subset = columnSubset.value();
-    AD_CONTRACT_CHECK(
-        ql::ranges::adjacent_find(subset, std::greater_equal{}) ==
-                subset.end() &&
-            (subset.empty() || subset.back() < outputColumns.size()),
-        "The `columnSubset` of a scan must be strictly increasing and only "
-        "contain indices of result columns.");
-    outputColumns = ::ranges::to<std::vector>(
-        columnSubset.value() |
-        ql::views::transform(
-            [&outputColumns](ColumnIndex i) { return outputColumns.at(i); }));
-  }
   return {std::move(columnIndices), std::move(outputColumns),
           std::move(columnSubset), std::move(graphFilter), locatedTriples};
 }
