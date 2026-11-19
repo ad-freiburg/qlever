@@ -16,6 +16,7 @@
 #include "./ValueIdTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IndexTestHelpers.h"
+#include "./util/LocalVocabTestHelpers.h"
 #include "./util/ParsedQueryTestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
@@ -32,6 +33,8 @@
 #include "parser/RdfParser.h"
 #include "parser/Tokenizer.h"
 #include "util/LocalVocabEntryTestHelpers.h"
+
+using ad_utility::testing::makeLocalVocab;
 
 using ad_utility::testing::iriLocalVocabEntry;
 using ad_utility::testing::localVocabEntry;
@@ -761,7 +764,7 @@ TEST_F(DeltaTriplesTest, rewriteLocalVocabEntriesAndBlankNodes) {
   // node.
   DeltaTriples deltaTriples(testQec->getIndex());
   auto& index = testQec->getIndex();
-  LocalVocab localVocabOutside;
+  LocalVocab localVocabOutside = makeLocalVocab();
   auto triples =
       makeIdTriples(index, localVocabOutside, {"<A> <notInVocab> <B>"});
   AD_CORRECTNESS_CHECK(triples.size() == 1);
@@ -836,7 +839,7 @@ TEST_F(DeltaTriplesTest, rewriteLocalVocabEntriesAndBlankNodes) {
 TEST_F(DeltaTriplesTest, rewriteRemovesLocalVocabEntriesInVocab) {
   DeltaTriples deltaTriples(testQec->getIndex());
   const IndexImpl& index = testQec->getIndex().getImpl();
-  LocalVocab localVocabOutside;
+  LocalVocab localVocabOutside = makeLocalVocab();
   auto triples = makeIdTriples(index, localVocabOutside, {"<a> <upp> <A>"});
   ASSERT_EQ(triples.size(), 1);
   auto expectedSubject = triples[0].ids()[0];
@@ -859,7 +862,7 @@ TEST_F(DeltaTriplesTest, rewriteRemovesLocalVocabEntriesInVocab) {
   // The same through the public update path, with a batch that mixes an
   // ordinary triple with the local-vocab spelling of an indexed word.
   DeltaTriples deltaTriples2(testQec->getIndex());
-  LocalVocab localVocabOutside2;
+  LocalVocab localVocabOutside2 = makeLocalVocab();
   auto triples2 = makeIdTriples(index, localVocabOutside2,
                                 {"<b> <upp> <B>", "<a> <upp> <A>"});
   triples2[1].ids()[0] = Id::makeFromLocalVocabIndex(
@@ -893,7 +896,7 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
   // dependent on the thread index. Check that the snapshot before in the
   // middle of these updates is as expected.
   auto insertAndDelete = [&](size_t threadIdx) {
-    LocalVocab localVocab;
+    LocalVocab localVocab = makeLocalVocab();
     LocatedTriplesSharedState beforeUpdate =
         deltaTriplesManager.getCurrentLocatedTriplesSharedState();
     for (size_t i = 0; i < numIterations; ++i) {
@@ -1013,7 +1016,7 @@ TEST_F(DeltaTriplesTest, LocatedTriplesSharedState) {
   EXPECT_THAT(copiedSnapshotBeforeUpdate2, Snapshot(0, 0));
 
   // Modifying the delta triples increases the index_.
-  LocalVocab localVocab;
+  LocalVocab localVocab = makeLocalVocab();
   auto triplesToInsert = makeIdTriples(index, localVocab, {"<A> <B> <C>"});
   deltaTriples.insertTriples(cancellationHandle, std::move(triplesToInsert));
 
@@ -1330,7 +1333,7 @@ TEST_F(DeltaTriplesTest, vacuum) {
       std::make_shared<ad_utility::CancellationHandle<>>();
   DeltaTriples deltaTriples(testQec->getIndex());
   auto& index = testQec->getIndex().getImpl();
-  LocalVocab localVocab;
+  LocalVocab localVocab = makeLocalVocab();
 
   // Insertions of triples in the index.
   deltaTriples.insertTriples(
@@ -1372,7 +1375,7 @@ TEST_F(DeltaTriplesTest, remapId) {
   auto B = &makeBlankNodeId<>;
   const IndexImpl& index = testQec->getIndex().getImpl();
   qlever::indexRebuilder::IndexRebuildMapping idMapping;
-  LocalVocab localVocab;
+  LocalVocab localVocab = makeLocalVocab();
 
   auto getLocalVocabId = ad_utility::testing::makeGetLocalVocabId();
   LocalVocabEntry sourceEntry = localVocabEntryFromStringRepresentation(
@@ -1458,7 +1461,7 @@ TEST_F(DeltaTriplesTest, addFromSnapshotDiff) {
   DeltaTriples deltaTriples(testQec->getIndex());
   auto& index = testQec->getIndex();
   auto getId = ad_utility::testing::makeGetId(index);
-  LocalVocab localVocab;
+  LocalVocab localVocab = makeLocalVocab();
 
   Id x = getId("<x>");
   Id anon = getId("<anon>");
@@ -1587,7 +1590,7 @@ TEST_F(DeltaTriplesTest, addFromSnapshotDiffReanchorsLocalVocabEntries) {
   {
     Index oldIndex = makeTestIndex(prefix + "-old", "<x> <y> <z> .");
     DeltaTriples oldDeltaTriples(oldIndex);
-    LocalVocab localVocab;
+    LocalVocab localVocab = makeLocalVocab();
 
     // The snapshot is taken BEFORE the update, so the rebuild mapping is
     // empty and the word below is carried over as a local vocab entry.
