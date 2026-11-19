@@ -55,8 +55,8 @@ std::vector<std::pair<std::string, bool>> makeWords(size_t numWords) {
 // Read a whole file.
 std::string readFile(const std::string& filename) {
   auto file = ad_utility::makeIfstream(filename, std::ios::binary);
-  // Copy the whole buffer at once, reading char by char via
-  // `std::istreambuf_iterator` is very slow in Debug builds.
+  // Copy the whole buffer at once (reading char by char via
+  // `std::istreambuf_iterator` is very slow in Debug builds).
   std::ostringstream contents;
   contents << file.rdbuf();
   return std::move(contents).str();
