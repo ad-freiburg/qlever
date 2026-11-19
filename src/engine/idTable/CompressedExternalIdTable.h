@@ -595,8 +595,7 @@ static_assert(parallelBlockMerge::InputConcept<CompressedIdTableRunsInput<3>>);
 // A callback that pushes complete blocks (instead of single rows) into a
 // `CompressedExternalIdTableBase` (see `makePushBlockCallback` below). This is
 // a named type and not a lambda, such that callers that accept both per-row
-// and per-block callbacks can tell the two apart (see e.g. `liftCallback` in
-// `IndexImpl.cpp`).
+// and per-block callbacks can tell the two apart.
 template <typename Table>
 struct PushBlockCallback {
   Table* table_;
@@ -1341,6 +1340,31 @@ class CompressedExternalIdTableSorter
                       CompletionToken&& completionToken) {
     return this->asyncPusher_->asyncPushBlock(std::move(table),
                                               AD_FWD(completionToken));
+  }
+
+  // Return a callback that takes a `std::shared_ptr` to a complete block (an
+  // `IdTable`) and a `done` callback, pushes the rows of the block via
+  // `asyncPushBlock`, and then invokes `done` (as an rvalue) with the
+  // `std::exception_ptr` of the push (or `nullptr`). The block is kept alive
+  // until the push has completed. As for `asyncPushBlock`, the callback may be
+  // invoked concurrently for several blocks (it is for example used as a
+  // `chunkwisePermutationWriter::ConcurrentBlockCallback`).
+  auto makeAsyncPushBlockCallback() {
+    // NOTE: `self = this` instead of `this` circumvents a false-positive
+    // `-Wunused-lambda-capture` warning of Clang for generic lambdas.
+    return [self = this](auto block, auto done) {
+      // The view (and the rows that it refers to) has to stay alive until the
+      // push has completed, which the aliasing `shared_ptr` guarantees.
+      using Holder = std::pair<decltype(block), IdTableView<0>>;
+      auto holder =
+          std::make_shared<Holder>(block, block->template asStaticView<0>());
+      auto* viewPtr = &holder->second;
+      std::shared_ptr<const IdTableView<0>> view{std::move(holder), viewPtr};
+      self->asyncPushBlock(std::move(view), [done = std::move(done)](
+                                                std::exception_ptr e) mutable {
+        std::move(done)(std::move(e));
+      });
+    };
   }
 
   // Set how the merge phase stores the output blocks that it spills (see
