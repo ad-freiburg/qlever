@@ -11,7 +11,6 @@
 #include "parser/NamedCachedResult.h"
 #include "parser/SparqlTriple.h"
 #include "parser/TripleComponent.h"
-#include "util/ContainersWithAllocator.h"
 
 using namespace parsedQuery;
 
@@ -100,7 +99,7 @@ TEST_F(NamedCachedResultTest, SequenceOfOperations) {
   auto errorMatcher = ::testing::HasSubstr("must be empty");
   AD_EXPECT_THROW_WITH_MESSAGE(
       query_->addGraph(GraphPatternOperation(parsedQuery::BasicGraphPattern{
-          qlm::vector<SparqlTriple>{ad_utility::testing::makeAllocator()}})),
+          {{}, ad_utility::testing::makeAllocator()}})),
       errorMatcher);
   // addParameter should always fail regardless of state
   SparqlTriple testTriple = createTestTriple();

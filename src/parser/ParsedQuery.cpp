@@ -433,14 +433,14 @@ bool ParsedQuery::GraphPattern::addLanguageFilter(
     const auto allocator = _graphPatterns.get_allocator();
     std::vector<BasicGraphPattern> operations;
     for (const auto& langTag : langTags) {
-      operations.push_back({qlm::vector<SparqlTriple>{
-          {SparqlTriple{
-              variable,
-              PropertyPath::fromIri(
-                  ad_utility::triple_component::Iri::fromIriref(
-                      LANGUAGE_PREDICATE)),
-              ad_utility::triple_component::Iri::fromLangtag(langTag)}},
-          allocator}});
+      operations.push_back(
+          {{{SparqlTriple{
+                variable,
+                PropertyPath::fromIri(
+                    ad_utility::triple_component::Iri::fromIriref(
+                        LANGUAGE_PREDICATE)),
+                ad_utility::triple_component::Iri::fromLangtag(langTag)}},
+            allocator}});
     }
 
     // Optimization if there already is a `BasicGraphPattern` we can use.

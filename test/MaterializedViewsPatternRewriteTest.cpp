@@ -373,7 +373,7 @@ TEST(MaterializedViewsPatternRewriteRejectionTest,
      emptyGraphPatternNotRewritten) {
   ParsedQuery parsed;
   parsed._rootGraphPattern._graphPatterns.emplace_back(
-      parsedQuery::BasicGraphPattern{qlm::vector<SparqlTriple>{alloc()}});
+      parsedQuery::BasicGraphPattern{{{}, alloc()}});
 
   auto result =
       materializedViewsQueryAnalysis::getTriplesForPatternRewrite(parsed);

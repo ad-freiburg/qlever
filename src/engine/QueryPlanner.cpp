@@ -807,8 +807,7 @@ void QueryPlanner::seedFromOrdinaryTriple(
 auto QueryPlanner::seedWithScansAndText(
     const QueryPlanner::TripleGraph& tg, const SubtreePlanMatrix& children,
     TextLimitMap& textLimits) -> PlansAndFilters {
-  PlansAndFilters result{SubtreePlanVec{allocator()},
-                         qlm::vector<SparqlFilter>{allocator()}};
+  PlansAndFilters result{SubtreePlanVec{allocator()}, {{}, allocator()}};
   SubtreePlanVec& seeds = result.plans_;
   // add all child plans as seeds
   uint64_t idShift = tg._nodeMap.size();
@@ -1162,7 +1161,7 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromVarOrIri(
     const ad_utility::sparql_types::VarOrIri& varOrIri,
     const TripleComponent& right) {
   ParsedQuery::GraphPattern p{allocator()};
-  p::BasicGraphPattern basic{qlm::vector<SparqlTriple>{allocator()}};
+  p::BasicGraphPattern basic{{{}, allocator()}};
   basic._triples.emplace_back(
       left,
       std::visit(

@@ -546,8 +546,7 @@ Alias Visitor::visit(Parser::AliasWithoutBracketsContext* ctx) {
 // ____________________________________________________________________________________
 parsedQuery::BasicGraphPattern Visitor::toGraphPattern(
     const ad_utility::sparql_types::Triples& triples) const {
-  parsedQuery::BasicGraphPattern pattern{
-      qlm::vector<SparqlTriple>{allocator()}};
+  parsedQuery::BasicGraphPattern pattern{{{}, allocator()}};
   pattern._triples.reserve(triples.size());
   auto toTripleComponent = [this](const auto& item) {
     using T = std::decay_t<decltype(item)>;
@@ -1320,8 +1319,7 @@ Visitor::OperationsAndFilters Visitor::visit(
       continue;
     }
     if (ops.empty() || !std::holds_alternative<BasicGraphPattern>(ops.back())) {
-      ops.emplace_back(
-          BasicGraphPattern{qlm::vector<SparqlTriple>{allocator()}});
+      ops.emplace_back(BasicGraphPattern{{{}, allocator()}});
     }
     std::get<BasicGraphPattern>(ops.back())
         .appendTriples(std::move(triples.value()));

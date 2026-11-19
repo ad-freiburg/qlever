@@ -725,7 +725,7 @@ class QueryPlanner {
           rootPattern_{rootPattern},
           qec_{planner._qec},
           candidatePlans_{allocator()},
-          candidateTriples_{qlm::vector<SparqlTriple>{allocator()}},
+          candidateTriples_{{{}, allocator()}},
           filtersAndSubst_{
               planner.wrapFiltersWithoutSubstitutes(rootPattern->_filters)} {}
 
