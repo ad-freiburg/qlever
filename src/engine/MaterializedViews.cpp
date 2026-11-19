@@ -308,13 +308,21 @@ MaterializedViewWriter::getBlocksForUnsortedResult(
 // _____________________________________________________________________________
 MaterializedViewWriter::RangeOfIdTables MaterializedViewWriter::getSortedBlocks(
     Sorter& spoSorter, std::shared_ptr<const Result> result) const {
-  // Check if the query result is already sorted by SPO considering the target
-  // column ordering
-  constexpr size_t numSortedColumns = 3;
+  // Check if the query result is already sorted by the columns that the
+  // `Comparator` sorts by, considering the target column ordering.
+  //
+  // NOTE: The `Comparator` sorts by the first four columns, because it treats
+  // the fourth column as the graph column. An appended empty column consists of
+  // `UNDEF`s only, so it need not be checked.
+  constexpr size_t numSortedColumns = ADDITIONAL_COLUMN_GRAPH_ID + 1;
+  const size_t numColumnsToCheck =
+      std::min(numSortedColumns, columnPermutation_.size());
   const auto& resultSortedBy = result->sortedBy();
   bool isAlreadySorted =
-      ql::ranges::equal(resultSortedBy | ql::views::take(numSortedColumns),
-                        columnPermutation_ | ql::views::take(numSortedColumns));
+      resultSortedBy.size() >= numColumnsToCheck &&
+      ql::ranges::equal(
+          resultSortedBy | ql::views::take(numColumnsToCheck),
+          columnPermutation_ | ql::views::take(numColumnsToCheck));
 
   // Either call the version that only permutes the correctly sorted blocks or
   // the version that sorts them.
@@ -853,7 +861,7 @@ MaterializedView::makeEmptyLocatedTriplesState(
   emptyLocatedTriples.at(static_cast<size_t>(permutation_->permutation()))
       .setOriginalMetadata(permutation_->metaData().blockDataShared());
   LocatedTriplesPerBlockAllPermutations<true> emptyInternalLocatedTriples;
-  LocalVocab emptyVocab;
+  LocalVocab emptyVocab{allocator};
 
   return std::allocate_shared<LocatedTriplesState>(
       allocator,

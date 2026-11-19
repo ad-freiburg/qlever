@@ -123,7 +123,7 @@ using sparqlExpression::detail::NumericValueGetter;
 struct NumericExpressionBenchmarkContext {
   QueryExecutionContext* qec = ad_utility::testing::getQec("");
   VariableToColumnMap variableToColumnMap;
-  LocalVocab localVocab;
+  LocalVocab localVocab{qec->getAllocator()};
   IdTable table{qec->getAllocator()};
 
   EvaluationContext context{

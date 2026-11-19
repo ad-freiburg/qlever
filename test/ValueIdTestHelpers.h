@@ -55,6 +55,14 @@ inline auto underflowingNBitGenerator =
 
 // Convert `uint64_t` values directly to and from `Id`s of an index type.
 template <typename IdType = ValueId>
+IdType makeTripleTermId(uint64_t value) {
+  return IdType::makeFromTripleTermIndex(TripleTermIndex::make(value));
+}
+template <typename IdType = ValueId>
+uint64_t getTripleTermIndex(IdType id) {
+  return id.getTripleTermIndex().get();
+}
+template <typename IdType = ValueId>
 IdType makeVocabId(uint64_t value) {
   return IdType::makeFromVocabIndex(VocabIndex::make(value));
 }
@@ -144,6 +152,7 @@ template <typename IdType = ValueId>
 std::vector<IdType> makeRandomIds() {
   std::vector<IdType> ids = makeRandomDoubleIds<IdType>();
   addIdsFromGenerator(indexGenerator<IdType>, &makeVocabId<IdType>, ids);
+  addIdsFromGenerator(indexGenerator<IdType>, &makeTripleTermId<IdType>, ids);
   // Only the `Id` of the current build can compare a `LocalVocabIndex` with an
   // `Id` of another datatype (see `IdBase::compareThreeWay`). For the other
   // layout, `LocalVocabEntry::IdProxy` would have to be a template too, which
