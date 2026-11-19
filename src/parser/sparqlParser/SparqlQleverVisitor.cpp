@@ -2130,18 +2130,9 @@ ExpressionPtr Visitor::visit(Parser::FunctionCallContext* ctx) {
 // ____________________________________________________________________________________
 qlm::vector<Visitor::ExpressionPtr> Visitor::visit(
     Parser::ArgListContext* ctx) {
-  qlm::vector<ExpressionPtr> arguments{allocator()};
-  // If no arguments, return empty expression vector.
-  if (ctx->NIL()) {
-    return arguments;
-  }
-  // Visit the expression of each argument. An optional `DISTINCT` before the
-  // argument list is handled by `processIriFunctionCall`.
-  arguments.reserve(ctx->expression().size());
-  for (auto* expression : ctx->expression()) {
-    arguments.push_back(visit(expression));
-  }
-  return arguments;
+  // Visit the expression of each argument (none for `NIL`). An optional
+  // `DISTINCT` before the argument list is handled by `processIriFunctionCall`.
+  return visitQlmVector(ctx->expression());
 }
 
 // ____________________________________________________________________________________
