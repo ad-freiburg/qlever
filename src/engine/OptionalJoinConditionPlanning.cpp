@@ -9,9 +9,59 @@
 
 #include "engine/OptionalJoinConditionPlanning.h"
 
+#include <absl/strings/str_cat.h>
+#include <absl/strings/str_join.h>
+
 #include "backports/algorithm.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
+#include "util/Algorithm.h"
 #include "util/ParseException.h"
+
+namespace {
+// Return the message for the `filter` of an OPTIONAL that uses the
+// `variables`, which are bound outside of the OPTIONAL, but not always inside
+// of it. If `inExists` is true, the `variables` are used by an `EXISTS` in the
+// `filter` and the message is for a `NotSupportedException`, otherwise it is
+// for the warning that the `filter` is evaluated on the content of the
+// OPTIONAL alone.
+std::string makeMessage(const sparqlExpression::SparqlExpressionPimpl& filter,
+                        bool inExists,
+                        const std::vector<std::string>& variables) {
+  auto variableList = absl::StrJoin(variables, ", ");
+  // NOTE: If the patterns that bind the `variables` are repeated inside of the
+  // OPTIONAL, the `variables` are always bound there, and the join with the
+  // left side gives the same result as the evaluation on the joined rows
+  // (provided that these patterns always bind the `variables` and only use
+  // variables of the left side).
+  return absl::StrCat(
+      "The FILTER ", filter.getDescriptor(), " inside of an OPTIONAL",
+      inExists ? " contains an EXISTS that" : "", " uses ", variableList,
+      ", which ", variables.size() > 1 ? "are" : "is",
+      " bound outside of the OPTIONAL but not always inside of it. The SPARQL "
+      "standard evaluates such ",
+      inExists ? "an EXISTS" : "a FILTER",
+      " on the joined rows, which is not supported yet",
+      inExists ? ""
+               : ", so QLever evaluates it on the content of the OPTIONAL "
+                 "alone",
+      ". To get the standard result, repeat the patterns that bind ",
+      variableList, " outside of the OPTIONAL also inside of it.");
+}
+
+// Return the names of the `variables` for which `predicate` is true, without
+// duplicates and in the order of their first occurrence.
+template <typename Variables, typename Predicate>
+std::vector<std::string> getNamesOfVariables(const Variables& variables,
+                                             const Predicate& predicate) {
+  std::vector<std::string> names;
+  for (const Variable& variable : variables) {
+    if (predicate(variable) && !ad_utility::contains(names, variable.name())) {
+      names.push_back(variable.name());
+    }
+  }
+  return names;
+}
+}  // namespace
 
 // _____________________________________________________________________________
 bool isPartOfOptionalJoinCondition(
@@ -29,16 +79,31 @@ bool isPartOfOptionalJoinCondition(
   for (const auto* expression : filter.getExistsExpressions()) {
     const auto& exists =
         dynamic_cast<const sparqlExpression::ExistsExpression&>(*expression);
-    if (ql::ranges::any_of(exists.argument().getVisibleVariables(),
-                           getsValueFromLeftSide)) {
-      throw NotSupportedException{
-          "A FILTER with EXISTS inside of an OPTIONAL, where the EXISTS uses "
-          "a variable that is bound outside of the OPTIONAL but not always "
-          "bound inside of it, is not supported yet."};
+    auto variables = getNamesOfVariables(
+        exists.argument().getVisibleVariables(), getsValueFromLeftSide);
+    if (!variables.empty()) {
+      throw NotSupportedException{makeMessage(filter, true, variables)};
     }
   }
   return ql::ranges::any_of(filter.containedVariables(),
                             [&](const Variable* variable) {
                               return getsValueFromLeftSide(*variable);
                             });
+}
+
+// _____________________________________________________________________________
+std::string getOptionalJoinConditionWarning(
+    const sparqlExpression::SparqlExpressionPimpl& filter,
+    const ad_utility::HashSet<Variable>& variablesOfLeftSide,
+    absl::FunctionRef<bool(const Variable&)> isAlwaysDefinedInGroup) {
+  auto variables = getNamesOfVariables(
+      filter.containedVariables() |
+          ql::views::transform([](const Variable* variable) -> const Variable& {
+            return *variable;
+          }),
+      [&](const Variable& variable) {
+        return variablesOfLeftSide.contains(variable) &&
+               !isAlwaysDefinedInGroup(variable);
+      });
+  return makeMessage(filter, false, variables);
 }

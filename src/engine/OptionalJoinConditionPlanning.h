@@ -12,6 +12,8 @@
 
 #include <absl/functional/function_ref.h>
 
+#include <string>
+
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "rdfTypes/Variable.h"
 #include "util/HashSet.h"
@@ -34,6 +36,16 @@
 // uses such a variable, because the `ExistsJoin` is computed on the group
 // alone.
 bool isPartOfOptionalJoinCondition(
+    const sparqlExpression::SparqlExpressionPimpl& filter,
+    const ad_utility::HashSet<Variable>& variablesOfLeftSide,
+    absl::FunctionRef<bool(const Variable&)> isAlwaysDefinedInGroup);
+
+// Return the warning for a `filter` for which `isPartOfOptionalJoinCondition`
+// returns true, but which is evaluated on the content of the OPTIONAL alone,
+// as long as the `OptionalJoin` can't evaluate it. The warning names the
+// `filter`, the variables that make it part of the condition, and workarounds.
+// The arguments are the same as for `isPartOfOptionalJoinCondition`.
+std::string getOptionalJoinConditionWarning(
     const sparqlExpression::SparqlExpressionPimpl& filter,
     const ad_utility::HashSet<Variable>& variablesOfLeftSide,
     absl::FunctionRef<bool(const Variable&)> isAlwaysDefinedInGroup);

@@ -330,6 +330,23 @@ class QueryPlanner {
                           const std::optional<ad_utility::HashSet<Variable>>&
                               variablesOfLeftSideOfOptional = std::nullopt);
 
+  // Apply all FILTERs to the final `plans` of a group that have not been
+  // applied yet, except for the FILTERs that are the condition of an OPTIONAL
+  // (see `optimize`).
+  void applyRemainingFilters(SubtreePlanVec& plans,
+                             const FiltersAndOptionalSubstitutes& filters,
+                             const std::optional<ad_utility::HashSet<Variable>>&
+                                 variablesOfLeftSideOfOptional) const;
+
+  // Return the bit map of the `filters` (same format as
+  // `SubtreePlan::_idsOfIncludedFilters`) that are the condition of the left
+  // join, if the `plans` are the final plans of the group of an OPTIONAL, see
+  // `isPartOfOptionalJoinCondition`. This only depends on the group and not on
+  // the plan, so only the first plan is used.
+  uint64_t getIdsOfOptionalJoinConditionFilters(
+      const SubtreePlanVec& plans, const FiltersAndOptionalSubstitutes& filters,
+      const ad_utility::HashSet<Variable>& variablesOfLeftSideOfOptional) const;
+
   // Add all the possible index scans for the triple represented by the node.
   // The triple is "ordinary" in the sense that it is neither a text triple with
   // ql:contains-word nor a special pattern trick triple.
@@ -575,9 +592,14 @@ class QueryPlanner {
     // where we have to make sure that all filters are applied.
     ApplyAllFiltersAndReplaceUnfiltered,
   };
+  // The filters in `idsOfFiltersToSkip` (same format as
+  // `SubtreePlan::_idsOfIncludedFilters`) are not applied, although they have
+  // not been applied yet. This is used for the FILTERs that are the condition
+  // of an OPTIONAL, see `applyRemainingFilters`.
   template <FilterMode mode = FilterMode::KeepUnfiltered>
-  void applyFiltersIfPossible(
-      SubtreePlanVec& row, const FiltersAndOptionalSubstitutes& filters) const;
+  void applyFiltersIfPossible(SubtreePlanVec& row,
+                              const FiltersAndOptionalSubstitutes& filters,
+                              uint64_t idsOfFiltersToSkip = 0) const;
 
   // Apply text limits if possible.
   // A text limit can be applied to a plan if:
@@ -780,6 +802,15 @@ class QueryPlanner {
     bool handleUnconnectedMinusOrOptional(
         SubtreePlanVec& candidates, const Variables& variables,
         bool isGraphVariableInScopeOnBothSidesOfMinus);
+
+    // Helper function for `graphPatternOperationVisitor`. The `OptionalJoin`
+    // can't evaluate the `optionalJoinCondition_` of the `candidates` (the
+    // plans of the group of an OPTIONAL) yet. Therefore apply its FILTERs to
+    // the group, like it was done before the condition was determined, and add
+    // a warning for each of them.
+    void applyOptionalJoinConditionToGroup(
+        SubtreePlanVec& candidates,
+        const ad_utility::HashSet<Variable>& variablesOfLeftSideOfOptional);
 
     // This function is called for groups, optional, or minus clauses.
     // The `candidates` are the result of planning the pattern inside the
