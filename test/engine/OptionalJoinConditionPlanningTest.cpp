@@ -44,10 +44,25 @@ void expectNotSupported(
       HasSubstr(message), NotSupportedException);
 }
 
+// Return the warnings of the plan for the `query`.
+std::vector<std::string> getWarnings(std::string query) {
+  return h::parseAndPlan(std::move(query), ad_utility::testing::getQec())
+      ->getRootOperation()
+      ->collectWarnings();
+}
+
+// Expect that the plan for the `query` has a warning with the given `message`.
+void expectWarning(std::string query, std::string_view message,
+                   ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(l);
+  EXPECT_THAT(getWarnings(std::move(query)),
+              ::testing::Contains(HasSubstr(message)));
+}
+
 constexpr std::string_view conditionMessage =
-    "A FILTER inside of an OPTIONAL that uses a variable";
+    "so QLever evaluates it on the content of the OPTIONAL alone";
 constexpr std::string_view existsMessage =
-    "A FILTER with EXISTS inside of an OPTIONAL";
+    "inside of an OPTIONAL contains an EXISTS that uses";
 
 }  // namespace
 
@@ -103,78 +118,93 @@ TEST(OptionalJoinConditionPlanning, filterStaysInGroup) {
   h::expect("SELECT * { ?x <p> ?y OPTIONAL { ?x <q> ?z FILTER(?x != ?z) } }",
             h::OptionalJoin(scan("?x", "<p>", "?y"),
                             h::Filter("?x != ?z", scan("?x", "<q>", "?z"))));
-  auto expectNoThrow = [](std::string query, ad_utility::source_location l =
-                                                 AD_CURRENT_SOURCE_LOC()) {
+  auto expectNoWarning = [](std::string query, ad_utility::source_location l =
+                                                   AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
-    EXPECT_NO_THROW(
-        h::parseAndPlan(std::move(query), ad_utility::testing::getQec()));
+    EXPECT_THAT(getWarnings(std::move(query)),
+                ::testing::Not(
+                    ::testing::Contains(HasSubstr("inside of an OPTIONAL"))));
   };
   // `?y` is always bound by the `VALUES` or the `BIND` of the group.
-  expectNoThrow(
+  expectNoWarning(
       "SELECT * { ?x <p> ?y OPTIONAL { VALUES ?y { 1 2 } ?x <q> ?z "
       "FILTER(?y < ?z) } }");
-  expectNoThrow(
+  expectNoWarning(
       "SELECT * { ?x <p> ?y OPTIONAL { ?x <q> ?z BIND(?z AS ?y) "
       "FILTER(?y < 5) } }");
   // There is no left side.
-  expectNoThrow("SELECT * { OPTIONAL { ?x <q> ?z FILTER(?y < ?z) } }");
-  expectNoThrow(
+  expectNoWarning("SELECT * { OPTIONAL { ?x <q> ?z FILTER(?y < ?z) } }");
+  expectNoWarning(
       "SELECT * { OPTIONAL { ?x <q> ?z FILTER(?y < ?z) } ?x <p> ?y }");
   // `?w` is not bound at all.
-  expectNoThrow(
+  expectNoWarning(
       "SELECT * { ?x <p> ?y OPTIONAL { ?x <q> ?z FILTER(?w < ?z) } }");
   // The FILTER belongs to a nested group and not directly to the OPTIONAL.
-  expectNoThrow(
+  expectNoWarning(
       "SELECT * { ?x <p> ?y OPTIONAL { { ?x <q> ?z FILTER(?y < ?z) } } }");
   // Inside `GRAPH ?g`, the triple of the group always binds `?g`.
-  expectNoThrow(
+  expectNoWarning(
       "SELECT * { GRAPH ?g { ?x <p> ?y OPTIONAL { ?x <q> ?z "
       "FILTER(?g != <a>) } } }");
   // An `EXISTS` whose variables are all always bound in the group.
-  expectNoThrow(
+  expectNoWarning(
       "SELECT * { ?x <p> ?y OPTIONAL { ?x <q> ?z FILTER NOT EXISTS "
       "{ ?x <r> ?z } } }");
 }
 
 // _____________________________________________________________________________
-TEST(OptionalJoinConditionPlanning, conditionIsNotSupportedYet) {
-  // `?y` is only bound on the left side.
-  expectNotSupported(
+TEST(OptionalJoinConditionPlanning, conditionIsAppliedToGroupWithWarning) {
+  auto scan = h::IndexScanFromStrings;
+  // `?y` is only bound on the left side. The FILTER is applied to the group,
+  // after all other FILTERs, like before the condition was determined.
+  h::expect(
       "SELECT * { ?x <p> ?y OPTIONAL { ?x <q> ?z FILTER(?y < ?z) } }",
-      conditionMessage);
+      h::QetWithWarnings(
+          {std::string{conditionMessage}},
+          h::OptionalJoin(scan("?x", "<p>", "?y"),
+                          h::Filter("?y < ?z", scan("?x", "<q>", "?z")))));
+  h::expect(
+      "SELECT * { ?x <p> ?y OPTIONAL { ?x <q> ?z FILTER(?y < ?z) "
+      "FILTER(?z > 3) } }",
+      h::QetWithWarnings(
+          {std::string{conditionMessage}},
+          h::OptionalJoin(
+              scan("?x", "<p>", "?y"),
+              h::Filter("?y < ?z",
+                        h::Filter("?z > 3", scan("?x", "<q>", "?z"))))));
   // The same for an OPTIONAL that shares no variable with the left side, and
   // for an OPTIONAL with an empty group.
-  expectNotSupported(
-      "SELECT * { ?x <p> ?y OPTIONAL { ?a <q> ?z FILTER(?y < ?z) } }",
-      conditionMessage);
-  expectNotSupported("SELECT * { ?x <p> ?y OPTIONAL { FILTER(?y < 5) } }",
-                     conditionMessage);
+  expectWarning("SELECT * { ?x <p> ?y OPTIONAL { ?a <q> ?z FILTER(?y < ?z) } }",
+                conditionMessage);
+  expectWarning("SELECT * { ?x <p> ?y OPTIONAL { FILTER(?y < 5) } }",
+                conditionMessage);
   // `?y` might be UNDEF in the group.
-  expectNotSupported(
+  expectWarning(
       "SELECT * { ?x <p> ?y OPTIONAL { ?x <q> ?z OPTIONAL { ?z <r> ?y } "
       "FILTER(?y < 5) } }",
       conditionMessage);
-  expectNotSupported(
+  expectWarning(
       "SELECT * { ?x <p> ?y OPTIONAL { VALUES ?y { 1 UNDEF } ?x <q> ?z "
       "FILTER(?y < ?z) } }",
       conditionMessage);
   // The left side is a previous OPTIONAL.
-  expectNotSupported(
+  expectWarning(
       "SELECT * { ?x <p> ?y OPTIONAL { ?x <q> ?z } OPTIONAL { ?x <r> ?w "
       "FILTER(?z < ?w) } }",
       conditionMessage);
   // Inside `GRAPH ?g`, the left side binds `?g`, but the group doesn't.
-  expectNotSupported(
+  expectWarning(
       "SELECT * { GRAPH ?g { ?x <p> ?y OPTIONAL { VALUES ?z { 1 } "
       "FILTER(?g != <a>) } } }",
       conditionMessage);
   // A FILTER that can be replaced by a `SpatialJoin`, which is already done
-  // when one of its variables is bound in the group.
-  expectNotSupported(
+  // when one of its variables is bound in the group. The plans with the
+  // `SpatialJoin` keep it, the other plans get the FILTER.
+  EXPECT_NO_THROW(h::parseAndPlan(
       "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
       "SELECT * { ?x <p> ?y OPTIONAL { ?x <q> ?b "
       "FILTER(geof:distance(?y, ?b) <= 0.5) } }",
-      conditionMessage);
+      ad_utility::testing::getQec()));
 }
 
 // _____________________________________________________________________________
@@ -193,4 +223,38 @@ TEST(OptionalJoinConditionPlanning, existsThatDependsOnLeftSide) {
       "SELECT * { ?x <p> ?y OPTIONAL { ?x <q> ?z OPTIONAL { ?z <r> ?y } "
       "FILTER EXISTS { ?y <s> ?w } } }",
       existsMessage);
+}
+
+// _____________________________________________________________________________
+TEST(OptionalJoinConditionPlanning, messages) {
+  // The messages name the FILTER and the variables that make it part of the
+  // condition, but not the other variables, and the rewrite that gives the
+  // result of the SPARQL standard.
+  auto query = "SELECT * { ?x <p> ?y OPTIONAL { ?x <q> ?z FILTER(?y < ?z) } }";
+  EXPECT_THAT(
+      getWarnings(query),
+      ::testing::ElementsAre(
+          "The FILTER (?y < ?z) inside of an OPTIONAL uses ?y, which is bound "
+          "outside of the OPTIONAL but not always inside of it. The SPARQL "
+          "standard evaluates such a FILTER on the joined rows, which is not "
+          "supported yet, so QLever evaluates it on the content of the "
+          "OPTIONAL alone. To get the standard result, repeat the patterns "
+          "that bind ?y outside of the OPTIONAL also inside of it."));
+  expectWarning(
+      "SELECT * { ?x <p> ?y . ?x <r> ?w OPTIONAL { ?x <q> ?z "
+      "FILTER(?y < ?w || ?y = ?z) } }",
+      "uses ?y, ?w, which are bound outside of the OPTIONAL but not always "
+      "inside of it. The SPARQL standard evaluates such a FILTER on the joined "
+      "rows, which is not supported yet, so QLever evaluates it on the content "
+      "of the OPTIONAL alone. To get the standard result, repeat the patterns "
+      "that bind ?y, ?w outside of the OPTIONAL also inside of it.");
+  expectNotSupported(
+      "SELECT * { ?x <p> ?y OPTIONAL { ?x <q> ?z FILTER EXISTS { ?z <r> ?y } "
+      "} }",
+      "The FILTER EXISTS { ?z <r> ?y } inside of an OPTIONAL contains an "
+      "EXISTS that uses ?y, which is bound outside of the OPTIONAL but not "
+      "always inside of it. The SPARQL standard evaluates such an EXISTS on "
+      "the joined rows, which is not supported yet. To get the standard "
+      "result, repeat the patterns that bind ?y outside of the OPTIONAL also "
+      "inside of it.");
 }
