@@ -1362,9 +1362,13 @@ TYPED_TEST(IdTableSubViewTest, subView) {
     auto fullView = target.subView(0, 5);
     EXPECT_EQ(fullView.numRows(), 5u);
     EXPECT_EQ(fullView.numColumns(), 2u);
-    // A view can only be compared with an `IdTable` of the default columns,
-    // so the comparison uses a copy of the view.
-    EXPECT_EQ(fullView.clone(), table);
+    // A view compares directly with an `IdTable` of the default columns, a
+    // view of split columns only via a copy.
+    if constexpr (std::is_same_v<Table, IdTable>) {
+      EXPECT_EQ(fullView, table);
+    } else {
+      EXPECT_EQ(fullView.clone(), table);
+    }
 
     // Empty sub-view: `subView(0, 0)` must have zero rows.
     auto emptyView = target.subView(0, 0);
