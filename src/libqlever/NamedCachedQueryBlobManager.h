@@ -91,10 +91,12 @@ struct BlobSerializationConfig {
   int compressionLevel_ = blobCompression::defaultCompressionLevel;
 
   // If true, then the blob is written as a segmented ZSTD frame (see
-  // `BlobCompression.h`) with three segments: (1) the header, the index
-  // metadata, and the vocabulary, (2) the secondary vocabulary (empty in the
-  // old format), and (3) the named results. Then the compressed form of the
-  // unchanged segments is reused when a blob diff is applied (see
+  // `BlobCompression.h`) with four segments: (1) the header, (2) the index
+  // metadata and the vocabulary, (3) the secondary vocabulary (empty in the
+  // old format), and (4) the named results. The header, which contains the
+  // format version, is a segment of its own, so that the vocabulary segment
+  // is the same in both formats. Then the compressed form of the unchanged
+  // segments is reused when a blob diff is applied (see
   // `blobDiff/SegmentedBlobDiff.h`). This makes the compression slightly
   // slower and the blob slightly larger.
   bool writeSegments_ = false;

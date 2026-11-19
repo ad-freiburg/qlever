@@ -573,6 +573,10 @@ std::vector<char> NamedCachedQueryBlobManager::serialize(
   writeBlobHeader(serializer, useNewFormat
                                   ? formatVersionWithSecondaryVocab
                                   : formatVersionWithoutSecondaryVocab);
+  // The header is a segment of its own (see
+  // `BlobSerializationConfig::writeSegments_`), so that the following
+  // vocabulary segment does not depend on the format of the blob.
+  const uint64_t headerEnd = serializer.getCurrentPosition();
   // Serialize the index metadata JSON together with the vocabulary, so that the
   // blob is self-contained and the loading side can set up the vocabulary
   // configuration without access to the on-disk index. Without excluded
@@ -588,9 +592,8 @@ std::vector<char> NamedCachedQueryBlobManager::serialize(
         serializer, indexImpl, indexImpl.getVocab().getUnderlyingVocabulary(),
         config.excludedEntryRegexes_);
   }
-  // The first two segments of the blob (see
-  // `BlobSerializationConfig::writeSegments_`) end here and after the
-  // secondary vocabulary.
+  // The next two segments of the blob end here and after the secondary
+  // vocabulary.
   const uint64_t vocabularyEnd = serializer.getCurrentPosition();
   if (useNewFormat) {
     serializer << secondaryVocab;
@@ -626,9 +629,9 @@ std::vector<char> NamedCachedQueryBlobManager::serialize(
   blobCompression::BlobEncoding encoding{config.compressionLevel_,
                                          std::nullopt};
   if (config.writeSegments_) {
-    encoding.segmentSizes_ =
-        std::vector<uint64_t>{vocabularyEnd, secondaryVocabEnd - vocabularyEnd,
-                              uncompressed.size() - secondaryVocabEnd};
+    encoding.segmentSizes_ = std::vector<uint64_t>{
+        headerEnd, vocabularyEnd - headerEnd, secondaryVocabEnd - vocabularyEnd,
+        uncompressed.size() - secondaryVocabEnd};
   }
   return compressBlob(uncompressed, encoding);
 }

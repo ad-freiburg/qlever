@@ -81,9 +81,10 @@ TEST(BlobCompression, withAndWithoutSegments) {
   EXPECT_EQ(compressBlob(changed, encoding, plain), expected);
 }
 
-// `BlobSerializationConfig::writeSegments_` writes a blob with three segments
-// (the vocabulary, the secondary vocabulary, and the named results), which
-// loads like any other blob.
+// `BlobSerializationConfig::writeSegments_` writes a blob with four segments
+// (the header, the vocabulary, the secondary vocabulary, and the named
+// results), each of which is a unit of its own, and which loads like any other
+// blob.
 TEST(BlobCompression, managerWritesSegments) {
   auto config = buildTestIndex(
       manyTriples(500), ad_utility::VocabularyType::InMemoryUncompressed);
@@ -99,7 +100,8 @@ TEST(BlobCompression, managerWritesSegments) {
   EXPECT_FALSE(SegmentedFrame::read(plain).has_value());
   auto frame = SegmentedFrame::read(segmented);
   ASSERT_TRUE(frame.has_value());
-  EXPECT_EQ(frame->numSegments(), 3u);
+  EXPECT_EQ(frame->numSegments(), 4u);
+  EXPECT_EQ(frame->numUnits(), 4u);
   // Both blobs have the same content.
   EXPECT_TRUE(ql::ranges::equal(decompressOrFail(plain, {}),
                                 decompressOrFail(segmented, {})));

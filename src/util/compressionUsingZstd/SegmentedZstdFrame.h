@@ -36,7 +36,8 @@
 // compressed blocks of a unit can be copied verbatim into another segmented
 // frame. Normally each segment is a unit of its own. A segment is merged with
 // the following segment(s) into one unit only if its compression cannot end in
-// the start state of the decoder (for example for random data). The index
+// the start state of the decoder (which is rare, see `ZstdIndependentUnit.h`;
+// short, empty, and random segments are stored uncompressed instead). The index
 // stores the size and the SHA-256 hash of the content of each segment, so it
 // can be determined without decompression whether a unit of one frame can be
 // reused for another frame with partially the same content.

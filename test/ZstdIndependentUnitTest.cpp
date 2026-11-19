@@ -46,6 +46,15 @@ Bytes randomBytes(size_t numBytes, unsigned seed) {
   return result;
 }
 
+// Compressible data without matches close to its end: zeros followed by
+// random bytes that are longer than the uncompressed tail of a unit.
+Bytes compressibleWithoutFinalMatches(unsigned seed) {
+  Bytes result(400'000, '\0');
+  auto random = randomBytes(100'000, seed);
+  result.insert(result.end(), random.begin(), random.end());
+  return result;
+}
+
 // Return the concatenation of `a` and `b`.
 Bytes concat(const Bytes& a, const Bytes& b) {
   Bytes result{a};
@@ -141,21 +150,49 @@ TEST(ZstdIndependentUnit, unitsCanBeCombined) {
   }
 }
 
-// Data without matches close to its end (random data, or data that is too
-// short) cannot end in the start state.
-TEST(ZstdIndependentUnit, noStartStateWithoutMatches) {
-  EXPECT_EQ(compressIndependentUnit(randomBytes(500'000, 5), 3, true),
-            std::nullopt);
-  EXPECT_EQ(compressIndependentUnit(Bytes(5, 'x'), 3, true), std::nullopt);
-  EXPECT_EQ(compressIndependentUnit(Bytes{}, 3, true), std::nullopt);
-  // Matches that are too far from the end are not used: random data that
-  // starts with zeros.
-  auto zerosThenRandom = concat(Bytes(1000, '\0'), randomBytes(500'000, 6));
-  EXPECT_EQ(compressIndependentUnit(zerosThenRandom, 3, true), std::nullopt);
-  // Followed by a few zeros, it works.
-  auto withZeros = concat(zerosThenRandom, Bytes(20, '\0'));
+// Data without matches close to its end is stored uncompressed in raw blocks
+// if this is cheap (random, short, or empty data), otherwise it cannot end in
+// the start state.
+TEST(ZstdIndependentUnit, withoutFinalMatches) {
+  // Return true iff `unit` consists of raw blocks that decompress to `data`.
+  auto isRawUnitOf = [](const CompressedUnit& unit, const Bytes& data) {
+    Bytes out(data.size());
+    size_t position = 0;
+    while (position < unit.blocks_.size()) {
+      auto block = BlockHeader::read(
+          ql::span<const char>{unit.blocks_}.subspan(position));
+      if (!block.has_value() || block->type_ != BlockHeader::Type::Raw) {
+        return false;
+      }
+      position += block->totalSize();
+    }
+    return unit.endsInStartState_ &&
+           decompressBlocks(unit.blocks_, data.size(), out) && out == data;
+  };
+  for (const auto& data :
+       {randomBytes(500'000, 5), Bytes(5, 'x'), Bytes{},
+        concat(Bytes(1000, '\0'), randomBytes(500'000, 6))}) {
+    auto unit = compressIndependentUnit(data, 3, true);
+    ASSERT_TRUE(unit.has_value());
+    EXPECT_TRUE(isRawUnitOf(unit.value(), data));
+    // A raw unit can be followed by any other unit.
+    auto next = binaryLike(10'000, 8);
+    auto nextUnit = compressIndependentUnit(next, 3, false).value();
+    auto expected = concat(data, next);
+    EXPECT_EQ(decompress(frameOf(concat(unit->blocks_, nextUnit.blocks_),
+                                 expected.size()),
+                         expected.size()),
+              expected);
+  }
+  // Compressible data without final matches cannot end in the start state.
+  EXPECT_EQ(
+      compressIndependentUnit(compressibleWithoutFinalMatches(7), 3, true),
+      std::nullopt);
+  // Followed by a few zeros, it is compressed with the final matches.
+  auto withZeros = concat(compressibleWithoutFinalMatches(7), Bytes(20, '\0'));
   auto unit = compressIndependentUnit(withZeros, 3, true);
   ASSERT_TRUE(unit.has_value());
+  EXPECT_LT(unit->blocks_.size(), withZeros.size() / 2);
   Bytes out(withZeros.size());
   EXPECT_TRUE(decompressBlocks(unit->blocks_, withZeros.size(), out));
   EXPECT_EQ(out, withZeros);

@@ -236,7 +236,9 @@ TEST(SegmentedBlobDiff, errors) {
 
 // The diff between the segmented blobs of a real index before and after an
 // update: the vocabulary is copied, the diff is small, and the result is
-// exactly the target blob, which loads and answers queries.
+// exactly the target blob, which loads and answers queries. The base is
+// written in the old format (it has no secondary vocabulary), the target in
+// the new format, which only changes the header segment.
 TEST(SegmentedBlobDiff, realBlobsAfterUpdate) {
   std::string triples;
   for (size_t i = 0; i < 2000; ++i) {
@@ -247,9 +249,6 @@ TEST(SegmentedBlobDiff, realBlobsAfterUpdate) {
   Qlever source{EngineConfig{config}};
   BlobSerializationConfig blobConfig;
   blobConfig.writeSegments_ = true;
-  // Both blobs have the same format, so that their headers (which are part of
-  // the first segment) are equal.
-  blobConfig.alwaysUseNewFormat_ = true;
   auto pinAndSerialize = [&source, &blobConfig]() {
     source.queryAndPinResultWithName(
         "all", "SELECT ?s ?p ?o WHERE { ?s ?p ?o } INTERNAL SORT BY ?s ?p ?o");
@@ -262,10 +261,17 @@ TEST(SegmentedBlobDiff, realBlobsAfterUpdate) {
                                            "DELETE DATA { <s5> <p> <o5> }");
   auto target = pinAndSerialize();
 
+  // The headers differ (because of the format), the vocabularies are equal.
+  auto baseFrame = SegmentedFrame::read(base).value();
+  auto targetFrame = SegmentedFrame::read(target).value();
+  EXPECT_NE(baseFrame.segment(0), targetFrame.segment(0));
+  EXPECT_EQ(baseFrame.segment(1), targetFrame.segment(1));
+
   auto diff = computeSegmentedBlobDiff(base, target);
   EXPECT_LT(diff.size(), target.size() / 4);
   // The vocabulary is copied, the new word is in the secondary vocabulary.
-  EXPECT_THAT(describeSegmentedBlobDiff(diff), HasSubstr("1 of which"));
+  EXPECT_THAT(describeSegmentedBlobDiff(diff),
+              HasSubstr("4 segments, 1 of which"));
   auto result = applyBlobDiffToCompressedBase(base, diff, maxTargetSize);
   ASSERT_THAT(result, isBlob(target));
 

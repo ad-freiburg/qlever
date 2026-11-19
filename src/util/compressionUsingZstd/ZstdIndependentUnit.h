@@ -38,6 +38,12 @@
 // the stable API of ZSTD is used. This requires that the data contains such
 // matches close to its end (three runs of repeated bytes, which are common in
 // typical binary data, but rare in random or already compressed data).
+//
+// Data without such matches can still end in the start state if it is stored
+// uncompressed in RAW BLOCKS, which are part of the standard ZSTD format and
+// neither use nor change the repeat offsets or the entropy tables. This is
+// done if it costs at most a little more than an ordinary compression, which
+// is the case for short, empty, random, or already compressed data.
 namespace ad_utility::zstd {
 
 // A compressed unit: its blocks (without a frame header, and with the
@@ -51,8 +57,8 @@ struct CompressedUnit {
 // Compress `data` as an independent unit with the ZSTD `compressionLevel`. If
 // `endInStartState` is false, the blocks are those of an ordinary compression.
 // If it is true, the unit ends in the start state, or `std::nullopt` is
-// returned if this is not possible for the `data` (see above). In the latter
-// case, `std::nullopt` is returned quickly, before anything is compressed.
+// returned if this is not possible for the `data` without a significantly
+// worse compression (see above).
 std::optional<CompressedUnit> compressIndependentUnit(ql::span<const char> data,
                                                       int compressionLevel,
                                                       bool endInStartState);

@@ -144,6 +144,26 @@ void checkEndsInStartState(ql::span<const char> data,
   }
 }
 
+// Return a unit that stores `data` uncompressed in raw blocks. Raw blocks
+// neither use nor change the repeat offsets or the entropy tables of the
+// decoder, so the unit ends in the start state. Empty `data` is stored as a
+// single empty raw block, because a unit needs at least one block.
+CompressedUnit rawUnit(ql::span<const char> data) {
+  CompressedUnit result{{}, true};
+  if (data.empty()) {
+    BlockHeader{false, BlockHeader::Type::Raw, 0}.append(result.blocks_);
+  } else {
+    appendRawBlocks(result.blocks_, data);
+  }
+  return result;
+}
+
+// Return true iff the `rawUnit` of data, whose ordinary compression has
+// `compressedSize` bytes, is at most a little larger than this compression.
+bool rawIsCheap(size_t rawSize, size_t compressedSize) {
+  return rawSize <= compressedSize + compressedSize / 32 + 64;
+}
+
 }  // namespace
 
 // _____________________________________________________________________________
@@ -157,6 +177,13 @@ std::optional<CompressedUnit> compressIndependentUnit(ql::span<const char> data,
   }
   auto matches = findFinalMatches(data);
   if (!matches.has_value()) {
+    // Without the final matches, the data is stored uncompressed if this is
+    // cheap (for example for short, empty, or random data).
+    auto raw = rawUnit(data);
+    auto compressed = compressIndependentUnit(data, compressionLevel, false);
+    if (rawIsCheap(raw.blocks_.size(), compressed.value().blocks_.size())) {
+      return raw;
+    }
     return std::nullopt;
   }
   const auto [match8, match4, match1] = matches.value();

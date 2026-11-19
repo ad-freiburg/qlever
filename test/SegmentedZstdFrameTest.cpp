@@ -48,6 +48,16 @@ Bytes randomBytes(size_t numBytes, unsigned seed) {
   return result;
 }
 
+// Compressible data without matches close to its end, which cannot end in the
+// start state (see `ZstdIndependentUnit.h`): zeros followed by random bytes
+// that are longer than the uncompressed tail of a unit.
+Bytes compressibleWithoutFinalMatches(unsigned seed) {
+  Bytes result(400'000, '\0');
+  auto random = randomBytes(100'000, seed);
+  result.insert(result.end(), random.begin(), random.end());
+  return result;
+}
+
 // Return the concatenation of the `parts`.
 Bytes concat(const std::vector<Bytes>& parts) {
   Bytes result;
@@ -123,33 +133,40 @@ TEST(SegmentedZstdFrame, oneUnitPerSegment) {
 }
 
 // A segment that cannot end in the start state is merged with the next one,
-// also if the next one is copied from another frame.
+// also if the next one is copied from another frame. Random and empty segments
+// are stored uncompressed, and are therefore units of their own.
 TEST(SegmentedZstdFrame, mergedSegments) {
-  std::vector<Bytes> parts{binaryLike(100'000, 1), randomBytes(100'000, 2),
-                           binaryLike(100'000, 3), Bytes{},
-                           binaryLike(50'000, 4)};
+  std::vector<Bytes> parts{
+      binaryLike(100'000, 1), compressibleWithoutFinalMatches(2),
+      binaryLike(100'000, 3), Bytes{},
+      randomBytes(1000, 4),   binaryLike(50'000, 5)};
   auto data = concat(parts);
   auto compressed = compressSegmented(data, sizesOf(parts), 1);
   auto frame = expectValidFrame(compressed, data, sizesOf(parts));
-  // The random segment and the empty segment are merged with the next
-  // segment.
-  ASSERT_EQ(frame.numUnits(), 3u);
+  // Only the second segment is merged with the next segment.
+  ASSERT_EQ(frame.numUnits(), 5u);
   EXPECT_EQ(frame.unit(0).numSegments_, 1u);
   EXPECT_EQ(frame.unit(1).numSegments_, 2u);
-  EXPECT_EQ(frame.unit(2).numSegments_, 2u);
   EXPECT_EQ(frame.unitOfSegment(2), 1u);
-  EXPECT_EQ(frame.unitOfSegment(3), 2u);
+  for (size_t u = 2; u < 5; ++u) {
+    EXPECT_EQ(frame.unit(u).numSegments_, 1u);
+    EXPECT_EQ(frame.unitOfSegment(u + 1), u);
+  }
+  // The empty and the random segment are stored uncompressed (the size of the
+  // empty raw block, and the random bytes plus the size of a block header).
+  EXPECT_EQ(frame.unitBlocks(2).size(), 3u);
+  EXPECT_EQ(frame.unitBlocks(3).size(), 1003u);
 
-  // Copy the last unit of `frame` after a random segment, which forces it to
-  // be decompressed and merged.
+  // Copy the first unit of `frame` after a segment that cannot end in the
+  // start state, which forces it to be decompressed and merged.
   SegmentedFrameBuilder builder{1};
-  auto random = randomBytes(1000, 5);
-  builder.addSegment(random);
+  auto withoutMatches = compressibleWithoutFinalMatches(6);
+  builder.addSegment(withoutMatches);
   builder.copyUnit(frame, 0);
   auto merged = std::move(builder).finish();
-  auto expected = concat({random, parts[0]});
-  auto mergedFrame =
-      expectValidFrame(merged, expected, {random.size(), parts[0].size()});
+  auto expected = concat({withoutMatches, parts[0]});
+  auto mergedFrame = expectValidFrame(merged, expected,
+                                      {withoutMatches.size(), parts[0].size()});
   EXPECT_EQ(mergedFrame.numUnits(), 1u);
 }
 
@@ -195,10 +212,11 @@ TEST(SegmentedZstdFrame, reuseUnitsOfBase) {
   EXPECT_EQ(compressed, compressSegmented(data, sizesOf(reordered), 3));
 }
 
-// A last unit that does not end in the start state (here: random data) is only
-// copied to the end of another frame.
+// A last unit that does not end in the start state is only copied to the end
+// of another frame.
 TEST(SegmentedZstdFrame, unitWithoutStartStateIsOnlyCopiedToTheEnd) {
-  std::vector<Bytes> baseParts{binaryLike(100'000, 1), randomBytes(50'000, 2)};
+  std::vector<Bytes> baseParts{binaryLike(100'000, 1),
+                               compressibleWithoutFinalMatches(2)};
   auto base = compressSegmented(concat(baseParts), sizesOf(baseParts), 3);
   auto baseFrame = SegmentedFrame::read(base).value();
   EXPECT_FALSE(baseFrame.unit(1).endsInStartState_);
@@ -223,7 +241,9 @@ TEST(SegmentedZstdFrame, emptyData) {
   for (const auto& sizes : {Sizes{}, Sizes{0}, Sizes{0, 0}}) {
     auto compressed = compressSegmented({}, sizes, 3);
     auto frame = expectValidFrame(compressed, {}, sizes);
-    EXPECT_EQ(frame.numUnits(), 1u);
+    // Each empty segment is a unit of its own, and a frame has at least one
+    // unit.
+    EXPECT_EQ(frame.numUnits(), std::max<size_t>(sizes.size(), 1));
   }
   // The segment sizes must match the data.
   EXPECT_ANY_THROW(compressSegmented(Bytes(10, 'x'), Sizes{5}, 3));
