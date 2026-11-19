@@ -1100,6 +1100,11 @@ using IdVectorTraits = columnBasedIdTable::ColumnStorageTraits<IdVector, Id>;
 
 using IdColumnRef = detail::IdVectorTraits::ColumnRef;
 using ConstIdColumnRef = detail::IdVectorTraits::ConstColumnRef;
+
+// `IdRef` and `ConstIdRef` are the `reference` of the column views and not the
+// `Ref` of the traits. With split columns the former is the full proxy, which
+// can be written through a variable, while `IdTable` hands out the restricted
+// one (see `IdRef.h`).
 using IdRef = IdColumnRef::reference;
 using ConstIdRef = ConstIdColumnRef::reference;
 
