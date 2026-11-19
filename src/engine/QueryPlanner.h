@@ -793,6 +793,12 @@ class QueryPlanner {
     // of shared variables leads to a special case.
     ad_utility::HashSet<Variable> getVariablesOfPreviousPatterns() const;
 
+    // Return the variables of the left side of an OPTIONAL that is the next
+    // child of the `rootPattern_`, that is, the variables of
+    // `getVariablesOfPreviousPatterns`, and the graph variable inside of
+    // `GRAPH ?g {...}` if it is bound by a triple.
+    ad_utility::HashSet<Variable> getVariablesOfLeftSideOfOptional() const;
+
     // Helper function for `visitGroupOptionalOrMinus`. SPARQL queries like
     // `SELECT * { OPTIONAL { ?a ?b ?c }}`, `SELECT * { MINUS { ?a ?b ?c }}` or
     // `SELECT * { ?x ?y ?z . OPTIONAL { ?a ?b ?c }}` need special handling.

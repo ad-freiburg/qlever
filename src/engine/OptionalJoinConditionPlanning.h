@@ -23,6 +23,8 @@
 // and not on the rows of `B` alone. This module decides for which FILTERs
 // this makes a difference.
 
+namespace qlever::queryPlanner {
+
 // Return true iff `filter`, one of the outermost FILTERs of an OPTIONAL
 // group, has to be evaluated on the joined rows. This is the case if it uses
 // a variable that can have a different value in the joined row than in the
@@ -43,11 +45,14 @@ bool isPartOfOptionalJoinCondition(
 // Return the warning for a `filter` for which `isPartOfOptionalJoinCondition`
 // returns true, but which is evaluated on the content of the OPTIONAL alone,
 // as long as the `OptionalJoin` can't evaluate it. The warning names the
-// `filter`, the variables that make it part of the condition, and workarounds.
-// The arguments are the same as for `isPartOfOptionalJoinCondition`.
+// `filter`, the variables that make it part of the condition, and the rewrite
+// that gives the result of the SPARQL standard. The arguments are the same as
+// for `isPartOfOptionalJoinCondition`.
 std::string getOptionalJoinConditionWarning(
     const sparqlExpression::SparqlExpressionPimpl& filter,
     const ad_utility::HashSet<Variable>& variablesOfLeftSide,
     absl::FunctionRef<bool(const Variable&)> isAlwaysDefinedInGroup);
+
+}  // namespace qlever::queryPlanner
 
 #endif  // QLEVER_SRC_ENGINE_OPTIONALJOINCONDITIONPLANNING_H

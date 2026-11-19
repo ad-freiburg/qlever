@@ -16,6 +16,7 @@
 
 namespace {
 namespace h = queryPlannerTestHelpers;
+using qlever::queryPlanner::isPartOfOptionalJoinCondition;
 using ::testing::HasSubstr;
 using Variables = ad_utility::HashSet<Variable>;
 

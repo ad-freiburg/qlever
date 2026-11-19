@@ -390,9 +390,9 @@ uint64_t QueryPlanner::getIdsOfOptionalJoinConditionFilters(
     uint64_t ids = 0;
     for (const auto& [i, filterAndSubst] :
          ::ranges::views::enumerate(filters)) {
-      if (isPartOfOptionalJoinCondition(filterAndSubst.filter_.expression_,
-                                        variablesOfLeftSideOfOptional,
-                                        isAlwaysDefined)) {
+      if (qlever::queryPlanner::isPartOfOptionalJoinCondition(
+              filterAndSubst.filter_.expression_, variablesOfLeftSideOfOptional,
+              isAlwaysDefined)) {
         ids |= uint64_t{1} << i;
       }
     }
@@ -3130,6 +3130,22 @@ QueryPlanner::GraphPatternPlanner::getVariablesOfPreviousPatterns() const {
 }
 
 // _____________________________________________________________________________
+ad_utility::HashSet<Variable>
+QueryPlanner::GraphPatternPlanner::getVariablesOfLeftSideOfOptional() const {
+  auto variables = getVariablesOfPreviousPatterns();
+  // The index scan of a triple inside of `GRAPH ?g {...}` has a column for
+  // `?g`, but only once the triple is planned (contains-word and materialized
+  // views are not allowed inside a `GRAPH` clause). The planned triples are
+  // among the `candidatePlans_` and have this column, but the triples in
+  // `candidateTriples_` are not planned yet.
+  if (const auto& graphVariable = planner_.activeGraphVariable_;
+      graphVariable.has_value() && !candidateTriples_._triples.empty()) {
+    variables.insert(graphVariable.value());
+  }
+  return variables;
+}
+
+// _____________________________________________________________________________
 void QueryPlanner::GraphPatternPlanner::applyOptionalJoinConditionToGroup(
     SubtreePlanVec& candidates,
     const ad_utility::HashSet<Variable>& variablesOfLeftSideOfOptional) {
@@ -3138,7 +3154,7 @@ void QueryPlanner::GraphPatternPlanner::applyOptionalJoinConditionToGroup(
     auto condition = std::move(plan.optionalJoinCondition_);
     plan.optionalJoinCondition_.clear();
     for (const auto& expression : condition) {
-      auto warning = getOptionalJoinConditionWarning(
+      auto warning = qlever::queryPlanner::getOptionalJoinConditionWarning(
           expression, variablesOfLeftSideOfOptional,
           [&plan](const Variable& variable) {
             return plan._qet->getRootOperation()->isVariableAlwaysDefined(
@@ -3168,21 +3184,19 @@ bool QueryPlanner::GraphPatternPlanner::handleUnconnectedMinusOrOptional(
     return false;
   }
   // Inside `GRAPH ?g {...}` the patterns are evaluated per graph, so an
-  // OPTIONAL has to be joined on `?g` if the previous patterns bind it. The
-  // triples only get their `?g` column when they are planned (contains-word and
-  // materialized views are not allowed inside a `GRAPH` clause).
+  // OPTIONAL has to be joined on `?g` if the previous patterns bind it, see
+  // `getVariablesOfLeftSideOfOptional`.
   //
   // For a MINUS on the other hand, `?g` only counts as a shared variable if it
   // is in scope on both sides without the implicit graph columns of the index
   // scans. Otherwise, the MINUS would remove all rows of every graph in which
   // its pattern matches. If the MINUS is connected via other variables, it
   // is still joined on `?g`, as the patterns are evaluated per graph.
-  auto previousVariables = getVariablesOfPreviousPatterns();
+  auto previousVariables = type == OPTIONAL ? getVariablesOfLeftSideOfOptional()
+                                            : getVariablesOfPreviousPatterns();
   if (const auto& graphVariable = planner_.activeGraphVariable_;
       graphVariable.has_value()) {
-    if (type == OPTIONAL && !candidateTriples_._triples.empty()) {
-      previousVariables.insert(graphVariable.value());
-    } else if (type == MINUS && !isGraphVariableInScopeOnBothSidesOfMinus) {
+    if (type == MINUS && !isGraphVariableInScopeOnBothSidesOfMinus) {
       previousVariables.erase(graphVariable.value());
     }
   }
@@ -3363,14 +3377,7 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
 
     std::optional<ad_utility::HashSet<Variable>> variablesOfLeftSideOfOptional;
     if constexpr (std::is_same_v<T, p::Optional>) {
-      // The variables of the left side of the left join. Inside `GRAPH ?g`,
-      // the triples only get their `?g` column when they are planned, see
-      // `handleUnconnectedMinusOrOptional`.
-      variablesOfLeftSideOfOptional = getVariablesOfPreviousPatterns();
-      if (const auto& graphVariable = planner_.activeGraphVariable_;
-          graphVariable.has_value() && !candidateTriples_._triples.empty()) {
-        variablesOfLeftSideOfOptional->insert(graphVariable.value());
-      }
+      variablesOfLeftSideOfOptional = getVariablesOfLeftSideOfOptional();
     }
     auto candidates =
         planner_.optimize(&arg._child, variablesOfLeftSideOfOptional);
