@@ -57,6 +57,26 @@ inline auto GeoPointId = [](const GeoPoint& v) {
   return Id::makeFromGeoPoint(v);
 };
 
+// A matcher for `ValueId`s that also handles floating point comparisons
+// (precision issues as well as NaNs) correctly.
+::testing::Matcher<const ValueId&> matchId(Id id) {
+  if (id.getDatatype() != Datatype::Double) {
+    // Everything that is not `Double` must match exactly.
+    return ::testing::Eq(id);
+  } else {
+    // NaN and NaN are considered equal, and we also use `FloatEq` and not
+    // `DoubleEq` because the precision of a `ValueId` is less than 64 bits
+    // because of the datatype bits.
+    ::testing::Matcher<float> doubleMatcher =
+        ::testing::NanSensitiveFloatEq(static_cast<float>(id.getDouble()));
+    auto doubleMatcherCast =
+        ::testing::MatcherCast<const double&>(doubleMatcher);
+    return ::testing::AllOf(
+        AD_PROPERTY(Id, getDatatype, ::testing::Eq(Datatype::Double)),
+        AD_PROPERTY(Id, getDouble, doubleMatcherCast));
+  }
+}
+
 }  // namespace ad_utility::testing
 
 #endif  // QLEVER_TEST_UTIL_IDTESTHELPERS_H

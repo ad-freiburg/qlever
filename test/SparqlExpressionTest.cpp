@@ -138,34 +138,15 @@ auto toExpressionResult(T vec) {
   }
 }
 
-// A matcher for `ValueId`s that also handles floating point comparisons
-// (precision issues as well as NaNs) correctly.
-::testing::Matcher<const ValueId&> matchId(Id id) {
-  if (id.getDatatype() != Datatype::Double) {
-    // Everything that is not `Double` must match exactly.
-    return ::testing::Eq(id);
-  } else {
-    // NaN and NaN are considered equal, and we also use `FloatEq` and not
-    // `DoubleEq` because the precision of a `ValueId` is less than 64 bits
-    // because of the datatype bits.
-    testing::Matcher<float> doubleMatcher =
-        ::testing::NanSensitiveFloatEq(static_cast<float>(id.getDouble()));
-    auto doubleMatcherCast =
-        ::testing::MatcherCast<const double&>(doubleMatcher);
-    return ::testing::AllOf(
-        AD_PROPERTY(Id, getDatatype, ::testing::Eq(Datatype::Double)),
-        AD_PROPERTY(Id, getDouble, doubleMatcherCast));
-  }
-}
-
 // Return a matcher that matches a result of an expression that is not a vector.
 // If it is an ID (possibly contained in the `IdOrLocalVocabEntry` variant),
-// then the `matchId` matcher from above is used, else we test for equality.
+// then the `ad_utility::testing::matchId` matcher from above is used, else we
+// test for equality.
 template <typename T>
 requires(!isVectorResult<T>)
 auto nonVectorResultMatcher(const T& expected) {
   if constexpr (std::is_same_v<T, Id>) {
-    return matchId(expected);
+    return ad_utility::testing::matchId(expected);
   } else if constexpr (std::is_same_v<T, IdOrLocalVocabEntry>) {
     return std::visit(
         [](const auto& el) {
@@ -181,8 +162,8 @@ auto nonVectorResultMatcher(const T& expected) {
 
 // Return a matcher, that matches the `expected` expression result. The case of
 // `expected` being a single element or a vector and the case of `expected`
-// storing `Ids` which have to be handled using the `matchId` matcher (see
-// above) are all handled correctly.
+// storing `Ids` which have to be handled using the
+// `ad_utility::testing::matchId` matcher (see above) are all handled correctly.
 auto sparqlExpressionResultMatcher = [](const auto& expected) {
   using Expected = std::decay_t<decltype(expected)>;
   CPP_assert(SingleExpressionResult<Expected>);
