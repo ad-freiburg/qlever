@@ -21,6 +21,7 @@
 #include "util/Exception.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
+#include "util/StringUtils.h"
 
 using std::string;
 using LazyScanMetadata = CompressedRelationReader::LazyScanMetadata;
@@ -159,12 +160,12 @@ qlm::string IndexScan::getCacheKeyImpl() const {
   os << " on index " << permutation().onDiskBase();
   if (!additionalColumns_.empty()) {
     os << " Additional Columns: ";
-    os << qlm::StrJoin(allocator(), additionalColumns(), " ");
+    ad_utility::lazyStrJoin(&os, additionalColumns(), " ");
   }
   if (!constantColumns_.empty()) {
     os << " Constant Columns: ";
-    os << qlm::StrJoin(
-        allocator(),
+    ad_utility::lazyStrJoin(
+        &os,
         constantColumns_ | ql::views::keys | ql::views::transform(&Id::getBits),
         " ");
   }
@@ -173,8 +174,8 @@ qlm::string IndexScan::getCacheKeyImpl() const {
   graphsToFilter_.format(os, &toRdfLiteral);
 
   if (varsToKeep_.has_value()) {
-    os << " column subset "
-       << qlm::StrJoin(allocator(), getSubsetForStrippedColumns(), ",");
+    os << " column subset ";
+    ad_utility::lazyStrJoin(&os, getSubsetForStrippedColumns(), ",");
   }
   return std::move(os).str();
 }

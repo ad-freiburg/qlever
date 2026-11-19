@@ -41,11 +41,11 @@ qlm::string Describe::getCacheKeyImpl() const {
       result.append(
           std::get<TripleComponent::Iri>(resource).toStringRepresentation());
     } else {
-      result.append(qlm::StrCat(
-          allocator(), "column #",
+      qlm::StrAppend(
+          &result, "column #",
           subtree_->getVariableColumnOrNullopt(std::get<Variable>(resource))
               .value_or(static_cast<size_t>(-1)),
-          " "));
+          " ");
     }
   }
 
