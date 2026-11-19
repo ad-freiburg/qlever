@@ -158,11 +158,6 @@ TYPED_TEST(ColumnStorageTraitsTest, idsKeepAllTheirBits) {
   }
 }
 
-// GCC 13 reports false `-Wstringop-overflow` positives in the `resize` of the
-// two arrays of a split column (`std::vector::_M_default_append` for the
-// datatype bytes) when `IdTable::resize` is inlined into the following test.
-DISABLE_STRINGOP_OVERFLOW_WARNINGS
-
 // Test that the element access via `operator()`, via `at` and via a column
 // refer to the same storage: a write via one of them is seen by the others.
 TYPED_TEST(ColumnStorageTraitsTest, allAccessesReferToTheSameStorage) {
@@ -186,7 +181,6 @@ TYPED_TEST(ColumnStorageTraitsTest, allAccessesReferToTheSameStorage) {
   }
   EXPECT_EQ(static_cast<Id>(constTable(0, 1)), I(20));
 }
-GCC_REENABLE_WARNINGS
 
 // Test that the views of a table refer to its storage: they see the right rows
 // and columns, and also writes to the table after they were created.
