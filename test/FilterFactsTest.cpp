@@ -136,6 +136,13 @@ TEST(FilterFactsCanonicalizer, Definitions) {
          500);
   expect("BIND(geof:metricDistance(?ga, ?gb) AS ?d)", "?d <= 500",
          Comparison::LE, 500);
+
+  // A variable with several values is not replaced.
+  auto several =
+      canonical("geof:metricDistance(?ga, ?gb) <= ?r", "VALUES ?r { 500 600 }");
+  EXPECT_THAT(several.conjuncts_,
+              ElementsAre(opaque(several.query_._rootGraphPattern._filters[0]
+                                     .expression_.getPimpl())));
 }
 
 // Test that only the columns of `VALUES` without `UNDEF`, the `BIND`s of
@@ -161,6 +168,31 @@ TEST(FilterFactsCanonicalizer, CollectDefinitions) {
   // triple binds it again.
   EXPECT_THAT(defs.constants_,
               UnorderedElementsAre(Key(V{"?r"}), Key(V{"?c"})));
+
+  // A later subquery with a `GROUP BY` may bind the target by an alias of its
+  // `SELECT` clause, and a later named cached result may bind any variable.
+  auto subquery = ad_utility::testing::parseQuery(
+      "SELECT * { ?a <p> ?ga . BIND(?ga AS ?x) BIND(?ga AS ?y) "
+      "{ SELECT (MIN(?o) AS ?x) { ?s <q> ?o } GROUP BY ?s } }");
+  EXPECT_THAT(collectDefinitions(subquery._rootGraphPattern._graphPatterns)
+                  .expressions_,
+              UnorderedElementsAre(Key(V{"?y"})));
+  auto cached = ad_utility::testing::parseQuery(
+      "SELECT * { ?a <p> ?ga . BIND(?ga AS ?x) "
+      "SERVICE ql:cached-result-with-name-foo {} }");
+  EXPECT_THAT(
+      collectDefinitions(cached._rootGraphPattern._graphPatterns).expressions_,
+      ::testing::IsEmpty());
+
+  // A variable of several `VALUES` clauses has the values in all of them
+  // without `UNDEF` in its column.
+  auto values = ad_utility::testing::parseQuery(
+      "SELECT * { VALUES ?r { 1 2 3 } VALUES ?r { UNDEF 1 4 } "
+      "VALUES ?r { 3 4 2 } }");
+  EXPECT_THAT(
+      collectDefinitions(values._rootGraphPattern._graphPatterns).constants_,
+      UnorderedElementsAre(::testing::Pair(
+          V{"?r"}, ElementsAre(TripleComponent{2}, TripleComponent{3}))));
 
   // A `BIND` of `UNDEF` (here of an unknown function in the syntax test mode)
   // is not a constant, because a later triple binds its target freely.
