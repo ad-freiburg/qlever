@@ -17,6 +17,7 @@
 #include <condition_variable>
 #include <memory>
 #include <mutex>
+#include <new>
 #include <range/v3/range/conversion.hpp>
 #include <stdexcept>
 #include <string>
@@ -468,4 +469,100 @@ TEST(AsyncTransformView, shortMaxRunnerDurationOnThreadPool) {
     EXPECT_THAT(::ranges::to_vector(view), ElementsAreArray(expected));
     EXPECT_EQ(numTransformed, 500u);
   }
+}
+
+namespace {
+// An executor that throws `std::bad_alloc` whenever a task is submitted to it,
+// as if memory ran out. Counts the attempts. Property queries are forwarded to
+// the `InnerExecutor`, so that it can be wrapped into a `ql::any_io_executor`.
+template <typename InnerExecutor>
+class ThrowingExecutor {
+ public:
+  ThrowingExecutor(InnerExecutor inner,
+                   std::shared_ptr<std::atomic<size_t>> numAttempts)
+      : inner_{std::move(inner)}, numAttempts_{std::move(numAttempts)} {}
+
+  // Old-style executor concept.
+  boost::asio::execution_context& context() const noexcept {
+    return inner_.context();
+  }
+  void on_work_started() const noexcept {}
+  void on_work_finished() const noexcept {}
+  template <typename Function, typename Allocator>
+  void dispatch(Function&&, const Allocator&) const {
+    fail();
+  }
+  template <typename Function, typename Allocator>
+  void post(Function&&, const Allocator&) const {
+    fail();
+  }
+  template <typename Function, typename Allocator>
+  void defer(Function&&, const Allocator&) const {
+    fail();
+  }
+  bool operator==(const ThrowingExecutor& other) const noexcept {
+    return inner_ == other.inner_;
+  }
+  bool operator!=(const ThrowingExecutor& other) const noexcept {
+    return !(*this == other);
+  }
+
+  // New-style executor concept.
+  template <typename Function>
+  void execute(Function&&) const {
+    fail();
+  }
+  template <typename Property>
+  auto require(const Property& p) const
+      -> ThrowingExecutor<std::decay_t<decltype(boost::asio::require(
+          std::declval<const InnerExecutor&>(), p))>> {
+    return {boost::asio::require(inner_, p), numAttempts_};
+  }
+  template <typename Property>
+  auto prefer(const Property& p) const
+      -> ThrowingExecutor<std::decay_t<decltype(boost::asio::prefer(
+          std::declval<const InnerExecutor&>(), p))>> {
+    return {boost::asio::prefer(inner_, p), numAttempts_};
+  }
+  template <typename Property>
+  auto query(const Property& p) const
+      -> decltype(boost::asio::query(std::declval<const InnerExecutor&>(), p)) {
+    return boost::asio::query(inner_, p);
+  }
+
+ private:
+  void fail() const {
+    ++*numAttempts_;
+    throw std::bad_alloc{};
+  }
+
+  InnerExecutor inner_;
+  std::shared_ptr<std::atomic<size_t>> numAttempts_;
+};
+}  // namespace
+
+// _____________________________________________________________________________
+TEST(AsyncTransformView, consumerTransformsElementsIfPostingFails) {
+  boost::asio::io_context ctx;
+  auto numAttempts = std::make_shared<std::atomic<size_t>>(0);
+  ql::any_io_executor executor{
+      ThrowingExecutor{ctx.get_executor(), numAttempts}};
+  auto consumerThread = std::this_thread::get_id();
+  auto transformation = [consumerThread](size_t i) {
+    EXPECT_EQ(std::this_thread::get_id(), consumerThread);
+    return 3 * i;
+  };
+  AsyncTransformView view{integerRange(20u), transformation, 4, executor};
+  EXPECT_EQ(view.get(), 0u);
+  EXPECT_EQ(*numAttempts, 1u);
+  // The failed runner is not counted anymore, so the next read-ahead tries to
+  // post a runner again.
+  EXPECT_EQ(view.get(), 3u);
+  EXPECT_EQ(*numAttempts, 2u);
+  std::vector<size_t> expected;
+  for (size_t i : integerRange(18u)) {
+    expected.push_back(3 * (i + 2));
+  }
+  EXPECT_THAT(::ranges::to_vector(view), ElementsAreArray(expected));
+  EXPECT_EQ(ctx.poll(), 0u);
 }
