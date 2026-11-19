@@ -1447,7 +1447,7 @@ TEST(SpatialJoin, InvalidGeometriesAreExcludedFromNonEmptyCheck) {
 // of the bounding box of the smaller side.
 TEST(SpatialJoin, NoValidGeometryOnSmallerSideSkipsLargerSide) {
   auto* qec = ad_utility::testing::getQec();
-  LocalVocab localVocab;
+  LocalVocab localVocab = makeLocalVocab();
   auto wktId = [&](std::string_view wkt) {
     return wktLiteralId(qec, localVocab, wkt);
   };
