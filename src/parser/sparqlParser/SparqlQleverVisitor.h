@@ -82,7 +82,8 @@ class SparqlQleverVisitor {
   const EncodedIriManager* encodedIriManager_;
 
   // The allocator for the containers that only live inside the visitor (as
-  // opposed to the containers of the resulting `ParsedQuery`).
+  // opposed to the containers of the resulting `ParsedQuery`) and for the
+  // `LocalVocab`s of updates.
   qlever::Allocator<Id> allocator_;
   const qlever::Allocator<Id>& allocator() const { return allocator_; }
 

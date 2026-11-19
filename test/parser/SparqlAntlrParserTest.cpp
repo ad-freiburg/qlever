@@ -1484,6 +1484,22 @@ TEST(SparqlParser, parsingRespectsTheMemoryLimitOfTheAllocator) {
                ad_utility::detail::AllocationExceedsLimitException);
 }
 
+// Test that the blank nodes of an update count toward the memory limit of the
+// passed allocator.
+TEST(SparqlParser, parsingUpdatesRespectsTheMemoryLimitOfTheAllocator) {
+  ad_utility::BlankNodeManager blankNodeManager;
+  EncodedIriManager encodedIriManager;
+  auto parseWithLimit = [&blankNodeManager,
+                         &encodedIriManager](ad_utility::MemorySize limit) {
+    return SparqlParser::parseUpdate(&blankNodeManager, &encodedIriManager,
+                                     ad_utility::testing::makeAllocator(limit),
+                                     "INSERT DATA { _:a <p> <o> }");
+  };
+  EXPECT_NO_THROW(parseWithLimit(ad_utility::MemorySize::megabytes(1)));
+  EXPECT_THROW(parseWithLimit(ad_utility::MemorySize::bytes(1)),
+               ad_utility::detail::AllocationExceedsLimitException);
+}
+
 // Test that ASK queries are parsed as they should.
 TEST(SparqlParser, AskQuery) {
   // Some helper functions and abbreviations.
