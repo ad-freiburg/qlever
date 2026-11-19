@@ -35,27 +35,39 @@ namespace {
 //
 // NOTE: For example, a variable that is only bound after the `BIND` is unbound
 // at the `BIND` (so `?v` is unbound), but bound at the FILTER.
-bool canSubstituteForTarget(const SparqlExpression& expression,
-                            const ad_utility::HashSet<Variable>& alwaysBound) {
-  std::vector<const SparqlExpression*> exists;
-  expression.getExistsExpressions(exists);
-  return expression.isDeterministic() && exists.empty() &&
+bool canSubstituteForTarget(
+    const sparqlExpression::SparqlExpressionPimpl& expression,
+    const ad_utility::HashSet<Variable>& alwaysBound) {
+  return expression.isDeterministic() &&
+         expression.getExistsExpressions().empty() &&
          ql::ranges::all_of(expression.containedVariables(),
                             [&alwaysBound](const Variable* variable) {
                               return alwaysBound.contains(*variable);
                             });
 }
 
-// Remove the expressions of the `BIND`s from `defs` whose target `operation`
-// may bind again, that is, any variable that `operation` contains (where the
-// expression is undefined, the target is then bound freely, so a FILTER may
-// no longer substitute the expression for it).
+// Remove the expressions of the `BIND`s from `defs` whose target is contained
+// in `operation`, because `operation` may bind the target in the rows where the
+// expression is undefined.
 //
-// NOTE: A later `BIND` cannot bind the target again (the target of a `BIND`
+// NOTE 1: For example, in `?a <p> ?x . BIND(?x + 1 AS ?v) ?b <q> ?v`, the
+// `BIND` leaves `?v` unbound in a row where `?x` is not a number, and the
+// triple `?b <q> ?v` then binds `?v` to any object of `<q>`. So a FILTER may
+// no longer substitute `?x + 1` for `?v`.
+//
+// NOTE 2: A later `BIND` cannot bind the target again (the target of a `BIND`
 // must not be in scope before it), so its expression may use the target.
+//
+// NOTE 3: The variables of a named cached result are not known at parse time
+// (its body is empty), so it may bind any target.
 void removeRedefinedTargets(const parsedQuery::GraphPatternOperation& operation,
                             Definitions& defs) {
-  if (std::holds_alternative<parsedQuery::Bind>(operation)) {
+  if (defs.expressions_.empty() ||
+      std::holds_alternative<parsedQuery::Bind>(operation)) {
+    return;
+  }
+  if (std::holds_alternative<parsedQuery::NamedCachedResult>(operation)) {
+    defs.expressions_.clear();
     return;
   }
   parsedQuery::VariableCounter variables;
@@ -66,10 +78,9 @@ void removeRedefinedTargets(const parsedQuery::GraphPatternOperation& operation,
 }
 
 // Add the values of each variable of `values` without `UNDEF` in its column to
-// `defs`, and the variable to `alwaysBound`.
-//
-// NOTE: If several `VALUES` clauses bind the same variable, each of them
-// contains all its values, so the first one is kept.
+// `defs`, and the variable to `alwaysBound`. If `defs` already has values for
+// the variable, keep only the values that are in both (the `VALUES` clauses
+// are joined).
 void addValues(const parsedQuery::Values& values, Definitions& defs,
                ad_utility::HashSet<Variable>& alwaysBound) {
   const auto& [variables, rows] = values._inlineValues;
@@ -80,15 +91,20 @@ void addValues(const parsedQuery::Values& values, Definitions& defs,
       continue;
     }
     alwaysBound.insert(variables[i]);
-    defs.constants_.emplace(variables[i], std::move(column));
+    auto [it, isNew] = defs.constants_.try_emplace(variables[i], column);
+    if (!isNew) {
+      ql::erase_if(it->second, [&column](const auto& value) {
+        return !ad_utility::contains(column, value);
+      });
+    }
   }
 }
 
 // Add the definition of `bind` to `defs`. The target of a constant other than
 // `UNDEF` is always bound to it, like a `VALUES` clause with a single row. The
 // target of any other expression is not always bound (the expression may be
-// undefined), its expression is only added if a FILTER may substitute it for
-// the target.
+// undefined), so its expression is only added if a FILTER may substitute it
+// for the target.
 void addBind(const parsedQuery::Bind& bind, Definitions& defs,
              ad_utility::HashSet<Variable>& alwaysBound) {
   auto constant = bind._expression.getConstantValue();
@@ -97,9 +113,8 @@ void addBind(const parsedQuery::Bind& bind, Definitions& defs,
     alwaysBound.insert(bind._target);
     defs.constants_.emplace(bind._target,
                             std::vector{std::move(constant).value()});
-  } else if (const auto* expression = bind._expression.getPimpl();
-             canSubstituteForTarget(*expression, alwaysBound)) {
-    defs.expressions_.emplace(bind._target, expression);
+  } else if (canSubstituteForTarget(bind._expression, alwaysBound)) {
+    defs.expressions_.emplace(bind._target, bind._expression.getPimpl());
   }
 }
 
