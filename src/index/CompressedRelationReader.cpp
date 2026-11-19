@@ -439,9 +439,8 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
   if (scanConfig.columnSubset_.has_value()) {
     indicesToCopy = ::ranges::to<std::vector>(
         scanConfig.columnSubset_.value() |
-        ql::views::transform([&indicesToCopy](ColumnIndex i) {
-          return indicesToCopy.at(i);
-        }));
+        ql::views::transform(
+            [&indicesToCopy](ColumnIndex i) { return indicesToCopy.at(i); }));
   }
 
   // Now copy the range `[beginIdx, endIdx)` from `block` to `result`.

@@ -280,12 +280,11 @@ CompressedRelationReader::IdTableGeneratorInputRange Permutation::lazyScanImpl(
     optBlocks = CompressedRelationReader::convertBlockMetadataRangesToVector(
         scanSpecAndBlocks.blockMetadata_);
   }
-  return reader.lazyScan(scanSpecAndBlocks.scanSpec_,
-                         std::move(optBlocks.value()), std::move(columns),
-                         cancellationHandle,
-                         getLocatedTriplesForPermutation(locatedTriplesState),
-                         std::move(executor), limitOffset,
-                         std::move(columnSubset));
+  return reader.lazyScan(
+      scanSpecAndBlocks.scanSpec_, std::move(optBlocks.value()),
+      std::move(columns), cancellationHandle,
+      getLocatedTriplesForPermutation(locatedTriplesState), std::move(executor),
+      limitOffset, std::move(columnSubset));
 }
 
 // _____________________________________________________________________________
@@ -298,10 +297,10 @@ Permutation::LazyScanWithReader Permutation::lazyScanWithUnlimitedReader(
   auto independentReader = std::make_unique<CompressedRelationReader>(
       reader().makeReaderWithReboundAllocator(
           ad_utility::makeUnlimitedAllocator<Id>()));
-  auto blocks = lazyScanImpl(
-      *independentReader, scanSpecAndBlocks, std::nullopt, additionalColumns,
-      cancellationHandle, locatedTriplesState, std::move(executor), {},
-      std::nullopt);
+  auto blocks =
+      lazyScanImpl(*independentReader, scanSpecAndBlocks, std::nullopt,
+                   additionalColumns, cancellationHandle, locatedTriplesState,
+                   std::move(executor), {}, std::nullopt);
   return {std::move(independentReader), std::move(blocks)};
 }
 

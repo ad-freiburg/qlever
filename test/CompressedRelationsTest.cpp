@@ -433,7 +433,9 @@ void testCompressedRelations(const Inputs& inputsOriginalBeforeCopy,
     subsets.push_back(::ranges::to<std::vector>(
         ql::views::iota(ColumnIndex{1}, table.numColumns())));
     for (const auto& subset : subsets) {
-      auto expected = table.clone();
+      IdTable expected =
+          reader.scan(ScanSpecAndBlocks{scanSpec, blocks}, additionalColumns,
+                      cancellationHandle, locatedTriples, executor());
       expected.setColumnSubset(subset);
       EXPECT_THAT(reader.scan(ScanSpecAndBlocks{scanSpec, blocks},
                               additionalColumns, cancellationHandle,
@@ -2232,8 +2234,7 @@ TEST(CompressedRelationWriter, scanWithGraphs) {
         ScanSpecAndBlocks{spec, getBlockMetadataRangesfromVec(blocks)}, {},
         handle, emptyLocatedTriples, executor(), {},
         std::vector<ColumnIndex>{1});
-    EXPECT_THAT(res,
-                matchesIdTableFromVector({{4}, {4}, {4}, {5}, {4}, {5}}))
+    EXPECT_THAT(res, matchesIdTableFromVector({{4}, {4}, {4}, {5}, {4}, {5}}))
         << "Failed with rowsPerBlock " << rowsPerBlock;
 
     // std::nullopt matches all graphs, but the default graph ('0' in this test)
