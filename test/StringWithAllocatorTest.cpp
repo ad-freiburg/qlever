@@ -36,7 +36,8 @@ constexpr std::string_view longString =
     "a string that is too long for the tiny allocator";
 }  // namespace
 
-// _____________________________________________________________________________
+// Test `qlm::StrCat` against `absl::StrCat`, and that it throws when the
+// allocator's limit is exceeded.
 TEST(StringWithAllocator, strCat) {
   auto alloc = unlimited();
   qlm::string q{"qlm", alloc};
@@ -51,7 +52,8 @@ TEST(StringWithAllocator, strCat) {
                AllocationExceedsLimitException);
 }
 
-// _____________________________________________________________________________
+// Test `qlm::StrAppend` against `absl::StrAppend`, and that it throws when
+// the allocator's limit is exceeded.
 TEST(StringWithAllocator, strAppend) {
   qlm::string result{"start", unlimited()};
   qlm::StrAppend(&result, " ", 7, " ", "end");
@@ -64,7 +66,8 @@ TEST(StringWithAllocator, strAppend) {
                AllocationExceedsLimitException);
 }
 
-// _____________________________________________________________________________
+// Test both overloads of `qlm::StrJoin` against `absl::StrJoin`, and that
+// they throw when the allocator's limit is exceeded.
 TEST(StringWithAllocator, strJoin) {
   auto alloc = unlimited();
   std::vector<int> ints{1, 2, 3};
@@ -92,7 +95,8 @@ TEST(StringWithAllocator, strJoin) {
                AllocationExceedsLimitException);
 }
 
-// _____________________________________________________________________________
+// Test `qlm::ostringstream` against `std::ostringstream`, and that it rethrows
+// the exception of the allocator when the limit is exceeded.
 TEST(StringWithAllocator, ostringstream) {
   auto alloc = unlimited();
   qlm::ostringstream os{alloc};
@@ -119,7 +123,7 @@ TEST(StringWithAllocator, ostringstream) {
   EXPECT_TRUE(smallNumbers.bad());
 }
 
-// Writing a lot of data (which requires growing the buffer several times) and
+// Test that writing a lot of data (which grows the buffer several times) and
 // seeking behave exactly like for a `std::ostringstream`.
 TEST(StringWithAllocator, ostringstreamGrowAndSeek) {
   qlm::ostringstream os{unlimited()};
@@ -139,7 +143,8 @@ TEST(StringWithAllocator, ostringstreamGrowAndSeek) {
   EXPECT_EQ(toStd(std::move(os).str()), expected.str());
 }
 
-// When growing the buffer fails, the previously written content is kept.
+// Test that the previously written content is kept when growing the buffer
+// fails.
 TEST(StringWithAllocator, ostringstreamKeepsContentOnFailure) {
   auto allocator = qlever::makeAllocatorWithLimit<char>(1_kB);
   qlm::ostringstream os{allocator};

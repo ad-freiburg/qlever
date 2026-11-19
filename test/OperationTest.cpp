@@ -1321,8 +1321,8 @@ TEST(Operation, makeDistinctTreeDefaultRequiresNotAlreadyDistinct) {
   EXPECT_EQ(scanOp.makeDistinctTree(SC{0}), std::nullopt);
 }
 
-// The cache keys of operations and the cache key that is stored in a
-// `QueryExecutionTree` are allocated with the allocator of the query, so they
+// Test that the cache keys of operations and the cache key stored in a
+// `QueryExecutionTree` are allocated with the allocator of the query and thus
 // count toward its memory limit.
 TEST(Operation, cacheKeysRespectMemoryLimit) {
   auto qec = getQec();
