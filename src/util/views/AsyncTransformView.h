@@ -201,11 +201,13 @@ class AsyncTransformView
     }
 
     // Return true if one more runner should be posted, and count it as
-    // running and queued. Requires that `mutex_` is held. One more runner is
-    // wanted if the unfinished slots are more than the current runners handle
-    // (`numSlotsPerRunner_` each) and `maxNumRunners_` isn't reached yet. To
-    // adapt to the load of the `executor_`, at most one runner is queued at a
-    // time (see the class comment).
+    // running and queued. Requires that `mutex_` is held.
+    //
+    // NOTE: One more runner is wanted if the unfinished slots are more than
+    // the current runners handle (`numSlotsPerRunner_` each) and
+    // `maxNumRunners_` isn't reached yet. To adapt to the load of the
+    // `executor_`, at most one runner is queued at a time (see the class
+    // comment).
     bool reserveRunnerIfWanted() {
       // The slots that busy runners hold count as well, as these runners
       // can't take a queued slot. Popping a slot thus never lowers `wanted`.

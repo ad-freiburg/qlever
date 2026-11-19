@@ -482,7 +482,8 @@ class ThrowingExecutor {
                    std::shared_ptr<std::atomic<size_t>> numAttempts)
       : inner_{std::move(inner)}, numAttempts_{std::move(numAttempts)} {}
 
-  // Old-style executor concept.
+  // Old-style executor concept (needed for Boost < 1.74, where
+  // `ql::any_io_executor` is `boost::asio::executor`).
   boost::asio::execution_context& context() const noexcept {
     return inner_.context();
   }
