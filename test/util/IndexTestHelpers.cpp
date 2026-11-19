@@ -63,32 +63,15 @@ Index makeIndexWithTestSettings(ad_utility::MemorySize parserBufferSize) {
   return index;
 }
 
-std::vector<std::string> getAllIndexFilenames(
-    const std::string& indexBasename) {
-  return {indexBasename + ".ttl",
-          indexBasename + ".index.pos",
-          indexBasename + ".index.pos.meta",
-          indexBasename + ".index.pso",
-          indexBasename + ".index.pso.meta",
-          indexBasename + ".index.sop",
-          indexBasename + ".index.sop.meta",
-          indexBasename + ".index.spo",
-          indexBasename + ".index.spo.meta",
-          indexBasename + ".index.ops",
-          indexBasename + ".index.ops.meta",
-          indexBasename + ".index.osp",
-          indexBasename + ".index.osp.meta",
-          indexBasename + ".index.patterns",
-          indexBasename + ".meta-data.json",
-          indexBasename + ".prefixes",
-          indexBasename + ".vocabulary.internal",
-          indexBasename + ".vocabulary.external",
-          indexBasename + ".vocabulary.external.offsets",
-          indexBasename + ".wordsfile",
-          indexBasename + ".docsfile",
-          indexBasename + ".text.index",
-          indexBasename + ".text.vocabulary",
-          indexBasename + ".text.docsDB"};
+// _____________________________________________________________________________
+void deleteTestIndexFiles(const std::string& indexBasename) {
+  std::string prefix = absl::StrCat(indexBasename, ".");
+  qlever::util::deleteFilesInDirectory(
+      ql::filesystem::current_path(),
+      [&prefix](const ql::filesystem::path& path) {
+        return ql::starts_with(path.filename().string(), prefix);
+      },
+      false);
 }
 
 namespace {
@@ -462,19 +445,7 @@ QueryExecutionContext* getQec(const std::string& indexBasenamePrefix,
         std::pair<TestIndexConfig, std::string>{c, indexBasenamePrefix},
         Context{makeAllocator(MemorySize::megabytes(100)),
                 TypeErasedCleanup{[testIndexBasename]() {
-                  // Delete all files of the index (including its input file)
-                  // by their common prefix rather than by a fixed list of
-                  // names, which would miss files of newer index formats and
-                  // leave them behind. Don't log when a file can't be deleted,
-                  // because the logging might already be destroyed.
-                  std::string prefix = absl::StrCat(testIndexBasename, ".");
-                  qlever::util::deleteFilesInDirectory(
-                      ql::filesystem::current_path(),
-                      [&prefix](const ql::filesystem::path& path) {
-                        return ql::starts_with(path.filename().string(),
-                                               prefix);
-                      },
-                      false);
+                  deleteTestIndexFiles(testIndexBasename);
                 }},
                 std::make_shared<Index>(makeTestIndex(testIndexBasename, c)),
                 std::make_unique<QueryResultCache>(),
