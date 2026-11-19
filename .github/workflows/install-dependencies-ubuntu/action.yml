@@ -22,6 +22,10 @@ inputs:
     description: "Whether to free disk space on the runner. Must be set to false for jobs that run in a `container`, because the directories that are cleaned up (and the Docker daemon) belong to the host and are not visible from inside the container"
     required: false
     default: "true"
+  install-gdal:
+    description: "Whether to install GDAL, which is needed for `-DUSE_GDAL=ON`. Ubuntu 24.04 ships GDAL 3.8, the oldest version that QLever supports"
+    required: false
+    default: "false"
 
 runs:
   using: "composite"
@@ -79,6 +83,11 @@ runs:
       # "Could NOT find OpenSSL").
       run:  |
         sudo apt-get install -y libicu-dev tzdata libzstd-dev libjemalloc-dev libssl-dev
+      shell: bash
+
+    - name: Install GDAL
+      if: inputs.install-gdal == 'true'
+      run: sudo apt-get install -y libgdal-dev
       shell: bash
 
     - name: Install Boost 1.83

@@ -42,7 +42,12 @@ jobs:
         warnings: [  "-Wall -Wextra -Werror -Woverloaded-virtual " ]
         build-type: [Release]
         expensive-tests: [true]
-        additional-cmake-options: [""]
+        # Build the raster support with GDAL 3.8 (the version of Ubuntu 24.04),
+        # the oldest version that QLever supports. Each `include` entry below
+        # differs from this job, so it becomes a separate job that only has its
+        # own keys. These jobs hence build without GDAL.
+        install-gdal: [true]
+        additional-cmake-options: ["-DUSE_GDAL=ON"]
         include:
           - compiler: gcc
             compiler-version: 11
