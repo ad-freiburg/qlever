@@ -31,9 +31,9 @@
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
-#include "util/Serializer/Serializer.h"
 #include "util/TypeTraits.h"
 #include "util/Views.h"
+#include "util/serializer/Serializer.h"
 
 // The signature of the SplitFunction for a SplitVocabulary. For each literal or
 // IRI, it should return a marker index which of the underlying vocabularies of

@@ -17,9 +17,9 @@
 #include "util/CompactStringVector.h"
 #include "util/Exception.h"
 #include "util/OwnedOrViewedVector.h"
-#include "util/Serializer/FileSerializer.h"
-#include "util/Serializer/SerializeVector.h"
-#include "util/Serializer/Serializer.h"
+#include "util/serializer/FileSerializer.h"
+#include "util/serializer/SerializeVector.h"
+#include "util/serializer/Serializer.h"
 
 // A vocabulary that stores all words in memory. The vocabulary supports
 // "holes", meaning that the indices of the contained words don't have to be
@@ -77,7 +77,7 @@ class VocabularyInMemoryBinSearch
 
   // Build a vocabulary as a non-owning, zero-copy view directly into the
   // buffer of `serializer`, which must support zero-copy deserialization (see
-  // `ZeroCopyReadSerializer` in `util/Serializer/Serializer.h`). The returned
+  // `ZeroCopyReadSerializer` in `util/serializer/Serializer.h`). The returned
   // vocabulary is only valid as long as the memory backing `serializer`'s
   // buffer is valid and unchanged. The layout read here exactly matches the one
   // written by the generic serialization function below.

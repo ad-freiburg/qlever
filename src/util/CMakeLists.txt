@@ -1,5 +1,5 @@
-add_subdirectory(ConfigManager)
-add_subdirectory(MemorySize)
+add_subdirectory(configManager)
+add_subdirectory(memorySize)
 add_subdirectory(http)
 
 # The lowest layer: string helpers that depend on nothing but the standard

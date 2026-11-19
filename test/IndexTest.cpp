@@ -41,8 +41,8 @@
 #include "util/HashSet.h"
 #include "util/IndexTestHelpers.h"
 #include "util/LocalVocabEntryTestHelpers.h"
-#include "util/Serializer/ByteBufferSerializer.h"
 #include "util/UnicodeSupport.h"
+#include "util/serializer/ByteBufferSerializer.h"
 
 // Multi-threaded, to exercise the concurrency of the tested code.
 static constexpr auto executor = &ad_utility::testing::multiThreadExecutor;
@@ -1004,7 +1004,8 @@ TEST(IndexTest, NumDistinctEntitiesCornerCases) {
   AD_EXPECT_THROW_WITH_MESSAGE(index.numDistinctObjects(),
                                ::testing::ContainsRegex("if all 6"));
   AD_EXPECT_THROW_WITH_MESSAGE(
-      index.numDistinctCol0(static_cast<Permutation::Enum>(42)),
+      index.numDistinctCol0(
+          static_cast<Permutation::Enum>(qlever::enumSize<Permutation::Enum>)),
       ::testing::ContainsRegex("should be unreachable"));
 
   const IndexImpl& indexNoPatterns =

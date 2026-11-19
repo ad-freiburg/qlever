@@ -320,6 +320,8 @@ addLinkAndDiscoverTestNoLibs(SynchronizedTest)
 
 addLinkAndDiscoverTest(VectorWithMemoryLimitTest)
 
+addLinkAndDiscoverTest(ContainersWithAllocatorTest)
+
 addLinkAndDiscoverTestNoLibs(AllocatorPmrTest)
 
 addLinkAndDiscoverTestNoLibs(AllocateSharedTest)
@@ -419,6 +421,8 @@ addLinkAndDiscoverTest(DateYearDurationTest qlever_util sparqlParser)
 addLinkAndDiscoverTest(DurationTest qlever_util)
 
 addLinkAndDiscoverTest(TripleComponentTest)
+
+addLinkAndDiscoverTest(IdBaseTest qlever_util)
 
 addLinkAndDiscoverTest(FoldedValueIdTest qlever_util)
 
@@ -680,6 +684,8 @@ addLinkAndDiscoverTest(ConstructBatchEvaluatorTest engine)
 addLinkAndDiscoverTest(ExportIdsTest engine sparqlParser)
 
 addLinkAndDiscoverTestNoLibs(EnumWithStringsTest Boost::program_options)
+
+addLinkAndDiscoverTestNoLibs(EnumSizeTest)
 
 addLinkAndDiscoverTest(ConstructTripleGeneratorTest engine)
 

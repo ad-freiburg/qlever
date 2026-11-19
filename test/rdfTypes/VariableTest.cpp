@@ -8,7 +8,7 @@
 #include "../util/GTestHelpers.h"
 #include "rdfTypes/Variable.h"
 #include "util/HashSet.h"
-#include "util/Serializer/ByteBufferSerializer.h"
+#include "util/serializer/ByteBufferSerializer.h"
 
 // _____________________________________________________________________________
 TEST(Variable, legalAndIllegalNames) {

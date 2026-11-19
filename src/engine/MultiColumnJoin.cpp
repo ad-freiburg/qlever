@@ -10,7 +10,7 @@
 #include "engine/JoinHelpers.h"
 #include "global/Constants.h"
 #include "index/IdTableUtils.h"
-#include "util/JoinAlgorithms/JoinAlgorithms.h"
+#include "util/joinAlgorithms/JoinAlgorithms.h"
 
 using std::endl;
 using std::string;

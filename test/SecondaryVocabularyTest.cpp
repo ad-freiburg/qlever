@@ -37,7 +37,7 @@
 #include "parser/TripleComponent.h"
 #include "util/CompactStringVector.h"
 #include "util/LocalVocabEntryTestHelpers.h"
-#include "util/Serializer/ByteBufferSerializer.h"
+#include "util/serializer/ByteBufferSerializer.h"
 
 using ad_utility::testing::iriLocalVocabEntry;
 
@@ -486,8 +486,7 @@ TEST(SecondaryVocabIndex, sortsDirectlyAfterTheMainVocabulary) {
                       Id::makeFromEncodedVal(7),
                       secondaryVocabId(0),
                       secondaryVocabId(1)};
-  for (size_t i = 0; i <= static_cast<size_t>(Datatype::MaxValue); ++i) {
-    auto datatype = static_cast<Datatype>(i);
+  for (Datatype datatype : qlever::allEnumValues<Datatype>) {
     bool isCovered = ::ranges::contains(ids, datatype, Id::getDatatypeL);
     ASSERT_EQ(isCovered, datatype != Datatype::LocalVocabIndex)
         << toString(datatype);

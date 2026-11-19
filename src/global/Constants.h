@@ -17,8 +17,8 @@
 #include <string>
 #include <string_view>
 
-#include "util/MemorySize/MemorySize.h"
 #include "util/StringUtils.h"
+#include "util/memorySize/MemorySize.h"
 
 // For access to `memorySize` literals.
 using namespace ad_utility::memory_literals;

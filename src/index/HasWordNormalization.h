@@ -19,6 +19,7 @@
 namespace ad_utility {
 
 enum class HasWordNormalizationEnum : uint8_t { Lowercase, LowercaseNoAccents };
+QLEVER_ENUM_SIZE(HasWordNormalizationEnum, 2);
 
 // The normalization that is applied to the words of the `ql:has-word` triples
 // (option `--has-word-normalization` of `qlever-index`). In all modes, literals
@@ -34,7 +35,8 @@ class HasWordNormalization
  public:
   using Enum = HasWordNormalizationEnum;
 
-  static constexpr std::array<std::pair<Enum, std::string_view>, 2>
+  static constexpr std::array<std::pair<Enum, std::string_view>,
+                              qlever::enumSize<Enum>>
       descriptions_{{{Enum::Lowercase, "lowercase"},
                      {Enum::LowercaseNoAccents, "lowercase-no-accents"}}};
 
