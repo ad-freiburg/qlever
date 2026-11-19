@@ -9,9 +9,9 @@
 
 #include "util/FilesystemHelpers.h"
 
+#include <absl/cleanup/cleanup.h>
 #include <absl/strings/str_cat.h>
 
-#include <iterator>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -22,6 +22,7 @@
 #include "backports/algorithm.h"
 #include "backports/filesystem.h"
 #include "util/File.h"
+#include "util/Random.h"
 
 namespace qlever::util {
 namespace fs = ql::filesystem;
@@ -123,17 +124,47 @@ bool isSubdirectoryOf(const std::string& path,
 }
 
 // _____________________________________________________________________________
-std::vector<char> readBinaryFile(const fs::path& path) {
-  auto stream = ad_utility::makeIfstream(path, std::ios::binary);
-  return {std::istreambuf_iterator<char>{stream},
-          std::istreambuf_iterator<char>{}};
+size_t detail::sizeOfRegularFile(const fs::path& path) {
+  if (!fs::is_regular_file(path)) {
+    throw std::runtime_error{
+        absl::StrCat("The file \"", path.string(),
+                     "\" does not exist or is not a regular file")};
+  }
+  return static_cast<size_t>(fs::file_size(path));
+}
+
+// _____________________________________________________________________________
+void detail::readFileIntoBuffer(const fs::path& path, ql::span<char> buffer) {
+  ad_utility::File file{path.string(), "r"};
+  auto numBytesRead = file.read(buffer.data(), buffer.size(), 0);
+  if (numBytesRead < 0 || static_cast<size_t>(numBytesRead) != buffer.size()) {
+    throw std::runtime_error{absl::StrCat(
+        "Could not read the complete file \"", path.string(), "\" (expected ",
+        buffer.size(), " bytes, but read ", numBytesRead,
+        "), was it modified while it was being read?")};
+  }
+}
+
+// _____________________________________________________________________________
+void writeFileAtomically(
+    const fs::path& path,
+    absl::FunctionRef<void(const fs::path& temporaryPath)> writeTemporaryFile) {
+  // The random component makes the name unique, so that two concurrent writers
+  // of the same `path` never write to the same temporary file.
+  fs::path temporary = path;
+  temporary += absl::StrCat(".", ad_utility::UuidGenerator{}(), ".tmp");
+  // Remove the temporary file if anything below throws. After a successful
+  // rename it no longer exists, so the removal is then a no-op.
+  absl::Cleanup removeTemporary = [&temporary] {
+    ad_utility::deleteFile(temporary, /*warnOnFailure=*/false);
+  };
+  writeTemporaryFile(temporary);
+  fs::rename(temporary, path);
 }
 
 // _____________________________________________________________________________
 void writeFileAtomically(const fs::path& path, ql::span<const char> bytes) {
-  fs::path temporary = path;
-  temporary += ".tmp";
-  {
+  writeFileAtomically(path, [bytes](const fs::path& temporary) {
     auto stream = ad_utility::makeOfstream(temporary, std::ios::binary);
     stream.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
     stream.flush();
@@ -141,16 +172,14 @@ void writeFileAtomically(const fs::path& path, ql::span<const char> bytes) {
       throw std::runtime_error{
           absl::StrCat("Could not write the file ", temporary.string())};
     }
-  }
-  fs::rename(temporary, path);
+  });
 }
 
 // _____________________________________________________________________________
 void copyFileAtomically(const fs::path& from, const fs::path& to) {
-  fs::path temporary = to;
-  temporary += ".tmp";
-  fs::copy_file(from, temporary, fs::copy_options::overwrite_existing);
-  fs::rename(temporary, to);
+  writeFileAtomically(to, [&from](const fs::path& temporary) {
+    fs::copy_file(from, temporary, fs::copy_options::overwrite_existing);
+  });
 }
 
 }  // namespace qlever::util

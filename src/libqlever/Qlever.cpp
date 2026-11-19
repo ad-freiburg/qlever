@@ -41,35 +41,6 @@
 
 namespace qlever {
 
-namespace {
-// Read the complete contents of the blob file with the given `filename`. The
-// buffer is not zero-initialized, because it is completely overwritten by the
-// read.
-std::vector<char, ad_utility::default_init_allocator<char>>
-readCompressedBlobFile(const std::string& filename) {
-  // A directory can be opened like a file, but its size is reported as the
-  // maximal file size, which we must not try to allocate.
-  if (!ql::filesystem::is_regular_file(filename)) {
-    throw std::runtime_error{
-        absl::StrCat("The blob file \"", filename,
-                     "\" does not exist or is not a regular file")};
-  }
-  ad_utility::File file{filename, "r"};
-  std::vector<char, ad_utility::default_init_allocator<char>> compressedBlob(
-      file.sizeOfFile());
-  auto numBytesRead =
-      file.read(compressedBlob.data(), compressedBlob.size(), 0);
-  AD_CORRECTNESS_CHECK(
-      static_cast<size_t>(numBytesRead) == compressedBlob.size(), [&]() {
-        return absl::StrCat("Could not read the complete blob file \"",
-                            filename, "\" (expected ", compressedBlob.size(),
-                            " bytes, but read ", numBytesRead,
-                            "), was it modified while it was being read?");
-      });
-  return compressedBlob;
-}
-}  // namespace
-
 // _____________________________________________________________________________
 Qlever::Qlever(const EngineConfig& config, bool skipLoading,
                qlever::Executor executor)
@@ -154,8 +125,12 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
     const auto& filename = config.compressedBlobFilename_.value();
     AD_LOG_INFO << "Loading the index from the blob file \"" << filename
                 << "\" ..." << std::endl;
+    // The buffer is not zero-initialized, because it is completely
+    // overwritten by the read.
     deserializeVocabAndNamedCacheFromCompressedBlob(
-        readCompressedBlobFile(filename));
+        qlever::util::readBinaryFile<
+            std::vector<char, ad_utility::default_init_allocator<char>>>(
+            filename));
     loadedFromBlob_ = true;
   } else {
     index.usePatterns() = enablePatternTrick_;

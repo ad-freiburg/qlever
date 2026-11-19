@@ -26,6 +26,7 @@
 #include "index/compressedRelationWriter/CompressedRelationHelpersImpl.h"
 #include "index/compressedRelationWriter/CompressedRelationPermutationWriterImpl.h"
 #include "index/compressedRelationWriter/CompressedRelationWriter.h"
+#include "util/FilesystemHelpers.h"
 #include "util/GlobalExecutor.h"
 #include "util/IndexTestHelpers.h"
 #include "util/LocalVocabEntryTestHelpers.h"
@@ -2226,11 +2227,8 @@ TEST(CompressedRelationWriter, blockMustHaveRoomForAtLeastOneRow) {
 // `CompressedRelationWriter::compressAndWriteColumn`.
 TEST(CompressedRelationWriter, fileMustBeEmpty) {
   auto [filename, cleanup] = testFilenameWithCleanup();
-  {
-    ad_utility::File file{filename, "w"};
-    const std::string content = "someContentThatMustNotBeOverwritten";
-    file.write(content.data(), content.size());
-  }
+  const std::string content = "someContentThatMustNotBeOverwritten";
+  qlever::util::writeFileAtomically(filename, content);
   AD_EXPECT_THROW_WITH_MESSAGE(
       (CompressedRelationWriter{1, ad_utility::File{filename, "r+"}, 2,
                                 executor()}),

@@ -11,14 +11,18 @@
 #include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 
+#include <algorithm>
 #include <fstream>
 #include <string>
 #include <vector>
 
 #include "backports/filesystem.h"
+#include "backports/memory_resource.h"
+#include "util/File.h"
 #include "util/FilesystemHelpers.h"
 #include "util/GTestHelpers.h"
 #include "util/Log.h"
+#include "util/UninitializedAllocator.h"
 
 namespace fs = ql::filesystem;
 using qlever::util::copyFileAtomically;
@@ -345,6 +349,16 @@ TEST(DeleteFilesInDirectory, pathThatIsNotADirectoryReturnsZero) {
   EXPECT_TRUE(fs::exists(file));
 }
 
+// Return the names of all entries directly contained in `directory`, sorted.
+std::vector<std::string> entryNames(const fs::path& directory) {
+  std::vector<std::string> names;
+  for (const auto& entry : fs::directory_iterator{directory}) {
+    names.push_back(entry.path().filename().string());
+  }
+  std::sort(names.begin(), names.end());
+  return names;
+}
+
 // _____________________________________________________________________________
 TEST(FilesystemHelpers, readWriteAndCopyFilesAtomically) {
   TempDir dir;
@@ -355,12 +369,13 @@ TEST(FilesystemHelpers, readWriteAndCopyFilesAtomically) {
   std::vector<char> bytes{'a', '\0', '\n', static_cast<char>(0xff), 'b'};
   writeFileAtomically(file, bytes);
   EXPECT_EQ(readBinaryFile(file), bytes);
-  EXPECT_FALSE(fs::exists(dir.path() / "file.tmp"));
+  // No temporary file is left behind.
+  EXPECT_THAT(entryNames(dir.path()), ::testing::ElementsAre("file"));
 
   // An existing file is replaced, also by an empty one.
   writeFileAtomically(file, std::vector<char>{'x'});
   EXPECT_EQ(readBinaryFile(file), std::vector<char>{'x'});
-  writeFileAtomically(file, {});
+  writeFileAtomically(file, std::vector<char>{});
   EXPECT_TRUE(readBinaryFile(file).empty());
 
   writeFileAtomically(file, bytes);
@@ -369,10 +384,99 @@ TEST(FilesystemHelpers, readWriteAndCopyFilesAtomically) {
   writeFileAtomically(file, std::vector<char>{'y'});
   copyFileAtomically(file, copy);
   EXPECT_EQ(readBinaryFile(copy), std::vector<char>{'y'});
-  EXPECT_FALSE(fs::exists(dir.path() / "copy.tmp"));
+  EXPECT_THAT(entryNames(dir.path()), ::testing::ElementsAre("copy", "file"));
 
   // Missing files and directories are reported.
   EXPECT_ANY_THROW(readBinaryFile(dir.path() / "missing"));
   EXPECT_ANY_THROW(writeFileAtomically(dir.path() / "missing" / "file", bytes));
   EXPECT_ANY_THROW(copyFileAtomically(dir.path() / "missing", copy));
+  EXPECT_EQ(readBinaryFile(copy), std::vector<char>{'y'});
+}
+
+// Test that `readBinaryFile` reads into other containers and with a custom
+// allocator, and that it rejects paths that are not regular files.
+TEST(FilesystemHelpers, readBinaryFileContainersAndErrors) {
+  TempDir dir;
+  auto file = dir.path() / "file";
+  std::string content{"some\0content", 12};
+  writeFileAtomically(file, content);
+
+  EXPECT_EQ(readBinaryFile<std::string>(file), content);
+  using DefaultInitVector =
+      std::vector<char, ad_utility::default_init_allocator<char>>;
+  auto defaultInit = readBinaryFile<DefaultInitVector>(file);
+  EXPECT_EQ((std::string{defaultInit.begin(), defaultInit.end()}), content);
+  // The allocator is passed to the container.
+  ql::pmr::monotonic_buffer_resource resource;
+  using PmrVector = std::vector<char, ql::pmr::polymorphic_allocator<char>>;
+  auto withAllocator = readBinaryFile<PmrVector>(
+      file, ql::pmr::polymorphic_allocator<char>{&resource});
+  EXPECT_EQ(withAllocator.get_allocator().resource(), &resource);
+  EXPECT_EQ((std::string{withAllocator.begin(), withAllocator.end()}), content);
+
+  // An empty file yields an empty container.
+  auto empty = dir.path() / "empty";
+  writeFileAtomically(empty, std::vector<char>{});
+  EXPECT_TRUE(readBinaryFile<std::string>(empty).empty());
+
+  // A file that does not exist and a directory are rejected with a readable
+  // error message.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      readBinaryFile(dir.path() / "missing"),
+      HasSubstr("does not exist or is not a regular file"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      readBinaryFile(dir.path()),
+      HasSubstr("does not exist or is not a regular file"));
+}
+
+// Test the overload of `writeFileAtomically` that writes the temporary file via
+// a callback.
+TEST(FilesystemHelpers, writeFileAtomicallyWithCallback) {
+  TempDir dir;
+  auto file = dir.path() / "file";
+
+  // The callback writes to a temporary file in the same directory, whose name
+  // starts with the name of the target and ends with `.tmp`, and which is
+  // different for each call.
+  std::vector<fs::path> temporaryPaths;
+  auto write = [&temporaryPaths](std::string content) {
+    return [&temporaryPaths, content](const fs::path& temporaryPath) {
+      temporaryPaths.push_back(temporaryPath);
+      EXPECT_FALSE(fs::exists(temporaryPath));
+      ad_utility::makeOfstream(temporaryPath) << content;
+    };
+  };
+  writeFileAtomically(file, write("first"));
+  writeFileAtomically(file, write("second"));
+  EXPECT_EQ(readBinaryFile<std::string>(file), "second");
+  ASSERT_EQ(temporaryPaths.size(), 2u);
+  EXPECT_NE(temporaryPaths.at(0), temporaryPaths.at(1));
+  for (const auto& temporaryPath : temporaryPaths) {
+    EXPECT_EQ(temporaryPath.parent_path(), dir.path());
+    EXPECT_THAT(temporaryPath.filename().string(),
+                ::testing::AllOf(::testing::StartsWith("file."),
+                                 ::testing::EndsWith(".tmp")));
+  }
+  EXPECT_THAT(entryNames(dir.path()), ::testing::ElementsAre("file"));
+
+  // If the callback throws, the temporary file is removed, the target is left
+  // unchanged, and the exception is propagated.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      writeFileAtomically(file,
+                          [](const fs::path& temporaryPath) {
+                            ad_utility::makeOfstream(temporaryPath) << "third";
+                            throw std::runtime_error{"callback failed"};
+                          }),
+      HasSubstr("callback failed"));
+  EXPECT_EQ(readBinaryFile<std::string>(file), "second");
+  EXPECT_THAT(entryNames(dir.path()), ::testing::ElementsAre("file"));
+
+  // If the renaming fails (here because the target is a non-empty directory),
+  // the temporary file is removed as well.
+  auto directory = dir.path() / "directory";
+  fs::create_directory(directory);
+  touch(directory / "entry");
+  EXPECT_ANY_THROW(writeFileAtomically(directory, write("fourth")));
+  EXPECT_THAT(entryNames(dir.path()),
+              ::testing::ElementsAre("directory", "file"));
 }

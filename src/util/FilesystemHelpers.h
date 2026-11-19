@@ -15,6 +15,7 @@
 #include <cstddef>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <vector>
 
 #include "backports/filesystem.h"
@@ -66,18 +67,66 @@ std::vector<ql::filesystem::path> directoriesWithPrefix(
 // but not of `/to/dir1/` (as `path2`).
 bool isSubdirectoryOf(const std::string& path1, const std::string& path2);
 
-// Read the whole file `path` into a vector of bytes. Throw if the file cannot
-// be opened.
-std::vector<char> readBinaryFile(const ql::filesystem::path& path);
+namespace detail {
+// Return the size of the file `path` in bytes. Throw if `path` does not exist
+// or is not a regular file (a directory, for example, can be opened like a
+// file, but its reported size is meaningless).
+size_t sizeOfRegularFile(const ql::filesystem::path& path);
 
-// Write `bytes` atomically to `path`: first to the temporary file `path.tmp`,
-// which is then renamed to `path`. An existing file `path` is replaced. Throw
-// if the file cannot be written.
+// Read exactly `buffer.size()` bytes from the beginning of the file `path` into
+// `buffer`. Throw if the file cannot be opened or read, or if it holds fewer
+// bytes.
+void readFileIntoBuffer(const ql::filesystem::path& path,
+                        ql::span<char> buffer);
+}  // namespace detail
+
+// Read the whole file `path` into a `Container` of bytes (a contiguous
+// container of `char` with an `allocator_type` and a `resize` member function,
+// for example `std::vector<char>`, `std::string`, or a vector with a custom
+// allocator), which uses `allocator` for its storage. The size of the file is
+// determined up front, so the bytes are read with a single allocation and
+// without a byte-wise copy; with an allocator that default-initializes (see
+// `ad_utility::default_init_allocator`) the buffer is also not zeroed before it
+// is overwritten. Throw if `path` does not exist, is not a regular file, or
+// cannot be read completely (for example because it is truncated while it is
+// being read).
+template <typename Container = std::vector<char>>
+Container readBinaryFile(const ql::filesystem::path& path,
+                         typename Container::allocator_type allocator = {}) {
+  static_assert(std::is_same_v<typename Container::value_type, char>,
+                "`readBinaryFile` reads into a container of `char`");
+  Container result(allocator);
+  result.resize(detail::sizeOfRegularFile(path));
+  detail::readFileIntoBuffer(path,
+                             ql::span<char>{result.data(), result.size()});
+  return result;
+}
+
+// Create the file `path` atomically: call `writeTemporaryFile` with the path of
+// a temporary file in the same directory (the name of which consists of `path`,
+// a random UUID, and the suffix `.tmp`, so that concurrent writers of the same
+// `path` do not collide), which has to create that file, and then rename the
+// temporary file to `path`. An existing file `path` is replaced. If
+// `writeTemporaryFile` or the renaming throws, the temporary file is removed,
+// `path` is left unchanged, and the exception is propagated.
+//
+// NOTE: The data is not explicitly synced to disk (no `fsync`), so the
+// replacement is atomic with respect to other processes and to crashes of this
+// process, but not necessarily with respect to a crash of the operating
+// system.
+void writeFileAtomically(
+    const ql::filesystem::path& path,
+    absl::FunctionRef<void(const ql::filesystem::path& temporaryPath)>
+        writeTemporaryFile);
+
+// Write `bytes` atomically to `path` (via a temporary file, see the overload
+// above). An existing file `path` is replaced. Throw if the file cannot be
+// written.
 void writeFileAtomically(const ql::filesystem::path& path,
                          ql::span<const char> bytes);
 
-// Copy the file `from` atomically to `to` (via the temporary file `to.tmp`, as
-// in `writeFileAtomically`). An existing file `to` is replaced.
+// Copy the file `from` atomically to `to` (via a temporary file, see
+// `writeFileAtomically`). An existing file `to` is replaced.
 void copyFileAtomically(const ql::filesystem::path& from,
                         const ql::filesystem::path& to);
 }  // namespace qlever::util
