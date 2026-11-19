@@ -1,6 +1,6 @@
 // Copyright 2025 - 2026 The QLever Authors, in particular:
 //
-// 2025 - 2026 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
+// 2025 - 2026 Christoph Ullinger <ullingec@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
@@ -121,11 +121,11 @@ TEST(SpatialJoinTest, BoundingBoxPrefilterIntersectsCoversAndNonIntersects) {
                          WITHIN_DIST);
 }
 
+// Test the prefilter with a large bounding box on the left side, which
+// contains half of the geometries on the right side.
 TEST(SpatialJoinTest, BoundingBoxPrefilterLargeContainsNotContains) {
-  // Case 3: Large bounding box which contains half of the geometries
-  // Left: Approximate boundary of Germany
-  // Right: All other test geometries (3x in Freiburg, 1x in London, Paris and
-  // New York)
+  // Left: Approximate boundary of Germany. Right: All other test geometries
+  // (3x in Freiburg, 1x in London, Paris and New York).
   auto kg = buildLibSJTestDataset(true, false, false);
   auto qec = buildQec(kg, true);
 
@@ -175,8 +175,8 @@ TEST(SpatialJoinTest, BoundingBoxPrefilterLargeContainsNotContains) {
                          {{{WITHIN_DIST, vIdGermany, vIdUni, 0},
                            {WITHIN_DIST, vIdGermany, vIdMinster, 0},
                            {WITHIN_DIST, vIdGermany, vIdGkAllee, 0},
-                           {WITHIN_DIST, vIdGermany, vIdLondon, 426521.1762},
-                           {WITHIN_DIST, vIdGermany, vIdParis, 314975.6313}},
+                           {WITHIN_DIST, vIdGermany, vIdLondon, 426521.189},
+                           {WITHIN_DIST, vIdGermany, vIdParis, 314975.5984}},
                           {},
                           {},
                           6,
@@ -366,5 +366,21 @@ INSTANTIATE_TEST_SUITE_P(SpatialJoinPrefilterGeoByBoundingBoxTest,
                          SpatialJoinPrefilterGeoByBoundingBoxTest,
                          ::testing::Values(PrefilterTestMode::GEO_VOCAB,
                                            PrefilterTestMode::PRECOMPUTED));
+
+// Test that the size limit of the geometry cache is never 0, which means
+// "unlimited" in `libspatialjoin`.
+TEST(SpatialJoinTest, GeometryCacheLimitIsNeverUnlimited) {
+  using ad_utility::MemorySize;
+
+  // Half of the memory, divided between 7 caches with 2 buckets each.
+  EXPECT_EQ(LibspatialjoinAlgorithm::sweeperConfig(2, MemorySize::bytes(2800))
+                .geomCacheMaxSize,
+            100);
+
+  // Too little memory for 1 byte per bucket still gives a limit of 1 byte.
+  EXPECT_EQ(LibspatialjoinAlgorithm::sweeperConfig(2, MemorySize::bytes(27))
+                .geomCacheMaxSize,
+            1);
+}
 
 }  // namespace

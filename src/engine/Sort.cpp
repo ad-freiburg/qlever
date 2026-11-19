@@ -109,7 +109,7 @@ Result Sort::computeResult(bool requestLaziness) {
   // For lazy input, collect blocks until we exceed the threshold. Note that we
   // may exceed the threshold by the size of one block.
   std::vector<IdTable> collectedBlocks;
-  LocalVocab mergedLocalVocab;
+  LocalVocab mergedLocalVocab{allocator()};
   size_t totalRows = 0;
   auto idTables = input->idTables();
   auto it = idTables.begin();
