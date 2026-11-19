@@ -106,12 +106,8 @@ std::optional<std::string> transformAsWkt(
   if (!wktResult.has_value()) {
     return std::nullopt;
   }
-  // Hide the CRS IRI for the default CRS.
-  if (targetCrs == defaultCrs) {
-    return wktResult.value();
-  } else {
-    return ::util::geo::getCrsIri(targetCrs) + wktResult.value();
-  }
+  // `getCrsIri` hides the CRS IRI for the default CRS.
+  return absl::StrCat(::util::geo::getCrsIri(targetCrs), wktResult.value());
 }
 
 // _____________________________________________________________________________

@@ -212,6 +212,7 @@ TEST(GeoSparqlHelpers, WktTransform) {
                    "POINT(111319.490793 222684.208506)"));
 
   // From `std::string` to other CRS.
+  // CRS84:
   std::string exampleWkt{
       "\"POINT(1 2)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"};
   EXPECT_EQ(
@@ -221,6 +222,34 @@ TEST(GeoSparqlHelpers, WktTransform) {
       WktTransform{}(GeoPointOrWkt{exampleWkt}, util::geo::CRSType::WGS84),
       anyWkt("<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(2 1)"));
   EXPECT_EQ(WktTransform{}(GeoPointOrWkt{exampleWkt},
+                           util::geo::CRSType::WEB_MERCATOR),
+            anyWkt("<http://www.opengis.net/def/crs/EPSG/0/3857> "
+                   "POINT(111319.490793 222684.208506)"));
+  // WGS84:
+  std::string exampleWktWgs84{
+      "\"<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(2 "
+      "1)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"};
+  EXPECT_EQ(
+      WktTransform{}(GeoPointOrWkt{exampleWktWgs84}, util::geo::CRSType::CRS84),
+      anyWkt("POINT(1 2)"));
+  EXPECT_EQ(
+      WktTransform{}(GeoPointOrWkt{exampleWktWgs84}, util::geo::CRSType::WGS84),
+      anyWkt("<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(2 1)"));
+  EXPECT_EQ(WktTransform{}(GeoPointOrWkt{exampleWktWgs84},
+                           util::geo::CRSType::WEB_MERCATOR),
+            anyWkt("<http://www.opengis.net/def/crs/EPSG/0/3857> "
+                   "POINT(111319.490793 222684.208506)"));
+  // WEB_MERCATOR:
+  std::string exampleWktWebMerc{
+      "\"<http://www.opengis.net/def/crs/EPSG/0/3857> POINT(111319.490793 "
+      "222684.208506)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"};
+  EXPECT_EQ(WktTransform{}(GeoPointOrWkt{exampleWktWebMerc},
+                           util::geo::CRSType::CRS84),
+            anyWkt("POINT(1 2)"));
+  EXPECT_EQ(WktTransform{}(GeoPointOrWkt{exampleWktWebMerc},
+                           util::geo::CRSType::WGS84),
+            anyWkt("<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(2 1)"));
+  EXPECT_EQ(WktTransform{}(GeoPointOrWkt{exampleWktWebMerc},
                            util::geo::CRSType::WEB_MERCATOR),
             anyWkt("<http://www.opengis.net/def/crs/EPSG/0/3857> "
                    "POINT(111319.490793 222684.208506)"));
