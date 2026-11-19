@@ -1063,7 +1063,7 @@ TEST_F(LocatedTriplesTest, identifyTriplesToVacuum) {
   const auto& index = qec->getIndex().getImpl();
   auto& perm = index.getPermutation(Permutation::PSO);
 
-  LocalVocab lv;
+  LocalVocab lv{ad_utility::testing::makeAllocator()};
   auto cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
   using TC = TripleComponent;
