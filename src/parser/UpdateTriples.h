@@ -20,7 +20,9 @@ namespace updateClause {
 struct UpdateTriples {
   using Vec = qlm::vector<SparqlTripleSimpleWithGraph>;
   Vec triples_;
-  LocalVocab localVocab_{};
+  // The parser has no access to the allocator of the query, but the size of
+  // the local vocab is bounded by the size of the update.
+  LocalVocab localVocab_{ad_utility::makeUnlimitedAllocator<Id>()};
 
   // Constructors. The `allocator` is used for the `triples_`.
   explicit UpdateTriples(const qlever::Allocator<Id>& allocator);

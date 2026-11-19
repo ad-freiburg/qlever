@@ -26,7 +26,7 @@ TEST(UpdateTriples, ConstructorWithAllocator) {
 TEST(UpdateTriples, ConstructorsAndAssignments) {
   auto* qec = ad_utility::testing::getQec();
   auto allocator = ad_utility::testing::makeAllocator();
-  LocalVocab l;
+  LocalVocab l{allocator};
   auto iri = ad_utility::testing::iriLocalVocabEntry(
       "<hallo>", qec->getLocalVocabContext());
   l.getIndexAndAddIfNotContained(iri);
