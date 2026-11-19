@@ -34,24 +34,13 @@
 // the prefix can be copied verbatim to another frame, and the remainder of the
 // other frame can be compressed independently by an ordinary ZSTD compressor.
 //
-// This works as follows. A compressed block of a ZSTD frame may depend on the
-// state of the decoder after the previous blocks: (1) the window of the
-// previous output, (2) the entropy tables of the previous block, and (3) the
-// three "repeat offsets". A fresh compressor only refers to data that it has
-// compressed itself (1), and never reuses the entropy tables in its first
-// block (2), but it assumes that the repeat offsets are the ones at the start
-// of a frame, namely `{1, 4, 8}` (3). The stable prefix is therefore encoded
-// such that the repeat offsets at its end are `{1, 4, 8}`: its last block ends
-// with three matches with the offsets 8, 4, and 1 (in this order), followed
-// only by literals. Then the decoder is in the same state as at the start of a
-// frame (as far as the following blocks are concerned), and the blocks of a
-// fresh compression of the remainder can be appended.
+// How the stable prefix is encoded such that its blocks can be combined with
+// the blocks of another compressor is described in `ZstdStablePrefix.h`.
 //
-// NOTE: Encoding the stable prefix requires the experimental sequence API of
-// ZSTD, which is only used with ZSTD 1.5.5 or newer. With older versions (and
-// if the stable prefix cannot be encoded, see `compressBlob`), the blob is
-// written without a stable prefix. Copying an existing stable prefix works
-// with every version.
+// NOTE: Encoding the stable prefix requires ZSTD 1.5.5 or newer. With older
+// versions (and if the stable prefix cannot be encoded, see `compressBlob`),
+// the blob is written without a stable prefix. Copying an existing stable
+// prefix works with every version.
 namespace qlever::blobCompression {
 
 // The default ZSTD compression level of a blob. The low levels are much faster
@@ -62,7 +51,7 @@ constexpr int defaultCompressionLevel = 1;
 // default level, because the stable prefix is typically compressed only once
 // and then copied (see above). Note that the levels of ZSTD that use the
 // `btopt` or `btultra` strategies are not supported by the sequence API of all
-// versions of ZSTD.
+// versions of ZSTD (see `encodeStablePrefix` in `ZstdStablePrefix.h`).
 constexpr int stablePrefixCompressionLevel = 9;
 
 // The smallest stable prefix (in bytes) that is encoded as such. Smaller

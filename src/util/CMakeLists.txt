@@ -19,4 +19,9 @@ qlever_target_link_libraries(antlrErrorHandling stringUtils antlr4_umbrella)
 add_library(qlever_util GlobalExecutor.cpp BinaryDiffApplier.cpp RegexSet.cpp ParseableDuration.cpp UnitOfMeasurement.cpp Date.cpp DateYearDuration.cpp Duration.cpp CancellationHandle.cpp LazyJsonParser.cpp BlankNodeManager.cpp IoUringManager.cpp FilesystemHelpers.cpp QueryEventLog.cpp ResourceMonitor.cpp KernelBugWorkaround.cpp)
 qlever_target_link_libraries(qlever_util antlrErrorHandling s2 pb_util pb_util_geo pb_util_json rdfTypes antlr4_umbrella)
 
+# The helpers for the ZSTD frame format and the stable prefix, see
+# `compressionUsingZstd/ZstdStablePrefix.h`.
+add_library(zstdHelpers compressionUsingZstd/ZstdFrameFormat.cpp compressionUsingZstd/ZstdStablePrefix.cpp)
+qlever_target_link_libraries(zstdHelpers)
+
 add_subdirectory(metrics)

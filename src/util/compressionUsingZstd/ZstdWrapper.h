@@ -19,6 +19,7 @@
 
 #include "backports/span.h"
 #include "util/Exception.h"
+#include "util/UninitializedAllocator.h"
 
 class ZstdWrapper {
  public:
@@ -29,6 +30,23 @@ class ZstdWrapper {
     auto compressedSize = checkError(ZSTD_compress(
         result.data(), result.size(), src, numBytes, compressionLevel));
     result.resize(compressedSize);
+    return result;
+  }
+
+  // A buffer whose bytes are not zero-initialized.
+  using UninitializedBuffer =
+      std::vector<char, ad_utility::default_init_allocator<char>>;
+
+  // Same as `compress`, but the buffer for the worst-case size of the result is
+  // not zero-initialized, so only the pages that are actually written are
+  // touched (the result is typically much smaller than the worst case). This
+  // avoids a lot of page faults for large inputs.
+  static UninitializedBuffer compressToUninitializedBuffer(
+      ql::span<const char> data, int compressionLevel) {
+    UninitializedBuffer result(ZSTD_compressBound(data.size()));
+    result.resize(
+        checkError(ZSTD_compress(result.data(), result.size(), data.data(),
+                                 data.size(), compressionLevel)));
     return result;
   }
 
