@@ -120,7 +120,8 @@ static Result::Generator importBinaryGenerator(
   // contains the number of rows (see `importNumRows`).
   if (header.variableNames_.empty()) {
     co_yield Result::IdTableVocabPair{
-        importNumRows(serializer, numColumns, qec), LocalVocab{}};
+        importNumRows(serializer, numColumns, qec),
+        LocalVocab{qec.getAllocator()}};
     co_return;
   }
 

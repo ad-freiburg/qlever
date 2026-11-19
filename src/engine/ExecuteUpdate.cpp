@@ -113,7 +113,7 @@ ExecuteUpdate::transformTriplesTemplate(
   // NOTE: Not necessarily all of these will be added to the `LocalVocab` of
   // the `DeltaTriple`. For example, with `<a> <b> ?c` in an `INSERT` template,
   // `<a>` and `<b>` would not become part of it if `?c` has no solutions.
-  LocalVocab localVocab{};
+  LocalVocab localVocab{index.allocator()};
 
   // Lookup the `TripleComponent`s in sorted order.
   //
