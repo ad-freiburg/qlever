@@ -27,8 +27,8 @@
 #include "util/Generators.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
-#include "util/JoinAlgorithms/JoinColumnMapping.h"
 #include "util/TypeTraits.h"
+#include "util/joinAlgorithms/JoinColumnMapping.h"
 
 namespace qlever::joinHelpers {
 
@@ -99,8 +99,8 @@ IteratorWithSingleCol<numJoinColumns> convertGeneratorFromScan(
         sendPriority = SendPriority::IfDue;
         // IndexScans don't have a local vocabulary, so we can just use an empty
         // one.
-        return makeIdTableAndFirstCols<numJoinColumns>(std::move(table),
-                                                       LocalVocab{});
+        return makeIdTableAndFirstCols<numJoinColumns>(
+            std::move(table), LocalVocab{scan.allocator()});
       });
 
   return IteratorWithSingleCol<numJoinColumns>{std::move(range)};

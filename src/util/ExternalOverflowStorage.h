@@ -15,9 +15,9 @@
 #include <vector>
 
 #include "util/File.h"
-#include "util/Serializer/FileSerializer.h"
-#include "util/Serializer/Serializer.h"
 #include "util/TypeTraits.h"
+#include "util/serializer/FileSerializer.h"
+#include "util/serializer/Serializer.h"
 
 namespace ad_utility {
 

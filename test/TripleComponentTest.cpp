@@ -6,6 +6,7 @@
 #include <gmock/gmock.h>
 
 #include "./util/IdTestHelpers.h"
+#include "./util/LocalVocabTestHelpers.h"
 #include "./util/ParsedQueryTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "global/Id.h"
@@ -89,6 +90,19 @@ TEST(TripleComponent, setAndGetId) {
   ASSERT_EQ(tc.getId(), id);
   const TripleComponent tcConst = std::move(tc);
   ASSERT_EQ(tcConst.getId(), id);
+}
+
+// Test that a `TripleComponent` constructed from a `LiteralOrIri` holds the
+// contained `Iri` or `Literal`.
+TEST(TripleComponent, constructFromLiteralOrIri) {
+  using ad_utility::triple_component::LiteralOrIri;
+  TripleComponent iri{LiteralOrIri::fromStringRepresentation("<x>")};
+  ASSERT_TRUE(iri.isIri());
+  EXPECT_EQ(iri.getIri().toStringRepresentation(), "<x>");
+
+  TripleComponent literal{LiteralOrIri::fromStringRepresentation("\"abc\"@en")};
+  ASSERT_TRUE(literal.isLiteral());
+  EXPECT_EQ(literal.getLiteral().toStringRepresentation(), "\"abc\"@en");
 }
 
 // Test that `getNumber` returns the value of an integer or a double (also as an
@@ -263,7 +277,7 @@ TEST(TripleComponent, toValueId) {
   ASSERT_EQ(toValueId(tc, index).value(),
             getId(std::string{HAS_PATTERN_PREDICATE}));
 
-  auto lv = LocalVocab();
+  auto lv = ad_utility::testing::makeLocalVocab();
   auto expectLocalVocab = [&lv, &index](TripleComponent tc, size_t pos) {
     auto id = toValueId(std::move(tc), index, lv);
     ASSERT_TRUE(id.getDatatype() == Datatype::LocalVocabIndex);

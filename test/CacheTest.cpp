@@ -9,7 +9,7 @@
 
 #include "util/Cache.h"
 #include "util/DefaultValueSizeGetter.h"
-#include "util/MemorySize/MemorySize.h"
+#include "util/memorySize/MemorySize.h"
 
 using std::string;
 using namespace ad_utility::memory_literals;

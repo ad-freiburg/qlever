@@ -9,6 +9,7 @@
 #include "./util/ColumnStrippingTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
+#include "./util/LocalVocabTestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "engine/ExistsJoin.h"
@@ -42,6 +43,8 @@
 #include "util/IndexTestHelpers.h"
 #include "util/LocalVocabEntryTestHelpers.h"
 #include "util/OperationTestHelpers.h"
+
+using ad_utility::testing::makeLocalVocab;
 
 static constexpr auto executor = &ad_utility::testing::singleThreadExecutor;
 
@@ -456,7 +459,7 @@ TEST_F(GroupByOptimizations, countStarOptimizationWorksAsExpected) {
         qec,
         makeIdTableFromVector({{Id::makeUndefined()}, {1}, {2}, {2}, {4}, {8}}),
         std::vector<std::optional<Variable>>{Variable{"?a"}}, false,
-        std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt, true);
+        std::vector<ColumnIndex>{}, makeLocalVocab(), std::nullopt, true);
     GroupByImpl groupBy{
         qec,
         {},
@@ -705,12 +708,8 @@ TEST_F(GroupByOptimizations, existsInGroupByAlias) {
     parsedQuery::Values valuesClause;
     valuesClause._inlineValues._variables = variables;
     for (const auto& row : rows) {
-      std::vector<TripleComponent> valueRow;
-      valueRow.reserve(row.size());
-      for (int64_t value : row) {
-        valueRow.emplace_back(value);
-      }
-      valuesClause._inlineValues._values.push_back(std::move(valueRow));
+      valuesClause._inlineValues._values.push_back(
+          ::ranges::to<std::vector<TripleComponent>>(row));
     }
     pq._rootGraphPattern._graphPatterns.emplace_back(std::move(valuesClause));
     for (const auto& variable : variables) {
@@ -2901,7 +2900,7 @@ TEST(GroupBy, localVocabIsProperlyCloned) {
   idTables.push_back(makeIdTableFromVector({{1}, {2}}, &Id::makeFromInt));
   idTables.push_back(makeIdTableFromVector({{2}}, &Id::makeFromInt));
   // This issue occurs only when the vocab contains any actual values.
-  LocalVocab dummy{};
+  LocalVocab dummy = makeLocalVocab();
   dummy.getIndexAndAddIfNotContained(localVocabEntryFromStringRepresentation(
       "\"dummy\"", qec->getLocalVocabContext()));
   auto subtree = makeExecutionTree<ValuesForTesting>(

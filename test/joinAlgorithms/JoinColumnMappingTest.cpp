@@ -10,7 +10,7 @@
 #include <array>
 #include <vector>
 
-#include "util/JoinAlgorithms/JoinColumnMapping.h"
+#include "util/joinAlgorithms/JoinColumnMapping.h"
 
 using ad_utility::JoinColumnMapping;
 using JoinColumns = std::vector<std::array<ColumnIndex, 2>>;

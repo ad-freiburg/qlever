@@ -15,6 +15,7 @@
 #include <string_view>
 #include <variant>
 
+#include "./AllocatorTestHelpers.h"
 #include "global/Id.h"
 #include "index/LocalVocab.h"
 #include "index/LocalVocabContext.h"
@@ -71,11 +72,13 @@ inline LocalVocabEntry localVocabEntryFromStringRepresentation(
 //
 // NOTE: The `Id` is always of type `LocalVocabIndex`, even if the word is
 // contained in the vocabulary of the index (unlike for
-// `getIdAndAddIfNotContained`).
-inline auto makeGetLocalVocabId() {
-  return [localVocab =
-              std::make_shared<LocalVocab>()](const LocalVocabEntry& entry) {
-    return Id::makeFromLocalVocabIndex(
+// `getIdAndAddIfNotContained`). The `IdType` is the `Id` of the current build
+// by default, the tests for both layouts of an `Id` pass it explicitly.
+template <typename IdType = Id>
+auto makeGetLocalVocabId() {
+  return [localVocab = std::make_shared<LocalVocab>(makeAllocator())](
+             const LocalVocabEntry& entry) {
+    return IdType::makeFromLocalVocabIndex(
         localVocab->getIndexAndAddIfNotContained(entry));
   };
 }

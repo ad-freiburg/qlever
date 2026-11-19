@@ -15,6 +15,7 @@
 #include <string>
 #include <vector>
 
+#include "./util/GTestHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "./util/IndexTestHelpers.h"
 #include "backports/StartsWithAndEndsWith.h"
@@ -79,6 +80,10 @@ TEST(OrderByComparator, getTermKind) {
   auto kind = [&comparator](Id id) { return comparator.getTermKind(id); };
 
   EXPECT_EQ(kind(UndefId()), TermKind::Undefined);
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      kind(Id::makeFromTripleTermIndex(TripleTermIndex::make(3))),
+      ::testing::StrEq("ORDER BY for triple terms is not supported yet"),
+      std::runtime_error);
 
   EXPECT_EQ(kind(BlankNodeId(3)), TermKind::BlankNode);
   auto blankNodeOfBnodeFunction = localVocabEntryFromStringRepresentation(
@@ -108,7 +113,7 @@ TEST(OrderByComparator, getTermKind) {
             TermKind::Literal);
 
   // An `Id` with an invalid datatype.
-  static_assert(static_cast<int>(Datatype::MaxValue) < 15);
+  static_assert(qlever::enumSize<Datatype> <= 15);
   EXPECT_ANY_THROW(kind(Id::fromBits(Id::DatatypeType{15}, 0)));
 }
 

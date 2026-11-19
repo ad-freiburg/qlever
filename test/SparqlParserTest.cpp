@@ -1494,6 +1494,19 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
     ASSERT_EQ(q._rootGraphPattern._filters[0].expression_.getDescriptor(),
               "(LANG(?x) = \"en\")");
   }
+  // Ensure filter is applied regularly if the language is a literal with a
+  // language tag or a datatype (which `LANG(?y)` never equals).
+  auto filtersFor = [](std::string_view language) {
+    return parseQuery(
+               absl::StrCat("PREFIX xsd: <http://www.w3.org/2001/XMLSchema#> "
+                            "SELECT * { ?x <label> ?y . FILTER (LANG(?y) = ",
+                            language, ")}"))
+        ._rootGraphPattern._filters.size();
+  };
+  EXPECT_EQ(filtersFor("\"en\"@de"), 1u);
+  EXPECT_EQ(filtersFor("\"en\"^^<x>"), 1u);
+  // A literal with the datatype `xsd:string` is a plain literal.
+  EXPECT_EQ(filtersFor("\"en\"^^xsd:string"), 0u);
   // Ensure filter is applied regularly if list is empty.
   {
     ParsedQuery q =

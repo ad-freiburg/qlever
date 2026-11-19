@@ -33,8 +33,8 @@
 #include "util/Generators.h"
 #include "util/HashMap.h"
 #include "util/Iterators.h"
-#include "util/JoinAlgorithms/JoinAlgorithms.h"
 #include "util/Math.h"
+#include "util/joinAlgorithms/JoinAlgorithms.h"
 
 using namespace qlever::joinHelpers;
 using namespace qlever::joinWithIndexScanHelpers;
@@ -784,7 +784,7 @@ Result JoinImpl::computeResultForTwoMaterializedInputs(
 // _____________________________________________________________________________
 Result JoinImpl::createEmptyResult() const {
   return {IdTable{getResultWidth(), allocator()}, resultSortedOn(),
-          LocalVocab{}};
+          LocalVocab{allocator()}};
 }
 
 // _____________________________________________________________________________

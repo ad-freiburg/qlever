@@ -299,7 +299,8 @@ inline std::vector<std::string> printTable(const QueryExecutionContext* qec,
     std::string line = "";
     for (size_t k = 0; k < table->idTableView().numColumns(); k++) {
       auto test = ql::exportIds::idToStringAndType(
-          qec->getIndex(), table->idTableView().at(i, k), {});
+          qec->getIndex(), table->idTableView().at(i, k),
+          LocalVocab{qec->getAllocator()});
       line += test.value().first;
       line += " ";
     }

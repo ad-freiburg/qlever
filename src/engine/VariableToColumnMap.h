@@ -16,8 +16,8 @@
 #include "global/Id.h"
 #include "rdfTypes/Variable.h"
 #include "util/HashMap.h"
-#include "util/Serializer/Serializer.h"
 #include "util/TypeTraits.h"
+#include "util/serializer/Serializer.h"
 
 // TODO<joka921> We have a cyclic dependency between `Id.h` and
 // `VariableToColumnMap.h`.
@@ -98,11 +98,9 @@ CPP_template(typename S, typename T)(
 void serializeDeterministically(S& serializer, T&& map) {
   if constexpr (ad_utility::serialization::WriteSerializer<S>) {
     serializer << map.size();
-    std::vector<const VariableToColumnMap::value_type*> sortedEntries;
-    sortedEntries.reserve(map.size());
-    for (const auto& entry : map) {
-      sortedEntries.push_back(&entry);
-    }
+    auto sortedEntries =
+        map | ql::views::transform([](const auto& entry) { return &entry; }) |
+        ::ranges::to_vector;
     ql::ranges::sort(sortedEntries, {},
                      [](const auto* entry) -> const std::string& {
                        return entry->first.name();

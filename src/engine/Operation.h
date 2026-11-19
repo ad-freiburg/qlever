@@ -664,9 +664,9 @@ class Operation : public std::enable_shared_from_this<Operation> {
   // `children` (which must be the children of this operation, in the order of
   // `getChildren()`) unchanged, and return `cloneWithNewChildren` of the
   // result. The push down is refused if it would change the values the `BIND`
-  // expression sees, or if any child contains the `BIND`'s target. The other
-  // `children` may be `nullptr` (they are then ignored), but the chosen child
-  // must not be.
+  // expression sees, if any child contains the `BIND`'s target, or if the
+  // `BIND` expression is a constant. The other `children` may be `nullptr`
+  // (they are then ignored), but the chosen child must not be.
   //
   // NOTE 1: Each variable of the expression must be contained in the chosen
   // child, and if it might be `UNDEF` there, no other child may contain it.
@@ -676,6 +676,11 @@ class Operation : public std::enable_shared_from_this<Operation> {
   // NOTE 2: A child can only contain the target if its variables are not
   // visible outside of this operation (e.g. the right child of `MINUS`). After
   // the push down, the target would then wrongly become a join column.
+  //
+  // NOTE 3: A constant `BIND` on top of this operation is computed only for the
+  // rows of its result. Pushed down, it would be computed for all rows of the
+  // child (e.g. for a whole relation as a constant column of an `IndexScan`)
+  // and then copied by this operation.
   std::optional<std::shared_ptr<QueryExecutionTree>> pushDownBindToChild(
       const parsedQuery::Bind& bind,
       qlm::vector<std::shared_ptr<QueryExecutionTree>> children,
