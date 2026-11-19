@@ -74,7 +74,9 @@ inline IdTable scanRelation(const std::string& filename,
   // blocks in the scan is still tested). For every 10th scan (on average), we
   // pass all the blocks.
   BlockMetadataSpan allBlocks{blocks};
-  ad_utility::SlowRandomIntGenerator<size_t> randomInt{0, 9};
+  // Construct the generator only once (a `std::random_device` per scan costs
+  // more than the scan itself under a parallel `ctest`).
+  static ad_utility::SlowRandomIntGenerator<size_t> randomInt{0, 9};
   auto first = allBlocks.begin();
   auto last = allBlocks.end();
   if (randomInt() != 0) {
