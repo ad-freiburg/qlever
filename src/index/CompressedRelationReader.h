@@ -329,7 +329,7 @@ class CompressedRelationReader {
    * threads.
    *
    * @param columnSubset If set, only these columns of the result (as specified
-   * above) are returned (as for `IdTable::setColumnSubset`, must be sorted).
+   * above) are returned. The indices must be strictly increasing.
    * The other columns are not read from disk, unless they are needed for
    * merging located triples, filtering by graph, or removing duplicates.
    *

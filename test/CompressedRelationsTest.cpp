@@ -430,8 +430,10 @@ void testCompressedRelations(const Inputs& inputsOriginalBeforeCopy,
     for (ColumnIndex col = 0; col < table.numColumns(); ++col) {
       subsets.push_back({col});
     }
-    subsets.push_back(::ranges::to<std::vector>(
-        ql::views::iota(ColumnIndex{1}, table.numColumns())));
+    if (table.numColumns() > 2) {
+      subsets.push_back(::ranges::to<std::vector>(
+          ql::views::iota(ColumnIndex{1}, table.numColumns())));
+    }
     for (const auto& subset : subsets) {
       IdTable expected =
           reader.scan(ScanSpecAndBlocks{scanSpec, blocks}, additionalColumns,
@@ -2236,6 +2238,18 @@ TEST(CompressedRelationWriter, scanWithGraphs) {
         std::vector<ColumnIndex>{1});
     EXPECT_THAT(res, matchesIdTableFromVector({{4}, {4}, {4}, {5}, {4}, {5}}))
         << "Failed with rowsPerBlock " << rowsPerBlock;
+
+    // A `columnSubset` that is not strictly increasing or contains an index
+    // that is not a result column is rejected.
+    for (std::vector<ColumnIndex> subset :
+         {std::vector<ColumnIndex>{1, 0}, std::vector<ColumnIndex>{1, 1},
+          std::vector<ColumnIndex>{2}}) {
+      AD_EXPECT_THROW_WITH_MESSAGE(
+          reader->scan(
+              ScanSpecAndBlocks{spec, getBlockMetadataRangesfromVec(blocks)},
+              {}, handle, emptyLocatedTriples, executor(), {}, subset),
+          ::testing::HasSubstr("strictly increasing"));
+    }
 
     // std::nullopt matches all graphs, but the default graph ('0' in this test)
     // should be filtered out.

@@ -384,7 +384,7 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
     if (result.has_value()) {
       return std::move(result.value().block_);
     } else {
-      return DecompressedBlock{config.scanColumns_.size(), allocator_};
+      return DecompressedBlock{config.outputColumns_.size(), allocator_};
     }
   }();
 
@@ -1128,6 +1128,13 @@ auto CompressedRelationReader::getScanConfig(
   // Restrict the `outputColumns` (which do not contain the graph column if it
   // is deleted) to the `columnSubset`.
   if (columnSubset.has_value()) {
+    const auto& subset = columnSubset.value();
+    AD_CONTRACT_CHECK(
+        ql::ranges::adjacent_find(subset, std::greater_equal{}) ==
+                subset.end() &&
+            (subset.empty() || subset.back() < outputColumns.size()),
+        "The `columnSubset` of a scan must be strictly increasing and only "
+        "contain indices of result columns.");
     outputColumns = ::ranges::to<std::vector>(
         columnSubset.value() |
         ql::views::transform(
