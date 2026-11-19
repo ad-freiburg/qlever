@@ -19,6 +19,7 @@
 #include "backports/algorithm.h"
 #include "backports/iterator.h"
 #include "backports/shift.h"
+#include "util/Allocator.h"
 #include "util/ContainersWithAllocator.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
@@ -136,16 +137,6 @@ auto transformToVector(Range&& input, F unaryOp,
          ql::views::transform(std::move(unaryOp)) |
          ::ranges::to<Vector>(vectorArgs...);
 }
-
-// True iff `T` is an instantiation of `qlever::Allocator`. NOTE: This cannot be
-// expressed via `isInstantiation`, because clang rejects the pack expansion for
-// the alias template `qlever::Allocator`.
-template <typename T, typename = void>
-inline constexpr bool isQleverAllocator = false;
-template <typename T>
-inline constexpr bool
-    isQleverAllocator<T, std::void_t<typename T::value_type>> =
-        std::is_same_v<T, qlever::Allocator<typename T::value_type>>;
 }  // namespace algorithm::detail
 
 /**
@@ -163,7 +154,7 @@ auto transform(Range&& input, F unaryOp) {
  * given `allocator`, which has to be a `qlever::Allocator`.
  */
 CPP_template(typename Range, typename F, typename Alloc)(
-    requires algorithm::detail::isQleverAllocator<Alloc>)
+    requires qlever::isQleverAllocator<Alloc>)
 auto transform(Range&& input, F unaryOp, const Alloc& allocator) {
   return algorithm::detail::transformToVector<qlm::vector>(
       AD_FWD(input), std::move(unaryOp), allocator);
