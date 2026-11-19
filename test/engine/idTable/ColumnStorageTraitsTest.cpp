@@ -19,6 +19,7 @@
 #include "engine/idTable/splitLayout/IdColumnVector.h"
 #include "global/Id.h"
 #include "rdfTypes/GeoPoint.h"
+#include "util/CompilerWarnings.h"
 #include "util/memorySize/MemorySize.h"
 
 namespace {
@@ -161,7 +162,11 @@ TYPED_TEST(ColumnStorageTraitsTest, idsKeepAllTheirBits) {
 // refer to the same storage: a write via one of them is seen by the others.
 TYPED_TEST(ColumnStorageTraitsTest, allAccessesReferToTheSameStorage) {
   TableOf<TypeParam> table{2, ad_utility::testing::makeAllocator()};
+  // GCC 13 and 16 emit a false `-Wstringop-overflow` for the vectorized copy of
+  // the old datatypes of the split columns when they grow to a small size.
+  DISABLE_STRINGOP_OVERFLOW_WARNINGS
   table.resize(3);
+  GCC_REENABLE_WARNINGS
   table(0, 0) = I(10);
   table.at(1, 0) = I(11);
   table.getColumn(0)[2] = I(12);
