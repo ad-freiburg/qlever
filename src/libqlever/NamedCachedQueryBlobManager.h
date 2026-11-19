@@ -90,13 +90,14 @@ struct BlobSerializationConfig {
   // `blobCompression::BlobEncoding`).
   int compressionLevel_ = blobCompression::defaultCompressionLevel;
 
-  // If true, then the start of the blob (the header, the index metadata, and
-  // the vocabulary) is compressed as a stable prefix (see
-  // `BlobCompression.h`). This makes the compression slower, but the stable
-  // prefix does not have to be compressed again when a blob with the same
-  // vocabulary is computed from this blob (a follow-up PR uses this when
-  // applying a blob diff).
-  bool writeStablePrefix_ = false;
+  // If true, then the blob is written as a segmented ZSTD frame (see
+  // `BlobCompression.h`) with three segments: (1) the header, the index
+  // metadata, and the vocabulary, (2) the secondary vocabulary (empty in the
+  // old format), and (3) the named results. Then the compressed form of the
+  // unchanged segments is reused when a blob diff is applied (see
+  // `blobDiff/SegmentedBlobDiff.h`). This makes the compression slightly
+  // slower and the blob slightly larger.
+  bool writeSegments_ = false;
 };
 
 // Serialize and deserialize the vocabulary and the `NamedResultCache` of a

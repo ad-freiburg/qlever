@@ -14,6 +14,7 @@
 
 #include "backports/algorithm.h"
 #include "libqlever/NamedCachedQueryBlobManager.h"
+#include "libqlever/blobDiff/SegmentedBlobDiff.h"
 #include "util/CryptographicHashUtils.h"
 #include "util/Exception.h"
 #include "util/TransparentFunctors.h"
@@ -200,6 +201,9 @@ DecompressedBlobOrError applyBlobDiffToDecompressedBase(
 BlobOrError applyBlobDiffToCompressedBase(
     ql::span<const char> compressedBase, ql::span<const char> diffFile,
     ad_utility::MemorySize maxTargetSize) {
+  if (isSegmentedBlobDiff(diffFile)) {
+    return applySegmentedBlobDiff(compressedBase, diffFile, maxTargetSize);
+  }
   // Run the cheap checks before the (possibly large) base is decompressed:
   // First validate the header of the diff, then compare the size of the
   // decompressed base, which is stored in the header of its ZSTD frame, with
@@ -237,6 +241,9 @@ BlobOrError applyBlobDiffToCompressedBase(
 
 // _____________________________________________________________________________
 std::string describeBlobDiff(ql::span<const char> diffFile) {
+  if (isSegmentedBlobDiff(diffFile)) {
+    return describeSegmentedBlobDiff(diffFile);
+  }
   // Only the header is described, nothing is allocated, so any target size is
   // fine.
   auto headerOrError =

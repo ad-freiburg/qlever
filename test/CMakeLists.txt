@@ -357,7 +357,11 @@ addLinkAndDiscoverTestNoLibs(ConstructDeduplicationModeTest)
 
 addLinkAndDiscoverTest(ZstdCompressionTest zstd ${cmake_thread_libs_init})
 
-addLinkAndDiscoverTest(ZstdHelpersTest zstdHelpers zstd)
+addLinkAndDiscoverTest(ZstdFrameFormatTest zstdHelpers zstd)
+
+addLinkAndDiscoverTest(ZstdIndependentUnitTest zstdHelpers zstd)
+
+addLinkAndDiscoverTest(SegmentedZstdFrameTest zstdHelpers zstd)
 
 addLinkAndDiscoverTest(CompressedBlockFileTest zstd ${cmake_thread_libs_init})
 

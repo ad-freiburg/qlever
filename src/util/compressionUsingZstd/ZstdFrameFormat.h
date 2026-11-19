@@ -17,17 +17,53 @@
 
 #include "backports/span.h"
 
-// Helpers for the parts of the ZSTD frame format (RFC 8878) that the public
-// API of ZSTD does not expose, but which are needed to combine the blocks of
-// several compressed frames into a single frame (see `ZstdStablePrefix.h`).
+// Helpers for the ZSTD frame format (RFC 8878) that are needed to take frames
+// apart and to assemble new frames from the blocks of other frames (see
+// `SegmentedZstdFrame.h`).
 //
-// NOTE: ZSTD has no public type or parser for the header of a block (its
-// `blockProperties_t` and `ZSTD_getcBlockSize` are internal to the library),
-// and no function that writes only the header of a frame. The functions for
-// skippable frames (`ZSTD_writeSkippableFrame`, `ZSTD_readSkippableFrame`) only
-// exist since ZSTD 1.5.0 and 1.5.2 respectively, which is newer than the ZSTD
-// of some of the supported platforms (for example Ubuntu 22.04 ships 1.4.8).
+// NOTE: Everything here only uses the stable API of ZSTD (no
+// `ZSTD_STATIC_LINKING_ONLY`) that exists in all supported versions (1.4.0 and
+// newer). The stable API has no functions for the headers of frames and
+// blocks, nor for skippable frames, which is why these are implemented here.
+// All integers of the frame format are little endian, which is the native byte
+// order on all platforms that QLever currently supports.
 namespace ad_utility::zstd {
+
+// _____________________________________________________________________________
+// Frame headers.
+
+// The parts of the header of a (regular, not skippable) ZSTD frame that are
+// needed here.
+struct FrameHeader {
+  // The size of the frame header in bytes; the first block starts right after
+  // it.
+  size_t headerSize_ = 0;
+  // True iff the frame ends with a 4-byte checksum (after the last block).
+  bool hasChecksum_ = false;
+};
+
+// Parse the header of the regular ZSTD frame at the start of `bytes`. Return
+// `std::nullopt` if `bytes` does not start with a complete and valid frame
+// header. Do not throw for any input.
+std::optional<FrameHeader> parseFrameHeader(ql::span<const char> bytes);
+
+// The size of the frame header that is written by
+// `appendSingleSegmentFrameHeader`.
+constexpr size_t singleSegmentFrameHeaderSize = 13;
+
+// Append the header of a frame with the given `contentSize` to `out`. The frame
+// is a "single segment" frame (its window is the whole content), such that
+// blocks that were written by different compressors (with different windows)
+// can follow it. It has neither a checksum nor a dictionary.
+//
+// NOTE: A streaming decompressor needs a buffer for the whole window, so it
+// has to allow a window of the size of the content (see
+// `ZSTD_d_windowLogMax`). The one-shot decompression is not affected.
+void appendSingleSegmentFrameHeader(std::vector<char>& out,
+                                    uint64_t contentSize);
+
+// _____________________________________________________________________________
+// Blocks.
 
 // The header of a block of a ZSTD frame.
 struct BlockHeader {
@@ -49,6 +85,9 @@ struct BlockHeader {
   // `std::nullopt` if `bytes` is too short for the header or for the complete
   // block, or if the block has the reserved type.
   static std::optional<BlockHeader> read(ql::span<const char> bytes);
+
+  // Append the header to `out`.
+  void append(std::vector<char>& out) const;
 };
 
 // The blocks of a single frame that was written by the ZSTD compressor,
@@ -63,46 +102,44 @@ struct FrameBlocks {
 // without a checksum. Throw if it is not.
 FrameBlocks blocksOfFrame(ql::span<const char> frame);
 
-// Return the bytes of the frame that starts at `frame[0]` from the end of its
-// header up to `end` (exclusive), if they consist of one or more complete
-// blocks, none of which is the last block of the frame, else `std::nullopt`.
-// Do not throw for any input.
-std::optional<ql::span<const char>> leadingNonLastBlocks(
-    ql::span<const char> frame, size_t end);
+// If `blocks` consists of one or more complete blocks, of which only the last
+// one may have the last-block flag set, then return the offset of the header of
+// the last block, else `std::nullopt`. Do not throw for any input.
+std::optional<size_t> lastBlockHeaderOffset(ql::span<const char> blocks);
 
-// Clear the last-block flag of the block whose header starts at
-// `blocks[headerOffset]`, such that further blocks can follow it.
-void clearLastBlockFlag(ql::span<char> blocks, size_t headerOffset);
+// Set or clear the last-block flag of the block whose header starts at
+// `blocks[headerOffset]`.
+void setLastBlockFlag(ql::span<char> blocks, size_t headerOffset, bool isLast);
 
-// The size of the frame header that is written by
-// `appendSingleSegmentFrameHeader`.
-constexpr size_t singleSegmentFrameHeaderSize = 13;
+// Decompress the `blocks` (as returned by `blocksOfFrame`, possibly with the
+// last-block flag cleared), which have to decode to exactly `contentSize`
+// bytes, into `out`, which has to have room for `contentSize` bytes. The blocks
+// must not depend on blocks that precede them (see `ZstdIndependentUnit.h`).
+// They are copied after a new frame header, which is cheap compared to the
+// decompression itself. Return false if the blocks are corrupted. Do not throw
+// for any input.
+bool decompressBlocks(ql::span<const char> blocks, uint64_t contentSize,
+                      ql::span<char> out);
 
-// Append the header of a frame with the given `contentSize` to `out`. The frame
-// is a "single segment" frame (its window is the whole content), such that
-// blocks that were written by different compressors (with different windows)
-// can follow it. It has neither a checksum nor a dictionary.
-//
-// NOTE: A streaming decompressor needs a buffer for the whole window, so it
-// has to allow a window of the size of the content (see
-// `ZSTD_d_windowLogMax`). The one-shot decompression is not affected.
-void appendSingleSegmentFrameHeader(std::vector<char>& out,
-                                    uint64_t contentSize);
+// _____________________________________________________________________________
+// Skippable frames, which every ZSTD decompressor ignores.
 
 // The size of the header of a skippable frame (its magic number and the size
 // of its content).
 constexpr size_t skippableFrameHeaderSize = 8;
 
 // Append a skippable frame with the `magicVariant` (in `[0, 16)`) and the
-// `content` to `out`. Every ZSTD decompressor ignores it.
-void appendSkippableFrame(std::vector<char>& out, uint32_t magicVariant,
-                          ql::span<const char> content);
+// `content` to `out`. The frame also stores its own size in its last 4 bytes,
+// such that it can be found from the end of the data (see
+// `readTrailingSkippableFrame`).
+void appendTrailingSkippableFrame(std::vector<char>& out, uint32_t magicVariant,
+                                  ql::span<const char> content);
 
-// If `bytes` ends with a skippable frame with the `magicVariant` and with
-// exactly `contentSize` bytes of content, then return that content, else
-// `std::nullopt`. Do not throw for any input.
+// If `bytes` ends with a skippable frame that was written by
+// `appendTrailingSkippableFrame` with the `magicVariant`, then return its
+// `content`, else `std::nullopt`. Do not throw for any input.
 std::optional<ql::span<const char>> readTrailingSkippableFrame(
-    ql::span<const char> bytes, uint32_t magicVariant, size_t contentSize);
+    ql::span<const char> bytes, uint32_t magicVariant);
 
 }  // namespace ad_utility::zstd
 

@@ -588,12 +588,14 @@ std::vector<char> NamedCachedQueryBlobManager::serialize(
         serializer, indexImpl, indexImpl.getVocab().getUnderlyingVocabulary(),
         config.excludedEntryRegexes_);
   }
-  // Everything up to here (the header, the metadata, and the vocabulary) is
-  // the stable prefix of the blob (see `BlobSerializationConfig`).
-  const uint64_t stablePrefixSize = serializer.getCurrentPosition();
+  // The first two segments of the blob (see
+  // `BlobSerializationConfig::writeSegments_`) end here and after the
+  // secondary vocabulary.
+  const uint64_t vocabularyEnd = serializer.getCurrentPosition();
   if (useNewFormat) {
     serializer << secondaryVocab;
   }
+  const uint64_t secondaryVocabEnd = serializer.getCurrentPosition();
   const uint16_t entriesVersion =
       useNewFormat ? namedResultCacheSerializer::formatVersion
                    : namedResultCacheSerializer::legacyFormatVersion;
@@ -621,10 +623,14 @@ std::vector<char> NamedCachedQueryBlobManager::serialize(
       entriesVersion);
   auto uncompressed = std::move(serializer).data();
 
-  return compressBlob(uncompressed,
-                      blobCompression::BlobEncoding{
-                          config.compressionLevel_,
-                          config.writeStablePrefix_ ? stablePrefixSize : 0});
+  blobCompression::BlobEncoding encoding{config.compressionLevel_,
+                                         std::nullopt};
+  if (config.writeSegments_) {
+    encoding.segmentSizes_ =
+        std::vector<uint64_t>{vocabularyEnd, secondaryVocabEnd - vocabularyEnd,
+                              uncompressed.size() - secondaryVocabEnd};
+  }
+  return compressBlob(uncompressed, encoding);
 }
 
 // _____________________________________________________________________________

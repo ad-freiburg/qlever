@@ -1,6 +1,6 @@
 add_library(qlever Qlever.cpp NamedCachedQueryBlobManager.cpp BlobCompression.cpp
         CanonicalRowOrder.cpp NamedCacheSecondaryVocabRewriter.cpp
-        blobDiff/BlobDiff.cpp)
+        blobDiff/BlobDiff.cpp blobDiff/SegmentedBlobDiff.cpp)
 qlever_target_link_libraries(qlever sparqlParser engine qlever_util index zstdHelpers)
 
 if (EMSCRIPTEN)
