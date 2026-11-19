@@ -1103,7 +1103,7 @@ auto CompressedRelationReader::getScanConfig(
 
   // Determine the columns of the result, that is, the `columnIndices` (which
   // do not contain the graph column yet) restricted to the `columnSubset`.
-  auto outputColumns = [&]() -> ColumnIndices {
+  auto outputColumns = [&columnSubset, &columnIndices]() -> ColumnIndices {
     if (!columnSubset.has_value()) {
       return columnIndices;
     }
