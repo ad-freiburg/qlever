@@ -158,6 +158,13 @@ void CompressedRelationReader::FilterDuplicatesAndGraphs::
 }
 
 // _____________________________________________________________________________
+bool CompressedRelationReader::FilterDuplicatesAndGraphs::blockMightBeFiltered(
+    const CompressedBlockMetadata& blockMetadata) const {
+  return blockNeedsFilteringByGraph(blockMetadata) ||
+         blockMetadata.containsDuplicatesWithDifferentGraphs_;
+}
+
+// _____________________________________________________________________________
 bool CompressedRelationReader::FilterDuplicatesAndGraphs::postprocessBlock(
     IdTable& block, const CompressedBlockMetadata& blockMetadata) const {
   bool filteredByGraph = filterByGraphIfNecessary(block, blockMetadata);
@@ -185,7 +192,8 @@ CompressedRelationReader::lazyScan(
     std::vector<CompressedBlockMetadata> relevantBlockMetadata,
     ColumnIndices additionalColumns, CancellationHandle cancellationHandle,
     const LocatedTriplesPerBlock& locatedTriplesPerBlock,
-    qlever::Executor executor, const LimitOffsetClause& limitOffset) const {
+    qlever::Executor executor, const LimitOffsetClause& limitOffset,
+    std::optional<ColumnIndices> columnSubset) const {
   AD_CONTRACT_CHECK(cancellationHandle);
 
   if (relevantBlockMetadata.empty()) {
@@ -199,7 +207,8 @@ CompressedRelationReader::lazyScan(
   // `executor`, concurrently for several blocks.
   auto readBlock = [this, scanSpec,
                     config = getScanConfig(scanSpec, additionalColumns,
-                                           locatedTriplesPerBlock),
+                                           locatedTriplesPerBlock,
+                                           std::move(columnSubset)),
                     cancellationHandle, &locatedTriplesPerBlock,
                     blocks = std::move(relevantBlockMetadata)](size_t i) {
     cancellationHandle->throwIfCancelled();
@@ -303,10 +312,14 @@ IdTable CompressedRelationReader::scan(
     ColumnIndicesRef additionalColumns,
     const CancellationHandle& cancellationHandle,
     const LocatedTriplesPerBlock& locatedTriplesPerBlock,
-    qlever::Executor executor, const LimitOffsetClause& limitOffset) const {
+    qlever::Executor executor, const LimitOffsetClause& limitOffset,
+    std::optional<ColumnIndices> columnSubset) const {
   const auto& scanSpec = scanSpecAndBlocks.scanSpec_;
-  auto columnIndices = prepareColumnIndices(scanSpec, additionalColumns);
-  IdTable result(columnIndices.size(), allocator_);
+  auto numColumns =
+      columnSubset.has_value()
+          ? columnSubset.value().size()
+          : prepareColumnIndices(scanSpec, additionalColumns).size();
+  IdTable result(numColumns, allocator_);
   // Compute an upper bound for the size and reserve enough space in the
   // result.
   auto sizes = scanSpecAndBlocks.getBlockMetadataView() |
@@ -323,7 +336,7 @@ IdTable CompressedRelationReader::scan(
            convertBlockMetadataRangesToVector(scanSpecAndBlocks.blockMetadata_),
            {additionalColumns.begin(), additionalColumns.end()},
            cancellationHandle, locatedTriplesPerBlock, std::move(executor),
-           limitOffset)) {
+           limitOffset, std::move(columnSubset))) {
     result.insertAtEnd(block);
   }
   cancellationHandle->throwIfCancelled();
@@ -420,6 +433,15 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
   // Copy all additional columns as-is.
   for (ColumnIndex i : ad_utility::integerRange(allAdditionalColumns.size())) {
     indicesToCopy.push_back(3 + i);
+  }
+
+  // Copy only the `columnSubset_` of the columns (if any).
+  if (scanConfig.columnSubset_.has_value()) {
+    indicesToCopy = ::ranges::to<std::vector>(
+        scanConfig.columnSubset_.value() |
+        ql::views::transform([&indicesToCopy](ColumnIndex i) {
+          return indicesToCopy.at(i);
+        }));
   }
 
   // Now copy the range `[beginIdx, endIdx)` from `block` to `result`.
@@ -824,6 +846,9 @@ CompressedRelationReader::decompressAndPostprocessBlock(
     // extra column.
     scanConfig.graphFilter_.deleteGraphColumnIfNecessary(decompressedBlock);
   }
+  if (scanConfig.columnSubset_.has_value()) {
+    decompressedBlock.setColumnSubset(scanConfig.columnSubset_.value());
+  }
   return {std::move(decompressedBlock), wasPostprocessed, hasUpdates};
 }
 
@@ -844,6 +869,23 @@ CompressedRelationReader::readAndDecompressBlock(
   if (scanConfig.graphFilter_.canBlockBeSkipped(blockMetaData)) {
     return std::nullopt;
   }
+
+  // If the block has no located triples and is not filtered by graph or
+  // because of duplicates, read only the `outputColumns_` (in particular not
+  // the graph column if it is deleted anyway).
+  bool needsPostprocessing =
+      scanConfig.locatedTriples_.containsTriples(blockMetaData.blockIndex_) ||
+      (useGraphPostProcessing_ &&
+       scanConfig.graphFilter_.blockMightBeFiltered(blockMetaData));
+  if (!needsPostprocessing) {
+    CompressedBlock compressedColumns =
+        readCompressedBlockFromFile(blockMetaData, scanConfig.outputColumns_);
+    return DecompressedBlockAndMetadata{
+        decompressBlock(compressedColumns, blockMetaData.numRows_), false,
+        false};
+  }
+
+  // Otherwise read all the `scanColumns_` and postprocess the block.
   CompressedBlock compressedColumns =
       readCompressedBlockFromFile(blockMetaData, scanConfig.scanColumns_);
   const auto numRowsToRead = blockMetaData.numRows_;
@@ -1059,8 +1101,10 @@ CompressedRelationReader::getMetadataForSmallRelation(
 // _____________________________________________________________________________
 auto CompressedRelationReader::getScanConfig(
     const ScanSpecification& scanSpec, ColumnIndicesRef additionalColumns,
-    const LocatedTriplesPerBlock& locatedTriples) -> ScanImplConfig {
+    const LocatedTriplesPerBlock& locatedTriples,
+    std::optional<ColumnIndices> columnSubset) -> ScanImplConfig {
   auto columnIndices = prepareColumnIndices(scanSpec, additionalColumns);
+  auto outputColumns = columnIndices;
   // Determine the index of the graph column (which we need either for
   // filtering or for the output or both) and whether we we need it for
   // the output or not.
@@ -1081,7 +1125,17 @@ auto CompressedRelationReader::getScanConfig(
   }();
   FilterDuplicatesAndGraphs graphFilter{scanSpec.graphFilter(),
                                         graphColumnIndex, deleteGraphColumn};
-  return {std::move(columnIndices), std::move(graphFilter), locatedTriples};
+
+  // Restrict the `outputColumns` (which do not contain the graph column if it
+  // is deleted) to the `columnSubset`.
+  if (columnSubset.has_value()) {
+    outputColumns = ::ranges::to<std::vector>(
+        columnSubset.value() |
+        ql::views::transform(
+            [&outputColumns](ColumnIndex i) { return outputColumns.at(i); }));
+  }
+  return {std::move(columnIndices), std::move(outputColumns),
+          std::move(columnSubset), std::move(graphFilter), locatedTriples};
 }
 
 // _____________________________________________________________________________
