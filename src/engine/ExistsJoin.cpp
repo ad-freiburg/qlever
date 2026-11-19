@@ -283,7 +283,7 @@ std::shared_ptr<QueryExecutionTree> ExistsJoin::addExistsJoinsToSubtree(
                   ql::views::transform([](const Variable& variable) {
                     return VariableOrderKey{variable};
                   }) |
-                  ::ranges::to<std::vector>;
+                  ::ranges::to<qlm::vector>(qec->getAllocator());
     // Ensure we have the same ordering `QueryExecutionTree::getJoinColumns`
     // would produce.
     ql::ranges::sort(pq._orderBy, {},
@@ -297,8 +297,11 @@ std::shared_ptr<QueryExecutionTree> ExistsJoin::addExistsJoinsToSubtree(
     // place, but since we're creating our own instance of `QueryPlanner` we
     // can't prevent them without refactoring the code. This workaround has the
     // downside that it might look confusing
+    // TODO<vrbommireddy> Pass the `qlm::vector` directly when
+    // `setSelectedVariablesForSubquery` takes a `ql::span`.
+    const auto& visibleVariables = pq.getVisibleVariables();
     tree->getRootOperation()->setSelectedVariablesForSubquery(
-        pq.getVisibleVariables());
+        {visibleVariables.begin(), visibleVariables.end()});
     subtree = ad_utility::makeExecutionTree<ExistsJoin>(
         qec, std::move(subtree), std::move(tree), exists.variable());
   }

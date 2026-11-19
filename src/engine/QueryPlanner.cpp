@@ -369,7 +369,7 @@ SubtreePlanVec QueryPlanner::getDistinctRow(
 
 // _____________________________________________________________________________
 SubtreePlanVec QueryPlanner::getPatternTrickRow(
-    const std::vector<Alias>& aliases, const SubtreePlanMatrix& dpTab,
+    ql::span<const Alias> aliases, const SubtreePlanMatrix& dpTab,
     const checkUsePatternTrick::PatternTrickTuple& patternTrickTuple) {
   AD_CORRECTNESS_CHECK(!dpTab.empty());
   const SubtreePlanVec& previous = dpTab.back();
@@ -438,7 +438,10 @@ SubtreePlanVec QueryPlanner::getGroupByRow(
   for (auto& parent : previous) {
     // Inside a `GRAPH ?var {....}` clause,  a `GROUP BY` must implicitly (also)
     // group by the graph variable.
-    auto groupVariables = pq._groupByVariables;
+    // TODO<vrbommireddy> Remove the conversions to `std::vector` when the
+    // constructor of `GroupBy` takes `qlm::vector`s.
+    std::vector<Variable> groupVariables(pq._groupByVariables.begin(),
+                                         pq._groupByVariables.end());
     if (activeGraphVariable_.has_value()) {
       AD_CORRECTNESS_CHECK(
           !ad_utility::contains(groupVariables, activeGraphVariable_.value()),
@@ -448,8 +451,9 @@ SubtreePlanVec QueryPlanner::getGroupByRow(
     }
     // Create a group by operation to determine on which columns the input
     // needs to be sorted
-    SubtreePlan groupByPlan =
-        makeSubtreePlan<GroupBy>(_qec, groupVariables, aliases, parent._qet);
+    SubtreePlan groupByPlan = makeSubtreePlan<GroupBy>(
+        _qec, groupVariables,
+        std::vector<Alias>(aliases.begin(), aliases.end()), parent._qet);
     assignNodesFilterAndTextLimitIds(groupByPlan, parent);
     added.push_back(std::move(groupByPlan));
   }
