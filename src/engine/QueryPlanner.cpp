@@ -290,7 +290,10 @@ std::shared_ptr<QueryExecutionTree> QueryPlanner::createExecutionTree(
 
 // _____________________________________________________________________________
 SubtreePlanVec QueryPlanner::optimize(ParsedQuery::GraphPattern* rootPattern) {
-  // A conjunct of a FILTER that is a fact can then be rewritten on its own.
+  // Split each FILTER with a conjunct that is a fact (e.g. a maximum
+  // distance or a comparison of `LANG(?x)`) into its conjuncts, so that the
+  // fact can be rewritten on its own (e.g. to a `SpatialJoin`, or applied to
+  // the triples of the group).
   rewriteFiltersWithFacts(*rootPattern);
   QueryPlanner::GraphPatternPlanner optimizer{*this, rootPattern};
   for (auto& child : rootPattern->_graphPatterns) {

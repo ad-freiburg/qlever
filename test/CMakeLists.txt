@@ -335,6 +335,8 @@ addLinkAndDiscoverTestNoLibs(AllocatorPmrTest)
 
 addLinkAndDiscoverTestNoLibs(AllocateSharedTest)
 
+addLinkAndDiscoverTestNoLibs(AllocatorMemoryResourceTest)
+
 addLinkAndDiscoverTestNoLibs(AllocatorBackendTest)
 
 addLinkAndDiscoverTestNoLibs(MemoryLimitTrackerTest)

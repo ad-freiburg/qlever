@@ -14,12 +14,15 @@
 #include "../util/IdTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/LocalVocabEntryTestHelpers.h"
+#include "../util/LocalVocabTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
 #include "backports/algorithm.h"
 #include "engine/NamedResultCache.h"
 #include "engine/NamedResultCacheSerializer.h"
 #include "index/LocalVocabEntry.h"
 #include "util/serializer/ByteBufferSerializer.h"
+
+using ad_utility::testing::makeLocalVocab;
 
 using namespace ad_utility::serialization;
 using ad_utility::testing::colIndices;
@@ -46,8 +49,8 @@ class NamedResultCacheSerializerTest : public ::testing::Test {
     ByteBufferWriteSerializer writeSerializer;
     writeSerializer << value;
     ByteBufferReadSerializer readSerializer{std::move(writeSerializer).data()};
-    NamedResultCache::Value result{{}, {}, colIndices({}, allocator),
-                                   {}, {}, {}};
+    NamedResultCache::Value result{
+        {}, {}, colIndices({}, allocator), LocalVocab{allocator}, {}, {}};
     result.allocatorForSerialization_ = std::move(allocator);
     result.contextForSerialization_ = &qec_->getIndex().getLocalVocabContext();
     readSerializer >> result;
@@ -70,7 +73,7 @@ class NamedResultCacheSerializerTest : public ::testing::Test {
                                        makeIdTableFromVector({{1, 2}, {3, 4}})),
                                    std::move(varColMap),
                                    colIndices({0}),
-                                   LocalVocab{},
+                                   makeLocalVocab(),
                                    std::move(cacheKey),
                                    std::nullopt};
   }
@@ -78,7 +81,8 @@ class NamedResultCacheSerializerTest : public ::testing::Test {
   // Read a `Value` from the given serialized `data`.
   NamedResultCache::Value deserializeValue(std::vector<char> data) const {
     ByteBufferReadSerializer readSerializer{std::move(data)};
-    NamedResultCache::Value value{{}, {}, colIndices({}, alloc_), {}, {}, {}};
+    NamedResultCache::Value value{
+        {}, {}, colIndices({}, alloc_), LocalVocab{alloc_}, {}, {}};
     value.allocatorForSerialization_ = alloc_;
     value.contextForSerialization_ = &qec_->getIndex().getLocalVocabContext();
     readSerializer >> value;
@@ -89,7 +93,7 @@ class NamedResultCacheSerializerTest : public ::testing::Test {
 // Test serialization of a complete `NamedResultCache::Value`.
 TEST_F(NamedResultCacheSerializerTest, ValueSerialization) {
   // Create a test Value
-  LocalVocab localVocab;
+  LocalVocab localVocab = makeLocalVocab();
   [[maybe_unused]] auto local =
       localVocab.getIndexAndAddIfNotContained(iriLocalVocabEntry(
           "<http://example.org/test>", qec_->getLocalVocabContext()));
@@ -160,7 +164,7 @@ TEST_F(NamedResultCacheSerializerTest, ValueSerializationZeroCopy) {
   NamedResultCache::Value value{std::make_shared<const IdTable>(table.clone()),
                                 varColMap,
                                 colIndices({0, 1}),
-                                LocalVocab{},
+                                makeLocalVocab(),
                                 "test-cache-key",
                                 std::nullopt};
 
@@ -169,8 +173,8 @@ TEST_F(NamedResultCacheSerializerTest, ValueSerializationZeroCopy) {
   AlignedByteBufferReadSerializer readSerializer{
       std::move(writeSerializer).data()};
 
-  NamedResultCache::Value deserializedValue{{}, {}, colIndices({}, alloc_),
-                                            {}, {}, {}};
+  NamedResultCache::Value deserializedValue{
+      {}, {}, colIndices({}, alloc_), LocalVocab{alloc_}, {}, {}};
   deserializedValue.allocatorForSerialization_ = alloc_;
   deserializedValue.contextForSerialization_ =
       &qec_->getIndex().getLocalVocabContext();
@@ -204,11 +208,11 @@ TEST_F(NamedResultCacheSerializerTest, CacheSerialization) {
   varColMap2[Variable{"?z"}] = makeAlwaysDefinedColumn(2);
 
   const auto& localVocabContext = qec_->getLocalVocabContext();
-  LocalVocab vocab1;
+  LocalVocab vocab1 = makeLocalVocab();
   vocab1.getIndexAndAddIfNotContained(
       iriLocalVocabEntry("<http://example.org/1>", localVocabContext));
 
-  LocalVocab vocab2;
+  LocalVocab vocab2 = makeLocalVocab();
   vocab2.getIndexAndAddIfNotContained(
       iriLocalVocabEntry("<http://example.org/2>", localVocabContext));
 
@@ -491,7 +495,7 @@ TEST_F(NamedResultCacheSerializerTest, SerializationIsDeterministic) {
             makeIdTableFromVector({{0, 1, 2, 3}, {4, 5, 6, 7}})),
         std::move(varColMap),
         colIndices({0, 1}),
-        LocalVocab{},
+        makeLocalVocab(),
         "cache-key",
         std::nullopt};
   };
@@ -533,7 +537,7 @@ TEST_F(NamedResultCacheSerializerTest, WriteValueWithReplacedColumns) {
   VariableToColumnMap varColMap;
   varColMap[Variable{"?x"}] = makeAlwaysDefinedColumn(0);
   varColMap[Variable{"?y"}] = makePossiblyUndefinedColumn(1);
-  LocalVocab localVocab;
+  LocalVocab localVocab = makeLocalVocab();
   localVocab.getIndexAndAddIfNotContained(iriLocalVocabEntry(
       "<http://example.org/test>", qec_->getLocalVocabContext()));
   ASSERT_EQ(localVocab.size(), 1);

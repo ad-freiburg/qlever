@@ -422,8 +422,9 @@ TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
           h::Join(scan("?a", "<p>", "?a2"), scan("?a2", "<p>", "?b"))));
 }
 
-// _____________________________________________________________________________
-TEST(QueryPlanner, SpatialJoinServiceMaxDistOutside) {
+// Test that the right variable of a spatial search may be declared outside the
+// `SERVICE`, unless the search is a nearest neighbors search.
+TEST(QueryPlanner, SpatialJoinServiceRightVarOutside) {
   auto scan = h::IndexScanFromStrings;
   using V = Variable;
   auto S2 = SpatialJoinAlgorithm::S2_GEOMETRY;
@@ -464,6 +465,24 @@ TEST(QueryPlanner, SpatialJoinServiceMaxDistOutside) {
       h::spatialJoin(1, -1, V{"?y"}, V{"?b"}, std::nullopt,
                      PayloadVariables::all(), S2, std::nullopt, std::nullopt,
                      scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+
+  // A `libspatialjoin` search without `maxDistance` may also have its right
+  // variable outside the `SERVICE` (this used to fail, see #3981).
+  h::expect(
+      "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "SERVICE spatialSearch: {"
+      "_:config spatialSearch:algorithm spatialSearch:libspatialjoin ;"
+      "spatialSearch:joinType spatialSearch:contains ;"
+      "spatialSearch:left ?y ;"
+      "spatialSearch:right ?b . "
+      " } }",
+      h::spatialJoin(
+          -1, -1, V{"?y"}, V{"?b"}, std::nullopt, PayloadVariables::all(),
+          SpatialJoinAlgorithm::LIBSPATIALJOIN, SpatialJoinType::CONTAINS,
+          std::nullopt, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
 
   // Nearest neighbors search requires the right child to be defined inside the
   // service
