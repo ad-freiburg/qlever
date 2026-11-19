@@ -290,6 +290,10 @@ std::shared_ptr<QueryExecutionTree> QueryPlanner::createExecutionTree(
 
 // _____________________________________________________________________________
 SubtreePlanVec QueryPlanner::optimize(ParsedQuery::GraphPattern* rootPattern) {
+  // Split each FILTER with a conjunct that is a fact (e.g. a maximum
+  // distance) into its conjuncts, so that the fact can be rewritten on its
+  // own (e.g. to a `SpatialJoin`).
+  splitFiltersWithFacts(rootPattern->_filters);
   QueryPlanner::GraphPatternPlanner optimizer{*this, rootPattern};
   for (auto& child : rootPattern->_graphPatterns) {
     child.visit([&optimizer](auto& arg) {
@@ -2633,56 +2637,34 @@ auto QueryPlanner::applyJoinDistributivelyToUnion(
 }
 
 // _____________________________________________________________________________
-std::optional<std::tuple<size_t, size_t>>
+QueryPlanner::TransitivePathJoinCols
 QueryPlanner::getJoinColumnsForTransitivePath(const JoinColumns& jcs,
                                               bool leftSideTransitivePath) {
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   (void)jcs;
   (void)leftSideTransitivePath;
-  return std::nullopt;
+  return TransitivePathJoinCols{std::nullopt, std::nullopt};
 #else
-  // If there are more than two pairs of join columns, we have a graph
-  // variable. In that case, we compute the full transitive hull (followed by a
-  // multi-column join).
-  if (jcs.size() > 2) {
-    return std::nullopt;
-  }
-
-  // The index in `jcs` of the transitive path side and the other side.
+  // The index in a pair of join columns from `jcs` of the transitive path side
+  // and the other side.
   auto transitivePathIndex = static_cast<size_t>(!leftSideTransitivePath);
   auto otherIndex = static_cast<size_t>(leftSideTransitivePath);
 
-  // If there is one pair of join columns, then either exactly one side of the
-  // transitive path can be bound (and we return that pair), or the graph
-  // variable is bound (in which case we return `std::nullopt`).
-  auto graphColIndex = TransitivePathBase::firstGraphOrPayloadColumnIndex();
-  if (jcs.size() == 1) {
-    size_t transitiveCol = jcs[0][transitivePathIndex];
-    size_t otherCol = jcs[0][otherIndex];
-    if (transitiveCol >= graphColIndex) {
-      return std::nullopt;
+  // The left and the right side are the columns 0 and 1 of the transitive
+  // path, a pair for its graph column (index 2) is ignored.
+  TransitivePathJoinCols cols;
+  for (const auto& jc : jcs) {
+    size_t transCol = jc[transitivePathIndex];
+    size_t otherCol = jc[otherIndex];
+    if (transCol == 0) {
+      AD_CORRECTNESS_CHECK(!cols.left.has_value());
+      cols.left = otherCol;
+    } else if (transCol == 1) {
+      AD_CORRECTNESS_CHECK(!cols.right.has_value());
+      cols.right = otherCol;
     }
-    return std::make_tuple(transitiveCol, otherCol);
   }
-
-  // At this point, we know that we have exactly two pairs of join columns,
-  // where one pertains to the graph variable and the other to one side of the
-  // transitive path operation. Return the pair that does not pertain to the
-  // graph variable.
-  size_t transitiveColA = jcs[0][transitivePathIndex];
-  size_t otherColA = jcs[0][otherIndex];
-  size_t transitiveColB = jcs[1][transitivePathIndex];
-  size_t otherColB = jcs[1][otherIndex];
-  if (transitiveColA < graphColIndex) {
-    if (transitiveColB == graphColIndex) {
-      return std::make_tuple(transitiveColA, otherColA);
-    }
-    // We currently don't support binding two regular columns at once
-    return std::nullopt;
-  }
-  AD_CORRECTNESS_CHECK(transitiveColB < graphColIndex);
-  AD_CORRECTNESS_CHECK(transitiveColA == graphColIndex);
-  return std::make_tuple(transitiveColB, otherColB);
+  return cols;
 #endif
 }
 
@@ -2712,27 +2694,15 @@ auto QueryPlanner::createJoinWithTransitivePath(
     return std::nullopt;
   }
 
-  // Do not bind the side of a path twice and don't bind on graph variable.
-  auto joinCols = getJoinColumnsForTransitivePath(jcs, aTransPath != nullptr);
-  if (!joinCols.has_value()) {
+  // The columns of `otherTree` that bind the left and the right side of the
+  // path. If only the graph variable is joined, the path is not bound.
+  auto [leftCol, rightCol] =
+      getJoinColumnsForTransitivePath(jcs, aTransPath != nullptr);
+  if (!leftCol.has_value() && !rightCol.has_value()) {
     return std::nullopt;
   }
-
-  // An unbound transitive path has at most two columns we can bind to.
-  const auto& [thisCol, otherCol] = joinCols.value();
-  AD_CONTRACT_CHECK(thisCol <= 1);
-
-  // The left or right side is a transitive path and its join column corresponds
-  // to the left side of its input.
-  SubtreePlan plan = [&]() {
-    if (thisCol == 0) {
-      return makeSubtreePlan(
-          transPathOperation->bindLeftSide(otherTree, otherCol));
-    } else {
-      return makeSubtreePlan(
-          transPathOperation->bindRightSide(otherTree, otherCol));
-    }
-  }();
+  SubtreePlan plan = makeSubtreePlan(
+      transPathOperation->bindSides(otherTree, leftCol, rightCol));
   mergeSubtreePlanIds(plan, a, b);
   return plan;
 #endif
@@ -3544,8 +3514,8 @@ void QueryPlanner::GraphPatternPlanner::visitSpatialSearch(
     // This helper function adds a subtree plan to the output candidates, which
     // either has the child graph pattern as a right child or no child at all.
     // If it has no child at all, the query planner may look for the right child
-    // of the SpatialJoin outside of the SERVICE. This is only allowed for max
-    // distance joins.
+    // of the SpatialJoin outside of the SERVICE. This is allowed for all joins
+    // except for nearest neighbors joins.
     auto addCandidateSpatialJoin = [this, &sub, &config,
                                     &candidatesOut](bool rightVarOutside) {
       std::optional<std::shared_ptr<QueryExecutionTree>> right = std::nullopt;
@@ -3562,10 +3532,12 @@ void QueryPlanner::GraphPatternPlanner::visitSpatialSearch(
       // The version using the child graph pattern
       addCandidateSpatialJoin(false);
     } else {
-      // The version without using the child graph pattern
-      if (std::holds_alternative<MaxDistanceConfig>(config.task_)) {
-        addCandidateSpatialJoin(true);
-      }
+      // The version without using the child graph pattern (a nearest neighbors
+      // search without child graph pattern is already rejected by
+      // `SpatialQuery::toSpatialJoinConfiguration`).
+      AD_CORRECTNESS_CHECK(
+          !std::holds_alternative<NearestNeighborsConfig>(config.task_));
+      addCandidateSpatialJoin(true);
     }
   }
   visitGroupOptionalOrMinus(std::move(candidatesOut));

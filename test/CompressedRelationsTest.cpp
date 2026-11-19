@@ -16,6 +16,8 @@
 
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
+#include "./util/LocalVocabTestHelpers.h"
+#include "./util/PermutationPairTestHelpers.h"
 #include "global/Constants.h"
 #include "index/CompressedRelationReader.h"
 #include "index/DistinctCol0Ids.h"
@@ -32,6 +34,8 @@
 #include "util/SourceLocation.h"
 #include "util/serializer/ByteBufferSerializer.h"
 
+using ad_utility::testing::makeLocalVocab;
+
 // Multi-threaded, to exercise the concurrency of the tested code.
 static constexpr auto executor = &ad_utility::testing::multiThreadExecutor;
 
@@ -41,12 +45,8 @@ using ad_utility::source_location;
 
 const LocatedTriplesPerBlock emptyLocatedTriples{};
 
-// Return an `ID` of type `VocabIndex` from `index`. Assert that `index`
-// is `>= 0`.
-Id V(int64_t index) {
-  AD_CONTRACT_CHECK(index >= 0);
-  return Id::makeFromVocabIndex(VocabIndex::make(index));
-}
+using permutationPairTestHelpers::scanRelation;
+using permutationPairTestHelpers::V;
 
 auto I = &Id::makeFromInt;
 
@@ -1232,7 +1232,7 @@ TEST(CompressedRelationReader, getDistinctCol0IdsWithGraphFilter) {
       [&blocks](ScanSpecification::GraphFilter filter) {
         return CompressedRelationReader::ScanSpecAndBlocks{
             ScanSpecification{std::nullopt, std::nullopt, std::nullopt,
-                              LocalVocab{}, std::move(filter)},
+                              makeLocalVocab(), std::move(filter)},
             getBlockMetadataRangesfromVec(blocks)};
       };
 
@@ -1300,7 +1300,7 @@ TEST(CompressedRelationReader, getDistinctCol0IdsWithUnknownGraphsInBlock) {
       [&blocks](ScanSpecification::GraphFilter filter) {
         return CompressedRelationReader::ScanSpecAndBlocks{
             ScanSpecification{std::nullopt, std::nullopt, std::nullopt,
-                              LocalVocab{}, std::move(filter)},
+                              makeLocalVocab(), std::move(filter)},
             getBlockMetadataRangesfromVec(blocks)};
       };
 
@@ -1360,7 +1360,7 @@ TEST(CompressedRelationReader, getDistinctCol0IdsWithSeveralGraphsInBlock) {
       [&blocks](ScanSpecification::GraphFilter filter) {
         return CompressedRelationReader::ScanSpecAndBlocks{
             ScanSpecification{std::nullopt, std::nullopt, std::nullopt,
-                              LocalVocab{}, std::move(filter)},
+                              makeLocalVocab(), std::move(filter)},
             getBlockMetadataRangesfromVec(blocks)};
       };
 
@@ -1436,7 +1436,7 @@ TEST(CompressedRelationReader, getDistinctCol0IdsWithDeltaTriples) {
                               ScanSpecification::GraphFilter::All()) {
     CompressedRelationReader::ScanSpecAndBlocks scanSpecAndBlocks{
         ScanSpecification{std::nullopt, std::nullopt, std::nullopt,
-                          LocalVocab{}, std::move(graphFilter)},
+                          makeLocalVocab(), std::move(graphFilter)},
         getBlockMetadataRangesfromVec(locatedTriples.getAugmentedMetadata())};
     return getDistinctCol0Ids(*reader, scanSpecAndBlocks, addGraphColumn,
                               std::nullopt, locatedTriples);
@@ -2432,22 +2432,9 @@ PermutationBuildResult buildPermutation(std::vector<RelationInput> inputs,
   result.blocks_ = std::move(permutationResult.blockMetadata_);
 
   // Scan each of the relations completely.
-  CompressedRelationReader reader{ad_utility::makeUnlimitedAllocator<Id>(),
-                                  ad_utility::File{filename, "r"}};
-  BlockMetadataSpan blockSpan{result.blocks_};
-  BlockMetadataRanges blockRanges{{blockSpan.begin(), blockSpan.end()}};
-  std::vector<ColumnIndex> additionalColumns;
-  for (size_t i = 3; i < numColumns; ++i) {
-    additionalColumns.push_back(i);
-  }
-  auto cancellationHandle =
-      std::make_shared<ad_utility::CancellationHandle<>>();
   for (const auto& input : inputs) {
-    ScanSpecification scanSpec{V(input.col0_), std::nullopt, std::nullopt};
-    result.scanResults_.push_back(reader.scan(
-        CompressedRelationReader::ScanSpecAndBlocks{scanSpec, blockRanges},
-        additionalColumns, cancellationHandle, emptyLocatedTriples,
-        executor()));
+    result.scanResults_.push_back(
+        scanRelation(filename, result.blocks_, V(input.col0_), numColumns));
   }
   return result;
 }
@@ -2849,16 +2836,7 @@ IdTable makeBlockOfLargeRelation(int col0, size_t numRows, size_t runBegin,
 IdTable scanLargeRelation(const std::string& filename,
                           const std::vector<CompressedBlockMetadata>& blocks,
                           Id col0Id) {
-  CompressedRelationReader reader{ad_utility::makeUnlimitedAllocator<Id>(),
-                                  ad_utility::File{filename, "r"}};
-  BlockMetadataSpan blockSpan{blocks};
-  BlockMetadataRanges blockRanges{{blockSpan.begin(), blockSpan.end()}};
-  ScanSpecification scanSpec{col0Id, std::nullopt, std::nullopt};
-  std::vector<ColumnIndex> additionalColumns{ADDITIONAL_COLUMN_GRAPH_ID};
-  return reader.scan(
-      CompressedRelationReader::ScanSpecAndBlocks{scanSpec, blockRanges},
-      additionalColumns, std::make_shared<ad_utility::CancellationHandle<>>(),
-      emptyLocatedTriples, executor());
+  return scanRelation(filename, blocks, col0Id, 4);
 }
 }  // namespace
 

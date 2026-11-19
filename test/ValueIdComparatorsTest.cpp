@@ -57,7 +57,8 @@ TEST_F(ValueIdComparators, GetRangeForDatatype) {
                                   Datatype::LocalVocabIndex,
                                   Datatype::TextRecordIndex,
                                   Datatype::WordVocabIndex,
-                                  Datatype::SecondaryVocabIndex};
+                                  Datatype::SecondaryVocabIndex,
+                                  Datatype::TripleTermIndex};
   auto ids = makeRandomIds();
   std::sort(ids.begin(), ids.end(), compareByBits);
   for (auto datatype : datatypes) {
@@ -266,6 +267,7 @@ TEST_F(ValueIdComparators, IndexTypes) {
   testImpl(vi<Datatype::TextRecordIndex>, &getTextRecordIndex<>);
   testImpl(vi<Datatype::LocalVocabIndex>, &getLocalVocabIndex<>);
   testImpl(vi<Datatype::WordVocabIndex>, &getWordVocabIndex<>);
+  testImpl(vi<Datatype::TripleTermIndex>, &getTripleTermIndex<>);
 }
 
 // _______________________________________________________________________
@@ -284,5 +286,6 @@ TEST_F(ValueIdComparators, undefinedWithItself) {
 TEST_F(ValueIdComparators, contractViolations) {
   auto u = ValueId::makeUndefined();
   // Invalid value for the `Comparison` enum.
-  ASSERT_ANY_THROW((compareIds(u, u, static_cast<Comparison>(542))));
+  ASSERT_ANY_THROW((
+      compareIds(u, u, static_cast<Comparison>(qlever::enumSize<Comparison>))));
 }
