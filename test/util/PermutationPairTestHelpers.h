@@ -37,6 +37,7 @@
 #include "index/chunkwisePermutationWriter/ChunkwisePermutationWriter.h"
 #include "index/compressedRelationWriter/CompressedRelationWriter.h"
 #include "util/File.h"
+#include "util/Random.h"
 #include "util/views/UniqueBlockView.h"
 
 // Helpers for the tests that write a pair of twin permutations (for example
@@ -67,17 +68,30 @@ inline IdTable scanRelation(const std::string& filename,
                             Id col0Id, size_t numColumns) {
   CompressedRelationReader reader{ad_utility::makeUnlimitedAllocator<Id>(),
                                   ad_utility::File{filename, "r"}};
-  // Only pass the blocks that can contain the relation, the expensive checks
-  // of `ScanSpecAndBlocks` are linear in the number of blocks.
+  // The expensive checks of `ScanSpecAndBlocks` are linear in the number of
+  // blocks, so we mostly pass only the blocks that can contain the relation
+  // plus a few random neighbors on each side (such that the filtering of the
+  // blocks in the scan is still tested). For every 10th scan (on average), we
+  // pass all the blocks.
   BlockMetadataSpan allBlocks{blocks};
-  auto first = ql::ranges::partition_point(
-      allBlocks, [col0Id](const CompressedBlockMetadata& block) {
-        return block.lastTriple_.col0Id_ < col0Id;
-      });
-  auto last = std::partition_point(
-      first, allBlocks.end(), [col0Id](const CompressedBlockMetadata& block) {
-        return block.firstTriple_.col0Id_ <= col0Id;
-      });
+  ad_utility::SlowRandomIntGenerator<size_t> randomInt{0, 9};
+  auto first = allBlocks.begin();
+  auto last = allBlocks.end();
+  if (randomInt() != 0) {
+    first = ql::ranges::partition_point(
+        allBlocks, [col0Id](const CompressedBlockMetadata& block) {
+          return block.lastTriple_.col0Id_ < col0Id;
+        });
+    last = std::partition_point(first, allBlocks.end(),
+                                [col0Id](const CompressedBlockMetadata& block) {
+                                  return block.firstTriple_.col0Id_ <= col0Id;
+                                });
+    constexpr size_t maxNumExtraBlocks = 3;
+    first -= std::min(randomInt() % (maxNumExtraBlocks + 1),
+                      static_cast<size_t>(first - allBlocks.begin()));
+    last += std::min(randomInt() % (maxNumExtraBlocks + 1),
+                     static_cast<size_t>(allBlocks.end() - last));
+  }
   BlockMetadataRanges blockRanges{{first, last}};
   ScanSpecification scanSpec{col0Id, std::nullopt, std::nullopt};
   std::vector<ColumnIndex> additionalColumns;
@@ -135,8 +149,8 @@ inline void checkPermutation(const std::string& filename,
                              const TestRows& expected, size_t numColumns,
                              source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto trace = generateLocationTrace(l);
-  // Check the invariants of all the blocks once, `scanRelation` only passes the
-  // blocks of a single relation to the scan.
+  // Check the invariants of all the blocks once, `scanRelation` mostly passes
+  // only the blocks around a single relation to the scan.
   CompressedRelationReader::ScanSpecAndBlocks::checkBlockMetadataInvariant(
       blocks, 0);
   size_t begin = 0;
