@@ -873,8 +873,9 @@ ParsedQuery Visitor::visit(Parser::LoadContext* ctx) {
                            : Quad::Graph(std::monostate{})}};
   parsedQuery_._clause = parsedQuery::UpdateClause{
       allocator(),
-      GraphUpdate{{toInsert, LocalVocab{ad_utility::makeUnlimitedAllocator<Id>()}},
-                  {}}};
+      GraphUpdate{
+          {toInsert, LocalVocab{ad_utility::makeUnlimitedAllocator<Id>()}},
+          {}}};
   return parsedQuery_;
 }
 
