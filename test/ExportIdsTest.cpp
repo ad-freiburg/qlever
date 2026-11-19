@@ -640,8 +640,8 @@ TEST(ExportIds, resolveNonVocabIndexIds) {
 TEST(ExportIds, tripleTerm) {
   const auto& index = ad_utility::testing::getQec()->getIndex();
   auto term = Id::makeFromTripleTermIndex(TripleTermIndex::make(17));
-  EXPECT_FALSE(ql::exportIds::idToLiteral(index, term, LocalVocab{}));
-  EXPECT_FALSE(ql::exportIds::idToLiteralOrIri(index, term, LocalVocab{}));
+  EXPECT_FALSE(ql::exportIds::idToLiteral(index, term, makeLocalVocab()));
+  EXPECT_FALSE(ql::exportIds::idToLiteralOrIri(index, term, makeLocalVocab()));
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       ql::exportIds::idToStringAndTypeForEncodedValue(term),
       ::testing::StrEq("Export of triple-term references is not supported yet"),
