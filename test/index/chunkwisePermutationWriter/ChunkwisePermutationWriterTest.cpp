@@ -12,14 +12,17 @@
 #include <gtest/gtest.h>
 
 #include <boost/asio/use_future.hpp>
+#include <exception>
 #include <future>
 #include <memory>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "../../util/GTestHelpers.h"
 #include "../../util/PermutationPairTestHelpers.h"
+#include "index/chunkwisePermutationWriter/Options.h"
 
 // The tests of the chunkwise permutation writer that are specific to it: many
 // chunks, relations that span several chunks, the serial merge, failing
@@ -240,6 +243,60 @@ TEST(ChunkwisePermutationWriter, failingOperationOfChunk) {
     EXPECT_TRUE(writer->stopRequested());
     EXPECT_THROW(writer->finish(completedFuture()), std::out_of_range);
   }
+}
+
+// Test that `toConcurrentBlockCallback` invokes the wrapped callback for each
+// block and then `done` exactly once, with `nullptr` if the callback succeeds
+// and with the exception of the callback if it throws.
+TEST(ChunkwisePermutationWriter, toConcurrentBlockCallback) {
+  using chunkwisePermutationWriter::Block;
+  using chunkwisePermutationWriter::DoneCallback;
+
+  // Return a block with `numRows` rows.
+  auto makeBlock = [](size_t numRows) {
+    auto block = std::make_shared<Block>(
+        NUM_COLUMNS, ad_utility::makeUnlimitedAllocator<Id>());
+    block->resize(numRows);
+    return block;
+  };
+
+  // The wrapped callback sums up the sizes of the blocks (so its state is kept
+  // across invocations) and throws for an empty block.
+  size_t numRowsSeen = 0;
+  auto callback = chunkwisePermutationWriter::toConcurrentBlockCallback(
+      [&numRowsSeen](const Block& block) {
+        if (block.empty()) {
+          throw std::runtime_error("empty block");
+        }
+        numRowsSeen += block.numRows();
+      });
+
+  // Each `done` callback appends the exception that it is invoked with to
+  // `doneResults`.
+  std::vector<std::exception_ptr> doneResults;
+  auto makeDone = [&doneResults]() -> DoneCallback {
+    return [&doneResults](std::exception_ptr e) {
+      doneResults.push_back(std::move(e));
+    };
+  };
+
+  // Two successful invocations: both blocks are seen and each `done` is
+  // invoked with `nullptr`.
+  callback(makeBlock(3), makeDone());
+  callback(makeBlock(4), makeDone());
+  EXPECT_EQ(numRowsSeen, 7);
+  ASSERT_EQ(doneResults.size(), 2);
+  EXPECT_EQ(doneResults[0], nullptr);
+  EXPECT_EQ(doneResults[1], nullptr);
+
+  // A throwing invocation: the exception does not escape, but is passed to
+  // `done`.
+  callback(makeBlock(0), makeDone());
+  EXPECT_EQ(numRowsSeen, 7);
+  ASSERT_EQ(doneResults.size(), 3);
+  ASSERT_NE(doneResults[2], nullptr);
+  AD_EXPECT_THROW_WITH_MESSAGE(std::rethrow_exception(doneResults[2]),
+                               ::testing::HasSubstr("empty block"));
 }
 
 #endif  // QLEVER_REDUCED_FEATURE_SET_FOR_CPP17

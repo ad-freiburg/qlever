@@ -1,6 +1,6 @@
 // Copyright 2025 - 2026 The QLever Authors, in particular:
 //
-// 2025 - 2026 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
+// 2025 - 2026 Christoph Ullinger <ullingec@cs.uni-freiburg.de>, UFR
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
@@ -11,9 +11,13 @@
 #include <absl/strings/str_join.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
-#include <spatialjoin/Sweeper.h>
+#include <spatialjoin/GeometryStore.h>
+#include <spatialjoin/SweepEventList.h>
 #include <spatialjoin/WKTParse.h>
 #include <util/geo/Geo.h>
+
+#include <chrono>
+#include <thread>
 
 #include "../util/LocalVocabEntryTestHelpers.h"
 #include "./SpatialJoinPrefilterTestHelpers.h"
@@ -29,7 +33,8 @@ namespace {
 using namespace SpatialJoinPrefilterTestHelpers;
 using namespace ad_utility::detail::parallel_wkt_parser;
 
-// _____________________________________________________________________________
+// Test that `addValueIdToQueue` parses or prefilters the geometries and that
+// the bounding box of the parsed geometries is computed.
 TEST(SpatialJoinParser, AddValueIdToQueue) {
   using enum SpatialJoinType::Enum;
 
@@ -43,22 +48,23 @@ TEST(SpatialJoinParser, AddValueIdToQueue) {
   auto idxLondon = getValId(nMap, "london");
   auto idxNewYork = getValId(nMap, "lib");
 
-  // Prepare sweeper
+  // A geometry store and an event list, to which all parsers below add.
   SweeperResult results;
   SweeperDistResult resultDists;
   auto cfg = makeSweeperCfg(LibSpatialJoinConfig{INTERSECTS}, results,
                             resultDists, -1);
   std::string sweeperPath = qec->getIndex().getOnDiskBase() + ".spatialjoin";
-  sj::Sweeper sweeper{cfg, ".", sweeperPath};
+  sj::GeometryStore store{cfg, ".", sweeperPath, false};
+  sj::SweepEventList events{cfg, ".", sweeperPath};
 
-  // Left side without prefilter box
+  // Without a prefilter box, all geometries are parsed.
   std::optional<util::geo::DBox> prefilterBox = std::nullopt;
-  WKTParser parser1{&sweeper, 5, true, prefilterBox, index};
+  WKTParser parser1(&store, events.addCb(0), 5, true, prefilterBox, index);
   EXPECT_EQ(parser1.getParseCounter(), 0);
   EXPECT_EQ(parser1.getPrefilterCounter(), 0);
-  parser1.addValueIdToQueue(idxUni, 0, false, std::nullopt);
-  parser1.addValueIdToQueue(idxUni, 1, false, std::nullopt);
-  parser1.addValueIdToQueue(idxLondon, 2, false, std::nullopt);
+  parser1.addValueIdToQueue(idxUni, 0, std::nullopt);
+  parser1.addValueIdToQueue(idxUni, 1, std::nullopt);
+  parser1.addValueIdToQueue(idxLondon, 2, std::nullopt);
   parser1.done();
   EXPECT_EQ(parser1.getParseCounter(), 3);
   EXPECT_EQ(parser1.getPrefilterCounter(), 0);
@@ -66,57 +72,52 @@ TEST(SpatialJoinParser, AddValueIdToQueue) {
                         parser1.getBoundingBox()),
                     boundingBoxUniAndLondon);
 
-  // Right side with prefilter box
+  // With a prefilter box around New York, only New York is parsed, also if
+  // the bounding box of a geometry is given explicitly.
   auto newYorkBox =
       ad_utility::GeometryInfo::getBoundingBox(areaStatueOfLiberty);
   ASSERT_TRUE(newYorkBox.has_value());
   std::optional<util::geo::DBox> newYorkUtilBox =
       ad_utility::detail::boundingBoxToUtilBox(newYorkBox.value());
 
-  WKTParser parser2{&sweeper, 5, true, newYorkUtilBox, index};
+  WKTParser parser2(&store, events.addCb(0), 5, true, newYorkUtilBox, index);
   EXPECT_EQ(parser2.getParseCounter(), 0);
   EXPECT_EQ(parser2.getPrefilterCounter(), 0);
-  parser2.addValueIdToQueue(idxUni, 0, true, std::nullopt);
-  parser2.addValueIdToQueue(idxUni, 1, true, std::nullopt);
-  parser2.addValueIdToQueue(idxLondon, 2, true, std::nullopt);
-  parser2.addValueIdToQueue(idxNewYork, 3, true, std::nullopt);
-  // Also test prefiltering using an explicitly provided bounding box.
+  parser2.addValueIdToQueue(idxUni, 0, std::nullopt);
+  parser2.addValueIdToQueue(idxUni, 1, std::nullopt);
+  parser2.addValueIdToQueue(idxLondon, 2, std::nullopt);
+  parser2.addValueIdToQueue(idxNewYork, 3, std::nullopt);
   auto uniGeoInfo = ad_utility::GeometryInfo::fromWktLiteral(areaUniFreiburg);
   ASSERT_TRUE(uniGeoInfo.has_value());
-  parser2.addValueIdToQueue(idxUni, 4, true,
-                            uniGeoInfo.value().getBoundingBox());
+  parser2.addValueIdToQueue(idxUni, 4, uniGeoInfo.value().getBoundingBox());
   parser2.done();
 
-  // New York is parsed, 2x Uni and 1x London get filtered out
+  // New York is parsed, the other four geometries are skipped.
   EXPECT_EQ(parser2.getParseCounter(), 1);
   EXPECT_EQ(parser2.getPrefilterCounter(), 4);
   auto actualBox = ad_utility::detail::projectInt32WebMercToDoubleLatLng(
       parser2.getBoundingBox());
   checkPrefilterBox(actualBox, newYorkUtilBox.value());
 
-  // Code coverage for queue clearing after 10'000 entries
-  WKTParser parser3{&sweeper, 5, true, boundingBoxUniAndLondon, index};
+  // The same with more geometries than fit into two batches (of 10'000 each)
+  // and a prefilter box around Uni Freiburg and London.
+  WKTParser parser3(&store, events.addCb(0), 5, true, boundingBoxUniAndLondon,
+                    index);
   EXPECT_EQ(parser3.getParseCounter(), 0);
   EXPECT_EQ(parser3.getPrefilterCounter(), 0);
   for (size_t i = 0; i < 25'000; ++i) {
-    parser3.addValueIdToQueue(idxNewYork, i, true, std::nullopt);
+    parser3.addValueIdToQueue(idxNewYork, i, std::nullopt);
   }
-  parser3.addValueIdToQueue(idxLondon, 25'000, true, std::nullopt);
-  parser3.addValueIdToQueue(idxUni, 25'001, true, std::nullopt);
+  parser3.addValueIdToQueue(idxLondon, 25'000, std::nullopt);
+  parser3.addValueIdToQueue(idxUni, 25'001, std::nullopt);
   parser3.done();
 
-  // Uni and London get parsed, 25'000x New York gets filtered out
+  // Uni and London are parsed, the 25'000 New York geometries are skipped.
   EXPECT_EQ(parser3.getParseCounter(), 2);
   EXPECT_EQ(parser3.getPrefilterCounter(), 25'000);
   auto actualBox2 = ad_utility::detail::projectInt32WebMercToDoubleLatLng(
       parser3.getBoundingBox());
   checkPrefilterBox(actualBox2, boundingBoxUniAndLondon);
-
-  // The sweeper object is empty and flushing provides no value for this test.
-  // However the object needs to be flushed anyway to prevent a memory leak,
-  // because memory manually allocated in the sweeper's constructor is freed in
-  // this function.
-  sweeper.flush();
 }
 
 // Test that a parser can be destroyed without `done()` while its worker
@@ -137,19 +138,16 @@ TEST(SpatialJoinParser, DestroyWithoutDone) {
   auto cfg = makeSweeperCfg(LibSpatialJoinConfig{INTERSECTS}, results,
                             resultDists, -1);
   std::string sweeperPath = qec->getIndex().getOnDiskBase() + ".spatialjoin";
-  sj::Sweeper sweeper{cfg, ".", sweeperPath};
+  sj::GeometryStore store{cfg, ".", sweeperPath, false};
+  sj::SweepEventList events{cfg, ".", sweeperPath};
 
   for (size_t numBatches : {0, 1, 5}) {
-    WKTParser parser{&sweeper, 4, true, std::nullopt, index};
+    WKTParser parser(&store, events.addCb(0), 4, true, std::nullopt, index);
     for (size_t i = 0; i < numBatches * WKT_PARSER_BATCH_SIZE; ++i) {
-      parser.addValueIdToQueue(idxUni, i, false, std::nullopt);
+      parser.addValueIdToQueue(idxUni, i, std::nullopt);
     }
     // The parser goes out of scope here without `done()`.
   }
-
-  // Work around a leak in libspatialjoin: The `Sweeper` frees its output
-  // buffer only in `flush()`, not in its destructor.
-  sweeper.flush();
 }
 
 // Test that invalid WKT literals from the index and from the local vocabulary
@@ -175,67 +173,108 @@ TEST(SpatialJoinParser, InvalidWktIsSkipped) {
       makeSweeperCfg(LibSpatialJoinConfig{SpatialJoinType::Enum::INTERSECTS},
                      results, resultDists, -1);
   std::string sweeperPath = qec->getIndex().getOnDiskBase() + ".spatialjoin";
-  sj::Sweeper sweeper{cfg, ".", sweeperPath};
-  WKTParser parser{&sweeper, 2, false, std::nullopt, qec->getIndex()};
+  sj::GeometryStore store{cfg, ".", sweeperPath, false};
+  sj::SweepEventList events{cfg, ".", sweeperPath};
+  WKTParser parser(&store, events.addCb(0), 2, false, std::nullopt,
+                   qec->getIndex());
 
   size_t row = 0;
   for (const auto& wkt : indexWkts) {
     auto id = getId(lit(wkt));
     ASSERT_EQ(id.getDatatype(), Datatype::VocabIndex);
-    parser.addValueIdToQueue(id, row++, false, std::nullopt);
+    parser.addValueIdToQueue(id, row++, std::nullopt);
   }
   // Literals from the query (`LocalVocabIndex`): The first two are valid
   // (exponent notation and a leading `+` are allowed in the strict mode). The
   // last one has an unsupported CRS.
-  LocalVocab localVocab;
+  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
   for (auto wkt : {"POINT(1 2)", "POINT(1e1 +2)", "POINT(1 2, 3 4)",
                    "LINESTRING(1 1, 3 3, 4 a)", "not wkt",
                    "<http://example.com/crs> POINT(1 2)"}) {
     auto idx = localVocab.getIndexAndAddIfNotContained(
         ad_utility::testing::localVocabEntryFromStringRepresentation(
             lit(wkt), qec->getLocalVocabContext()));
-    parser.addValueIdToQueue(Id::makeFromLocalVocabIndex(idx), row++, false,
+    parser.addValueIdToQueue(Id::makeFromLocalVocabIndex(idx), row++,
                              std::nullopt);
   }
   parser.done();
 
   EXPECT_EQ(parser.getParseCounter(), 8);
   EXPECT_EQ(parser.getNumInvalid(), 5);
-  EXPECT_EQ(sweeper.numElements(), 3);
-
-  // See `AddValueIdToQueue` above.
-  sweeper.flush();
+  EXPECT_EQ(events.numObjects(), 3);
 }
 
-// _____________________________________________________________________________
+// Test that an exception on a worker thread of the parser is thrown on the main
+// thread by `done()` and `throwIfWorkerFailed()` (instead of terminating the
+// program).
+TEST(SpatialJoinParser, WorkerExceptionIsRethrown) {
+  auto qec = buildQec(buildLibSJTestDataset(), true);
+  auto [vMap, nMap] = resolveValIdTable(qec, 6);
+  SweeperResult results;
+  SweeperDistResult resultDists;
+  auto cfg =
+      makeSweeperCfg(LibSpatialJoinConfig{SpatialJoinType::Enum::INTERSECTS},
+                     results, resultDists, -1);
+  std::string sweeperPath = qec->getIndex().getOnDiskBase() + ".spatialjoin";
+  sj::SweepEventList events{cfg, ".", sweeperPath};
+  auto uni = getValId(nMap, "uni");
+  auto matcher = ::testing::HasSubstr("Could not open geometry store file");
+
+  // Each block below uses a new geometry store in a directory that does not
+  // exist, which writes its geometries to a file right away (maximum memory
+  // size `0`). The worker thread that adds a geometry to it fails.
+
+  // With a single geometry, `done()` throws the exception of the worker.
+  {
+    sj::GeometryStore store{cfg, "/nonexistent-directory", sweeperPath, false,
+                            0};
+    WKTParser parser(&store, events.addCb(0), 2, true, std::nullopt,
+                     qec->getIndex());
+    parser.addValueIdToQueue(uni, 0, std::nullopt);
+    AD_EXPECT_THROW_WITH_MESSAGE(parser.done(), matcher);
+  }
+
+  // With a full batch, the worker thread fails before `done()`, and
+  // `throwIfWorkerFailed()` throws its exception (wait at most 10 seconds).
+  {
+    sj::GeometryStore store{cfg, "/nonexistent-directory", sweeperPath, false,
+                            0};
+    WKTParser parser(&store, events.addCb(0), 2, true, std::nullopt,
+                     qec->getIndex());
+    for (size_t row = 0; row < WKT_PARSER_BATCH_SIZE; ++row) {
+      parser.addValueIdToQueue(uni, row, std::nullopt);
+    }
+    auto waitForFailure = [&parser]() {
+      for (size_t i = 0; i < 1000; ++i) {
+        parser.throwIfWorkerFailed();
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+      }
+    };
+    AD_EXPECT_THROW_WITH_MESSAGE(waitForFailure(), matcher);
+  }
+}
+
+// Test that `SpatialJoinParseJob`s are compared by their `ValueId` and row,
+// but not by their bounding box.
 TEST(SpatialJoinParser, SpatialJoinTaskOperatorEq) {
-  // Test equality operator of `SpatialJoinParseJob` helper struct
+  // Jobs that differ in the row, the `ValueId` or the bounding box.
   auto point = ValueId::makeFromGeoPoint({1, 1});
   auto undef = ValueId::makeUndefined();
-
-  SpatialJoinParseJob job1{point, 5, true, "", std::nullopt};
-  SpatialJoinParseJob job1Copy = job1;
-  SpatialJoinParseJob job2{point, 7, true, "", std::nullopt};
-  SpatialJoinParseJob job3{point, 5, false, "", std::nullopt};
-  SpatialJoinParseJob job4{undef, 5, true, "", std::nullopt};
-  SpatialJoinParseJob job5{point, 5, false, "",
+  SpatialJoinParseJob job1{point, 5, "", std::nullopt};
+  SpatialJoinParseJob job2{point, 7, "", std::nullopt};
+  SpatialJoinParseJob job3{undef, 5, "", std::nullopt};
+  SpatialJoinParseJob job4{point, 5, "",
                            ad_utility::BoundingBox{{1, 1}, {1, 1}}};
 
+  // A job is equal to itself, a different row or `ValueId` makes the jobs
+  // different.
   EXPECT_EQ(job1, job1);
-  EXPECT_EQ(job2, job2);
-  EXPECT_EQ(job3, job3);
-  EXPECT_EQ(job4, job4);
-  EXPECT_EQ(job1, job1Copy);
-  EXPECT_EQ(job3, job5);
-
   EXPECT_NE(job1, job2);
   EXPECT_NE(job1, job3);
-  EXPECT_NE(job1, job4);
   EXPECT_NE(job2, job3);
-  EXPECT_NE(job2, job4);
-  EXPECT_NE(job3, job4);
-  EXPECT_NE(job2, job5);
-  EXPECT_NE(job4, job5);
+
+  // The bounding box is ignored.
+  EXPECT_EQ(job1, job4);
 }
 
 }  // namespace
