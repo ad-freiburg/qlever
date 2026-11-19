@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "backports/filesystem.h"
+#include "backports/span.h"
 
 namespace qlever::util {
 // Return the paths of all regular files directly contained in the directory of
@@ -64,6 +65,21 @@ std::vector<ql::filesystem::path> directoriesWithPrefix(
 // (as `path1`) would be detected as a subdirectory of `/to/dir2/` (as `path2`),
 // but not of `/to/dir1/` (as `path2`).
 bool isSubdirectoryOf(const std::string& path1, const std::string& path2);
+
+// Read the whole file `path` into a vector of bytes. Throw if the file cannot
+// be opened.
+std::vector<char> readBinaryFile(const ql::filesystem::path& path);
+
+// Write `bytes` atomically to `path`: first to the temporary file `path.tmp`,
+// which is then renamed to `path`. An existing file `path` is replaced. Throw
+// if the file cannot be written.
+void writeFileAtomically(const ql::filesystem::path& path,
+                         ql::span<const char> bytes);
+
+// Copy the file `from` atomically to `to` (via the temporary file `to.tmp`, as
+// in `writeFileAtomically`). An existing file `to` is replaced.
+void copyFileAtomically(const ql::filesystem::path& from,
+                        const ql::filesystem::path& to);
 }  // namespace qlever::util
 
 #endif  // QLEVER_SRC_UTIL_FILESYSTEMHELPERS_H

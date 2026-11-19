@@ -21,9 +21,12 @@
 #include "util/Log.h"
 
 namespace fs = ql::filesystem;
+using qlever::util::copyFileAtomically;
 using qlever::util::deleteFilesInDirectory;
 using qlever::util::doesDirectoryContainFileWithBasename;
 using qlever::util::filesWithBaseNameAndSuffix;
+using qlever::util::readBinaryFile;
+using qlever::util::writeFileAtomically;
 using ::testing::HasSubstr;
 
 namespace {
@@ -340,4 +343,36 @@ TEST(DeleteFilesInDirectory, pathThatIsNotADirectoryReturnsZero) {
       deleteFilesInDirectory(file, [](const fs::path&) { return true; });
   EXPECT_EQ(deleted, 0u);
   EXPECT_TRUE(fs::exists(file));
+}
+
+// _____________________________________________________________________________
+TEST(FilesystemHelpers, readWriteAndCopyFilesAtomically) {
+  TempDir dir;
+  auto file = dir.path() / "file";
+  auto copy = dir.path() / "copy";
+
+  // Bytes that are not valid text (including a null byte) round-trip.
+  std::vector<char> bytes{'a', '\0', '\n', static_cast<char>(0xff), 'b'};
+  writeFileAtomically(file, bytes);
+  EXPECT_EQ(readBinaryFile(file), bytes);
+  EXPECT_FALSE(fs::exists(dir.path() / "file.tmp"));
+
+  // An existing file is replaced, also by an empty one.
+  writeFileAtomically(file, std::vector<char>{'x'});
+  EXPECT_EQ(readBinaryFile(file), std::vector<char>{'x'});
+  writeFileAtomically(file, {});
+  EXPECT_TRUE(readBinaryFile(file).empty());
+
+  writeFileAtomically(file, bytes);
+  copyFileAtomically(file, copy);
+  EXPECT_EQ(readBinaryFile(copy), bytes);
+  writeFileAtomically(file, std::vector<char>{'y'});
+  copyFileAtomically(file, copy);
+  EXPECT_EQ(readBinaryFile(copy), std::vector<char>{'y'});
+  EXPECT_FALSE(fs::exists(dir.path() / "copy.tmp"));
+
+  // Missing files and directories are reported.
+  EXPECT_ANY_THROW(readBinaryFile(dir.path() / "missing"));
+  EXPECT_ANY_THROW(writeFileAtomically(dir.path() / "missing" / "file", bytes));
+  EXPECT_ANY_THROW(copyFileAtomically(dir.path() / "missing", copy));
 }
