@@ -27,6 +27,7 @@
 using qlever::raster::BandValues;
 using qlever::raster::PixelTable;
 using qlever::raster::RasterFile;
+using qlever::raster::rasterFilePath;
 using ::testing::AllOf;
 using ::testing::DoubleNear;
 using ::testing::Each;
@@ -437,4 +438,51 @@ TEST(PixelTable, rejectsColumnsOfDifferentLengths) {
   std::vector<BandValues> valuesPerBand{BandValues{allocator}};
   EXPECT_THROW(PixelTable(std::move(centers), std::move(valuesPerBand)),
                ad_utility::Exception);
+}
+
+// _____________________________________________________________________________
+// Test that a name gives the path of the file with that name, and not of
+// another file in the folder.
+TEST(RasterFilePath, findsTheFileWithTheGivenName) {
+  auto [folder, cleanup] =
+      ad_utility::testing::makeTemporaryDirectory("rasterFilePathFinds");
+  std::ofstream{folder + "/elevation.tif"}.close();
+  std::ofstream{folder + "/slope.tif"}.close();
+  EXPECT_EQ(rasterFilePath(folder, "elevation"), folder + "/elevation.tif");
+}
+
+// _____________________________________________________________________________
+// Test that a name without a file throws, and that the message names the file
+// and the folder.
+TEST(RasterFilePath, throwsForAnUnknownName) {
+  auto [folder, cleanup] =
+      ad_utility::testing::makeTemporaryDirectory("rasterFilePathUnknown");
+  std::ofstream{folder + "/elevation.tif"}.close();
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      rasterFilePath(folder, "slope"),
+      AllOf(HasSubstr("There is no raster file \"slope.tif\""),
+            HasSubstr(folder)));
+}
+
+// _____________________________________________________________________________
+// Test that a name cannot reach a file outside the folder, even if the file
+// exists.
+TEST(RasterFilePath, throwsForANameThatIsAPath) {
+  auto [folder, cleanup] =
+      ad_utility::testing::makeTemporaryDirectory("rasterFilePathOutside");
+  ql::filesystem::create_directory(folder + "/rasters");
+  std::ofstream{folder + "/outside.tif"}.close();
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      rasterFilePath(folder + "/rasters", "../outside"),
+      HasSubstr("There is no raster file"));
+}
+
+// _____________________________________________________________________________
+// Test that files with another extension than `.tif` are not found.
+TEST(RasterFilePath, ignoresFilesThatAreNotTif) {
+  auto [folder, cleanup] =
+      ad_utility::testing::makeTemporaryDirectory("rasterFilePathNotTif");
+  std::ofstream{folder + "/elevation.txt"}.close();
+  AD_EXPECT_THROW_WITH_MESSAGE(rasterFilePath(folder, "elevation"),
+                               HasSubstr("There is no raster file"));
 }

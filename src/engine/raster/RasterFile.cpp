@@ -307,4 +307,19 @@ PixelTable RasterFile::lookupPoint(const GeoPoint& point,
   return PixelTable{std::move(centers), std::move(valuesPerBand)};
 }
 
+// _____________________________________________________________________________
+std::string rasterFilePath(const ql::filesystem::path& folder,
+                           std::string_view name) {
+  for (const auto& entry : ql::filesystem::directory_iterator(folder)) {
+    const ql::filesystem::path& file = entry.path();
+    if (ql::filesystem::is_regular_file(file) && file.extension() == ".tif" &&
+        file.stem().string() == name) {
+      return file.string();
+    }
+  }
+  throw std::runtime_error(absl::StrCat("There is no raster file \"", name,
+                                        ".tif\" in the folder \"",
+                                        folder.string(), "\""));
+}
+
 }  // namespace qlever::raster

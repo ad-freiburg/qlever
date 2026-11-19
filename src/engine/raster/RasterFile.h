@@ -14,9 +14,11 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <variant>
 #include <vector>
 
+#include "backports/filesystem.h"
 #include "backports/span.h"
 #include "rdfTypes/GeoPoint.h"
 #include "util/ContainersWithAllocator.h"
@@ -75,6 +77,12 @@ class RasterFile {
   PixelTable lookupPoint(const GeoPoint& point, ql::span<const int> bands,
                          const qlm::Allocator<char>& allocator);
 };
+
+// Return the path of the file `<name>.tif` in `folder`. Throw if there is no
+// such file. Only files that are in `folder` can be returned, so a query that
+// passes `name` can never reach a file outside of it.
+std::string rasterFilePath(const ql::filesystem::path& folder,
+                           std::string_view name);
 
 }  // namespace qlever::raster
 
