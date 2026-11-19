@@ -8,6 +8,7 @@
 
 #include <optional>
 
+#include "./util/LocalVocabTestHelpers.h"
 #include "engine/Bind.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
@@ -29,6 +30,8 @@
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 #include "util/RuntimeParametersTestHelpers.h"
+
+using ad_utility::testing::makeLocalVocab;
 
 static constexpr auto executor = &ad_utility::testing::singleThreadExecutor;
 
@@ -384,7 +387,7 @@ TEST_F(OperationTestFixture, getPrecomputedResultBecauseSiblingOfService) {
   // If a precomputedResult is set, it will be returned by `getResult`
   auto idTable = makeIdTableFromVector({{1, 6, 0}, {2, 5, 0}, {3, 4, 0}});
   auto result = std::make_shared<const Result>(idTable.clone(), colIndices({0}),
-                                               LocalVocab{});
+                                               makeLocalVocab());
   operation.precomputedResultBecauseSiblingOfService() =
       std::make_optional(result);
   EXPECT_EQ(operation.getResult(), result);
@@ -685,7 +688,7 @@ TEST(Operation, verifyRuntimeInformationIsUpdatedForLazyOperations) {
   std::vector<IdTable> idTablesVector{};
   idTablesVector.push_back(makeIdTableFromVector({{3, 4}}));
   idTablesVector.push_back(makeIdTableFromVector({{7, 8}}));
-  LocalVocab localVocab{};
+  LocalVocab localVocab = makeLocalVocab();
   localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{
       ad_utility::triple_component::Literal::literalWithoutQuotes("Test"),
       qec->getLocalVocabContext()});
@@ -824,16 +827,16 @@ TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd) {
   auto operationPtr = std::make_shared<CustomGeneratorOperation>(
       &context, [](const IdTable& idTable) -> Result::Generator {
         std::this_thread::sleep_for(50ms);
-        co_yield {idTable.clone(), LocalVocab{}};
+        co_yield {idTable.clone(), makeLocalVocab()};
         // This one should not trigger because it's below the 50ms threshold
         std::this_thread::sleep_for(30ms);
-        co_yield {idTable.clone(), LocalVocab{}};
+        co_yield {idTable.clone(), makeLocalVocab()};
         std::this_thread::sleep_for(30ms);
-        co_yield {idTable.clone(), LocalVocab{}};
+        co_yield {idTable.clone(), makeLocalVocab()};
         // This one should not trigger directly, but trigger because it's the
         // last one
         std::this_thread::sleep_for(30ms);
-        co_yield {idTable.clone(), LocalVocab{}};
+        co_yield {idTable.clone(), makeLocalVocab()};
       }(idTable));
   auto& operation = *operationPtr;
 
@@ -859,7 +862,7 @@ TEST(Operation, verifyTimeAfterLastChunkIsAddedToRuntimeInformation) {
   auto idTable = makeIdTableFromVector({{}});
   auto operationPtr = std::make_shared<CustomGeneratorOperation>(
       getQec(), [](const IdTable& idTable) -> Result::Generator {
-        co_yield {idTable.clone(), LocalVocab{}};
+        co_yield {idTable.clone(), makeLocalVocab()};
         // Work that is done after the last chunk, e.g. a filter that discards
         // the remaining input, has to be accounted for, too.
         std::this_thread::sleep_for(5ms);
@@ -901,8 +904,8 @@ TEST(Operation, ensureSignalUpdateIsCalledAtTheEndOfPartialConsumption) {
       [&](std::string) { ++updateCallCounter; }};
   auto operationPtr = std::make_shared<CustomGeneratorOperation>(
       &context, [](const IdTable& idTable) -> Result::Generator {
-        co_yield {idTable.clone(), LocalVocab{}};
-        co_yield {idTable.clone(), LocalVocab{}};
+        co_yield {idTable.clone(), makeLocalVocab()};
+        co_yield {idTable.clone(), makeLocalVocab()};
       }(idTable));
   auto& operation = *operationPtr;
 

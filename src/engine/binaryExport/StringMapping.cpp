@@ -24,6 +24,10 @@
 namespace qlever::binary_export {
 
 // _____________________________________________________________________________
+StringMapping::StringMapping(const Index& index)
+    : index_{&index}, dummyLocalVocab_{index.getImpl().allocator()} {}
+
+// _____________________________________________________________________________
 std::vector<std::string> StringMapping::takeStrings() {
   stringMapping_.clear();
   numBytes_ = 0;
@@ -33,6 +37,13 @@ std::vector<std::string> StringMapping::takeStrings() {
 // _____________________________________________________________________________
 Id StringMapping::remapId(Id id) {
   using enum Datatype;
+  if (id.getDatatype() == Datatype::TripleTermIndex) {
+    // TODO<Prashanth0703> Support the binary export of triple terms with a
+    // suitable format version and structural term transport. The version
+    // checks in `BinaryFormat.cpp` rely on this rejection, see the note there.
+    throw std::runtime_error(
+        "Binary export of triple-term references is not yet supported");
+  }
   // The datatypes that can be passed to a string mapping are exactly the
   // datatypes that semantically point to strings (so literals/IRIs that can't
   // be directly encoded into the ID). All other IDs have to be serialized by
@@ -46,10 +57,11 @@ Id StringMapping::remapId(Id id) {
   // (see above), or `EncodedVal`, or `BlankNodeIndex`. The latter two are not
   // sent as strings: An `EncodedVal` is sent as is (together with the patterns
   // of its encoding), and a `BlankNodeIndex` is remapped by the importer.
+  // `TripleTermIndex` is accounted for separately because it is rejected above.
   static constexpr auto checkType = [](Datatype datatype) {
     return ad_utility::contains(allowedDatatypes, datatype) ||
            isDatatypeTrivial(datatype) || datatype == BlankNodeIndex ||
-           datatype == EncodedVal;
+           datatype == EncodedVal || datatype == TripleTermIndex;
   };
   static_assert(ql::ranges::all_of(qlever::allEnumValues<Datatype>, checkType));
 

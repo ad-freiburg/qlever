@@ -277,9 +277,12 @@ CompressedRelationReader::lazyScan(
   };
 
   return IdTableGeneratorInputRange{Generator{
-      std::make_unique<BlocksView>(ad_utility::integerRange(numBlocks),
-                                   std::move(readBlock), numBlocksInFlight,
-                                   std::move(executor)),
+      std::make_unique<BlocksView>(
+          ad_utility::integerRange(numBlocks), std::move(readBlock),
+          numBlocksInFlight, std::move(executor),
+          // The `executor` runs at most this many tasks of the query at the
+          // same time, so more runners would only wait in its queue.
+          getRuntimeParameter<&RuntimeParameters::maxNumThreadsPerQuery_>()),
       numBlocks, std::move(cancellationHandle), limitOffset}};
 }
 
