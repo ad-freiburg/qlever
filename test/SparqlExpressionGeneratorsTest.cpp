@@ -5,9 +5,12 @@
 
 #include <gmock/gmock.h>
 
+#include "./util/LocalVocabTestHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "util/GTestHelpers.h"
 #include "util/IndexTestHelpers.h"
+
+using ad_utility::testing::makeLocalVocab;
 
 using namespace sparqlExpression::detail;
 
@@ -17,7 +20,7 @@ TEST(SparqlExpressionGenerators, makeStringResultGetter) {
   auto* qec = ad_utility::testing::getQec();
   auto literal = LocalVocabEntry::literalWithoutQuotes(
       "Test String", qec->getLocalVocabContext());
-  LocalVocab localVocab{};
+  LocalVocab localVocab = makeLocalVocab();
 
   auto function = makeStringResultGetter(&localVocab);
 
@@ -33,7 +36,7 @@ TEST(SparqlExpressionGenerators, idOrLiteralOrIriToId) {
   auto* qec = ad_utility::testing::getQec();
   auto literal = LocalVocabEntry::literalWithoutQuotes(
       "Test String", qec->getLocalVocabContext());
-  LocalVocab localVocab{};
+  LocalVocab localVocab = makeLocalVocab();
 
   auto result = idOrLiteralOrIriToId(literal, &localVocab);
 

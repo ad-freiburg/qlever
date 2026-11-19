@@ -98,9 +98,12 @@ struct WrapperWithEnsuredRow
     }
     if (*iterator_ == originalRange_.end()) {
       done_ = true;
-      return hasRows_ ? std::nullopt
-                      : std::optional{Result::IdTableVocabPair{
-                            std::move(rowFallback_), {}}};
+      if (hasRows_) {
+        return std::nullopt;
+      }
+      LocalVocab emptyVocab{rowFallback_.getAllocator()};
+      return Result::IdTableVocabPair{std::move(rowFallback_),
+                                      std::move(emptyVocab)};
     }
     hasRows_ |= !iterator_.value()->idTable_.empty();
     return std::move(*iterator_.value());
@@ -124,8 +127,7 @@ Result NeutralOptional::computeResult(bool requestLaziness) {
     if (childResult->idTableView().empty()) {
       return {singleRowCroppedByLimit() ? IdTable{getResultWidth(), allocator()}
                                         : std::move(singleRowTable),
-              resultSortedOn(),
-              {}};
+              resultSortedOn(), LocalVocab{allocator()}};
     }
     return {childResult->cloneIdTable(cancellationChecker()),
             childResult->sortedBy(), childResult->getSharedLocalVocab()};

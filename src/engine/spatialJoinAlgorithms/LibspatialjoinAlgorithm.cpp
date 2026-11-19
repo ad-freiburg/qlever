@@ -320,8 +320,8 @@ Result LibspatialjoinAlgorithm::run() {
   spatialJoin_.value()->runtimeInfo().addDetail("num-sweeper-threads",
                                                 NUM_THREADS);
 
-  // Configure the sweeper. Half of the memory that is left is used for the
-  // geometry cache (see `sweeperConfig`), split between the caches of its
+  // Configure `libspatialjoin`. Half of the memory that is left is used for
+  // the geometry cache (see `sweeperConfig`), split between the caches of its
   // stores (the store for this query and possibly the persisted store of the
   // index, see below). The other half is split evenly between the geometries
   // that the store keeps in memory, the write buffers of the two event lists
