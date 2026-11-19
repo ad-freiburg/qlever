@@ -1347,9 +1347,8 @@ struct BlockZipperJoinImplCRTP {
       if (allBlocksWereFilled) {
         blockStatus = BlockStatus::allFilled;
       }
-      return !ql::ranges::all_of(target, [](const auto& block) {
-        return ql::ranges::empty(block.subrange());
-      });
+      return !ql::ranges::all_of(
+          target, [](const auto& block) { return block.empty(); });
     };
 
     // We are only guaranteed to have all relevant blocks from one side, so we
