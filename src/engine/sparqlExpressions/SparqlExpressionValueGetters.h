@@ -402,23 +402,37 @@ struct IriValueGetter : Mixin<IriValueGetter> {
   OptIri operator()(const LiteralOrIri& s, const EvaluationContext*) const;
 };
 
-// `UnitOfMeasurementValueGetter` returns a `UnitOfMeasurement`.
-struct UnitOfMeasurementValueGetter : Mixin<UnitOfMeasurementValueGetter> {
-  // Set the size of this cache to at least the number of supported units.
-  mutable ad_utility::util::LRUCache<ValueId, UnitOfMeasurement> cache_{10};
-  using Value = UnitOfMeasurement;
-  using Mixin<UnitOfMeasurementValueGetter>::operator();
-  UnitOfMeasurement operator()(ValueId id, const EvaluationContext*) const;
-  UnitOfMeasurement operator()(const LiteralOrIri& s,
-                               const EvaluationContext*) const;
+// `EnumValueGetter` turns an IRI, or a literal of datatype `xsd:anyURI`, into
+// a value of an enum via the function `iriToValue` (which takes the IRI
+// without brackets). Everything else, including unknown IRIs, becomes the enum
+// value `undefined`. Instances are `UnitOfMeasurementValueGetter` and
+// `CRSTypeValueGetter` below.
+CPP_template(auto iriToValue, auto undefined)(
+    requires ad_utility::InvocableWithExactReturnType<
+        decltype(iriToValue), decltype(undefined), std::string_view>)
+struct EnumValueGetter : Mixin<EnumValueGetter<iriToValue, undefined>> {
+  using Value = decltype(undefined);
+  // Cache for the ID path. Its size must be at least twice the number of
+  // values of the enum (each value has an IRI and a literal form), 32 covers
+  // both instances.
+  mutable ad_utility::util::LRUCache<ValueId, Value> cache_{32};
+  using Mixin<EnumValueGetter<iriToValue, undefined>>::operator();
+  Value operator()(ValueId id, const EvaluationContext*) const;
+  Value operator()(const LiteralOrIri& s, const EvaluationContext*) const;
 
-  // The actual implementation for a given `LiteralOrIri` which is guaranteed
-  // not to use the `EvaluationContext`. This method can be used to convert
-  // `LiteralOrIri` objects holding a unit of measurement, even when no
-  // `EvaluationContext` is available. Currently used for `geof:distance` filter
-  // substitution during query planning.
-  static UnitOfMeasurement litOrIriToUnit(const LiteralOrIri& s);
+  // The actual implementation for a given `LiteralOrIri`, which does not need
+  // an `EvaluationContext`. Used by the `geof:distance` filter substitution
+  // during query planning, where there is none.
+  static Value litOrIriToValue(const LiteralOrIri& s);
 };
+
+using UnitOfMeasurementValueGetter =
+    EnumValueGetter<&ad_utility::detail::iriToUnitOfMeasurement,
+                    UnitOfMeasurement::UNKNOWN>;
+
+using CRSTypeValueGetter =
+    EnumValueGetter<&ad_utility::SourceCrsType::iriToCrsType,
+                    ad_utility::crsTypeUnsupported>;
 
 // This value getter retrieves geometries: `GeoPoints` or literals with
 // `geo:wktLiteral` datatype.

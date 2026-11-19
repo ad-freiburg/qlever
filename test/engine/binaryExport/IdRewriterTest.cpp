@@ -253,10 +253,15 @@ TEST(IdRewriter, dispatch) {
   EXPECT_EQ(rewriteSingleId(rewriter, remotePoint),
             Id::makeFromGeoPoint(point));
 
-  // The exporter sends the strings instead of the `VocabIndex`.
+  // The exporter sends the strings instead of the `VocabIndex`, and it never
+  // sends a triple term.
   AD_EXPECT_THROW_WITH_MESSAGE(
       rewriteSingleId(rewriter, Id::makeFromVocabIndex(VocabIndex::make(0))),
       ::testing::HasSubstr("unexpected datatype VocabIndex"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      rewriteSingleId(rewriter,
+                      Id::makeFromTripleTermIndex(TripleTermIndex::make(17))),
+      ::testing::HasSubstr("unexpected datatype TripleTermIndex"));
 }
 
 // Test that `rewriteGeoPoint` converts a point between two encodings and

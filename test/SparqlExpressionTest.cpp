@@ -2009,6 +2009,13 @@ TEST(SparqlExpression, testToNumericExpression) {
   auto checkGetDouble = testUnaryExpression<&makeConvertToDoubleExpression>;
   auto chekGetDecimal = testUnaryExpression<&makeConvertToDecimalExpression>;
 
+  // Triple terms cannot be cast to numeric literals; conversion is an
+  // expression error rather than a C++ exception from string export.
+  Id term = Id::makeFromTripleTermIndex(TripleTermIndex::make(17));
+  checkGetInt(idOrLitOrStringVec({term}), Ids{U});
+  checkGetDouble(idOrLitOrStringVec({term}), Ids{U});
+  chekGetDecimal(idOrLitOrStringVec({term}), Ids{U});
+
   checkGetInt(
       idOrLitOrStringVec({U, "  -1275", "5.97", "-78.97", "-5BoB6", "FreBurg1",
                           "", " .", " 42\n", " 0.01 ", "", "@", "@?+1", "1", G,
@@ -2112,7 +2119,11 @@ TEST(SparqlExpression, testToBooleanExpression) {
       Ids{U, U, U, U, U, F, U, U, T, U, U, U, F, T,
           T, F, F, F, T, T, F, T, T, U, U, U, U});
 
-  checkGetBoolean(IdOrLocalVocabEntryVec({Id::makeUndefined()}), Ids{U});
+  // Triple terms also cannot be cast to boolean literals.
+  checkGetBoolean(IdOrLocalVocabEntryVec(
+                      {Id::makeUndefined(),
+                       Id::makeFromTripleTermIndex(TripleTermIndex::make(17))}),
+                  Ids{U, U});
 }
 
 // ____________________________________________________________________________
