@@ -2356,7 +2356,8 @@ TEST(SpatialJoin, LibspatialJoinWithGeometryStoreIdColumns) {
       std::vector<std::string> row;
       for (const auto* var : {"?obj1", "?geo1", "?obj2", "?geo2"}) {
         auto id = table.at(i, varToCol.at(Variable{var}).columnIndex_);
-        row.push_back(ql::exportIds::idToStringAndType(qec->getIndex(), id, {})
+        row.push_back(ql::exportIds::idToStringAndType(
+                          qec->getIndex(), id, LocalVocab{qec->getAllocator()})
                           .value()
                           .first);
       }
