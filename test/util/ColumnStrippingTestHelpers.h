@@ -13,6 +13,7 @@
 #include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 
+#include "./AllocatorTestHelpers.h"
 #include "backports/algorithm.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
