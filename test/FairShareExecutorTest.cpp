@@ -9,6 +9,7 @@
 
 #include <gmock/gmock.h>
 
+#include <algorithm>
 #include <atomic>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/post.hpp>
@@ -21,6 +22,7 @@
 
 #include "util/FairShareExecutor.h"
 #include "util/Timer.h"
+#include "util/jthread.h"
 
 using namespace ad_utility;
 using namespace std::chrono_literals;
@@ -77,15 +79,16 @@ size_t runAndWait(const qlever::Executor& executor, size_t numTasks,
 }
 
 // A task that keeps a class of a `FairScheduler` saturated: it adds its run
-// time (in microseconds) to `runTime_` and posts a copy of itself again until
-// `stop_` is set.
+// time (in microseconds) to `runTime_`, keeps the maximal run time of a single
+// task in `maxRunTime_`, and posts a copy of itself again until `stop_` is set.
 //
 // NOTE: The run time is what the scheduler balances. Counting the tasks
 // instead is not reliable, because on a loaded machine a task may be preempted
-// and then take longer than others.
+// and then take longer than others. The feeders must run on a single thread.
 struct Feeder {
   qlever::Executor executor_;
   std::atomic<int64_t>* runTime_;
+  std::atomic<int64_t>* maxRunTime_;
   const std::atomic<bool>* stop_;
   void operator()() const {
     if (*stop_) {
@@ -93,8 +96,10 @@ struct Feeder {
     }
     Timer timer{Timer::Started};
     spin(500us);
-    *runTime_ += timer.value().count();
     boost::asio::post(executor_, *this);
+    int64_t runTime = timer.value().count();
+    *runTime_ += runTime;
+    *maxRunTime_ = std::max(maxRunTime_->load(), runTime);
   }
 };
 }  // namespace
@@ -123,10 +128,17 @@ TEST(FairShareExecutor, maxConcurrencyOfClient) {
 
 // Test that under contention the classes get the threads according to their
 // shares, no matter how many tasks each of them has queued.
+//
+// NOTE: The run time of a task is charged when it finishes, so the shares are
+// only met up to the run time of a single task, which is large if the thread
+// was descheduled. The tolerance takes this into account. A single slot keeps
+// this deviation small (with several slots, one class may hold all of them
+// while their threads are descheduled). The worker thread starts only after
+// all tasks are queued, so that neither class runs alone at the start.
 #ifndef _QLEVER_NO_TIMING_TESTS
 TEST(FairShareExecutor, sharesOfClasses) {
-  boost::asio::thread_pool pool{4};
-  auto scheduler = std::make_shared<FairScheduler>(pool.get_executor(), 4);
+  boost::asio::io_context ctx;
+  auto scheduler = std::make_shared<FairScheduler>(ctx.get_executor(), 1);
   scheduler->setShare(FairShareClass::Background, 0.25);
   scheduler->setShare(FairShareClass::Foreground, 0.75);
   qlever::Executor background = FairShareExecutor{
@@ -139,25 +151,31 @@ TEST(FairShareExecutor, sharesOfClasses) {
   }
   std::atomic<int64_t> backgroundRunTime = 0;
   std::atomic<int64_t> foregroundRunTime = 0;
+  std::atomic<int64_t> maxRunTime = 0;
   std::atomic<bool> stop = false;
   // Keep both classes saturated for a while.
-  auto feed = [&stop](const qlever::Executor& executor,
-                      std::atomic<int64_t>& runTime) {
+  auto feed = [&stop, &maxRunTime](const qlever::Executor& executor,
+                                   std::atomic<int64_t>& runTime) {
     for (size_t i = 0; i < 8; ++i) {
-      boost::asio::post(executor, Feeder{executor, &runTime, &stop});
+      boost::asio::post(executor,
+                        Feeder{executor, &runTime, &maxRunTime, &stop});
     }
   };
   feed(background, backgroundRunTime);
   for (auto& q : queries) {
     feed(q, foregroundRunTime);
   }
-  std::this_thread::sleep_for(1s);
-  stop = true;
-  pool.join();
-  double fraction = static_cast<double>(backgroundRunTime) /
-                    static_cast<double>(backgroundRunTime + foregroundRunTime);
-  EXPECT_NEAR(fraction, 0.25, 0.07)
-      << backgroundRunTime << " " << foregroundRunTime;
+  {
+    ad_utility::JThread worker{[&ctx]() { ctx.run(); }};
+    std::this_thread::sleep_for(1s);
+    stop = true;
+  }  // `worker` joins here.
+  double totalRunTime =
+      static_cast<double>(backgroundRunTime + foregroundRunTime);
+  double fraction = static_cast<double>(backgroundRunTime) / totalRunTime;
+  EXPECT_NEAR(fraction, 0.25,
+              0.07 + static_cast<double>(maxRunTime) / totalRunTime)
+      << backgroundRunTime << " " << foregroundRunTime << " " << maxRunTime;
 }
 #endif
 
