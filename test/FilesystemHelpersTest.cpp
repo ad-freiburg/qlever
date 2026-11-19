@@ -10,8 +10,10 @@
 #include <absl/cleanup/cleanup.h>
 #include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
+#include <sys/resource.h>
 
 #include <algorithm>
+#include <csignal>
 #include <fstream>
 #include <string>
 #include <vector>
@@ -479,4 +481,67 @@ TEST(FilesystemHelpers, writeFileAtomicallyWithCallback) {
   EXPECT_ANY_THROW(writeFileAtomically(directory, write("fourth")));
   EXPECT_THAT(entryNames(dir.path()),
               ::testing::ElementsAre("directory", "file"));
+}
+
+// Test that `detail::readFileIntoBuffer` throws if the file holds fewer bytes
+// than requested, or if it cannot be read at all.
+TEST(FilesystemHelpers, readFileIntoBufferFailures) {
+  TempDir dir;
+  auto file = dir.path() / "file";
+  writeFileAtomically(file, std::string{"abc"});
+
+  // Reading exactly the size of the file works.
+  std::vector<char> buffer(3);
+  qlever::util::detail::readFileIntoBuffer(file, buffer);
+  EXPECT_EQ((std::string{buffer.begin(), buffer.end()}), "abc");
+
+  // A file that is shorter than the buffer (e.g. because it was truncated after
+  // its size was determined) is reported.
+  std::vector<char> tooLarge(10);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      qlever::util::detail::readFileIntoBuffer(file, tooLarge),
+      HasSubstr("expected 10 bytes, but read 3"));
+
+  // A directory can be opened on Linux, but reading from it fails (with
+  // `EISDIR`), so `pread` returns a negative value. On other platforms, the
+  // opening may already fail.
+  std::vector<char> oneByte(1);
+#ifdef __linux__
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      qlever::util::detail::readFileIntoBuffer(dir.path(), oneByte),
+      HasSubstr("Could not read the complete file"));
+#else
+  EXPECT_ANY_THROW(
+      qlever::util::detail::readFileIntoBuffer(dir.path(), oneByte));
+#endif
+}
+
+// Test that `writeFileAtomically` throws if writing the bytes fails after the
+// temporary file was successfully opened, and that it then leaves neither the
+// target nor a temporary file behind. The failure is provoked by lowering the
+// limit of the file size (`RLIMIT_FSIZE`) of this process, so that the `write`
+// fails with `EFBIG` (the signal `SIGXFSZ` that is raised in this case is
+// ignored, as it would otherwise terminate the process).
+TEST(FilesystemHelpers, writeFileAtomicallyWriteFailure) {
+  TempDir dir;
+  auto file = dir.path() / "file";
+
+  struct rlimit oldLimit {};
+  ASSERT_EQ(getrlimit(RLIMIT_FSIZE, &oldLimit), 0);
+  auto oldHandler = std::signal(SIGXFSZ, SIG_IGN);
+  ASSERT_NE(oldHandler, SIG_ERR);
+  absl::Cleanup restore = [&oldLimit, oldHandler] {
+    setrlimit(RLIMIT_FSIZE, &oldLimit);
+    std::signal(SIGXFSZ, oldHandler);
+  };
+  struct rlimit newLimit = oldLimit;
+  newLimit.rlim_cur = 1;
+  ASSERT_EQ(setrlimit(RLIMIT_FSIZE, &newLimit), 0);
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      writeFileAtomically(file, std::vector<char>(100, 'x')),
+      HasSubstr("Could not write the file"));
+  std::move(restore).Invoke();
+
+  EXPECT_TRUE(entryNames(dir.path()).empty());
 }

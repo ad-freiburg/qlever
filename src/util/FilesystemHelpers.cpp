@@ -15,6 +15,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "Views.h"
@@ -153,13 +154,13 @@ void writeFileAtomically(
   // of the same `path` never write to the same temporary file.
   fs::path temporary = path;
   temporary += absl::StrCat(".", ad_utility::UuidGenerator{}(), ".tmp");
-  // Remove the temporary file if anything below throws. After a successful
-  // rename it no longer exists, so the removal is then a no-op.
+  // Remove the temporary file if writing or renaming it fails.
   absl::Cleanup removeTemporary = [&temporary] {
     ad_utility::deleteFile(temporary, /*warnOnFailure=*/false);
   };
   writeTemporaryFile(temporary);
   fs::rename(temporary, path);
+  std::move(removeTemporary).Cancel();
 }
 
 // _____________________________________________________________________________
