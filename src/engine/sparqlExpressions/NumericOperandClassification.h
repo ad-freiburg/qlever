@@ -225,7 +225,8 @@ inline NumericOperandClassification classifyNumericOperand(ValueId value) {
 }
 
 // Classify a supported operand representation. Constants are classified
-// directly, vectors and columns of `ValueId` are passed on as they are.
+// directly, vectors and columns of `ValueId` are passed on to
+// `classifyNumericValues` unchanged.
 template <bool IncludeDates = false, typename Operand>
 inline NumericOperandClassification classifyNumericOperand(
     const Operand& operand, const EvaluationContext* context) {

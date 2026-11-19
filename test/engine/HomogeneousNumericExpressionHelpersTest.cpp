@@ -279,6 +279,8 @@ TEST_F(HomogeneousNumericExpressionHelpersTest, ClassifySpan) {
 // a span, for more than one block of 32 `Id`s plus a rest, and for blocks with
 // one, two, and more datatypes.
 TEST_F(HomogeneousNumericExpressionHelpersTest, ClassifySplitColumn) {
+  // Classify `ids` once as a split column and once as a span of `ValueId`,
+  // and expect the same result.
   auto expectSameClassification = [this](const std::vector<ValueId>& ids) {
     const columnBasedIdTable::splitLayout::IdColumnVector<std::allocator<Id>>
         column{ids.begin(), ids.end(), std::allocator<Id>{}};
@@ -292,6 +294,8 @@ TEST_F(HomogeneousNumericExpressionHelpersTest, ClassifySplitColumn) {
               fromSpan.containsValueRejectedByGetter_);
   };
 
+  // Three columns of 70 `Id`s each: only integers, integers and doubles, and
+  // integers, doubles and booleans.
   std::vector<ValueId> ints(70, I(1));
   std::vector<ValueId> intsAndDoubles;
   std::vector<ValueId> threeDatatypes;

@@ -74,7 +74,8 @@ auto makeIndexedValueGetter(Operand&& operand, EvaluationContext* context) {
                         columnBasedIdTable::splitLayout::ConstIdRef::Base,
                         columnBasedIdTable::splitLayout::IdRef::Base>) {
         // An element of a split column converts to both `ValueId` and
-        // `IdOrLocalVocabEntry`, so it is passed on as the `Id` it refers to.
+        // `IdOrLocalVocabEntry`, which makes a call of a value getter
+        // ambiguous, so it is passed on as the `Id` it refers to.
         return ValueGetter{}(Id{operand[i]}, context);
       } else {
         return ValueGetter{}(operand[i], context);

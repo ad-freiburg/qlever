@@ -96,7 +96,8 @@ auto resultGeneratorImpl(T&& vector, size_t numItems,
                     columnBasedIdTable::splitLayout::ConstIdRef::Base,
                     columnBasedIdTable::splitLayout::IdRef::Base>) {
     // An element of a split column converts to both `ValueId` and
-    // `IdOrLocalVocabEntry`, so it is passed on as the `Id` it refers to.
+    // `IdOrLocalVocabEntry`, which makes a call of a value getter ambiguous,
+    // so it is passed on as the `Id` it refers to.
     return AD_FWD(vector) |
            ql::views::transform([transformation = std::move(transformation)](
                                     Id id) { return transformation(id); });
