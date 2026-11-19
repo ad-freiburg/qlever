@@ -11,6 +11,7 @@
 #include "rdfTypes/GeometryInfo.h"
 
 #include <absl/base/casts.h>
+#include <absl/strings/str_cat.h>
 
 #include <array>
 #include <cmath>
@@ -25,6 +26,10 @@
 #include "util/Log.h"
 
 namespace ad_utility {
+
+// Check that the constant `crsTypeUnsupported` of `GeometryInfo.h` (which only
+// forward-declares `CRSType`) is the enum value it stands for.
+static_assert(crsTypeUnsupported == ::util::geo::CRSType::UNSUPPORTED);
 
 // ____________________________________________________________________________
 GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
@@ -212,6 +217,14 @@ std::optional<std::string_view> GeometryType::asIri() const {
 // ____________________________________________________________________________
 std::optional<std::string_view> SourceCrsType::asIri() const {
   return detail::crsTypeToIri(type_);
+}
+
+// _____________________________________________________________________________
+::util::geo::CRSType SourceCrsType::iriToCrsType(std::string_view uri) {
+  // Wrap the IRI in angle brackets, because `getCRSType` parses the CRS
+  // prefix of a WKT literal (`<http://...> POINT(...)`) and treats a missing
+  // opening bracket as "no CRS given", which is CRS84 and not `UNSUPPORTED`.
+  return ::util::geo::getCRSType(absl::StrCat("<", uri, ">"));
 }
 
 // ____________________________________________________________________________

@@ -66,10 +66,13 @@ class WKTParser : public sj::WKTParserBase<SpatialJoinParseJob> {
             const std::optional<::util::geo::DBox>& prefilterLatLngBox,
             const Index& index, bool usePersistedGeometries = false);
 
-  // Stop the worker threads. The destructor of `WKTParserBase` does this as
-  // well, but only after the members of this class are destroyed, and the
-  // threads use them until they stop. This matters if the parsing ends
-  // without `done()`, for example because the query was cancelled.
+  // Stop the worker threads if the parsing ends without `done()`, for example
+  // because the query was cancelled.
+  //
+  // NOTE: `WKTParserBase` has no destructor that stops the threads (the
+  // `sj::WKTParser` of `libspatialjoin` does it in its own destructor, but this
+  // class does not derive from it). Without this one, a joinable thread would
+  // be destroyed, which terminates the program.
   ~WKTParser();
 
   // If a worker thread has failed, wait for all worker threads to finish and

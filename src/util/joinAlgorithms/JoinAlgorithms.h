@@ -1752,7 +1752,7 @@ struct BlockZipperJoinImplForSpecialOptionalJoin
       size_t numCols =
           blocks.front().fullBlock().template asStaticView<0>().numColumns();
       IdTable table(numCols, allocator);
-      LocalVocab vocab;
+      LocalVocab vocab{allocator};
       // TODO<joka921> preallocate the sum of the index-range sizes.
       for (const auto& block : blocks) {
         const auto& staticView = block.fullBlock().template asStaticView<0>();

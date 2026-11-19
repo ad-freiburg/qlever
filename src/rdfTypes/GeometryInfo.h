@@ -37,6 +37,12 @@ enum class CRSType : uint8_t;
 
 namespace ad_utility {
 
+// The value `util::geo::CRSType::UNSUPPORTED`, which this header cannot name
+// (the enum is only forward-declared). Used by the `CRSTypeValueGetter` in
+// `SparqlExpressionValueGetters.h`, checked against the enum in
+// `GeometryInfo.cpp`.
+constexpr inline ::util::geo::CRSType crsTypeUnsupported{0};
+
 // These encapsulating structs are required for the `RequestedInfo` templates
 // used in the `GeometryInfo` class and the `GeometryInfoValueGetter`.
 
@@ -128,6 +134,8 @@ struct SourceCrsType {
 
   // Returns the representing IRI.
   std::optional<std::string_view> asIri() const;
+  // Convert a CRS IRI string to CRS type.
+  static ::util::geo::CRSType iriToCrsType(std::string_view uri);
 
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL_CONSTEXPR(SourceCrsType, type_)
 };

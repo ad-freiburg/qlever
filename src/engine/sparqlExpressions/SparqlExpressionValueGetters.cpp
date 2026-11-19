@@ -81,6 +81,7 @@ NumericValue NumericValueGetter::operator()(
     case Datatype::WordVocabIndex:
     case Datatype::Date:
     case Datatype::GeoPoint:
+    case Datatype::TripleTermIndex:
     case Datatype::BlankNodeIndex:
     case Datatype::SecondaryVocabIndex:
       return NotNumeric{};
@@ -108,6 +109,7 @@ NumericOrDateValue NumericOrDateValueGetter::operator()(
     case Datatype::Date:
       return id.getDate();
     case Datatype::GeoPoint:
+    case Datatype::TripleTermIndex:
     case Datatype::BlankNodeIndex:
     case Datatype::SecondaryVocabIndex:
       return NotNumeric{};
@@ -128,6 +130,10 @@ auto EffectiveBooleanValueGetter::operator()(
       return (id.getInt() != 0) ? True : False;
     case Datatype::Bool:
       return id.getBool() ? True : False;
+    case Datatype::TripleTermIndex:
+      // SPARQL 1.2 section 17.2.3: EBV of a non-literal is an error.
+      // `Undef` represents that error, not an unbound triple term.
+      return Undef;
     case Datatype::Undefined:
     case Datatype::BlankNodeIndex:
       return Undef;
@@ -283,6 +289,10 @@ Id IsSomethingValueGetter<isSomethingFunction, prefix>::operator()(
     case Datatype::Date:
     case Datatype::GeoPoint:
       return Id::makeFromBool(prefix == isLiteralPrefix);
+    case Datatype::TripleTermIndex:
+      // A triple term is neither an IRI nor a literal (SPARQL 1.2 sections
+      // 17.4.2.3 and 17.4.2.5).
+      return Id::makeFromBool(false);
     case Datatype::TextRecordIndex:
     case Datatype::WordVocabIndex:
     case Datatype::BlankNodeIndex:
@@ -319,6 +329,9 @@ bool IsValidValueGetter::operator()(
 IntDoubleStr ToNumericValueGetter::operator()(
     ValueId id, [[maybe_unused]] const EvaluationContext* context) const {
   switch (id.getDatatype()) {
+    // A triple term cannot be cast to a numeric or boolean literal, the
+    // `monostate` becomes an undefined expression result.
+    case Datatype::TripleTermIndex:
     case Datatype::Undefined:
       return std::monostate{};
     case Datatype::Int:
@@ -380,6 +393,7 @@ OptIri DatatypeValueGetter::operator()(ValueId id,
     case SecondaryVocabIndex:
       return (*this)(getLiteralOrIri(id, context), context);
     case Undefined:
+    case TripleTermIndex:
     case BlankNodeIndex:
     case TextRecordIndex:
     case WordVocabIndex:
@@ -418,39 +432,59 @@ OptIri IriValueGetter::operator()(
 }
 
 // _____________________________________________________________________________
-UnitOfMeasurement UnitOfMeasurementValueGetter::operator()(
-    ValueId id, const EvaluationContext* context) const {
-  // Use cache to remember fully parsed units for reoccurring ValueIds
+CPP_template_out_def(auto iriToValue, auto undefined)(
+    requires ad_utility::InvocableWithExactReturnType<
+        decltype(iriToValue), decltype(undefined), std::string_view>)
+decltype(undefined)
+    EnumValueGetter<CPP_sfinae_args(iriToValue, undefined)>::operator()(
+        ValueId id, const EvaluationContext * context) const {
+  // Use the cache to remember the values of reoccurring `ValueId`s.
   return cache_.getOrCompute(
-      id, [&context](const ValueId& value) -> UnitOfMeasurement {
+      id, [&context](const ValueId& value) -> decltype(undefined) {
         // Get string content of ValueId
         auto str = idToLiteralOrIri(value, context, true);
         // Use LiteralOrIri overload for actual computation
         if (str.has_value()) {
-          return UnitOfMeasurementValueGetter{}(str.value(), context);
+          return litOrIriToValue(str.value());
         }
-        return UnitOfMeasurement::UNKNOWN;
+        return undefined;
       });
 }
 
 // _____________________________________________________________________________
-UnitOfMeasurement UnitOfMeasurementValueGetter::operator()(
-    const LiteralOrIri& s, const EvaluationContext*) const {
-  return litOrIriToUnit(s);
+CPP_template_out_def(auto iriToValue, auto undefined)(
+    requires ad_utility::InvocableWithExactReturnType<
+        decltype(iriToValue), decltype(undefined), std::string_view>)
+decltype(undefined)
+    EnumValueGetter<CPP_sfinae_args(iriToValue, undefined)>::operator()(
+        const LiteralOrIri & s, const EvaluationContext*) const {
+  return litOrIriToValue(s);
 }
 
 // _____________________________________________________________________________
-UnitOfMeasurement UnitOfMeasurementValueGetter::litOrIriToUnit(
-    const LiteralOrIri& s) {
+CPP_template_out_def(auto iriToValue, auto undefined)(
+    requires ad_utility::InvocableWithExactReturnType<
+        decltype(iriToValue), decltype(undefined), std::string_view>)
+decltype(undefined)
+    EnumValueGetter<CPP_sfinae_args(iriToValue, undefined)>::litOrIriToValue(
+        const LiteralOrIri& s) {
   // The GeoSPARQL standard requires literals of datatype xsd:anyURI for units
-  // of measurement. Because this is a rather obscure requirement, we support
-  // IRIs also.
+  // of measurement and CRS types. Because this is a rather obscure requirement,
+  // we support IRIs also.
   if (s.isIri() || (s.isLiteral() && s.getLiteral().hasDatatype() &&
                     s.getLiteral().getDatatype() == XSD_ANYURI_TYPE)) {
-    return ad_utility::detail::iriToUnitOfMeasurement(s.getContent());
+    return iriToValue(s.getContent());
   }
-  return UnitOfMeasurement::UNKNOWN;
+  return undefined;
 }
+
+// Explicit instantiations of the two `EnumValueGetter`s, see the header.
+namespace sparqlExpression::detail {
+template struct EnumValueGetter<&ad_utility::detail::iriToUnitOfMeasurement,
+                                UnitOfMeasurement::UNKNOWN>;
+template struct EnumValueGetter<&ad_utility::SourceCrsType::iriToCrsType,
+                                ad_utility::crsTypeUnsupported>;
+}  // namespace sparqlExpression::detail
 
 //______________________________________________________________________________
 std::optional<ad_utility::GeoPointOrWkt> GeoPointOrWktValueGetter::operator()(
@@ -472,6 +506,7 @@ std::optional<ad_utility::GeoPointOrWkt> GeoPointOrWktValueGetter::operator()(
     case Undefined:
     case TextRecordIndex:
     case WordVocabIndex:
+    case TripleTermIndex:
     case BlankNodeIndex:
     case EncodedVal:
       return std::nullopt;
@@ -505,6 +540,7 @@ T getValue(ValueId id, const sparqlExpression::EvaluationContext* context,
       return valueGetter(getLiteralOrIri(id, context), context);
     case TextRecordIndex:
     case WordVocabIndex:
+    case TripleTermIndex:
     case BlankNodeIndex:
     case Bool:
     case Int:
@@ -546,6 +582,7 @@ std::optional<std::string> LanguageTagValueGetter::operator()(
     case LocalVocabIndex:
     case TextRecordIndex:
     case WordVocabIndex:
+    case TripleTermIndex:
     case BlankNodeIndex:
     case SecondaryVocabIndex:
       return getValue<std::optional<std::string>>(id, context, *this);
@@ -636,6 +673,7 @@ std::optional<RequestedInfo> GeometryInfoValueGetter<CPP_sfinae_args(
           .getRequestedInfo<RequestedInfo>();
     case TextRecordIndex:
     case WordVocabIndex:
+    case TripleTermIndex:
     case BlankNodeIndex:
     case Bool:
     case Int:
@@ -740,6 +778,7 @@ template struct TypeErasedValueGetter<ToNumericValueGetter>;
 template struct TypeErasedValueGetter<DatatypeValueGetter>;
 template struct TypeErasedValueGetter<IriValueGetter>;
 template struct TypeErasedValueGetter<UnitOfMeasurementValueGetter>;
+template struct TypeErasedValueGetter<CRSTypeValueGetter>;
 template struct TypeErasedValueGetter<GeoPointOrWktValueGetter>;
 template struct TypeErasedValueGetter<LanguageTagValueGetter>;
 template struct TypeErasedValueGetter<IriOrUriValueGetter>;
