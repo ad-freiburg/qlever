@@ -439,9 +439,10 @@ IndexScan::makeCopyWithPrefilteredScanSpecAndBlocks(
 
 // _____________________________________________________________________________
 Result::LazyResult IndexScan::chunkedIndexScan() const {
-  return Result::LazyResult{
-      ad_utility::CachingTransformInputRange(getLazyScan(), [](auto& table) {
-        return Result::IdTableVocabPair{std::move(table), LocalVocab{}};
+  return Result::LazyResult{ad_utility::CachingTransformInputRange(
+      getLazyScan(), [allocator = allocator()](auto& table) {
+        return Result::IdTableVocabPair{std::move(table),
+                                        LocalVocab{allocator}};
       })};
 }
 
@@ -463,7 +464,8 @@ Result IndexScan::computeResult(bool requestLaziness) {
   if (requestLaziness) {
     return {chunkedIndexScan(), resultSortedOn()};
   }
-  return {materializedIndexScan(), getResultSortedOn(), LocalVocab{}};
+  return {materializedIndexScan(), getResultSortedOn(),
+          LocalVocab{allocator()}};
 }
 
 // _____________________________________________________________________________
@@ -1067,7 +1069,8 @@ Result::LazyResult IndexScan::chunkedIndexScanWithRuntimeInfo(
   return Result::LazyResult{ad_utility::CachingTransformInputRange(
       *scan, [this, scan](auto& table) mutable {
         updateRuntimeInfoForLazyScan(scan->details(), IfDue);
-        return Result::IdTableVocabPair{std::move(table), LocalVocab{}};
+        return Result::IdTableVocabPair{std::move(table),
+                                        LocalVocab{allocator()}};
       })};
 }
 
@@ -1112,12 +1115,13 @@ Result::LazyResult IndexScan::createPrefilteredIndexScanSide(
         // Transform the scan to Result::IdTableVocabPair and yield all
         auto transformedScan = ad_utility::CachingTransformInputRange(
             std::move(scan),
-            [&metadata, &scanDetails,
-             originalMetadata = metadata](auto& table) mutable {
+            [&metadata, &scanDetails, originalMetadata = metadata,
+             allocator = allocator()](auto& table) mutable {
               // Make sure we don't add everything more than once.
               metadata = originalMetadata;
               metadata.aggregate(scanDetails);
-              return Result::IdTableVocabPair{std::move(table), LocalVocab{}};
+              return Result::IdTableVocabPair{std::move(table),
+                                              LocalVocab{allocator}};
             });
 
         return LoopControl::yieldAll(std::move(transformedScan));

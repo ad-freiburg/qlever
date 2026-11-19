@@ -582,7 +582,12 @@ DeltaTriples::DeltaTriples(const Index& index)
     : DeltaTriples(index.getImpl()) {}
 
 // ____________________________________________________________________________
-DeltaTriples::DeltaTriples(const IndexImpl& index) : index_{index} {}
+DeltaTriples::DeltaTriples(const IndexImpl& index)
+    : index_{index},
+      // The delta triples are part of the state of the index, not of a query,
+      // so they must not count toward the memory limit of the queries (which
+      // the allocator of the index typically is).
+      localVocab_{ad_utility::makeUnlimitedAllocator<Id>()} {}
 
 // ____________________________________________________________________________
 DeltaTriplesManager::DeltaTriplesManager(const IndexImpl& index)
@@ -756,7 +761,8 @@ void DeltaTriples::readFromDisk() {
   }
   AD_CONTRACT_CHECK(localVocab_.empty());
   auto [vocab, idRanges] = ad_utility::deserializeIds(
-      filenameForPersisting_.value(), index_.getLocalVocabContext());
+      filenameForPersisting_.value(), index_.getLocalVocabContext(),
+      localVocab_.allocator());
   if (idRanges.empty()) {
     return;
   }
