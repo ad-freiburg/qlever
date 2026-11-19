@@ -53,9 +53,9 @@ using MergeRegexPatternAndFlagsExpression =
 // follow the `\`). Regex pattern at namespace scope for C++17 compatibility.
 constexpr ctll::fixed_string rewriteTokenRegex = "[^\\\\]+|\\\\\\\\|\\\\[0-9]+";
 
-// Turn the output of `ReplacementStringGetter` into a valid re2 rewrite string
+// Turn the output of `ReplacementStringGetter` into a valid RE2 rewrite string
 // for `pattern`, following the XPath rules for the group references. Return
-// `std::nullopt` for a reference to group 10 or higher, which re2 does not
+// `std::nullopt` for a reference to group 10 or higher, which RE2 does not
 // support.
 //
 // NOTE 1: In XPath, a reference `$N` takes as many of the following digits as
@@ -64,7 +64,7 @@ constexpr ctll::fixed_string rewriteTokenRegex = "[^\\\\]+|\\\\\\\\|\\\\[0-9]+";
 // groups, `$10` is group 10, but `$11` is group 1 followed by a literal `1`.
 //
 // NOTE 2: A reference to a group that does not exist is replaced by the empty
-// string (re2 would refuse to rewrite at all).
+// string (RE2 would refuse to rewrite at all).
 std::optional<std::string> adaptRewriteToPattern(std::string_view rewrite,
                                                  const RE2& pattern) {
   const int numGroups = pattern.NumberOfCapturingGroups();

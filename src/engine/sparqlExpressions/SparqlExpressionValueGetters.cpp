@@ -250,14 +250,14 @@ std::optional<std::string> ReplacementStringGetter::convertToReplacementString(
     std::string_view token = match.to_view();
     numConsumed += token.size();
     if (token == "\\$") {
-      // A literal dollar needs no escaping in re2.
+      // A literal dollar needs no escaping in RE2.
       result.push_back('$');
     } else if (token.front() == '$') {
       // Re2 uses `\N` instead of `$N` to refer to a group.
       result.push_back('\\');
       result.append(token.substr(1));
     } else {
-      // Literal text, or `\\`, which is a literal backslash in re2 too.
+      // Literal text, or `\\`, which is a literal backslash in RE2 too.
       result.append(token);
     }
   }

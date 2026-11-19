@@ -2695,7 +2695,7 @@ TEST(SparqlExpression, ReplaceExpression) {
   checkReplaceAbc("b", "[$01]", lit("a[]c"));
   checkReplaceAbc("b", "[$00]", lit("a[b]c"));
   checkReplaceAbc("(a)(b)(c)()()()()()()()", "$11", lit("a1"));
-  // re2 does not support references to group 10 or higher.
+  // RE2 does not support references to group 10 or higher.
   checkReplaceAbc("(a)(b)(c)()()()()()()()", "$10", U);
   checkReplaceAbc("(a)(b)(c)()()()()()()()", "$010", U);
   // A group that exists but did not participate in the match is empty.

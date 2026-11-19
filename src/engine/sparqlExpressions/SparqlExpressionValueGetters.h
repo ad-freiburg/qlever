@@ -330,7 +330,7 @@ struct LiteralFromIdGetter : Mixin<LiteralFromIdGetter> {
 };
 
 // Similar to `LiteralFromIdGetter`, but converts the replacement string of
-// `fn:replace` into the rewrite string that re2 expects. So '$1 \\ \$' becomes
+// `fn:replace` into the rewrite string that RE2 expects. So '$1 \\ \$' becomes
 // '\1 \\ $'. Return `std::nullopt` if the replacement string is invalid (error
 // `FORX0004` in the XPath standard).
 //
