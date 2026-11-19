@@ -59,9 +59,10 @@ using Allocator = ad_utility::allocatorImpl::AllocatorWithLimit<T>;
 
 #endif  // QLEVER_USE_PMR_ALLOCATOR
 
-// True iff `T` is an instantiation of `qlever::Allocator`. NOTE: This cannot be
-// expressed via `isInstantiation`, because clang rejects the pack expansion for
-// the alias template `qlever::Allocator`.
+// True iff `T` is an instantiation of `qlever::Allocator`.
+//
+// NOTE: This cannot be expressed via `isInstantiation`, because clang rejects
+// the pack expansion for the alias template `qlever::Allocator`.
 template <typename T, typename = void>
 inline constexpr bool isQleverAllocator = false;
 template <typename T>

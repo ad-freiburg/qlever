@@ -81,8 +81,8 @@ class SparqlQleverVisitor {
   // Needed to efficiently encode common IRIs directly into the ID.
   const EncodedIriManager* encodedIriManager_;
 
-  // The allocator for the containers that only live inside the visitor (as
-  // opposed to the containers of the resulting `ParsedQuery`).
+  // The allocator for the containers of the resulting `ParsedQuery` and for
+  // the containers that only live inside the visitor.
   qlever::Allocator<Id> allocator_;
   const qlever::Allocator<Id>& allocator() const { return allocator_; }
 
