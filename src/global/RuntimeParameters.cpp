@@ -54,6 +54,7 @@ RuntimeParameters::RuntimeParameters() {
   add(throwOnInvalidWkt_);
   add(enablePrefilterOnIndexScans_);
   add(spatialJoinMaxNumThreads_);
+  add(spatialJoinFixedGeometryAlgorithm_);
   add(patternTrickNumTasksInFlight_);
   add(sortNumTasksInFlight_);
   add(spatialJoinPrefilterMaxSize_);
