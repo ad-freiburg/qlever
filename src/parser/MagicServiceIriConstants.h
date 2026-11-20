@@ -33,6 +33,11 @@ constexpr inline std::string_view EXTERNAL_VALUES_IRI =
 constexpr inline std::string_view RASTER_IRI =
     "<https://qlever.cs.uni-freiburg.de/raster/>";
 
+// The namespace of the raster datasets. The IRI with this prefix and the name
+// `NAME` identifies the file `NAME.<extension>` in the raster folder.
+constexpr inline std::string_view RASTER_DATASET_IRI_WITHOUT_BRACKETS =
+    "https://qlever.cs.uni-freiburg.de/raster/dataset/";
+
 // This prefix definition is used for backwards compatibility with the BMW use
 // case (they already use this syntax in some of their applications which we
 // do not want to break). New use cases of the `ExternalValues`

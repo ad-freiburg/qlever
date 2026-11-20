@@ -18,6 +18,7 @@
 
 #include "engine/RasterLookupConfig.h"
 #include "parser/MagicServiceQuery.h"
+#include "parser/TripleComponent.h"
 
 class SparqlTriple;
 
@@ -27,11 +28,16 @@ class RasterException : public std::runtime_error {
   using std::runtime_error::runtime_error;
 };
 
+// Return the name of the raster dataset that `iri` identifies, which is the
+// part of `iri` after `RASTER_DATASET_IRI_WITHOUT_BRACKETS`. Throw if `iri` is
+// not in that namespace or the name is empty.
+std::string extractRasterDatasetName(const TripleComponent::Iri& iri);
+
 // A raster lookup, specified via the SERVICE
 // <https://qlever.cs.uni-freiburg.de/raster/>:
 // SELECT * {
 //   SERVICE raster: {
-//     [] raster:dataset "vorratskarte" ;
+//     [] raster:dataset rds:vorratskarte ;
 //        raster:band1 ?species ;
 //        raster:band2 ?height ;
 //        raster:radius 500 ;
@@ -41,7 +47,9 @@ class RasterException : public std::runtime_error {
 //   }
 // }
 // At least one band is required. The radius (in metres) and the center are
-// optional.
+// optional. The prefix `rds:` stands for the namespace
+// <https://qlever.cs.uni-freiburg.de/raster/dataset/>. The dataset can also be
+// given as a string literal with its name, for example "vorratskarte".
 struct RasterQuery : MagicServiceQuery {
   // Empty until set by a configuration triple.
   std::optional<std::string> dataset_;

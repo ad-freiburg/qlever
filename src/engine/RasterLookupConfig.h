@@ -27,7 +27,9 @@ struct RasterLookupConfiguration {
     Variable variable_;
   };
 
-  // The name of the raster, see `qlever::raster::rasterFilePath`.
+  // The name of the raster, see `qlever::raster::rasterFilePath`. The query
+  // gives it as a string literal or as an IRI, whose namespace the parser
+  // removes (see `parsedQuery::extractRasterDatasetName`).
   std::string dataset_;
   // At least one, in the order of the query.
   std::vector<Band> bands_;

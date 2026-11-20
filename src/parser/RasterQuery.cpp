@@ -55,6 +55,24 @@ std::optional<int> parseBandNumber(std::string_view parameter) {
 }  // namespace
 
 // ____________________________________________________________________________
+std::string extractRasterDatasetName(const TripleComponent::Iri& iri) {
+  std::string_view content = iri.getContent();
+  if (!ql::starts_with(content, RASTER_DATASET_IRI_WITHOUT_BRACKETS)) {
+    throw RasterException(
+        absl::StrCat("A raster dataset must be an IRI of the form `<",
+                     RASTER_DATASET_IRI_WITHOUT_BRACKETS, "NAME>`, but was `<",
+                     content, ">`"));
+  }
+  content.remove_prefix(RASTER_DATASET_IRI_WITHOUT_BRACKETS.size());
+  if (content.empty()) {
+    throw RasterException(absl::StrCat("The raster dataset IRI `<",
+                                       RASTER_DATASET_IRI_WITHOUT_BRACKETS,
+                                       ">` has no name after the namespace"));
+  }
+  return std::string{content};
+}
+
+// ____________________________________________________________________________
 void RasterQuery::addParameter(const SparqlTriple& triple) {
   auto simpleTriple = triple.getSimple();
   TripleComponent predicate = simpleTriple.p_;
@@ -67,11 +85,16 @@ void RasterQuery::addParameter(const SparqlTriple& triple) {
       throw RasterException(
           "The parameter `<dataset>` must not be set more than once");
     }
-    if (!object.isLiteral()) {
-      throw RasterException(
-          "The parameter `<dataset>` expects a string literal");
+    if (object.isLiteral()) {
+      dataset_ = std::string{object.getLiteral().getContent()};
+    } else if (object.isIri()) {
+      dataset_ = extractRasterDatasetName(object.getIri());
+    } else {
+      throw RasterException(absl::StrCat(
+          "The parameter `<dataset>` expects a string literal or an IRI of "
+          "the form `<",
+          RASTER_DATASET_IRI_WITHOUT_BRACKETS, "NAME>`"));
     }
-    dataset_ = std::string{object.getLiteral().getContent()};
   } else if (std::optional<int> number = parseBandNumber(predString);
              number.has_value()) {
     // The real upper bound of the number depends on the file and is checked
