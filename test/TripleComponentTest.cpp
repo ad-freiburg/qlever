@@ -512,7 +512,7 @@ TEST(TripleComponent, tripleTermConversionsAreUnsupported) {
           "Converting parsed triple terms to RDF output is not yet supported"));
   auto qec = getQec("<s> <p> <o> .");
   const auto& index = qec->getIndex();
-  LocalVocab localVocab;
+  LocalVocab localVocab{qec->getAllocator()};
   AD_EXPECT_THROW_WITH_MESSAGE(
       (void)toValueId(term, index),
       ::testing::HasSubstr(
