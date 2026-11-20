@@ -45,7 +45,7 @@ class OptionalJoin : public Operation {
                bool keepJoinColumns = true);
 
  private:
-  std::string getCacheKeyImpl() const override;
+  qlm::string getCacheKeyImpl() const override;
 
   void onLimitOffsetChanged(const LimitOffsetClause&,
                             bool childrenAreExclusivelyOwned) override;

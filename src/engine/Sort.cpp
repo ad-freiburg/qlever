@@ -42,8 +42,8 @@ Sort::Sort(QueryExecutionContext* qec,
       explicitSort_{explicitSort} {}
 
 // _____________________________________________________________________________
-std::string Sort::getCacheKeyImpl() const {
-  std::ostringstream os;
+qlm::string Sort::getCacheKeyImpl() const {
+  qlm::ostringstream os{allocator()};
   os << "SORT(internal) on columns:";
 
   for (const auto& sortCol : sortColumnIndices_) {

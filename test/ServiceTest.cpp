@@ -132,7 +132,7 @@ class ServiceTest : public ::testing::Test {
   static Service::SiblingInfo siblingInfoFromOp(std::shared_ptr<Operation> op) {
     return Service::SiblingInfo{op->getResult(),
                                 op->getExternallyVisibleVariableColumns(),
-                                op->getCacheKey()};
+                                std::string{op->getCacheKey()}};
   };
 };
 
