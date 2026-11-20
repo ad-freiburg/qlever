@@ -335,6 +335,8 @@ addLinkAndDiscoverTestNoLibs(AllocatorPmrTest)
 
 addLinkAndDiscoverTestNoLibs(AllocateSharedTest)
 
+addLinkAndDiscoverTestNoLibs(AllocatorMemoryResourceTest)
+
 addLinkAndDiscoverTestNoLibs(AllocatorBackendTest)
 
 addLinkAndDiscoverTestNoLibs(MemoryLimitTrackerTest)
@@ -362,6 +364,8 @@ addLinkAndDiscoverTest(TaskQueueTest)
 addLinkAndDiscoverTest(TaskQueueOnExecutorTest)
 
 addLinkAndDiscoverTest(ConcurrencyLimitedExecutorTest)
+
+addLinkAndDiscoverTest(FairShareExecutorTest)
 
 addLinkAndDiscoverTest(SetOfIntervalsTest sparqlExpressions)
 
