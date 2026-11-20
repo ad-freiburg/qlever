@@ -38,6 +38,7 @@
 #include "util/CancellationHandle.h"
 #include "util/Exception.h"
 #include "util/File.h"
+#include "util/FilesystemHelpers.h"
 #include "util/SourceLocation.h"
 
 namespace ad_utility::testing {
@@ -153,8 +154,7 @@ inline void writeTestBlobFile(const std::string& filename) {
   source.queryAndPinResultWithName("blobPin",
                                    "SELECT ?s ?o WHERE { ?s <p> ?o }");
   auto compressedBlob = source.serializeVocabAndNamedCacheToCompressedBlob();
-  ad_utility::File file{filename, "w"};
-  file.write(compressedBlob.data(), compressedBlob.size());
+  qlever::util::writeFileAtomically(filename, compressedBlob);
 }
 
 // The query for the result pinned in the blob of `writeTestBlobFile`, and its

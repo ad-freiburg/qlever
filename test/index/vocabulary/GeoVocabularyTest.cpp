@@ -8,7 +8,6 @@
 
 #include <algorithm>
 #include <cstring>
-#include <fstream>
 
 #include "../../GeometryInfoTestHelpers.h"
 #include "VocabularyTestHelpers.h"
@@ -19,6 +18,7 @@
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
 #include "util/File.h"
+#include "util/FilesystemHelpers.h"
 
 namespace {
 
@@ -321,11 +321,7 @@ TEST(GeoVocabularyTest, ReadVersion5) {
   // record size, but in version 5, the bytes `[28, 32)` of a valid record could
   // contain arbitrary content.
   const std::string geoInfoFilename = AnyGeoVocab::getGeoInfoFilename(filename);
-  std::string contents;
-  {
-    std::ifstream in{geoInfoFilename, std::ios::binary};
-    contents.assign(std::istreambuf_iterator<char>{in}, {});
-  }
+  auto contents = qlever::util::readBinaryFile(geoInfoFilename);
   constexpr size_t recordSize = 48;
   static_assert(geometryInfoSize(5) == recordSize);
   ASSERT_EQ(contents.size(), sizeof(uint64_t) + literals.size() * recordSize);
@@ -338,10 +334,7 @@ TEST(GeoVocabularyTest, ReadVersion5) {
       std::fill(record + 28, record + 32, '\xab');
     }
   }
-  {
-    std::ofstream out{geoInfoFilename, std::ios::binary | std::ios::trunc};
-    out << contents;
-  }
+  qlever::util::writeFileAtomically(geoInfoFilename, contents);
 
   // Read the version 5 file. The fields in the bytes `[28, 32)` must be zero:
   // the source CRS "not computed" and the serialization type `WKT`.

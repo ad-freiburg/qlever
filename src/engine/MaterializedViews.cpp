@@ -391,8 +391,9 @@ void MaterializedViewWriter::writeViewMetadata(
   nlohmann::json viewInfo = {{"version", MATERIALIZED_VIEWS_VERSION},
                              {"columns", std::move(columns)},
                              {"query", parsedQuery_._originalString}};
-  ad_utility::makeOfstream(absl::StrCat(getFilenameBase(), VIEW_INFO_SUFFIX))
-      << viewInfo.dump() << std::endl;
+  std::string serializedViewInfo = absl::StrCat(viewInfo.dump(), "\n");
+  qlever::util::writeFileAtomically(
+      absl::StrCat(getFilenameBase(), VIEW_INFO_SUFFIX), serializedViewInfo);
 }
 
 // _____________________________________________________________________________

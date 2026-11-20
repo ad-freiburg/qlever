@@ -18,7 +18,6 @@
 #include <chrono>
 #include <fstream>
 #include <future>
-#include <iterator>
 #include <memory>
 #include <numeric>
 #include <optional>
@@ -71,14 +70,6 @@ using namespace std::string_literals;
 namespace {
 auto V = ad_utility::testing::VocabId;
 auto B = ad_utility::testing::BlankNodeId;
-
-// Read a file into a buffer.
-std::vector<char> fileToBuffer(const std::string& filename) {
-  std::ifstream f{filename, std::ios::binary};
-  EXPECT_TRUE(f.is_open()) << "Could not open file " << filename;
-  return std::vector(std::istreambuf_iterator<char>(f),
-                     std::istreambuf_iterator<char>());
-}
 
 // Select the correct suffixes.
 std::vector<std::string> getVocabSuffixesForType(
@@ -140,9 +131,9 @@ TEST(IndexRebuilder, materializeEmptyLocalVocab) {
   EXPECT_THAT(localVocabMapping, ::testing::UnorderedElementsAre());
 
   for (const auto& suffix : getVocabSuffixesForType(type.value())) {
-    EXPECT_EQ(
-        fileToBuffer("materializeEmptyLocalVocab"s + VOCAB_SUFFIX + suffix),
-        fileToBuffer(vocabFileName + suffix));
+    EXPECT_EQ(qlever::util::readBinaryFile("materializeEmptyLocalVocab"s +
+                                           VOCAB_SUFFIX + suffix),
+              qlever::util::readBinaryFile(vocabFileName + suffix));
   }
 }
 
@@ -599,8 +590,8 @@ TEST(IndexRebuilder, createPermutationWriterTask) {
   threadPool.join();
   for (std::string_view suffix : suffixes) {
     EXPECT_TRUE(ql::filesystem::exists(prefix + suffix));
-    EXPECT_EQ(fileToBuffer(index.getOnDiskBase() + suffix),
-              fileToBuffer(prefix + suffix));
+    EXPECT_EQ(qlever::util::readBinaryFile(index.getOnDiskBase() + suffix),
+              qlever::util::readBinaryFile(prefix + suffix));
   }
 }
 
@@ -683,8 +674,7 @@ TEST(IndexRebuilder, materializeToIndex) {
       // progress line (with a percentage and an average speed) to the rebuild's
       // log file.
       {
-        auto logStream = ad_utility::makeIfstream(logFile);
-        std::string logContent{std::istreambuf_iterator<char>{logStream}, {}};
+        auto logContent = qlever::util::readBinaryFile<std::string>(logFile);
         using ::testing::HasSubstr;
         EXPECT_THAT(logContent, HasSubstr("Writing new vocabulary (merging "
                                           "existing and new words) ..."));

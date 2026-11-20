@@ -9,10 +9,18 @@
 
 #include "util/FilesystemHelpers.h"
 
+#include <absl/cleanup/cleanup.h>
 #include <absl/strings/str_cat.h>
+#include <fcntl.h>
+#include <unistd.h>
 
+#include <algorithm>
+#include <cerrno>
+#include <cstring>
+#include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "Views.h"
@@ -20,6 +28,7 @@
 #include "backports/algorithm.h"
 #include "backports/filesystem.h"
 #include "util/File.h"
+#include "util/Random.h"
 
 namespace qlever::util {
 namespace fs = ql::filesystem;
@@ -118,6 +127,151 @@ bool isSubdirectoryOf(const std::string& path,
     return fs::weakly_canonical(fs::absolute(p)).parent_path();
   };
   return ::ranges::starts_with(normalize(path), normalize(containerPath));
+}
+
+// _____________________________________________________________________________
+size_t detail::sizeOfRegularFile(const fs::path& path) {
+  if (!fs::is_regular_file(path)) {
+    throw std::runtime_error{
+        absl::StrCat("The file \"", path.string(),
+                     "\" does not exist or is not a regular file")};
+  }
+  return static_cast<size_t>(fs::file_size(path));
+}
+
+namespace {
+// Throw an exception that says that the `operation` (e.g. "write") on the file
+// `path` failed, including the description of the `errno` value
+// `errorNumber`.
+[[noreturn]] void throwFileError(std::string_view operation,
+                                 const fs::path& path, int errorNumber) {
+  throw std::runtime_error{absl::StrCat("Could not ", operation, " the file \"",
+                                        path.string(),
+                                        "\": ", std::strerror(errorNumber))};
+}
+
+// Return the path that `path` refers to after following all symbolic links of
+// its last component (also if the final target does not exist yet). The
+// directories of `path` are not resolved, as they do not matter for where the
+// file is written.
+fs::path resolveSymlinks(const fs::path& path) {
+  // The same limit as `MAXSYMLINKS` on Linux, to detect cycles.
+  constexpr size_t maxNumSymlinks = 40;
+  fs::path resolved = path;
+  for (size_t i = 0; fs::is_symlink(resolved); ++i) {
+    if (i == maxNumSymlinks) {
+      throw std::runtime_error{
+          absl::StrCat("Could not resolve the file \"", path.string(),
+                       "\": too many levels of symbolic links")};
+    }
+    fs::path target = fs::read_symlink(resolved);
+    resolved = target.is_absolute() ? target : resolved.parent_path() / target;
+  }
+  return resolved;
+}
+
+// Return the path of a fresh temporary file in the same directory as `path`:
+// the file name of `path`, followed by a random component and the suffix
+// `.tmp`. If that name would exceed the maximal length of a file name, the
+// part that stems from the file name of `path` is shortened.
+fs::path temporaryPathFor(const fs::path& path) {
+  // The maximal length of a file name in bytes (`NAME_MAX`) on Linux and macOS.
+  constexpr size_t maxFilenameLength = 255;
+  constexpr size_t numRandomChars = 8;
+  constexpr std::string_view alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
+  ad_utility::SlowRandomIntGenerator<size_t> randomIndex{0,
+                                                         alphabet.size() - 1};
+  std::string suffix = ".";
+  for (size_t i = 0; i < numRandomChars; ++i) {
+    suffix.push_back(alphabet[randomIndex()]);
+  }
+  suffix += ".tmp";
+  std::string filename = path.filename().string();
+  filename.resize(std::min(filename.size(), maxFilenameLength - suffix.size()));
+  return path.parent_path() / absl::StrCat(filename, suffix);
+}
+}  // namespace
+
+// _____________________________________________________________________________
+void detail::readFileIntoBuffer(const fs::path& path, ql::span<char> buffer) {
+  ad_utility::File file{path.string(), "r"};
+  auto numBytesRead = file.read(buffer.data(), buffer.size(), 0);
+  if (numBytesRead < 0) {
+    throwFileError("read", path, errno);
+  }
+  if (static_cast<size_t>(numBytesRead) != buffer.size()) {
+    throw std::runtime_error{absl::StrCat(
+        "Could not read the complete file \"", path.string(), "\" (expected ",
+        buffer.size(), " bytes, but read ", numBytesRead,
+        "), was it modified while it was being read?")};
+  }
+}
+
+// _____________________________________________________________________________
+void writeFileAtomically(
+    const fs::path& path,
+    absl::FunctionRef<void(const fs::path& temporaryPath)> writeTemporaryFile) {
+  // Replace the file a symbolic link points to, not the link itself.
+  fs::path target = resolveSymlinks(path);
+  // The random component makes the name unique, so that two concurrent writers
+  // of the same `path` never write to the same temporary file.
+  fs::path temporary = temporaryPathFor(target);
+  // Remove the temporary file if writing or renaming it fails. This runs while
+  // an exception is propagated, so it must not throw itself; a temporary file
+  // that cannot be removed is harmless.
+  absl::Cleanup removeTemporary = [&temporary] {
+    ql::error_code ignored;
+    fs::remove(temporary, ignored);
+  };
+  writeTemporaryFile(temporary);
+  // An existing file keeps its permissions (the temporary file is a new file
+  // and has the default permissions).
+  ql::error_code statusError;
+  auto status = fs::status(target, statusError);
+  if (!statusError && fs::exists(status)) {
+    fs::permissions(temporary, status.permissions());
+  }
+  fs::rename(temporary, target);
+  std::move(removeTemporary).Cancel();
+}
+
+// _____________________________________________________________________________
+void writeFileAtomically(const fs::path& path, ql::span<const char> bytes) {
+  // Use the POSIX functions directly (and not `std::ofstream`), so that every
+  // failure is detected, including one that is only reported when the file is
+  // closed, and that its reason (`errno`) is reported.
+  writeFileAtomically(path, [bytes](const fs::path& temporary) {
+    int fd = ::open(temporary.string().c_str(),
+                    O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0666);
+    if (fd < 0) {
+      throwFileError("open", temporary, errno);
+    }
+    absl::Cleanup closeOnError = [fd] { ::close(fd); };
+    const char* data = bytes.data();
+    size_t numBytesLeft = bytes.size();
+    while (numBytesLeft > 0) {
+      ssize_t numBytesWritten = ::write(fd, data, numBytesLeft);
+      if (numBytesWritten < 0) {
+        if (errno == EINTR) {
+          continue;
+        }
+        throwFileError("write", temporary, errno);
+      }
+      data += numBytesWritten;
+      numBytesLeft -= static_cast<size_t>(numBytesWritten);
+    }
+    std::move(closeOnError).Cancel();
+    if (::close(fd) != 0) {
+      throwFileError("close", temporary, errno);
+    }
+  });
+}
+
+// _____________________________________________________________________________
+void copyFileAtomically(const fs::path& from, const fs::path& to) {
+  writeFileAtomically(to, [&from](const fs::path& temporary) {
+    fs::copy_file(from, temporary, fs::copy_options::overwrite_existing);
+  });
 }
 
 }  // namespace qlever::util
