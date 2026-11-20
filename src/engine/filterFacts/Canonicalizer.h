@@ -63,12 +63,18 @@ struct Distance {
 };
 
 // The comparison `lhs_ op_ rhs_` of a distance with a number `rhs_` (in
-// meters), where `op_` is `<` or `<=`.
+// meters), where `op_` is `<` or `<=`. The conjunct implies the comparison.
+//
+// NOTE: The conjunct and the comparison are equivalent iff `exact_` is true. It
+// is false if the number is a variable from a `VALUES` clause with different
+// numbers in different rows: then `rhs_` is the largest of them.
 struct DistanceComparison {
   Distance lhs_;
   valueIdComparators::Comparison op_;
   double rhs_;
-  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR(DistanceComparison, lhs_, op_, rhs_)
+  bool exact_ = true;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR(DistanceComparison, lhs_, op_, rhs_,
+                                        exact_)
 };
 
 // Any other expression.

@@ -51,7 +51,7 @@ std::optional<DistanceBound> recognizeDistanceBound(const Conjunct& conjunct) {
   if (maxMeters < 0) {
     return std::nullopt;
   }
-  return DistanceBound{distance, maxMeters};
+  return DistanceBound{distance, maxMeters, comparison->exact_};
 }
 
 }  // namespace filterFacts
