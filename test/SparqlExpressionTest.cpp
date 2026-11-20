@@ -2363,6 +2363,7 @@ TEST(SparqlExpression, geoSparqlExpressions) {
       },
       exampleMultiGeoms, Ids{I(2), I(2), I(2), I(2), I(2)});
 
+  // The function `geof:transform`: an unknown CRS IRI yields `UNDEF`.
   auto checkTransform =
       std::bind_front(testNaryExpression, &makeTransformExpression);
   auto examplePoint = geoLit("POINT(1 2)");

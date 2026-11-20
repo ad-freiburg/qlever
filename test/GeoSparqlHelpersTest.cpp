@@ -262,9 +262,17 @@ TEST(GeoSparqlHelpers, WktTransform) {
       WktTransform{}(GeoPointOrWkt{invalidWkt}, util::geo::CRSType::WGS84),
       undef);
 
-  // Test unsupported CRS.
+  // Test unsupported target CRS.
   EXPECT_EQ(WktTransform{}(GeoPointOrWkt{examplePoint},
                            util::geo::CRSType::UNSUPPORTED),
+            undef);
+
+  // Test unsupported source CRS (the projection fails during parsing).
+  std::string unsupportedSourceCrs{
+      "\"<http://www.opengis.net/def/crs/EPSG/0/25832> POINT(500000 "
+      "5000000)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"};
+  EXPECT_EQ(WktTransform{}(GeoPointOrWkt{unsupportedSourceCrs},
+                           util::geo::CRSType::WGS84),
             undef);
 
   // Test UNDEF from `wkt` without value.
