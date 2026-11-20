@@ -19,8 +19,8 @@
 #include "global/Id.h"
 #include "index/ExportIds.h"
 #include "index/Index.h"
-#include "parser/LiteralOrIri.h"
 #include "parser/RasterQuery.h"
+#include "rdfTypes/LiteralOrIri.h"
 #include "util/ChunkedForLoop.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
@@ -75,6 +75,7 @@ qlever::raster::PixelTable lookupPixels(qlever::raster::RasterFile& rasterFile,
     case WordVocabIndex:
     case BlankNodeIndex:
     case EncodedVal:
+    case TripleTermIndex:
       return noPixels();
   }
   AD_FAIL();
@@ -258,7 +259,7 @@ std::string RasterLookup::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-std::string RasterLookup::getCacheKeyImpl() const {
+qlm::string RasterLookup::getCacheKeyImpl() const {
   // Column numbers instead of variable names, so that renaming a variable
   // keeps the key. The names of the new columns do not change the result, but
   // the order of the bands does. A name is quoted, so that it never looks like
@@ -273,8 +274,9 @@ std::string RasterLookup::getCacheKeyImpl() const {
                                 subtree_->getVariableColumn(variable));
           }},
       config_.dataset_);
-  return absl::StrCat(
-      "RASTER LOOKUP ", dataset, " bands ", bandNumbers(config_.bands_),
+  return qlm::StrCat(
+      allocator(), "RASTER LOOKUP ", dataset, " bands ",
+      bandNumbers(config_.bands_),
       // Full precision, because `StrCat` keeps only 6 digits
       // of a `double`.
       config_.radius_.has_value()

@@ -46,7 +46,7 @@ class RasterLookup : public Operation {
   uint64_t getSizeEstimateBeforeLimit() override;
   VariableToColumnMap computeVariableToColumnMap() const override;
   qlm::vector<QueryExecutionTree*> getChildrenImpl() const override;
-  std::string getCacheKeyImpl() const override;
+  qlm::string getCacheKeyImpl() const override;
   std::unique_ptr<Operation> cloneImpl() const override;
   bool isDeterministicImpl() const override;
   Result computeResult(bool requestLaziness) override;
