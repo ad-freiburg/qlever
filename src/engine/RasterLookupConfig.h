@@ -12,6 +12,7 @@
 
 #include <optional>
 #include <string>
+#include <variant>
 #include <vector>
 
 #include "rdfTypes/Variable.h"
@@ -27,10 +28,14 @@ struct RasterLookupConfiguration {
     Variable variable_;
   };
 
-  // The name of the raster, see `qlever::raster::rasterFilePath`. The query
-  // gives it as a string literal or as an IRI, whose namespace the parser
-  // removes (see `parsedQuery::extractRasterDatasetName`).
-  std::string dataset_;
+  // The name of a raster (see `qlever::raster::rasterFilePath`), or the
+  // variable of the child's column that holds the raster of each row.
+  using Dataset = std::variant<std::string, Variable>;
+
+  // The query gives a name as a string literal or as an IRI, whose namespace
+  // is removed (see `parsedQuery::extractRasterDatasetName`). The values of a
+  // variable are read the same way, row by row.
+  Dataset dataset_;
   // At least one, in the order of the query.
   std::vector<Band> bands_;
   // In metres. If set, each geometry is first widened by this radius.

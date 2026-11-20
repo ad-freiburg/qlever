@@ -186,6 +186,12 @@ void VariableCounter::operator()(const RowNumberQuery& op) {
 
 // _____________________________________________________________________________
 void VariableCounter::operator()(const RasterQuery& op) {
+  if (op.dataset_.has_value()) {
+    const auto& variant = op.dataset_.value();
+    if (std::holds_alternative<Variable>(variant)) {
+      (*this)(std::get<Variable>(variant));
+    }
+  }
   (*this)(op.geometry_);
   for (const RasterLookupConfiguration::Band& band : op.bands_) {
     (*this)(band.variable_);

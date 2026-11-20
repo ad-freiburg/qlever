@@ -49,10 +49,10 @@ std::string extractRasterDatasetName(const TripleComponent::Iri& iri);
 // At least one band is required. The radius (in metres) and the center are
 // optional. The prefix `rds:` stands for the namespace
 // <https://qlever.cs.uni-freiburg.de/raster/dataset/>. The dataset can also be
-// given as a string literal with its name, for example "vorratskarte".
+// a string literal ("vorratskarte") or a variable bound by the pattern.
 struct RasterQuery : MagicServiceQuery {
   // Empty until set by a configuration triple.
-  std::optional<std::string> dataset_;
+  std::optional<RasterLookupConfiguration::Dataset> dataset_;
   // In the order of the configuration triples.
   std::vector<RasterLookupConfiguration::Band> bands_;
   std::optional<double> radius_;

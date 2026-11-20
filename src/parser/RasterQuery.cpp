@@ -89,11 +89,13 @@ void RasterQuery::addParameter(const SparqlTriple& triple) {
       dataset_ = std::string{object.getLiteral().getContent()};
     } else if (object.isIri()) {
       dataset_ = extractRasterDatasetName(object.getIri());
+    } else if (object.isVariable()) {
+      dataset_ = object.getVariable();
     } else {
       throw RasterException(absl::StrCat(
-          "The parameter `<dataset>` expects a string literal or an IRI of "
-          "the form `<",
-          RASTER_DATASET_IRI_WITHOUT_BRACKETS, "NAME>`"));
+          "The parameter `<dataset>` expects a string literal, a variable, ",
+          "or an IRI of the form `<", RASTER_DATASET_IRI_WITHOUT_BRACKETS,
+          "NAME>`"));
     }
   } else if (std::optional<int> number = parseBandNumber(predString);
              number.has_value()) {

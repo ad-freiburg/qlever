@@ -11,6 +11,7 @@
 #define QLEVER_SRC_ENGINE_RASTERLOOKUP_H
 
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "engine/Operation.h"
@@ -23,8 +24,9 @@ class RasterLookup : public Operation {
  private:
   std::shared_ptr<QueryExecutionTree> subtree_;
   RasterLookupConfiguration config_;
-  // The file of `config_.dataset_`, determined once by the constructor.
-  std::string path_;
+  // The file of `config_.dataset_`, determined once by the constructor. Empty
+  // if the dataset is a variable, whose files are only known per row.
+  std::optional<std::string> path_;
 
  public:
   RasterLookup(QueryExecutionContext* qec,

@@ -20,8 +20,10 @@
 #include "index/ExportIds.h"
 #include "index/Index.h"
 #include "parser/LiteralOrIri.h"
+#include "parser/RasterQuery.h"
 #include "util/ChunkedForLoop.h"
 #include "util/Exception.h"
+#include "util/HashMap.h"
 #include "util/HashSet.h"
 #include "util/OverloadCallOperator.h"
 #include "util/ParseException.h"
@@ -94,6 +96,54 @@ Id pixelValueToId(const std::optional<qlever::raster::PixelValue>& value) {
       value.value());
 }
 
+// The name of the raster in a row of a variable dataset: the content of a
+// literal, or the name in a dataset IRI. Nothing for other `Id`s (UNDEF,
+// numbers, IRIs outside the namespace, ...).
+std::optional<std::string> datasetName(Id dataset, const Index& index,
+                                       const LocalVocab& localVocab) {
+  std::optional<ql::exportIds::LiteralOrIri> value =
+      ql::exportIds::idToLiteralOrIri(index.getImpl(), dataset, localVocab,
+                                      /*skipEncodedValues=*/true);
+  if (!value.has_value()) {
+    return std::nullopt;
+  }
+  if (value->isLiteral()) {
+    return std::string{value->getContent()};
+  }
+  try {
+    return parsedQuery::extractRasterDatasetName(value->getIri());
+  } catch (const parsedQuery::RasterException&) {
+    return std::nullopt;
+  }
+}
+
+// The file of the dataset `name`. An unknown dataset is a mistake in the query
+// or the data, and `rasterFilePath` does not know about SPARQL, so its error is
+// converted.
+std::string findRasterFile(std::string_view name) {
+  try {
+    return qlever::raster::rasterFilePath(name);
+  } catch (const std::runtime_error& error) {
+    throw InvalidSparqlQueryException(error.what());
+  }
+}
+
+// Open the raster file at `path` and check that it has all `bands`, which is
+// only known once the file is open. `name` is the dataset for the error.
+qlever::raster::RasterFile openRasterFile(const std::string& path,
+                                          std::string_view name,
+                                          ql::span<const int> bands) {
+  qlever::raster::RasterFile rasterFile{path};
+  for (int band : bands) {
+    if (band > rasterFile.numBands()) {
+      throw InvalidSparqlQueryException(
+          absl::StrCat("The raster \"", name, "\" has ", rasterFile.numBands(),
+                       " band(s), but band ", band, " was requested"));
+    }
+  }
+  return rasterFile;
+}
+
 // The numbers of `bands`, separated by spaces, for example "1 3".
 std::string bandNumbers(
     const std::vector<RasterLookupConfiguration::Band>& bands) {
@@ -111,11 +161,19 @@ RasterLookup::RasterLookup(QueryExecutionContext* qec,
     : Operation(qec), subtree_(std::move(subtree)), config_(std::move(config)) {
   // Mistakes in the query, reported as an invalid query (HTTP 400) instead of
   // as a failed internal check later on.
-  if (!subtree_->getVariableColumnOrNullopt(config_.geometry_).has_value()) {
-    throw InvalidSparqlQueryException(absl::StrCat(
-        "The geometry variable ", config_.geometry_.name(),
-        " of the raster lookup is not bound by the pattern inside the "
-        "SERVICE"));
+  // The variables that are read must be bound by the child.
+  auto checkBoundVariable = [this](const Variable& variable,
+                                   std::string_view role) {
+    if (!subtree_->getVariableColumnOrNullopt(variable).has_value()) {
+      throw InvalidSparqlQueryException(absl::StrCat(
+          "The ", role, " variable ", variable.name(),
+          " of the raster lookup is not bound by the pattern inside the "
+          "SERVICE"));
+    }
+  };
+  checkBoundVariable(config_.geometry_, "geometry");
+  if (const auto* variable = std::get_if<Variable>(&config_.dataset_)) {
+    checkBoundVariable(*variable, "dataset");
   }
   // The variables of the new columns must be unbound and all different.
   ad_utility::HashSet<Variable> newVariables;
@@ -140,12 +198,10 @@ RasterLookup::RasterLookup(QueryExecutionContext* qec,
     checkNewVariable(config_.center_.value(), "center");
   }
 
-  // An unknown dataset is also a mistake in the query. `rasterFilePath` does
-  // not know about SPARQL, so its error is converted here.
-  try {
-    path_ = qlever::raster::rasterFilePath(config_.dataset_);
-  } catch (const std::runtime_error& error) {
-    throw InvalidSparqlQueryException(error.what());
+  // The files of a variable dataset are only found per row, see
+  // `computeResult`.
+  if (const auto* name = std::get_if<std::string>(&config_.dataset_)) {
+    path_ = findRasterFile(*name);
   }
 }
 
@@ -189,7 +245,12 @@ qlm::vector<QueryExecutionTree*> RasterLookup::getChildrenImpl() const {
 
 // _____________________________________________________________________________
 std::string RasterLookup::getDescriptor() const {
-  return absl::StrCat("RasterLookup ", config_.dataset_, " bands ",
+  std::string dataset =
+      std::visit(ad_utility::OverloadCallOperator{
+                     [](const std::string& name) { return name; },
+                     [](const Variable& variable) { return variable.name(); }},
+                 config_.dataset_);
+  return absl::StrCat("RasterLookup ", dataset, " bands ",
                       bandNumbers(config_.bands_),
                       config_.radius_.has_value()
                           ? absl::StrCat(" radius ", config_.radius_.value())
@@ -200,10 +261,20 @@ std::string RasterLookup::getDescriptor() const {
 std::string RasterLookup::getCacheKeyImpl() const {
   // Column numbers instead of variable names, so that renaming a variable
   // keeps the key. The names of the new columns do not change the result, but
-  // the order of the bands does.
+  // the order of the bands does. A name is quoted, so that it never looks like
+  // a column.
+  std::string dataset = std::visit(
+      ad_utility::OverloadCallOperator{
+          [](const std::string& name) {
+            return absl::StrCat("dataset \"", name, "\"");
+          },
+          [this](const Variable& variable) {
+            return absl::StrCat("dataset column ",
+                                subtree_->getVariableColumn(variable));
+          }},
+      config_.dataset_);
   return absl::StrCat(
-      "RASTER LOOKUP ", config_.dataset_, " bands ",
-      bandNumbers(config_.bands_),
+      "RASTER LOOKUP ", dataset, " bands ", bandNumbers(config_.bands_),
       // Full precision, because `StrCat` keeps only 6 digits
       // of a `double`.
       config_.radius_.has_value()
@@ -264,32 +335,76 @@ Result RasterLookup::computeResult([[maybe_unused]] bool requestLaziness) {
 
   if (!input.empty()) {
     ColumnIndex geometryColumn = subtree_->getVariableColumn(config_.geometry_);
-    // Opened once and used for all rows, so GDAL's cache of read blocks stays
-    // warm. Closed at the end of this block.
-    qlever::raster::RasterFile rasterFile{path_};
-    // The number of bands is only known once the file is open. The parser
-    // already checked that each number is at least 1.
+    // The parser already checked that each number is at least 1.
     std::vector<int> bands;
     for (const RasterLookupConfiguration::Band& band : config_.bands_) {
-      if (band.number_ > rasterFile.numBands()) {
-        throw InvalidSparqlQueryException(absl::StrCat(
-            "The raster \"", config_.dataset_, "\" has ", rasterFile.numBands(),
-            " band(s), but band ", band.number_, " was requested"));
-      }
       bands.push_back(band.number_);
     }
-    // Input rows whose geometry is not a point or WKT literal, lies outside
-    // the grid, or only covers NoData pixels.
+    // A fixed dataset is opened once and used for all rows, so GDAL's cache of
+    // read blocks stays warm. Closed at the end of this block.
+    std::optional<qlever::raster::RasterFile> fixedRasterFile;
+    if (const auto* name = std::get_if<std::string>(&config_.dataset_)) {
+      fixedRasterFile = openRasterFile(path_.value(), *name, bands);
+    }
+    // A variable dataset opens each file when a row first names it, keyed by
+    // the `Id`, so that the name is only read once per value.
+    std::optional<ColumnIndex> datasetColumn;
+    if (const auto* variable = std::get_if<Variable>(&config_.dataset_)) {
+      datasetColumn = subtree_->getVariableColumn(*variable);
+    }
+    // Empty for a value without a usable raster, so that it is only checked
+    // once.
+    ad_utility::HashMap<Id, std::optional<qlever::raster::RasterFile>>
+        rasterFilesPerDataset;
+    // The file of a row, or `nullptr` if its dataset has no usable raster.
+    // Only valid until the next call, as the map moves its entries when it
+    // grows.
+    auto rasterFileForRow =
+        [&](size_t inputRow) -> qlever::raster::RasterFile* {
+      if (fixedRasterFile.has_value()) {
+        return &fixedRasterFile.value();
+      }
+      Id dataset = input(inputRow, datasetColumn.value());
+      auto it = rasterFilesPerDataset.find(dataset);
+      if (it == rasterFilesPerDataset.end()) {
+        std::optional<qlever::raster::RasterFile> rasterFile;
+        std::optional<std::string> name =
+            datasetName(dataset, getIndex(), subResult->localVocab());
+        // An unknown name or a missing band is a mistake in the data, so the
+        // rows with this value are skipped. A file that cannot be read is
+        // still an error, because `RasterFile` throws a different exception.
+        if (name.has_value()) {
+          try {
+            rasterFile = openRasterFile(findRasterFile(name.value()),
+                                        name.value(), bands);
+          } catch (const InvalidSparqlQueryException&) {
+          }
+        }
+        it = rasterFilesPerDataset.try_emplace(dataset, std::move(rasterFile))
+                 .first;
+      }
+      return it->second.has_value() ? &it->second.value() : nullptr;
+    };
+    // Input rows whose dataset names no usable raster. Only possible for a
+    // variable dataset.
+    size_t numRowsWithoutRaster = 0;
+    // Input rows whose geometry is not a point or WKT literal, lies outside the
+    // grid, or only covers NoData pixels.
     size_t numRowsWithoutPixels = 0;
     auto checkCancellationCallback = [this]() { checkCancellation(); };
     size_t firstBandColumn = input.numColumns();
     for (size_t inputRow = 0; inputRow < input.numRows(); ++inputRow) {
       checkCancellation();
+      qlever::raster::RasterFile* rasterFile = rasterFileForRow(inputRow);
+      if (rasterFile == nullptr) {
+        ++numRowsWithoutRaster;
+        continue;
+      }
       // NOTE: `pixels` and the buffers of the lookup count towards the memory
       // limit. GDAL's own memory (its block cache, and the mask image while it
       // is drawn) does not.
       qlever::raster::PixelTable pixels = lookupPixels(
-          rasterFile, bands, config_.radius_, input(inputRow, geometryColumn),
+          *rasterFile, bands, config_.radius_, input(inputRow, geometryColumn),
           getIndex(), subResult->localVocab(), allocator());
       if (pixels.numPixels() == 0) {
         ++numRowsWithoutPixels;
@@ -333,6 +448,11 @@ Result RasterLookup::computeResult([[maybe_unused]] bool requestLaziness) {
     }
     runtimeInfo().addDetail("num-input-rows-without-pixels",
                             numRowsWithoutPixels);
+    // A fixed dataset always has a raster, so the counter would always be 0.
+    if (datasetColumn.has_value()) {
+      runtimeInfo().addDetail("num-input-rows-without-raster",
+                              numRowsWithoutRaster);
+    }
   }
 
   // The pixel values and centers are stored in the `Id`s themselves, so no
