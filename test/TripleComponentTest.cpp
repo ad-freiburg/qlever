@@ -6,6 +6,7 @@
 #include <gmock/gmock.h>
 
 #include "./util/IdTestHelpers.h"
+#include "./util/LocalVocabTestHelpers.h"
 #include "./util/ParsedQueryTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "global/Id.h"
@@ -276,7 +277,7 @@ TEST(TripleComponent, toValueId) {
   ASSERT_EQ(toValueId(tc, index).value(),
             getId(std::string{HAS_PATTERN_PREDICATE}));
 
-  auto lv = LocalVocab();
+  auto lv = ad_utility::testing::makeLocalVocab();
   auto expectLocalVocab = [&lv, &index](TripleComponent tc, size_t pos) {
     auto id = toValueId(std::move(tc), index, lv);
     ASSERT_TRUE(id.getDatatype() == Datatype::LocalVocabIndex);

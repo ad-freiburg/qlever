@@ -26,5 +26,7 @@ using SecondaryVocabIndex =
     ad_utility::TypedIndex<uint64_t, secondaryVocabIndexTag>;
 inline constexpr ad_utility::IndexTag documentIndexTag = "DocumentIndex";
 using DocumentIndex = ad_utility::TypedIndex<uint64_t, documentIndexTag>;
+inline constexpr ad_utility::IndexTag tripleTermIndexTag = "TripleTermIndex";
+using TripleTermIndex = ad_utility::TypedIndex<uint64_t, tripleTermIndexTag>;
 
 #endif  // QLEVER_SRC_GLOBAL_INDEXTYPES_H

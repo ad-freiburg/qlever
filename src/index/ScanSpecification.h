@@ -41,6 +41,7 @@ class ScanSpecification {
   // still alive.
   // TODO<joka921> This can be enforced by the type system, but that requires
   // several intrusive changes in other parts of QLever.
+  // Is `nullptr` if no local vocab was passed to the constructor.
   std::shared_ptr<const LocalVocab> localVocab_;
 
   // Filter specification of which graphs to include and which to omit.
@@ -50,12 +51,15 @@ class ScanSpecification {
   void validate() const;
 
  public:
-  ScanSpecification(T col0Id, T col1Id, T col2Id, LocalVocab localVocab = {},
+  ScanSpecification(T col0Id, T col1Id, T col2Id,
+                    std::optional<LocalVocab> localVocab = std::nullopt,
                     GraphFilter graphFilter = GraphFilter::All())
       : col0Id_{col0Id},
         col1Id_{col1Id},
         col2Id_{col2Id},
-        localVocab_{std::make_shared<LocalVocab>(std::move(localVocab))},
+        localVocab_{localVocab.has_value() ? std::make_shared<const LocalVocab>(
+                                                 std::move(localVocab).value())
+                                           : nullptr},
         graphFilter_{std::move(graphFilter)} {
     validate();
   }
