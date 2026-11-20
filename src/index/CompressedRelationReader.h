@@ -123,14 +123,14 @@ class CompressedRelationReader {
         IdTable& block, const CompressedBlockMetadata& blockMetadata);
   };
 
-  // Classes holding various subsets of parameters relevant for a scan of a
-  // permutation, including a reference to the relevant located triples.
-  //
-  // NOTE: The `scanColumns_` are the columns read for the postprocessing of a
-  // block (including the graph column). The result of the scan consists of the
-  // `outputColumns_`, which are the `scanColumns_` without the graph column (if
-  // it is deleted) and restricted to the `columnSubset_` (if any). Blocks that
-  // need no postprocessing are read with only the `outputColumns_`.
+  // The parameters of a scan of a permutation, including a reference to the
+  // relevant located triples. The `scanColumns_` are the columns read for a
+  // block that needs postprocessing (merging located triples, filtering by
+  // graph, removing duplicates), including the graph column. The result of the
+  // scan consists of the `outputColumns_`, which are the `scanColumns_` without
+  // the graph column (if it is deleted) and restricted to the `columnSubset_`
+  // (if any). A block that needs no postprocessing is read with only the
+  // `outputColumns_`.
   struct ScanImplConfig {
     ColumnIndices scanColumns_;
     ColumnIndices outputColumns_;

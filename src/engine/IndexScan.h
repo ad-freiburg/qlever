@@ -409,7 +409,7 @@ class IndexScan final : public Operation {
   // of the permuted triple followed by the additional columns) that are not
   // stripped, or `std::nullopt` if `varsToKeep_` is `nullopt`. This subset is
   // passed to the `CompressedRelationReader`, so that the stripped columns are
-  // (in most cases) not read at all.
+  // not read at all for the blocks that need no postprocessing (see there).
   std::optional<std::vector<ColumnIndex>> getSubsetOfPermutationColumns() const;
 
   // Return a lambda that takes an `idTable` as read from the permutation (with

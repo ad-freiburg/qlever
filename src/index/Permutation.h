@@ -115,9 +115,9 @@ class Permutation {
 
   // For a given ID for the col0, retrieve all IDs of the col1 and col2.
   // If `col1Id` is specified, only the col2 is returned for triples that
-  // additionally have the specified col1. .This is just a thin wrapper around
-  // `CompressedRelationMetaData::scan`, which reads the blocks on the
-  // `executor` (see there for the `columnSubset`).
+  // additionally have the specified col1. This is just a thin wrapper around
+  // `CompressedRelationReader::scan`, which reads the blocks on the
+  // `executor` (see there, also for the `columnSubset`).
   IdTable scan(const ScanSpecAndBlocks& scanSpecAndBlocks,
                ColumnIndicesRef additionalColumns,
                const CancellationHandle& cancellationHandle,
