@@ -810,9 +810,14 @@ CompressedRelationReader::decompressAndPostprocessBlock(
       prepareLocatedTriples(scanConfig.scanColumns_);
   bool hasUpdates = false;
   if (scanConfig.locatedTriples_.containsTriples(metadata.blockIndex_)) {
+    // The scanned columns after the index columns and the graph column are
+    // payload columns.
+    auto payloadColumns =
+        ql::span<const ColumnIndex>{scanConfig.scanColumns_}.subspan(
+            numIndexColumns + includeGraphColumn);
     decompressedBlock = scanConfig.locatedTriples_.mergeTriples(
         metadata.blockIndex_, decompressedBlock, numIndexColumns,
-        includeGraphColumn);
+        includeGraphColumn, payloadColumns);
     hasUpdates = true;
   }
   bool wasPostprocessed = false;

@@ -156,14 +156,20 @@ auto tieLocatedTriple(T& lt) {
 
 // ____________________________________________________________________________
 template <size_t numIndexColumns, bool includeGraphColumn>
-IdTable LocatedTriplesPerBlock::mergeTriplesImpl(size_t blockIndex,
-                                                 const IdTable& block) const {
+IdTable LocatedTriplesPerBlock::mergeTriplesImpl(
+    size_t blockIndex, const IdTable& block,
+    ql::span<const ColumnIndex> payloadColumns) const {
   // This method should only be called if there are located triples in the
   // specified block.
   AD_CONTRACT_CHECK(map_.contains(blockIndex));
 
-  AD_CONTRACT_CHECK(numIndexColumns + static_cast<size_t>(includeGraphColumn) <=
+  static constexpr auto plusOneIfGraph =
+      static_cast<size_t>(includeGraphColumn);
+  AD_CONTRACT_CHECK(numIndexColumns + plusOneIfGraph + payloadColumns.size() ==
                     block.numColumns());
+  AD_CONTRACT_CHECK(ql::ranges::all_of(payloadColumns, [](ColumnIndex col) {
+    return col > ADDITIONAL_COLUMN_GRAPH_ID;
+  }));
 
   auto numInsertsAndDeletes = numTriples(blockIndex);
   IdTable result{block.numColumns(), block.getAllocator()};
@@ -189,19 +195,22 @@ IdTable LocatedTriplesPerBlock::mergeTriplesImpl(size_t blockIndex,
   // Write the given `locatedTriple` to `result` at position `resultIt` and
   // advance `resultIt` by one. See the example in the comment of the
   // declaration of `mergeTriples` to understand the behavior of this function.
-  auto writeLocatedTripleToResult = [&result, &resultIt](auto& locatedTriple) {
+  auto writeLocatedTripleToResult = [&resultIt,
+                                     payloadColumns](auto& locatedTriple) {
     // Write part from `locatedTriple` that also occurs in the input `block` to
     // the result.
-    static constexpr auto plusOneIfGraph =
-        static_cast<size_t>(includeGraphColumn);
     for (size_t i = 0; i < numIndexColumns + plusOneIfGraph; i++) {
       (*resultIt)[i] = locatedTriple.triple_.ids()[3 - numIndexColumns + i];
     }
-    // If the input `block` has payload columns (which located triples don't
-    // have), set their values to UNDEF.
-    for (size_t i = numIndexColumns + plusOneIfGraph; i < result.numColumns();
-         i++) {
-      (*resultIt)[i] = ValueId::makeUndefined();
+    // Write the values of the payload columns from the payload of
+    // `locatedTriple`, or UNDEF if it has no value for a column.
+    const auto& payload = locatedTriple.payload_;
+    for (size_t i = 0; i < payloadColumns.size(); i++) {
+      size_t payloadIndex = payloadColumns[i] - ADDITIONAL_COLUMN_GRAPH_ID - 1;
+      (*resultIt)[numIndexColumns + plusOneIfGraph + i] =
+          payload != nullptr && payloadIndex < payload->size()
+              ? (*payload)[payloadIndex]
+              : ValueId::makeUndefined();
     }
     resultIt++;
   };
@@ -244,21 +253,23 @@ IdTable LocatedTriplesPerBlock::mergeTriplesImpl(size_t blockIndex,
 }
 
 // ____________________________________________________________________________
-IdTable LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
-                                             const IdTable& block,
-                                             size_t numIndexColumns,
-                                             bool includeGraphColumn) const {
+IdTable LocatedTriplesPerBlock::mergeTriples(
+    size_t blockIndex, const IdTable& block, size_t numIndexColumns,
+    bool includeGraphColumn, ql::span<const ColumnIndex> payloadColumns) const {
   // The following code does nothing more than turn `numIndexColumns` and
   // `includeGraphColumn` into template parameters of `mergeTriplesImpl`.
   auto mergeTriplesImplHelper = [numIndexColumns, blockIndex, &block,
-                                 this](auto hasGraphColumn) {
+                                 payloadColumns, this](auto hasGraphColumn) {
     if (numIndexColumns == 3) {
-      return mergeTriplesImpl<3, hasGraphColumn>(blockIndex, block);
+      return mergeTriplesImpl<3, hasGraphColumn>(blockIndex, block,
+                                                 payloadColumns);
     } else if (numIndexColumns == 2) {
-      return mergeTriplesImpl<2, hasGraphColumn>(blockIndex, block);
+      return mergeTriplesImpl<2, hasGraphColumn>(blockIndex, block,
+                                                 payloadColumns);
     } else {
       AD_CORRECTNESS_CHECK(numIndexColumns == 1);
-      return mergeTriplesImpl<1, hasGraphColumn>(blockIndex, block);
+      return mergeTriplesImpl<1, hasGraphColumn>(blockIndex, block,
+                                                 payloadColumns);
     }
   };
   using ad_utility::use_value_identity::vi;
