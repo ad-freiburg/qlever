@@ -20,7 +20,7 @@
 // operations.
 class CartesianProductJoin : public Operation {
  public:
-  using Children = std::vector<std::shared_ptr<QueryExecutionTree>>;
+  using Children = qlm::vector<std::shared_ptr<QueryExecutionTree>>;
 
  private:
   Children children_;
@@ -58,7 +58,7 @@ class CartesianProductJoin : public Operation {
 
   // The individual implementation of `getCacheKey` (see above) that has to be
   // customized by every child class.
-  std::string getCacheKeyImpl() const override;
+  qlm::string getCacheKeyImpl() const override;
 
  public:
   // Gets a very short (one line without line ending) descriptor string for
@@ -92,7 +92,7 @@ class CartesianProductJoin : public Operation {
   std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
       const parsedQuery::Bind& bind) const override;
   std::unique_ptr<Operation> cloneWithNewChildren(
-      std::vector<std::shared_ptr<QueryExecutionTree>> children) const override;
+      qlm::vector<std::shared_ptr<QueryExecutionTree>> children) const override;
 
   // The Cartesian product is distinct wrt `distinctIndices` iff every child is
   // distinct wrt the subset of `distinctIndices` that falls into its columns

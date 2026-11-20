@@ -24,11 +24,11 @@
 #include "index/LocatedTriples.h"
 #include "index/compressedRelationWriter/CompressedRelationWriter.h"
 #include "util/Algorithm.h"
-#include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/HashSet.h"
 #include "util/Iterators.h"
 #include "util/Timer.h"
 #include "util/Views.h"
+#include "util/compressionUsingZstd/ZstdWrapper.h"
 #include "util/views/AsyncTransformView.h"
 
 using namespace std::chrono_literals;
@@ -277,9 +277,12 @@ CompressedRelationReader::lazyScan(
   };
 
   return IdTableGeneratorInputRange{Generator{
-      std::make_unique<BlocksView>(ad_utility::integerRange(numBlocks),
-                                   std::move(readBlock), numBlocksInFlight,
-                                   std::move(executor)),
+      std::make_unique<BlocksView>(
+          ad_utility::integerRange(numBlocks), std::move(readBlock),
+          numBlocksInFlight, std::move(executor),
+          // The `executor` runs at most this many tasks of the query at the
+          // same time, so more runners would only wait in its queue.
+          getRuntimeParameter<&RuntimeParameters::maxNumThreadsPerQuery_>()),
       numBlocks, std::move(cancellationHandle), limitOffset}};
 }
 
@@ -826,10 +829,10 @@ CompressedRelationReader::decompressAndPostprocessBlock(
 
 // ____________________________________________________________________________
 void CompressedRelationReader::decompressColumn(
-    const std::vector<char>& compressedBlock, IdColumnRef column) {
+    const std::vector<char>& compressedBlock, IdColumnRef column) const {
   ad_utility::idColumnByteIO::decode(
-      column, [&compressedBlock](const auto& buffers) {
-        ZstdWrapper::decompressChunks(compressedBlock, buffers);
+      column, [this, &compressedBlock](const auto& buffers) {
+        zstdContext_->decompressChunks(compressedBlock, buffers);
       });
 }
 
@@ -1027,13 +1030,17 @@ CompressedRelationReader::getMetadataForSmallRelation(
         scanSpec, config, blockMetadata, std::nullopt, locatedTriplesPerBlock);
 
     numRowsTotal += block.numRows();
-    // The `col1` is sorted, so we compute the multiplicity using
-    // `std::unique`. Note: The distinct count might be off by one in the case
-    // of two blocks, because we perform the `unique` separately for both
-    // blocks. But as the multiplicity is only an approximate measure used for
-    // query planning statistics, this is not an issue.
+    // The `col1` is sorted, so we compute the multiplicity using `unique`.
+    //
+    // NOTE 1: `ql::ranges::unique` does not work because of a discrepancy in
+    // the return types between `std::ranges` and `range-v3`.
+    //
+    // NOTE 2: The distinct count might be off by one in the case of two
+    // blocks, because we perform the `unique` separately for both blocks. But
+    // as the multiplicity is only an approximate measure used for query
+    // planning statistics, this is not an issue.
     const auto& blockCol = block.getColumn(0);
-    auto endOfUnique = std::unique(blockCol.begin(), blockCol.end());
+    auto endOfUnique = ::ranges::unique(blockCol);
     numDistinct += endOfUnique - blockCol.begin();
 
     // The `col2` is unsorted, so we use a hash map.

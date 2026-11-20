@@ -25,6 +25,7 @@
 #include "util/ContainersWithAllocator.h"
 #include "util/CopyableSynchronization.h"
 #include "util/Exception.h"
+#include "util/StringWithAllocator.h"
 #include "util/Synchronized.h"
 #include "util/TypeTraits.h"
 
@@ -215,7 +216,7 @@ class Operation : public std::enable_shared_from_this<Operation> {
   // Get a unique, not ambiguous string representation for a subtree.
   // This should act like an ID for each subtree.
   // Calls  `getCacheKeyImpl` and adds the information about the `LIMIT` clause.
-  virtual std::string getCacheKey() const final;
+  virtual qlm::string getCacheKey() const final;
 
   // Return true iff this operation and all of its children are guaranteed to
   // produce the same result on every invocation, OR are explicitly configured
@@ -271,7 +272,7 @@ class Operation : public std::enable_shared_from_this<Operation> {
 
   // The individual implementation of `getCacheKey` (see above) that has to
   // be customized by every child class.
-  virtual std::string getCacheKeyImpl() const = 0;
+  virtual qlm::string getCacheKeyImpl() const = 0;
 
  public:
   // Gets a very short (one line without line ending) descriptor string for
@@ -624,7 +625,7 @@ class Operation : public std::enable_shared_from_this<Operation> {
   // `pushDownBindToAnyChild` or `pushDownBindToChild` have to override this.
   // The default implementation throws.
   virtual std::unique_ptr<Operation> cloneWithNewChildren(
-      std::vector<std::shared_ptr<QueryExecutionTree>> children) const;
+      qlm::vector<std::shared_ptr<QueryExecutionTree>> children) const;
 
  protected:
   /**
@@ -664,9 +665,9 @@ class Operation : public std::enable_shared_from_this<Operation> {
   // `children` (which must be the children of this operation, in the order of
   // `getChildren()`) unchanged, and return `cloneWithNewChildren` of the
   // result. The push down is refused if it would change the values the `BIND`
-  // expression sees, or if any child contains the `BIND`'s target. The other
-  // `children` may be `nullptr` (they are then ignored), but the chosen child
-  // must not be.
+  // expression sees, if any child contains the `BIND`'s target, or if the
+  // `BIND` expression is a constant. The other `children` may be `nullptr`
+  // (they are then ignored), but the chosen child must not be.
   //
   // NOTE 1: Each variable of the expression must be contained in the chosen
   // child, and if it might be `UNDEF` there, no other child may contain it.
@@ -676,9 +677,14 @@ class Operation : public std::enable_shared_from_this<Operation> {
   // NOTE 2: A child can only contain the target if its variables are not
   // visible outside of this operation (e.g. the right child of `MINUS`). After
   // the push down, the target would then wrongly become a join column.
+  //
+  // NOTE 3: A constant `BIND` on top of this operation is computed only for the
+  // rows of its result. Pushed down, it would be computed for all rows of the
+  // child (e.g. for a whole relation as a constant column of an `IndexScan`)
+  // and then copied by this operation.
   std::optional<std::shared_ptr<QueryExecutionTree>> pushDownBindToChild(
       const parsedQuery::Bind& bind,
-      std::vector<std::shared_ptr<QueryExecutionTree>> children,
+      qlm::vector<std::shared_ptr<QueryExecutionTree>> children,
       size_t childIndex) const;
 
   // Opt-in helper for implementing `makeTreeWithBindColumn`: Push the `bind`
@@ -688,7 +694,7 @@ class Operation : public std::enable_shared_from_this<Operation> {
   // `makeTreeWithBindColumn` override.
   std::optional<std::shared_ptr<QueryExecutionTree>> pushDownBindToAnyChild(
       const parsedQuery::Bind& bind,
-      std::vector<std::shared_ptr<QueryExecutionTree>> children) const;
+      qlm::vector<std::shared_ptr<QueryExecutionTree>> children) const;
 
  private:
   //! Compute the result of the query-subtree rooted at this element..

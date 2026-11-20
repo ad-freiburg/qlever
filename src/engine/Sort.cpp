@@ -19,7 +19,7 @@
 #include "index/ExternalSortFunctors.h"
 #include "index/IdTableUtils.h"
 #include "util/Algorithm.h"
-#include "util/Random.h"
+#include "util/UuidGenerator.h"
 
 // Type alias for the external sorter.
 //
@@ -35,15 +35,15 @@ size_t Sort::getResultWidth() const { return subtree_->getResultWidth(); }
 // _____________________________________________________________________________
 Sort::Sort(QueryExecutionContext* qec,
            std::shared_ptr<QueryExecutionTree> subtree,
-           std::vector<ColumnIndex> sortColumnIndices, bool explicitSort)
+           qlm::vector<ColumnIndex> sortColumnIndices, bool explicitSort)
     : Operation{qec},
       subtree_{std::move(subtree)},
       sortColumnIndices_{std::move(sortColumnIndices)},
       explicitSort_{explicitSort} {}
 
 // _____________________________________________________________________________
-std::string Sort::getCacheKeyImpl() const {
-  std::ostringstream os;
+qlm::string Sort::getCacheKeyImpl() const {
+  qlm::ostringstream os{allocator()};
   os << "SORT(internal) on columns:";
 
   for (const auto& sortCol : sortColumnIndices_) {
@@ -109,7 +109,7 @@ Result Sort::computeResult(bool requestLaziness) {
   // For lazy input, collect blocks until we exceed the threshold. Note that we
   // may exceed the threshold by the size of one block.
   std::vector<IdTable> collectedBlocks;
-  LocalVocab mergedLocalVocab;
+  LocalVocab mergedLocalVocab{allocator()};
   size_t totalRows = 0;
   auto idTables = input->idTables();
   auto it = idTables.begin();
@@ -266,7 +266,8 @@ std::optional<std::shared_ptr<QueryExecutionTree>> Sort::makeSortedTree(
       << std::endl;
   return ad_utility::makeExecutionTree<Sort>(
       _executionContext, subtree_,
-      std::vector<ColumnIndex>(sortColumns.begin(), sortColumns.end()),
+      qlm::vector<ColumnIndex>{sortColumns.begin(), sortColumns.end(),
+                               allocator()},
       explicitSort_);
 }
 
@@ -296,7 +297,7 @@ Sort::makeTreeWithStrippedColumns(
   // of the stripped subtree.
   auto subtree = QueryExecutionTree::makeTreeWithStrippedColumns(
       subtree_, varsRequiredFromSubtree.get());
-  std::vector<ColumnIndex> sortColumnIndices;
+  qlm::vector<ColumnIndex> sortColumnIndices{allocator()};
   for (const auto& var : sortVars) {
     sortColumnIndices.push_back(subtree->getVariableColumn(*var));
   }

@@ -11,12 +11,13 @@
 
 #include "backports/algorithm.h"
 #include "backports/concepts.h"
+#include "backports/span.h"
 #include "backports/three_way_comparison.h"
 #include "global/Id.h"
 #include "rdfTypes/Variable.h"
 #include "util/HashMap.h"
-#include "util/Serializer/Serializer.h"
 #include "util/TypeTraits.h"
+#include "util/serializer/Serializer.h"
 
 // TODO<joka921> We have a cyclic dependency between `Id.h` and
 // `VariableToColumnMap.h`.
@@ -97,11 +98,9 @@ CPP_template(typename S, typename T)(
 void serializeDeterministically(S& serializer, T&& map) {
   if constexpr (ad_utility::serialization::WriteSerializer<S>) {
     serializer << map.size();
-    std::vector<const VariableToColumnMap::value_type*> sortedEntries;
-    sortedEntries.reserve(map.size());
-    for (const auto& entry : map) {
-      sortedEntries.push_back(&entry);
-    }
+    auto sortedEntries =
+        map | ql::views::transform([](const auto& entry) { return &entry; }) |
+        ::ranges::to_vector;
     ql::ranges::sort(sortedEntries, {},
                      [](const auto* entry) -> const std::string& {
                        return entry->first.name();
@@ -147,7 +146,7 @@ copySortedByColumnIndex(VariableToColumnMap map);
 enum class BinOpType { Join, OptionalJoin };
 VariableToColumnMap makeVarToColMapForJoinOperation(
     const VariableToColumnMap& leftVars, const VariableToColumnMap& rightVars,
-    std::vector<std::array<ColumnIndex, 2>> joinColumns, BinOpType binOpType,
+    ql::span<const std::array<ColumnIndex, 2>> joinColumns, BinOpType binOpType,
     size_t leftResultWidth, bool keepJoinColumns = true);
 
 #endif  // QLEVER_SRC_ENGINE_VARIABLETOCOLUMNMAP_H

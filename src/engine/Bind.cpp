@@ -81,10 +81,11 @@ std::string Bind::getDescriptor() const { return _bind.getDescriptor(); }
 bool Bind::knownEmptyResult() { return _subtree->knownEmptyResult(); }
 
 // _____________________________________________________________________________
-std::string Bind::getCacheKeyImpl() const {
-  return absl::StrCat(
-      "BIND ", _bind._expression.getCacheKey(_subtree->getVariableColumns()),
-      "\n", _subtree->getCacheKey());
+qlm::string Bind::getCacheKeyImpl() const {
+  return qlm::StrCat(
+      allocator(), "BIND ",
+      _bind._expression.getCacheKey(_subtree->getVariableColumns()), "\n",
+      _subtree->getCacheKey());
 }
 
 // _____________________________________________________________________________
@@ -249,12 +250,12 @@ bool Bind::isDeterministicImpl() const {
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Bind::cloneImpl() const {
-  return cloneWithNewChildren({_subtree->clone()});
+  return cloneWithNewChildren({{_subtree->clone()}, allocator()});
 }
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Bind::cloneWithNewChildren(
-    std::vector<std::shared_ptr<QueryExecutionTree>> children) const {
+    qlm::vector<std::shared_ptr<QueryExecutionTree>> children) const {
   return std::make_unique<Bind>(_executionContext, std::move(children.at(0)),
                                 _bind);
 }
@@ -267,7 +268,7 @@ std::optional<std::shared_ptr<QueryExecutionTree>> Bind::makeTreeWithBindColumn(
   if (_bind._expression.isVariableContained(bind._target)) {
     return std::nullopt;
   }
-  return pushDownBindToAnyChild(bind, {_subtree});
+  return pushDownBindToAnyChild(bind, {{_subtree}, allocator()});
 }
 
 // _____________________________________________________________________________

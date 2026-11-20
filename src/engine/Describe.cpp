@@ -31,20 +31,21 @@ qlm::vector<QueryExecutionTree*> Describe::getChildrenImpl() const {
 }
 
 // _____________________________________________________________________________
-std::string Describe::getCacheKeyImpl() const {
+qlm::string Describe::getCacheKeyImpl() const {
   // The cache key must represent the `resources_` (the variables and IRIs of
   // the DESCRIBE clause) and the `subtree_` (the WHERE clause).
-  std::string result = absl::StrCat("DESCRIBE ", subtree_->getCacheKey(), " ");
+  qlm::string result =
+      qlm::StrCat(allocator(), "DESCRIBE ", subtree_->getCacheKey(), " ");
   for (const auto& resource : describe_.resources_) {
     if (std::holds_alternative<TripleComponent::Iri>(resource)) {
       result.append(
           std::get<TripleComponent::Iri>(resource).toStringRepresentation());
     } else {
-      result.append(absl::StrCat(
-          "column #",
+      qlm::StrAppend(
+          &result, "column #",
           subtree_->getVariableColumnOrNullopt(std::get<Variable>(resource))
               .value_or(static_cast<size_t>(-1)),
-          " "));
+          " ");
     }
   }
 
@@ -61,8 +62,8 @@ std::string Describe::getCacheKeyImpl() const {
     ql::ranges::transform(defaultGraphs.value(), std::back_inserter(graphIdVec),
                           &toRdfLiteral);
     ql::ranges::sort(graphIdVec);
-    absl::StrAppend(&result,
-                    "\nFiltered by Graphs:", absl::StrJoin(graphIdVec, " "));
+    qlm::StrAppend(&result, "\nFiltered by Graphs:",
+                   qlm::StrJoin(allocator(), graphIdVec, " "));
   }
   return result;
 }
@@ -175,7 +176,7 @@ IdTable Describe::makeAndExecuteJoinWithFullIndex(
       VariableToColumnMap{
           {subjectVar,
            ColumnIndexAndTypeInfo{0, ColumnIndexAndTypeInfo::AlwaysDefined}}},
-      std::vector<ColumnIndex>{}, LocalVocab{},
+      qlm::vector<ColumnIndex>{allocator()}, LocalVocab{allocator()},
       absl::StrCat("INTERNAL DESCRIBE ", uniqueCounter++));
   SparqlTripleSimple triple{subjectVar, V{"?predicate"}, V{"?object"}};
   auto activeGraphs = describe_.datasetClauses_.activeDefaultGraphs();
@@ -250,7 +251,7 @@ IdTable Describe::getIdsToDescribe(const Result& result,
 
 // _____________________________________________________________________________
 Result Describe::computeResult([[maybe_unused]] bool requestLaziness) {
-  LocalVocab localVocab;
+  LocalVocab localVocab{allocator()};
   // Compute the results of the WHERE clause and extract the `Id`s to describe.
   //
   // TODO<joka921> Would we benefit from computing `resultOfWhereClause` lazily?

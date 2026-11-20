@@ -10,6 +10,8 @@
 #include "global/RuntimeParameters.h"
 #include "index/TripleComponentConversions.h"
 #include "parser/BlankNodeAdder.h"
+#include "parser/RdfParser.h"
+#include "parser/Tokenizer.h"
 #include "util/http/HttpUtils.h"
 
 // _____________________________________________________________________________
@@ -20,12 +22,13 @@ Load::Load(QueryExecutionContext* qec, parsedQuery::Load loadClause,
       getResultFunction_(std::move(getResultFunction)) {}
 
 // _____________________________________________________________________________
-std::string Load::getCacheKeyImpl() const {
+qlm::string Load::getCacheKeyImpl() const {
   if (getRuntimeParameter<&RuntimeParameters::cacheLoadResults_>()) {
-    return absl::StrCat("LOAD ", loadClause_.iri_.toStringRepresentation(),
-                        loadClause_.silent_ ? " SILENT" : "");
+    return qlm::StrCat(allocator(), "LOAD ",
+                       loadClause_.iri_.toStringRepresentation(),
+                       loadClause_.silent_ ? " SILENT" : "");
   }
-  return absl::StrCat("LOAD ", cacheBreaker_);
+  return qlm::StrCat(allocator(), "LOAD ", cacheBreaker_);
 }
 
 // _____________________________________________________________________________
@@ -74,7 +77,7 @@ qlm::vector<ColumnIndex> Load::resultSortedOn() const {
 Result Load::computeResult(bool requestLaziness) {
   auto makeSilentResult = [this]() -> Result {
     return {IdTable{getResultWidth(), getExecutionContext()->getAllocator()},
-            resultSortedOn(), LocalVocab{}};
+            resultSortedOn(), LocalVocab{allocator()}};
   };
 
   // In the syntax test mode we don't even try to compute the result, as this
