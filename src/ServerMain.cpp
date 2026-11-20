@@ -454,13 +454,24 @@ int main(int argc, char** argv) {
                   resourceMonitor.indexRebuildIdTracker());
     // Per-query jsonl metrics log, written next to the index files. On by
     // default; `--no-metrics-log` opts out.
+    // A missing metrics log is not fatal (consistent with the resource-usage
+    // log): e.g. a read-only or foreign-owned data directory in Docker.
     if (!noMetricsLog) {
-      server.configureQueryEventLog(config.baseName_ + ".metrics-log.jsonl");
+      const std::string metricsLogPath =
+          config.baseName_ + ".metrics-log.jsonl";
+      try {
+        server.configureQueryEventLog(metricsLogPath);
+      } catch (const std::exception& e) {
+        AD_LOG_WARN << "Could not open the metrics log \"" << metricsLogPath
+                    << "\" (" << e.what()
+                    << "); continuing without a metrics log. Check that the "
+                       "directory is writable, or pass --no-metrics-log."
+                    << std::endl;
+      }
     }
     server.run();
   } catch (const std::exception& e) {
-    // Reached if opening the metrics log fails; server.run() otherwise
-    // handles its own exceptions.
+    // `server.run()` handles its own exceptions; this is a last resort.
     AD_LOG_ERROR << e.what() << std::endl;
     return 1;
   }

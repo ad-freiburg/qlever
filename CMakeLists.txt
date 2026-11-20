@@ -427,6 +427,51 @@ else ()
     if (${JEMALLOC_FOUND})
         include_directories(${JEMALLOC_INCLUDE_DIRS})
         link_libraries(${JEMALLOC_LIBRARIES})
+        # Some builds of jemalloc (e.g. `jemalloc 5.4.0` from conda-forge) don't
+        # export `aligned_alloc`, so that `aligned_alloc` is served by glibc but
+        # the corresponding `free` by jemalloc, which leads to segfaults. In that
+        # case we add our own `aligned_alloc` that forwards to jemalloc, see
+        # `src/util/JemallocAlignedAllocShim.cpp` for details.
+        find_library(QLEVER_JEMALLOC_LIBRARY_FILE NAMES jemalloc
+                HINTS ${JEMALLOC_LIBRARY_DIRS} NO_CACHE)
+        set(QLEVER_JEMALLOC_HAS_ALIGNED_ALLOC ON)
+        if (QLEVER_JEMALLOC_LIBRARY_FILE AND CMAKE_NM)
+            execute_process(COMMAND ${CMAKE_NM} -D --defined-only ${QLEVER_JEMALLOC_LIBRARY_FILE}
+                    OUTPUT_VARIABLE QLEVER_JEMALLOC_SYMBOLS ERROR_QUIET
+                    RESULT_VARIABLE QLEVER_JEMALLOC_NM_RESULT)
+            if (QLEVER_JEMALLOC_NM_RESULT EQUAL 0 AND
+                    NOT QLEVER_JEMALLOC_SYMBOLS MATCHES "[ \t]aligned_alloc\n")
+                set(QLEVER_JEMALLOC_HAS_ALIGNED_ALLOC OFF)
+            endif ()
+        endif ()
+        if (NOT QLEVER_JEMALLOC_HAS_ALIGNED_ALLOC AND NOT QLEVER_SANITIZER_ENABLED)
+            message(STATUS "jemalloc (${QLEVER_JEMALLOC_LIBRARY_FILE}) doesn't export `aligned_alloc`, adding a shim that forwards it to jemalloc")
+            add_library(jemallocAlignedAllocShim OBJECT src/util/JemallocAlignedAllocShim.cpp)
+            # Only the executables need (and should get) the shim. We can't use
+            # `link_libraries` here, as this would add the shim to the
+            # (exported) library targets of our dependencies, which breaks
+            # their `install(EXPORT ...)`. Instead, we add it to all executables
+            # once all targets have been defined.
+            function(qlever_add_aligned_alloc_shim_to_executables dir)
+                get_property(targets DIRECTORY ${dir} PROPERTY BUILDSYSTEM_TARGETS)
+                foreach (target IN LISTS targets)
+                    get_target_property(type ${target} TYPE)
+                    get_target_property(imported ${target} IMPORTED)
+                    if (type STREQUAL "EXECUTABLE" AND NOT imported)
+                        # Set the properties directly, `target_link_libraries`
+                        # would clash with targets that use the plain signature.
+                        set_property(TARGET ${target} APPEND PROPERTY LINK_LIBRARIES jemallocAlignedAllocShim)
+                        set_property(TARGET ${target} APPEND PROPERTY LINK_OPTIONS "LINKER:--export-dynamic-symbol=aligned_alloc")
+                    endif ()
+                endforeach ()
+                get_property(subdirs DIRECTORY ${dir} PROPERTY SUBDIRECTORIES)
+                foreach (subdir IN LISTS subdirs)
+                    qlever_add_aligned_alloc_shim_to_executables(${subdir})
+                endforeach ()
+            endfunction()
+            cmake_language(DEFER DIRECTORY ${CMAKE_SOURCE_DIR}
+                    CALL qlever_add_aligned_alloc_shim_to_executables ${CMAKE_SOURCE_DIR})
+        endif ()
     else ()
         message(WARNING "Jemalloc could not be found via
     pkg-config. If you are sure that you have installed jemalloc on your system
