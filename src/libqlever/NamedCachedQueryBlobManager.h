@@ -18,6 +18,7 @@
 
 #include "backports/memory_resource.h"
 #include "backports/span.h"
+#include "libqlever/BlobCompression.h"
 #include "util/AlignedAllocator.h"
 #include "util/UninitializedAllocator.h"
 #include "util/serializer/ByteBufferSerializer.h"
@@ -84,6 +85,21 @@ struct BlobSerializationConfig {
     double maxDeadShapeRatio_ = 0.3;
   };
   std::optional<IncrementalBase> incremental_;
+
+  // The ZSTD compression level of the blob (see
+  // `blobCompression::BlobEncoding`).
+  int compressionLevel_ = blobCompression::defaultCompressionLevel;
+
+  // If true, then the blob is written as a segmented ZSTD frame (see
+  // `BlobCompression.h`) with four segments: (1) the header, (2) the index
+  // metadata and the vocabulary, (3) the secondary vocabulary (empty in the
+  // old format), and (4) the named results. The header, which contains the
+  // format version, is a segment of its own, so that the vocabulary segment
+  // is the same in both formats. Then the compressed form of the unchanged
+  // segments is reused when a blob diff is applied (see
+  // `blobDiff/SegmentedBlobDiff.h`). This makes the compression slightly
+  // slower and the blob slightly larger.
+  bool writeSegments_ = false;
 };
 
 // Serialize and deserialize the vocabulary and the `NamedResultCache` of a
@@ -261,8 +277,11 @@ class NamedCachedQueryBlobManager {
   // format. They are exposed publicly so that they can be unit-tested in
   // isolation.
 
-  // Compress `uncompressedBlob` into a single ZSTD frame.
-  static std::vector<char> compressBlob(ql::span<const char> uncompressedBlob);
+  // Compress `uncompressedBlob` into a single ZSTD frame with the given
+  // `encoding` (see `blobCompression::compressBlob`).
+  static std::vector<char> compressBlob(
+      ql::span<const char> uncompressedBlob,
+      const blobCompression::BlobEncoding& encoding = {});
 
   // Inverse of `compressBlob`: decompress `compressedBlob` into a freshly
   // allocated buffer that uses `allocator` for its storage (see
