@@ -563,9 +563,8 @@ struct ParseGeoPointOrWktVisitor {
 
 static constexpr ParseGeoPointOrWktVisitor parseGeoPointOrWkt;
 
-// Helper to convert a geometry from `pb_util` to a WKT string.
-// Optionally specify a coordinate reference system to which the input will be
-// projected.
+// Helper to convert a geometry from `pb_util` (in CRS84) to a WKT string,
+// projected to `projCrs` (with the IRI of `projCrs` unless it is CRS84).
 struct UtilGeomToWktVisitor {
   // Visitor for `std::optional` inputs.
   template <typename T>
@@ -855,27 +854,28 @@ struct UtilGeomProjectionVisitor {
 static constexpr UtilGeomProjectionVisitor projectWebMerc{
     CRSType::CRS84, CRSType::WEB_MERCATOR};
 
-// For correctness of the centroid, we compute it in the `sourceCrs` of the wkt
-// literal. For example the Web Mercator y axis is not linear, so it doesn't
-// linearly translate to CRS84. Project the parsed geometry into `sourceCrs`,
-// compute the centroid and return it as a `GeoPoint` (projected to CRS84)
-// wrapped inside a `Centroid` struct.
+// Compute the centroid of a parsed geometry (which is in CRS84) in the CRS
+// `sourceCrs` of its literal and return it as a `GeoPoint` (in CRS84) wrapped
+// inside a `Centroid` struct.
+//
+// NOTE: The centroid of the geometry projected to CRS84 is not the projection
+// of its centroid in the source CRS when the projection is not linear, as for
+// the y axis of Web Mercator (700 km apart for Canada).
 inline std::optional<Centroid> centroidAsGeoPoint(const ParsedWkt& geometry,
                                                   CRSType sourceCrs) {
-  const UtilGeomProjectionVisitor projectToSourceCrs{defaultCrs, sourceCrs};
-  auto computeCentroid = [](auto& geom) {
-    return std::visit([](auto& val) { return centroid(val); }, geom);
+  auto computeCentroid = [](const ParsedWkt& geom) {
+    return std::visit([](const auto& val) { return centroid(val); }, geom);
   };
 
-  // The result should be in defaultCrs.
+  // Project the geometry back to `sourceCrs` unless that is CRS84, compute the
+  // centroid there and project it to CRS84.
   Point<CoordType> resultCentroid;
   if (sourceCrs == defaultCrs) {
-    // There is no need for additional projections.
     resultCentroid = computeCentroid(geometry);
   } else {
-    auto inSourceCrs = projectToSourceCrs(geometry);
-    auto uPoint = computeCentroid(inSourceCrs);
-    resultCentroid = projectToCRS(uPoint, sourceCrs, defaultCrs);
+    const UtilGeomProjectionVisitor projectToSourceCrs{defaultCrs, sourceCrs};
+    resultCentroid = projectToCRS(computeCentroid(projectToSourceCrs(geometry)),
+                                  sourceCrs, defaultCrs);
   }
 
   try {

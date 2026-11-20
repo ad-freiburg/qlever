@@ -407,6 +407,16 @@ TEST(GeometryInfoTest, FromWktLiteral) {
                      MetricLength{0},
                      MetricArea{0}};
   EXPECT_THAT(g10, geoInfoMatcher(exp10));
+
+  // The centroid of a Web Mercator polygon is computed in Web Mercator (the
+  // center of this square is `POINT(5000000 5000000)`) and stored in CRS84.
+  auto g11 = GeometryInfo::fromWktLiteral(
+      "\"<http://www.opengis.net/def/crs/EPSG/0/3857> POLYGON((0 0,10000000 "
+      "0,10000000 10000000,0 10000000,0 0))\"^^<http://www.opengis.net/ont/"
+      "geosparql#wktLiteral>");
+  ASSERT_TRUE(g11.has_value());
+  EXPECT_THAT(g11.value().getCentroid(),
+              centroidNear(Centroid{40.916274, 44.915764}));
 }
 
 // Test that `isValidWktStrict` accepts well-formed literals and rejects
@@ -504,8 +514,9 @@ TEST(GeometryInfoTest, RequestedInfoLiteral) {
   }
 }
 
-// Test the WKT representation of a `BoundingBox`.
-TEST(GeometryInfoTest, BoundingBoxAsWKT) {
+// Test the WKT representation of a `BoundingBox` and a `Centroid`, in CRS84
+// and projected to another CRS.
+TEST(GeometryInfoTest, BoundingBoxAndCentroidAsWKT) {
   BoundingBox bb1{{0, 0}, {1, 1}};
   ASSERT_EQ(bb1.asWkt(), "POLYGON((0 0,1 0,1 1,0 1,0 0))");
   BoundingBox bb2{{0, 0}, {0, 0}};
@@ -513,8 +524,21 @@ TEST(GeometryInfoTest, BoundingBoxAsWKT) {
   auto bb3 = GeometryInfo::getBoundingBox(
       "\"LINESTRING(2 4,8 8)\""
       "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
-  EXPECT_THAT(bb3, Optional(Property(&BoundingBox::asWkt,
-                                     "POLYGON((2 4,8 4,8 8,2 8,2 4))")));
+  ASSERT_TRUE(bb3.has_value());
+  EXPECT_EQ(bb3.value().asWkt(), "POLYGON((2 4,8 4,8 8,2 8,2 4))");
+
+  // Projected to another CRS (with its IRI, swapped axes for WGS84).
+  using util::geo::CRSType;
+  EXPECT_EQ(bb3.value().asWkt(SourceCrsType{CRSType::WGS84}),
+            "<http://www.opengis.net/def/crs/EPSG/0/4326> "
+            "POLYGON((4 2,4 8,8 8,8 2,4 2))");
+  EXPECT_EQ(bb1.asWkt(SourceCrsType{CRSType::CRS84}),
+            "POLYGON((0 0,1 0,1 1,0 1,0 0))");
+  Centroid centroid{2, 1};
+  EXPECT_EQ(centroid.asWkt(SourceCrsType{CRSType::CRS84}), "POINT(1 2)");
+  EXPECT_EQ(centroid.asWkt(SourceCrsType{CRSType::WEB_MERCATOR}),
+            "<http://www.opengis.net/def/crs/EPSG/0/3857> "
+            "POINT(111319.490793 222684.208506)");
 }
 
 // ____________________________________________________________________________

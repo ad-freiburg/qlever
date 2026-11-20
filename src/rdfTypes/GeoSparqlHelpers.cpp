@@ -90,21 +90,6 @@ std::optional<std::string> geometryNAsWkt(GeoPointOrWkt wkt, int64_t n) {
 }
 
 // _____________________________________________________________________________
-std::optional<std::string> geoPointToWktInCrs(const GeoPoint& point,
-                                              SourceCrsType projCrs) {
-  return utilGeomToWkt(geoPointToUtilPoint(point),
-                       static_cast<::util::geo::CRSType>(projCrs.type()));
-}
-
-// _____________________________________________________________________________
-std::string boundingBoxToWkt(const GeoPoint& lowerLeft,
-                             const GeoPoint& upperRight,
-                             SourceCrsType projCrs) {
-  return boundingBoxAsWkt(lowerLeft, upperRight,
-                          static_cast<::util::geo::CRSType>(projCrs.type()));
-}
-
-// _____________________________________________________________________________
 std::optional<std::string> simplifyWkt(GeoPointOrWkt wkt, double tolerance) {
   auto parseResult = parseGeoPointOrWkt(wkt);
   return utilGeomToWkt(simplifyGeometry(parseResult.parsedWkt_, tolerance));

@@ -27,9 +27,11 @@
 
 namespace ad_utility {
 
-// Check that the constant `crsTypeUnsupported` of `GeometryInfo.h` (which only
-// forward-declares `CRSType`) is the enum value it stands for.
+// Check that the constants `crsTypeUnsupported` and `crsTypeCrs84` of
+// `GeometryInfo.h` (which only forward-declares `CRSType`) are the enum values
+// they stand for.
 static_assert(crsTypeUnsupported == ::util::geo::CRSType::UNSUPPORTED);
+static_assert(crsTypeCrs84 == ::util::geo::CRSType::CRS84);
 
 // ____________________________________________________________________________
 GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
@@ -288,6 +290,19 @@ std::optional<MetricArea> GeometryInfo::getMetricArea(std::string_view wkt) {
 // ____________________________________________________________________________
 std::string BoundingBox::asWkt() const {
   return detail::boundingBoxAsWkt(lowerLeft_, upperRight_);
+}
+
+// ____________________________________________________________________________
+std::string BoundingBox::asWkt(SourceCrsType crs) const {
+  return detail::boundingBoxAsWkt(lowerLeft_, upperRight_,
+                                  static_cast<util::geo::CRSType>(crs.type()));
+}
+
+// ____________________________________________________________________________
+std::string Centroid::asWkt(SourceCrsType crs) const {
+  return util::geo::getWKT(detail::geoPointToUtilPoint(centroid_),
+                           detail::defaultCrs,
+                           static_cast<util::geo::CRSType>(crs.type()));
 }
 
 // ____________________________________________________________________________

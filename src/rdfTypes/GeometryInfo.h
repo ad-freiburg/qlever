@@ -37,11 +37,15 @@ enum class CRSType : uint8_t;
 
 namespace ad_utility {
 
-// The value `util::geo::CRSType::UNSUPPORTED`, which this header cannot name
-// (the enum is only forward-declared). Used by the `CRSTypeValueGetter` in
-// `SparqlExpressionValueGetters.h`, checked against the enum in
-// `GeometryInfo.cpp`.
+// The values `util::geo::CRSType::UNSUPPORTED` and `util::geo::CRSType::CRS84`
+// (the default CRS), which this header cannot name (the enum is only
+// forward-declared). Used by the `CRSTypeValueGetter` in
+// `SparqlExpressionValueGetters.h` and by `WktCentroid` in
+// `GeoSparqlHelpers.h`, checked against the enum in `GeometryInfo.cpp`.
 constexpr inline ::util::geo::CRSType crsTypeUnsupported{0};
+constexpr inline ::util::geo::CRSType crsTypeCrs84{1};
+
+struct SourceCrsType;
 
 // These encapsulating structs are required for the `RequestedInfo` templates
 // used in the `GeometryInfo` class and the `GeometryInfoValueGetter`.
@@ -56,6 +60,10 @@ struct Centroid {
   Centroid(double lat, double lng) : centroid_{lat, lng} {}
 
   GeoPoint centroid() const { return centroid_; }
+
+  // Return a `POINT` WKT literal without quotes or datatype representing this
+  // centroid, projected to `crs` (with the IRI of `crs` unless it is CRS84).
+  std::string asWkt(SourceCrsType crs) const;
 };
 
 // The individual coordinates describing the bounding box.
@@ -81,8 +89,10 @@ struct BoundingBox {
   }
 
   // Return a `POLYGON` WKT literal without quotes or datatype representing this
-  // bounding box.
+  // bounding box, in CRS84 or projected to `crs` (with the IRI of `crs` unless
+  // it is CRS84).
   std::string asWkt() const;
+  std::string asWkt(SourceCrsType crs) const;
 
   // Extract the minimum or maximum coordinates
   template <BoundingCoordinate RequestedCoordinate>

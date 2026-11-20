@@ -76,16 +76,6 @@ double wktDistImpl(GeoPoint point1, GeoPoint point2);
 // Helper to avoid including `GeometryInfoHelpersImpl.h`
 std::optional<std::string> geometryNAsWkt(GeoPointOrWkt wkt, int64_t n);
 
-// Helper to avoid including `GeometryInfoHelpersImpl.h`.
-// Project the coordinates of a `GeoPoint` to another coordinate reference
-// system and return as WKT string.
-std::optional<std::string> geoPointToWktInCrs(const GeoPoint& point,
-                                              SourceCrsType projCrs);
-
-// Helper to avoid including `GeometryInfoHelpersImpl.h`.
-std::string boundingBoxToWkt(const GeoPoint& lowerLeft,
-                             const GeoPoint& upperRight, SourceCrsType projCrs);
-
 // Simplify a WKT geometry using `pb_util`. The returned WKT string has neither
 // quotation marks nor a datatype yet.
 std::optional<std::string> simplifyWkt(GeoPointOrWkt wkt, double tolerance);
@@ -179,7 +169,8 @@ class WktMetricLength {
   }
 };
 
-// Get the centroid of a geometry.
+// Get the centroid of a geometry, as a `GeoPoint` for a geometry in CRS84 and
+// as a WKT literal in the CRS of the geometry otherwise.
 class WktCentroid {
  public:
   sparqlExpression::IdOrLiteralOrIri operator()(
@@ -187,32 +178,19 @@ class WktCentroid {
     if (!geom.has_value()) {
       return ValueId::makeUndefined();
     }
-    std::optional<SourceCrsType> sourceCrs = geom.value().crs_;
-    AD_CORRECTNESS_CHECK(sourceCrs.has_value());
-
-    Centroid centroid = geom.value().info_;
-
-    AD_CORRECTNESS_CHECK(sourceCrs.value().type() > 0);
-    // If the `sourceCrs` is the default CRS (CRS84), return as `GeoPoint`.
-    if (sourceCrs.value().type() == 1) {
+    const auto& [centroid, sourceCrs] = geom.value();
+    if (sourceCrs == SourceCrsType{crsTypeCrs84}) {
       return ValueId::makeFromGeoPoint(centroid.centroid());
     }
-    // For all other CRS (`type` > 1) return as WKT literal (with the
-    // appropriate CRS IRI).
-    auto resultWkt = ad_utility::detail::geoPointToWktInCrs(centroid.centroid(),
-                                                            sourceCrs.value());
-    // `geoPointToWktInCrs` should only return `std::nullopt` if one of the
-    // arguments is `std::nullopt`.
-    AD_CORRECTNESS_CHECK(resultWkt.has_value());
-
     using namespace triple_component;
-    auto lit = Literal::literalWithoutQuotes(resultWkt.value());
+    auto lit = Literal::literalWithoutQuotes(centroid.asWkt(sourceCrs));
     lit.addDatatype(detail::wktLiteralIri);
     return {LiteralOrIri{std::move(lit)}};
   }
 };
 
-// Get the bounding box of a geometry.
+// Get the bounding box of a geometry as a WKT literal in the CRS of the
+// geometry.
 class WktEnvelope {
  public:
   sparqlExpression::IdOrLiteralOrIri operator()(
@@ -220,16 +198,9 @@ class WktEnvelope {
     if (!geom.has_value()) {
       return ValueId::makeUndefined();
     }
-
-    std::optional<SourceCrsType> sourceCrs = geom.value().crs_;
-    AD_CORRECTNESS_CHECK(sourceCrs.has_value());
-
-    BoundingBox boundingBox = geom.value().info_;
+    const auto& [boundingBox, sourceCrs] = geom.value();
     using namespace triple_component;
-    auto lit =
-        Literal::literalWithoutQuotes(ad_utility::detail::boundingBoxToWkt(
-            boundingBox.lowerLeft(), boundingBox.upperRight(),
-            sourceCrs.value()));
+    auto lit = Literal::literalWithoutQuotes(boundingBox.asWkt(sourceCrs));
     lit.addDatatype(detail::wktLiteralIri);
     return {LiteralOrIri{std::move(lit)}};
   }
