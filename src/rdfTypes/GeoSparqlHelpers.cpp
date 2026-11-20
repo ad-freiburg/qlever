@@ -94,9 +94,10 @@ std::optional<std::string> transformAsWkt(
     return std::nullopt;
   }
   ::util::geo::CRSType sourceCrs = sourceCrsFromGeoPointOrWkt(wkt);
-  // No need to transform the input.
+  // No need to transform the input. We deliberately skip validation of the WKT
+  // here and return it unchanged for better performance.
   if (targetCrs == sourceCrs) {
-    return wktFromGeoPointOrWktVisitor(wkt);
+    return wktFromGeoPointOrWkt(wkt);
   }
   // This projects the coordinates of `wkt` to `targetCrs` during parsing.
   auto parseResult = parseGeoPointOrWkt(wkt, targetCrs);

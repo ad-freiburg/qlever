@@ -37,6 +37,7 @@
 #include "util/Exception.h"
 #include "util/GeoConverters.h"
 #include "util/Log.h"
+#include "util/OverloadCallOperator.h"
 #include "util/TypeTraits.h"
 #include "util/Views.h"
 #include "util/json.h"
@@ -617,7 +618,7 @@ static constexpr ParseGeoPointOrWktVisitor parseGeoPointOrWkt;
 // Returns default CRS for a `GeoPoint`. For a WKT literal extract the source
 // CRS type from the string.
 struct SourceCrsFromGeoPointOrWktVisitor {
-  CRSType operator()(const GeoPoint& point) const { return defaultCrs; }
+  CRSType operator()(const GeoPoint&) const { return defaultCrs; }
 
   CRSType operator()(const std::string& wkt) const { return getCRSType(wkt); }
 
@@ -672,36 +673,22 @@ struct UtilGeomToWktVisitor {
 static constexpr UtilGeomToWktVisitor utilGeomToWkt;
 
 // Helper to extract a WKT literal from `GeoPointOrWkt` variant.
-struct WktFromGeoPointOrWktVisitor {
-  std::optional<std::string> operator()(const GeoPoint& point) const {
-    auto utilPoint = geoPointToUtilPoint(point);
-    return utilGeomToWkt(utilPoint);
-  }
-
-  std::optional<std::string> operator()(const std::string& wkt) const {
-    // If the input wkt string still contains the WKT literal suffix, we need to
-    // remove the datatype suffix and the surrounding quotes.
-    return removeDatatype(wkt);
-  }
-
-  std::optional<std::string> operator()(
-      const GeoPointOrWkt& geoPointOrWkt) const {
-    return std::visit(
-        [](const auto& value) { return WktFromGeoPointOrWktVisitor{}(value); },
-        geoPointOrWkt);
-  }
-
-  template <typename T>
-  std::optional<std::string> operator()(
-      const std::optional<T>& geoPointOrWkt) const {
-    if (!geoPointOrWkt.has_value()) {
-      return std::nullopt;
-    }
-    return WktFromGeoPointOrWktVisitor{}(geoPointOrWkt.value());
-  }
-};
-
-static constexpr WktFromGeoPointOrWktVisitor wktFromGeoPointOrWktVisitor;
+inline std::optional<std::string> wktFromGeoPointOrWkt(
+    const GeoPointOrWkt& geoPointOrWkt) {
+  return std::visit(
+      ad_utility::OverloadCallOperator{
+          [](const GeoPoint& point) -> std::optional<std::string> {
+            return utilGeomToWkt(geoPointToUtilPoint(point));
+          },
+          [](const std::string& wkt) -> std::optional<std::string> {
+            // If the input wkt string still contains the WKT
+            // literal suffix, we need to remove the datatype
+            // suffix and the surrounding quotes.
+            return removeDatatype(wkt);
+            ;
+          }},
+      geoPointOrWkt);
+}
 
 // Helper to convert a geometry from `pb_util` to a GeoJSON geometry object (RFC
 // 7946). The input is expected to be in CRS84, as GeoJSON only supports this
