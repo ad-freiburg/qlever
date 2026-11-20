@@ -6,7 +6,9 @@
 
 #include "backports/algorithm.h"
 #include "backports/type_traits.h"
+#include "engine/PermutationSelector.h"
 #include "parser/GraphPatternOperation.h"
+#include "parser/MagicServiceIriConstants.h"
 
 namespace checkUsePatternTrick {
 // __________________________________________________________________________
@@ -83,6 +85,30 @@ bool isVariableContainedInGraphPatternOperation(
   });
 }
 
+// Return true iff the `triple` has a fixed predicate and is evaluated by an
+// `IndexScan` on the regular PSO or POS permutation, which store the patterns
+// in additional columns.
+//
+// NOTE: This excludes triples that contain an internal IRI, for example the
+// language-tagged predicates of a `LANG` filter, `ql:langtag`,
+// `ql:has-predicate`, or the text search predicates. These are evaluated on the
+// internal permutation (without pattern columns) or by special operations. It
+// also excludes the magic predicates for a spatial join or a materialized view.
+static bool isEvaluatedByRegularIndexScan(const SparqlTriple& triple) {
+  auto predicate = triple.getSimplePredicate();
+  if (!predicate.has_value()) {
+    return false;
+  }
+  // TODO<ullingerc> Replace the checks for the magic predicates by
+  // `getTripleKind(triple) == TripleKind::IndexScan` once #3864 is merged.
+  auto isMagic = [&predicate](std::string_view prefix) {
+    return ql::starts_with(predicate.value(), prefix);
+  };
+  return !qlever::containsInternalIri(triple.getSimple()) &&
+         !isMagic(MAX_DIST_IN_METERS) && !isMagic(NEAREST_NEIGHBORS) &&
+         !isMagic(MATERIALIZED_VIEW_IRI_WITHOUT_CLOSING_BRACKET);
+}
+
 // Internal helper function.
 // Modify the `triples` s.t. the patterns for `subAndPred.subject_` will appear
 // in a column with the variable `subAndPred.predicate_` when evaluating and
@@ -94,18 +120,19 @@ static void rewriteTriplesForPatternTrick(const PatternTrickTuple& subAndPred,
                                           std::vector<SparqlTriple>& triples) {
   // The following lambda tries to find a triple in the `triples` that has the
   // subject variable of the pattern trick in its `triplePosition` (which is
-  // either the subject or the object) and a fixed predicate (no variable). If
-  // such a triple is found, it is modified s.t. it also scans the
-  // `additionalScanColumn` which has to be the index of the column where the
-  // patterns of the `triplePosition` are stored in the POS and PSO permutation.
-  // Return true iff such a triple was found and replaced.
+  // either the subject or the object) and is evaluated by a regular index scan
+  // (see `isEvaluatedByRegularIndexScan`). If such a triple is found, it is
+  // modified s.t. it also scans the `additionalScanColumn` which has to be the
+  // index of the column where the patterns of the `triplePosition` are stored
+  // in the POS and PSO permutation. Return true iff such a triple was found and
+  // replaced.
   auto findAndRewriteMatchingTriple = [&subAndPred, &triples](
                                           auto triplePosition,
                                           size_t additionalScanColumn) {
     auto matchingTriple = ql::ranges::find_if(
         triples, [&subAndPred, triplePosition](const SparqlTriple& t) {
           return std::invoke(triplePosition, t) == subAndPred.subject_ &&
-                 t.getSimplePredicate().has_value();
+                 isEvaluatedByRegularIndexScan(t);
         });
     if (matchingTriple == triples.end()) {
       return false;

@@ -24,15 +24,15 @@ bool isInternalComponent(const TripleComponent& tripleComponent) {
   return tripleComponent.isIri() && hasInternalPrefix(tripleComponent.getIri());
 }
 
-// Return true if one of the 3 triple components of `triple` contains an
-// internal IRI.
+}  // namespace
+
+namespace qlever {
+// _____________________________________________________________________________
 bool containsInternalIri(const SparqlTripleSimple& triple) {
   return isInternalComponent(triple.s_) || isInternalComponent(triple.p_) ||
          isInternalComponent(triple.o_);
 }
-}  // namespace
 
-namespace qlever {
 // _____________________________________________________________________________
 std::shared_ptr<const Permutation> getPermutationForTriple(
     Permutation::Enum permutation, const Index& index,

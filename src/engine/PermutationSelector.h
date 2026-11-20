@@ -13,6 +13,10 @@
 
 namespace qlever {
 
+// Return true if one of the 3 triple components of `triple` contains an
+// internal IRI (see `getPermutationForTriple` below).
+bool containsInternalIri(const SparqlTripleSimple& triple);
+
 // Return a shared pointer to the correct permutation in `index` based on the
 // `permutation` enum and the values in `triple`. In particular return the
 // associated internal permutation if the passed `triple` contains an internal
