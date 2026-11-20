@@ -11,6 +11,8 @@
 
 #include <absl/strings/str_cat.h>
 
+#include <iterator>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -118,6 +120,37 @@ bool isSubdirectoryOf(const std::string& path,
     return fs::weakly_canonical(fs::absolute(p)).parent_path();
   };
   return ::ranges::starts_with(normalize(path), normalize(containerPath));
+}
+
+// _____________________________________________________________________________
+std::vector<char> readBinaryFile(const fs::path& path) {
+  auto stream = ad_utility::makeIfstream(path, std::ios::binary);
+  return {std::istreambuf_iterator<char>{stream},
+          std::istreambuf_iterator<char>{}};
+}
+
+// _____________________________________________________________________________
+void writeFileAtomically(const fs::path& path, ql::span<const char> bytes) {
+  fs::path temporary = path;
+  temporary += ".tmp";
+  {
+    auto stream = ad_utility::makeOfstream(temporary, std::ios::binary);
+    stream.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+    stream.flush();
+    if (!stream) {
+      throw std::runtime_error{
+          absl::StrCat("Could not write the file ", temporary.string())};
+    }
+  }
+  fs::rename(temporary, path);
+}
+
+// _____________________________________________________________________________
+void copyFileAtomically(const fs::path& from, const fs::path& to) {
+  fs::path temporary = to;
+  temporary += ".tmp";
+  fs::copy_file(from, temporary, fs::copy_options::overwrite_existing);
+  fs::rename(temporary, to);
 }
 
 }  // namespace qlever::util

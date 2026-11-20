@@ -1,1 +1,2 @@
 addLinkAndDiscoverTestNoLibs(BlobDiffTest qlever testUtil)
+addLinkAndDiscoverTestNoLibs(TurtleDeltaTest qlever testUtil)
