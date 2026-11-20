@@ -2663,7 +2663,51 @@ TEST(SparqlExpression, ReplaceExpression) {
   checkReplace(idOrLitOrStringVec({R"("$1 \\2 A \\bc")", R"("$1 \\2 DE \\f")"}),
                std::tuple{idOrLitOrStringVec({"Abc", "DEf"}),
                           IdOrLocalVocabEntry{lit("([A-Z]+)")},
-                          IdOrLocalVocabEntry{lit(R"("\\$1 \\2 $1 \\")")}});
+                          IdOrLocalVocabEntry{lit(R"("\\$1 \\\\2 $1 \\\\")")}});
+
+  // The rules for the replacement string from the XPath standard. The literals
+  // are escaped, so `R"("\\\\")"` is a string that consists of two backslashes.
+  auto checkReplaceAbc = [&checkReplace](
+                             std::string_view pattern,
+                             std::string_view replacement,
+                             IdOrLocalVocabEntry expected,
+                             source_location l = AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    checkReplace(expected, std::tuple{IdOrLocalVocabEntry{lit("abc")},
+                                      IdOrLocalVocabEntry{lit(pattern)},
+                                      IdOrLocalVocabEntry{lit(replacement)}});
+  };
+  // `\$` is a literal dollar and `\\` a literal backslash.
+  checkReplaceAbc("b", R"("\\$")", lit("a$c"));
+  checkReplaceAbc("b", R"("\\\\")", lit(R"("a\\c")"));
+  checkReplaceAbc("(b)", R"("\\$$1")", lit("a$bc"));
+  checkReplaceAbc("(b)", R"("\\\\$1")", lit(R"("a\\bc")"));
+  checkReplaceAbc("(b)", R"("\\\\\\$$1")", lit(R"("a\\$bc")"));
+  // `$0` is the whole match, and a group that does not exist is empty.
+  checkReplaceAbc("b", "[$0]", lit("a[b]c"));
+  checkReplaceAbc("b", "[$2]", lit("a[]c"));
+  checkReplaceAbc("(a)(b)", "$3$2$1$9", lit("bac"));
+  // A reference takes as many digits as possible, as long as the number still
+  // names an existing group or is at most 9. The rest are literal digits.
+  checkReplaceAbc("(b)", "$10", lit("ab0c"));
+  checkReplaceAbc("(b)", "[$20]", lit("a[0]c"));
+  checkReplaceAbc("(b)", "[$01]", lit("a[b]c"));
+  checkReplaceAbc("b", "[$01]", lit("a[]c"));
+  checkReplaceAbc("b", "[$00]", lit("a[b]c"));
+  checkReplaceAbc("(a)(b)(c)()()()()()()()", "$11", lit("a1"));
+  // RE2 does not support references to group 10 or higher.
+  checkReplaceAbc("(a)(b)(c)()()()()()()()", "$10", U);
+  checkReplaceAbc("(a)(b)(c)()()()()()()()", "$010", U);
+  // A group that exists but did not participate in the match is empty.
+  checkReplaceAbc("(x)?b", "[$1]", lit("a[]c"));
+  checkReplaceAbc("(a)|(b)", "[$1|$2]", lit("[a|][|b]c"));
+  // An unescaped `$` that is not followed by a digit, or a `\` that is not
+  // followed by `\` or `$`, is an error.
+  checkReplaceAbc("b", "$", U);
+  checkReplaceAbc("b", "x$y", U);
+  checkReplaceAbc("b", R"("\\x")", U);
+  checkReplaceAbc("b", R"("x\\")", U);
+  checkReplaceAbc("b", R"("\\\\\\")", U);
 
   // Only simple literals should be replaced.
   checkReplace(idOrLitOrStringVec({U, U}),
