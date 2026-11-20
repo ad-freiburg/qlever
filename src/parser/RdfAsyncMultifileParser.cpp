@@ -10,11 +10,13 @@
 #include "parser/RdfAsyncMultifileParser.h"
 
 #include <absl/cleanup/cleanup.h>
+#include <absl/strings/str_cat.h>
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/use_awaitable.hpp>
 #include <memory>
 #include <optional>
+#include <stdexcept>
 #include <utility>
 
 #include "backports/algorithm.h"
@@ -76,22 +78,42 @@ std::unique_ptr<AsyncRdfParserBase> RdfAsyncMultifileParser::makeFileParser(
   auto makeParserImpl = ad_utility::ApplyAsValueIdentity{
       [this, &spec, &graph](
           auto useRelaxed,
-          auto isTurtleInput) -> std::unique_ptr<AsyncRdfParserBase> {
+          auto filetype) -> std::unique_ptr<AsyncRdfParserBase> {
         using TokenizerT =
             std::conditional_t<useRelaxed == 1, TokenizerCtre, Tokenizer>;
-        using InnerParser =
-            std::conditional_t<isTurtleInput == 1, TurtleParser<TokenizerT>,
-                               NQuadParser<TokenizerT>>;
+        using InnerParser = std::conditional_t<
+            filetype == 1, TurtleParser<TokenizerT>,
+            std::conditional_t<filetype == 2, TriGParser<TokenizerT>,
+                               NQuadParser<TokenizerT>>>;
+        // The parallel parser splits the input into batches by looking for a
+        // line-ending dot, without any awareness of `GRAPH <g> { ... }`
+        // blocks. A dot that ends a statement inside such a block looks
+        // identical to one that ends a top-level statement, so a batch
+        // boundary can end up inside an open block. TriG can therefore not
+        // use the parallel parser, regardless of how well-behaved the file is
+        // otherwise.
+        if constexpr (filetype == 2) {
+          if (spec.parseInParallel_) {
+            throw std::runtime_error{absl::StrCat(
+                "Parallel parsing is not supported for TriG files, but was "
+                "requested for \"",
+                spec.filename(),
+                "\". Please use `--parallel-parsing false` for this file.")};
+          }
+        }
         return makeFileParserForInnerParser<InnerParser>(
             executor(), spec, bufferSize_, encodedIriManager_, graph,
             settings_);
       }};
   // The call to `callFixedSize` lifts the runtime booleans to compile-time
   // integers, exactly like `makeStreamParserForSingleFile` in `RdfParser.cpp`
-  // (which this function mirrors for the asynchronous parsers).
-  return ad_utility::callFixedSize(
+  // (which this function mirrors for the asynchronous parsers). The explicit
+  // `<2>` is required, see the comment there.
+  return ad_utility::callFixedSize<2>(
       std::array{settings_.useRelaxedParsing_ ? 1 : 0,
-                 spec.filetype_ == qlever::Filetype::Turtle ? 1 : 0},
+                 spec.filetype_ == qlever::Filetype::Turtle
+                     ? 1
+                     : (spec.filetype_ == qlever::Filetype::TriG ? 2 : 0)},
       makeParserImpl);
 }
 

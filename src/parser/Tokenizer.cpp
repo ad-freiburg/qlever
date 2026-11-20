@@ -56,12 +56,18 @@ const RE2& Tokenizer::idToRegex(const TurtleTokenId reg) {
       return _tokens.TurtleBase;
     case SparqlBase:
       return _tokens.SparqlBase;
+    case SparqlGraph:
+      return _tokens.SparqlGraph;
     case Dot:
       return _tokens.Dot;
     case Comma:
       return _tokens.Comma;
     case Semicolon:
       return _tokens.Semicolon;
+    case OpenCurly:
+      return _tokens.OpenCurly;
+    case CloseCurly:
+      return _tokens.CloseCurly;
     case OpenSquared:
       return _tokens.OpenSquared;
     case CloseSquared:

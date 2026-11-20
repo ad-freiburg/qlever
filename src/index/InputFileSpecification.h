@@ -23,8 +23,8 @@
 
 namespace qlever {
 
-// An enum to distinguish between `Turtle` and `NQuad` files.
-enum class Filetype { Turtle, NQuad };
+// An enum to distinguish between `Turtle`, `NQuad` and TriG files.
+enum class Filetype { Turtle, NQuad, TriG };
 
 // Convert a `MediaType` (typically parsed from an HTTP `Content-Type` header)
 // to a `Filetype` (typically used for selecting an RDF parser). Return
@@ -62,6 +62,8 @@ struct InputFileSpecification {
   // If set to `true`, then the parallel RDF parser will be used for this file.
   // This always works for N-Triples and N-Quads files, and for well-behaved
   // Turtle files with all prefixes at the beginning and no multiline literals.
+  // Not supported for TriG files, see
+  // `RdfAsyncMultifileParser::makeFileParser`.
   bool parseInParallel_ = false;
 
   // Remember if the value for parallel parsing was set explicitly (via the

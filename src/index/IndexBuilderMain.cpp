@@ -62,6 +62,8 @@ qlever::Filetype getFiletype(std::optional<std::string_view> filetype,
       return qlever::Filetype::Turtle;
     } else if (s == "nq") {
       return qlever::Filetype::NQuad;
+    } else if (s == "trig") {
+      return qlever::Filetype::TriG;
     } else {
       return std::nullopt;
     }
@@ -73,7 +75,7 @@ qlever::Filetype getFiletype(std::optional<std::string_view> filetype,
     } else {
       throw std::runtime_error{
           absl::StrCat("The value of --file-format or -F must be one of "
-                       "`ttl`, `nt`, or `nq`, but is `",
+                       "`ttl`, `nt`, `trig`, or `nq`, but is `",
                        filetype.value(), "`")};
     }
   }
@@ -82,7 +84,8 @@ qlever::Filetype getFiletype(std::optional<std::string_view> filetype,
   auto throwNotDeducable = [&filename]() {
     throw std::runtime_error{absl::StrCat(
         "Could not deduce the file format from the filename \"", filename,
-        "\". Either use files with names that end on `.ttl`, `.nt`, or `.nq`, "
+        "\". Either use files with names that end on `.ttl`, `.nt`, `.trig`, "
+        "or `.nq`, "
         "or explicitly set the format of the file via --file-format or -F")};
   };
   if (posOfDot == std::string::npos) {
@@ -222,7 +225,8 @@ int main(int argc, char** argv) {
       "will read from stdin.");
   add("file-format,F", po::value(&filetype),
       "The format of the input file with the knowledge graph data. Must be one "
-      "of [nt|ttl|nq]. Can be specified once (then all files use that format), "
+      "of [nt|ttl|trig|nq]. Can be specified once (then all files use that "
+      "format), "
       "or once per file, or not at all (in that case, the format is deduced "
       "from the filename suffix if possible).");
   add("default-graph,g", po::value(&defaultGraphs),
@@ -234,7 +238,8 @@ int main(int argc, char** argv) {
       "or once per input file. Parallel parsing works for all input files "
       "using the N-Triples or N-Quads format, as well as for well-behaved "
       "Turtle files, where all the prefix declarations come in one block at "
-      "the beginning and there are no multiline literals");
+      "the beginning and there are no multiline literals. Not supported for "
+      "the TriG format.");
   add("kg-index-name,K", po::value(&config.kbIndexName_),
       "The name of the knowledge graph index (default: basename of "
       "`kg-input-file`).");

@@ -621,6 +621,85 @@ bool NQuadParser<T>::nQuadGraphLabel() {
   return false;
 }
 
+// _____________________________________________________________________________
+template <typename T>
+bool TriGParser<T>::statement() {
+  return Base::directive() || block();
+}
+
+// _____________________________________________________________________________
+template <typename T>
+bool TriGParser<T>::block() {
+  return namedGraph() || triplesOrGraph() || wrappedGraph() ||
+         (Base::triples() && this->template skip<TurtleTokenId::Dot>());
+}
+
+// _____________________________________________________________________________
+template <typename T>
+bool TriGParser<T>::namedGraph() {
+  // namedGraph ::= "GRAPH" labelOrSubject wrappedGraph
+  if (!this->template parseTerminal<TurtleTokenId::SparqlGraph>()) {
+    return false;
+  }
+
+  this->check(labelOrSubject());
+
+  auto restoreGraph = switchDefaultGraph(std::move(this->lastParseResult_));
+  return this->check(wrappedGraph());
+}
+
+// _____________________________________________________________________________
+template <typename T>
+bool TriGParser<T>::triplesOrGraph() {
+  if (!labelOrSubject()) {
+    return false;
+  }
+  {
+    // The plain-subject fallback below must see the real default graph, not
+    // the one we're switching to here, so the switch is scoped to just this
+    // block. Returning from inside it still restores the graph first, since
+    // `restoreGraph`'s destructor runs before the function actually returns.
+    auto restoreGraph = switchDefaultGraph(std::move(this->lastParseResult_));
+    if (wrappedGraph()) {
+      return true;
+    }
+  }
+
+  // It was a plain subject all along (activeSubject_ already set, from
+  // labelOrSubject()).
+  return this->check(Base::predicateObjectList()) &&
+         this->check(this->template skip<TurtleTokenId::Dot>());
+}
+
+// _____________________________________________________________________________
+template <typename T>
+bool TriGParser<T>::labelOrSubject() {
+  if (!(Base::blankNode() || Base::iri())) {
+    return false;
+  }
+  this->activeSubject_ = this->lastParseResult_;
+  return true;
+}
+
+// _____________________________________________________________________________
+template <typename T>
+bool TriGParser<T>::wrappedGraph() {
+  if (!this->template parseTerminal<TurtleTokenId::OpenCurly>()) {
+    return false;
+  }
+
+  // Loop over the block's triples; unlike at the top level, no directives are
+  // allowed here.
+  while (!this->template skip<TurtleTokenId::CloseCurly>()) {
+    this->check(Base::triples());
+
+    if (!this->template skip<TurtleTokenId::Dot>()) {
+      return this->check(this->template skip<TurtleTokenId::CloseCurly>());
+    }
+  }
+  return true;
+}
+
 // ______________________________________________________________________
 template <class T>
 bool TurtleParser<T>::rdfLiteralImpl(bool allowMultilineLiterals) {
@@ -1333,19 +1412,25 @@ static std::unique_ptr<RdfParserBase> makeStreamParserForSingleFile(
     ad_utility::MemorySize bufferSize, RdfParserSettings settings) {
   auto makeRdfParserImpl = ad_utility::ApplyAsValueIdentity{
       [&input, &bufferSize, ev,
-       &settings](auto isTurtleInput) -> std::unique_ptr<RdfParserBase> {
-        using InnerParser =
-            std::conditional_t<isTurtleInput == 1, TurtleParser<TokenizerT>,
-                               NQuadParser<TokenizerT>>;
+       &settings](auto filetype) -> std::unique_ptr<RdfParserBase> {
+        using InnerParser = std::conditional_t<
+            filetype == 1, TurtleParser<TokenizerT>,
+            std::conditional_t<filetype == 2, TriGParser<TokenizerT>,
+                               NQuadParser<TokenizerT>>>;
         return std::make_unique<RdfStreamParser<InnerParser>>(
             input, bufferSize, ev, defaultGraphFromSpec(input), settings);
       }};
 
   // The call to `callFixedSize` lifts runtime integers to compile time
   // integers. We use it here to create the correct combination of template
-  // arguments.
-  return ad_utility::callFixedSize(
-      std::array{input.filetype_ == qlever::Filetype::Turtle ? 1 : 0},
+  // arguments. The explicit `<2>` is required: the default max value
+  // (`DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE`) is only 1 under
+  // `QLEVER_CHEAPER_COMPILATION`, which would silently fold `TriG` (2) back
+  // to `NQuad` (0).
+  return ad_utility::callFixedSize<2>(
+      std::array{input.filetype_ == qlever::Filetype::Turtle
+                     ? 1
+                     : (input.filetype_ == qlever::Filetype::TriG ? 2 : 0)},
       makeRdfParserImpl);
 }
 
@@ -1431,6 +1516,8 @@ std::optional<std::vector<TurtleTriple>> RdfMultifileParser::getBatch(
 // Explicit instantiations
 template class TurtleParser<Tokenizer>;
 template class TurtleParser<TokenizerCtre>;
+template class TriGParser<Tokenizer>;
+template class TriGParser<TokenizerCtre>;
 template class RdfStreamParser<TurtleParser<Tokenizer>>;
 template class RdfStreamParser<TurtleParser<TokenizerCtre>>;
 template class RdfParallelParsingState<TurtleParser<Tokenizer>>;
@@ -1439,3 +1526,7 @@ template class RdfParallelParsingState<NQuadParser<Tokenizer>>;
 template class RdfParallelParsingState<NQuadParser<TokenizerCtre>>;
 template class RdfStreamParser<NQuadParser<Tokenizer>>;
 template class RdfStreamParser<NQuadParser<TokenizerCtre>>;
+template class RdfStreamParser<TriGParser<Tokenizer>>;
+template class RdfStreamParser<TriGParser<TokenizerCtre>>;
+template class RdfParallelParsingState<TriGParser<Tokenizer>>;
+template class RdfParallelParsingState<TriGParser<TokenizerCtre>>;

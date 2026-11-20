@@ -20,6 +20,8 @@ std::optional<Filetype> filetypeFromMediaType(ad_utility::MediaType mediaType) {
       return Filetype::Turtle;
     case nquads:
       return Filetype::NQuad;
+    case trig:
+      return Filetype::TriG;
     default:
       return std::nullopt;
   }
