@@ -182,6 +182,17 @@ TEST_F(LoadTest, computeResult) {
       getResultFunctionFactory("<x> <b> <c>",
                                boost::beast::http::status::not_found),
       testing::HasSubstr("RDF dataset responded with HTTP status code: 404"));
+  // The quoted first 100 bytes of the response end within the two-byte
+  // character `ö`, which is replaced by U+FFFD.
+  std::string cutResponse = "x";
+  for (size_t i = 0; i < 60; ++i) {
+    cutResponse += "ö";
+  }
+  expectThrowOnlyIfNotSilent(
+      pqLoad("https://mundhahs.dev"),
+      getResultFunctionFactory(cutResponse,
+                               boost::beast::http::status::not_found),
+      testing::HasSubstr("ö\uFFFD'"));
   expectThrowOnlyIfNotSilent(
       pqLoad("https://mundhahs.dev"),
       getResultFunctionFactory("<x> <b> <c>", boost::beast::http::status::ok,

@@ -147,6 +147,25 @@ TEST(StringUtils, getUTF8Prefix) {
   }
 }
 
+// Test that `utf8ReplaceInvalid` keeps valid UTF-8 and replaces each byte that
+// is not part of a valid UTF-8 sequence by U+FFFD.
+TEST(StringUtils, utf8ReplaceInvalid) {
+  using ad_utility::utf8ReplaceInvalid;
+
+  // Valid UTF-8 with two- and four-byte characters is kept.
+  EXPECT_EQ(utf8ReplaceInvalid(""), "");
+  EXPECT_EQ(utf8ReplaceInvalid("Flöhe 🐜"), "Flöhe 🐜");
+
+  // A two-byte character `ö` (0xC3 0xB6) cut at the end or at the start is
+  // replaced.
+  EXPECT_EQ(utf8ReplaceInvalid("Fl\xC3"), "Fl\uFFFD");
+  EXPECT_EQ(utf8ReplaceInvalid("\xB6he"), "\uFFFDhe");
+
+  // A Latin-1 `ö` (0xF6) and each byte of an overlong encoding are replaced.
+  EXPECT_EQ(utf8ReplaceInvalid("Fl\xF6he"), "Fl\uFFFDhe");
+  EXPECT_EQ(utf8ReplaceInvalid("\xC0\xAF"), "\uFFFD\uFFFD");
+}
+
 // _____________________________________________________________________________
 // Test the ICU-free `utf8EncodeCodepoint` for one-, two-, three- and four-byte
 // codepoints as well as the replacement of out-of-range codepoints.
