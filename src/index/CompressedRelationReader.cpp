@@ -1030,13 +1030,17 @@ CompressedRelationReader::getMetadataForSmallRelation(
         scanSpec, config, blockMetadata, std::nullopt, locatedTriplesPerBlock);
 
     numRowsTotal += block.numRows();
-    // The `col1` is sorted, so we compute the multiplicity using
-    // `std::unique`. Note: The distinct count might be off by one in the case
-    // of two blocks, because we perform the `unique` separately for both
-    // blocks. But as the multiplicity is only an approximate measure used for
-    // query planning statistics, this is not an issue.
+    // The `col1` is sorted, so we compute the multiplicity using `unique`.
+    //
+    // NOTE 1: `ql::ranges::unique` does not work because of a discrepancy in
+    // the return types between `std::ranges` and `range-v3`.
+    //
+    // NOTE 2: The distinct count might be off by one in the case of two
+    // blocks, because we perform the `unique` separately for both blocks. But
+    // as the multiplicity is only an approximate measure used for query
+    // planning statistics, this is not an issue.
     const auto& blockCol = block.getColumn(0);
-    auto endOfUnique = std::unique(blockCol.begin(), blockCol.end());
+    auto endOfUnique = ::ranges::unique(blockCol);
     numDistinct += endOfUnique - blockCol.begin();
 
     // The `col2` is unsorted, so we use a hash map.
