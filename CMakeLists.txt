@@ -398,6 +398,14 @@ else ()
     MESSAGE(STATUS "USE_IO_URING is OFF, building without io_uring support")
 endif ()
 
+### GDAL (optional, for raster lookups on GeoTIFF files)
+option(USE_GDAL "Enable raster lookups on GeoTIFF files (requires GDAL >= 3.8)" OFF)
+if (USE_GDAL)
+    find_package(GDAL 3.8 CONFIG REQUIRED)
+    MESSAGE(STATUS "Found GDAL ${GDAL_VERSION}, enabling raster support")
+    add_compile_definitions(QLEVER_USE_GDAL)
+endif ()
+
 ### ZSTD
 find_package(ZSTD QUIET)
 if (TARGET zstd::libzstd_static)

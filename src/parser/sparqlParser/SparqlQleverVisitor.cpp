@@ -1457,6 +1457,8 @@ GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
                              EXTERNAL_VALUES_IRI_PREFIX)) {
     return visitMagicServiceQuery<parsedQuery::ExternalValuesQuery>(ctx,
                                                                     serviceIri);
+  } else if (serviceIri.toStringRepresentation() == RASTER_IRI) {
+    return visitMagicServiceQuery<parsedQuery::RasterQuery>(ctx);
   } else if (ql::starts_with(serviceIri.getContent(),
                              CACHED_RESULT_WITH_NAME_PREFIX)) {
     return visitMagicServiceQuery<parsedQuery::NamedCachedResult>(ctx,
