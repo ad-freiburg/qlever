@@ -435,9 +435,7 @@ void testCompressedRelations(const Inputs& inputsOriginalBeforeCopy,
           ql::views::iota(ColumnIndex{1}, table.numColumns())));
     }
     for (const auto& subset : subsets) {
-      IdTable expected =
-          reader.scan(ScanSpecAndBlocks{scanSpec, blocks}, additionalColumns,
-                      cancellationHandle, locatedTriples, executor());
+      IdTable expected = table.clone();
       expected.setColumnSubset(subset);
       EXPECT_THAT(reader.scan(ScanSpecAndBlocks{scanSpec, blocks},
                               additionalColumns, cancellationHandle,
