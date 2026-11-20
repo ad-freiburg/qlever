@@ -11,8 +11,10 @@
 #include "engine/IndexScan.h"
 #include "engine/MultiColumnJoin.h"
 #include "engine/NeutralOptional.h"
+#include "engine/StripColumns.h"
 #include "global/Constants.h"
 #include "util/AllocatorTestHelpers.h"
+#include "util/ColumnStrippingTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IdTestHelpers.h"
 #include "util/IndexTestHelpers.h"
@@ -293,4 +295,98 @@ TEST(MultiColumnJoin, columnOriginatesFromGraphOrUndef) {
   testWithTrees(values2, index1, true, false, true);
   testWithTrees(values2, values3, false, false, false);
   testWithTrees(values2, values1, false, false, false);
+}
+
+// Test that `makeTreeWithStrippedColumns` strips the subtrees to the requested
+// variables plus the variables that the left and right subtree have in common
+// and adds a `StripColumns` for the join variables that the parent did not
+// request.
+TEST(MultiColumnJoin, makeTreeWithStrippedColumns) {
+  using ::column_stripping_test_helpers::isStrippedColumns;
+  using ::testing::Key;
+  using ::testing::UnorderedElementsAre;
+  using V = Variable;
+  auto qec = ad_utility::testing::getQec();
+  // The left subtree with the variables `?a`, `?b` and `?c`.
+  auto leftSubtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec,
+      makeIdTableFromVector({{1, 2, 3}, {1, 2, 5}, {10, 20, 3}, {1, 6, 3}},
+                            &Id::makeFromInt),
+      std::vector<std::optional<V>>{V{"?a"}, V{"?b"}, V{"?c"}});
+  // The right subtree with the variables `?d`, `?a` and `?b`.
+  auto rightSubtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec,
+      makeIdTableFromVector({{4, 1, 2}, {5, 10, 20}, {4, 4, 5}, {4, 6, 5}},
+                            &Id::makeFromInt),
+      std::vector<std::optional<V>>{V{"?d"}, V{"?a"}, V{"?b"}});
+  // Alternative right subtree whose join values do not match any row of
+  // leftSubtree
+  auto alternativeSubtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec,
+      makeIdTableFromVector({{4, 8, 2}, {5, 11, 20}, {4, 4, 5}, {4, 6, 5}},
+                            &Id::makeFromInt),
+      std::vector<std::optional<V>>{V{"?d"}, V{"?a"}, V{"?b"}});
+  auto strip = [&](std::set<V> requestedVariables,
+                   std::shared_ptr<QueryExecutionTree> rSubtree) {
+    MultiColumnJoin multiColumnJoin{qec, leftSubtree, rSubtree};
+    auto tree = multiColumnJoin.makeTreeWithStrippedColumns(requestedVariables);
+    AD_CONTRACT_CHECK(tree.has_value() && tree.value() != nullptr);
+    return std::move(tree).value();
+  };
+
+  // `?a`, `?b` and `?c` requested: `?d` is stripped
+  {
+    auto tree = strip({V{"?a"}, V{"?b"}, V{"?c"}}, rightSubtree);
+    EXPECT_THAT(tree.get(), isStrippedColumns<MultiColumnJoin>(
+                                {V{"?a"}, V{"?b"}, V{"?c"}},
+                                matchesIdTableFromVector(
+                                    {{1, 2, 3}, {1, 2, 5}, {10, 20, 3}},
+                                    &Id::makeFromInt)));
+  }
+
+  // `?a`, `?b`, `?c` and `?d` requested: nothing is stripped
+  {
+    auto tree = strip({V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}}, rightSubtree);
+    EXPECT_THAT(tree.get(),
+                isStrippedColumns<MultiColumnJoin>(
+                    {V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}},
+                    matchesIdTableFromVector(
+                        {{1, 2, 3, 4}, {1, 2, 5, 4}, {10, 20, 3, 5}},
+                        &Id::makeFromInt)));
+  }
+
+  // A requested variable that neither subtree has is ignored.
+  {
+    auto tree =
+        strip({V{"?a"}, V{"?b"}, V{"?d"}, V{"?notIncluded"}}, rightSubtree);
+    EXPECT_THAT(tree->getVariableColumns(),
+                UnorderedElementsAre(Key(V{"?a"}), Key(V{"?b"}), Key(V{"?d"})));
+  }
+
+  // `?a` and `?c` requested: the `MultiColumnJoin` keeps `?a`, `?b` and `?c`,
+  // a `StripColumns` on top removes `?b`.
+  {
+    auto tree = strip({V{"?a"}, V{"?c"}}, rightSubtree);
+    EXPECT_THAT(tree.get(),
+                isStrippedColumns<StripColumns>(
+                    {V{"?a"}, V{"?c"}},
+                    matchesIdTableFromVector({{1, 3}, {1, 5}, {10, 3}},
+                                             &Id::makeFromInt)));
+
+    EXPECT_THAT(
+        tree->getRootOperation()->getChildren().at(0),
+        isStrippedColumns<MultiColumnJoin>(
+            {V{"?a"}, V{"?b"}, V{"?c"}},
+            matchesIdTableFromVector({{1, 2, 3}, {1, 2, 5}, {10, 20, 3}},
+                                     &Id::makeFromInt)));
+  }
+
+  // `?a`, `?b` and `?c` requested, but no rows match: empty result is
+  // returned.
+  {
+    auto tree = strip({V{"?a"}, V{"?b"}, V{"?c"}}, alternativeSubtree);
+    EXPECT_THAT(tree.get(), isStrippedColumns<MultiColumnJoin>(
+                                {V{"?a"}, V{"?b"}, V{"?c"}},
+                                matchesIdTableFromVector({})));
+  }
 }

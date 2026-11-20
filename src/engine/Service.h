@@ -116,6 +116,10 @@ class Service : public Operation {
                                       std::shared_ptr<Operation> right,
                                       bool rightOnly, bool requestLaziness);
 
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithStrippedColumns(
+      const std::set<Variable>& requestedVariables) const override;
+
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
