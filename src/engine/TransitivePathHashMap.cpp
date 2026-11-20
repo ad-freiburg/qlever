@@ -101,4 +101,14 @@ std::unique_ptr<Operation> TransitivePathHashMap::cloneImpl() const {
   return copy;
 }
 
+// ______________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+TransitivePathHashMap::createWithStrippedColumns(
+    const std::set<Variable>& requestedVariables,
+    std::shared_ptr<QueryExecutionTree> subtree, const TransitivePathSide& lhs,
+    const TransitivePathSide& rhs) const {
+  return createWithStrippedColumnsImpl<TransitivePathHashMap>(
+      requestedVariables, subtree, lhs, rhs);
+}
+
 #endif

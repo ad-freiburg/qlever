@@ -171,4 +171,14 @@ std::unique_ptr<Operation> TransitivePathBinSearch::cloneImpl() const {
   return copy;
 }
 
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+TransitivePathBinSearch::createWithStrippedColumns(
+    const std::set<Variable>& requestedVariables,
+    std::shared_ptr<QueryExecutionTree> subtree, const TransitivePathSide& lhs,
+    const TransitivePathSide& rhs) const {
+  return createWithStrippedColumnsImpl<TransitivePathBinSearch>(
+      requestedVariables, subtree, lhs, rhs);
+}
+
 #endif

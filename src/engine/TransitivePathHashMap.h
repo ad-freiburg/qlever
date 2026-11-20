@@ -71,6 +71,12 @@ class TransitivePathHashMap : public TransitivePathImpl<HashMapWrapper> {
  public:
   using TransitivePathImpl::TransitivePathImpl;
 
+  virtual std::optional<std::shared_ptr<QueryExecutionTree>> createWithStrippedColumns(
+      const std::set<Variable>& requestedVariables,
+      std::shared_ptr<QueryExecutionTree> subtree,
+      const TransitivePathSide& lhs,
+      const TransitivePathSide& rhs) const override;
+
  private:
   [[nodiscard]] bool isDeterministicImpl() const override { return true; }
 
