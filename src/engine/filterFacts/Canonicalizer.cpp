@@ -191,7 +191,10 @@ std::variant<DistanceComparison, Opaque> toCanonicalForm(
     return Opaque{};
   }
   auto call = sparqlExpression::getGeoDistanceExpressionParameters(
-      resolve(*expression.children()[0], defs));
+      resolve(*expression.children()[0], defs),
+      [&defs](const Variable& variable) {
+        return getConstant(variable, defs);
+      });
   auto number = getNumber(*expression.children()[1], defs);
   if (!call.has_value() || !ad_utility::detail::isLengthUnit(call->unit_) ||
       !number.has_value()) {
