@@ -10,11 +10,15 @@
 
 #include "index/vocabulary/GeoVocabulary.h"
 
+#include <spatialjoin/GeometryStore.h>
+#include <spatialjoin/WKTParse.h>
+
 #include <boost/asio/post.hpp>
 #include <boost/asio/use_future.hpp>
 #include <stdexcept>
 #include <vector>
 
+#include "backports/filesystem.h"
 #include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/VocabularyConstraints.h"
 #include "index/vocabulary/VocabularyInMemory.h"
@@ -27,6 +31,26 @@
 #include "util/memorySize/MemorySize.h"
 
 using ad_utility::GeometryInfo;
+
+namespace {
+// Parse WKT literals into a `sj::GeometryStore` on the calling thread, with the
+// parsing of `sj::WKTParserBase`, but without its worker threads.
+class GeometryStoreParser : public sj::WKTParserBase<sj::ParseJob> {
+ public:
+  explicit GeometryStoreParser(sj::GeometryStore* store)
+      : sj::WKTParserBase<sj::ParseJob>(store, {}, 1) {}
+
+  // Parse the WKT `literal` in the strict mode and add it to the `batch` under
+  // the given `gid`. An invalid literal is skipped.
+  void parse(const std::string& literal, const std::string& gid,
+             sj::WriteBatch& batch) {
+    parseWKTGeometry(literal.c_str(), gid, 0, batch, true);
+  }
+
+ private:
+  void processQueue(size_t) override {}
+};
+}  // namespace
 
 // ____________________________________________________________________________
 template <typename V>
@@ -70,7 +94,72 @@ void GeoVocabulary<V>::open(const std::string& filename) {
   }
   geoInfoVersion_ = versionOfFile;
 
+  // The files of the geometry store exist iff the vocabulary was written by a
+  // version of QLever that writes them (possibly empty, see
+  // `setBuildGeometryStore`).
+  auto prefix = getGeometryStorePrefix(filename);
+  geometryStorePrefix_ = std::nullopt;
+  if (ql::ranges::all_of(geometryStoreTypes, [&prefix](std::string_view type) {
+        return ql::filesystem::exists(absl::StrCat(prefix, type));
+      })) {
+    geometryStorePrefix_ = std::move(prefix);
+  }
+
   endIndex_ = computeEndIndex();
+}
+
+// ____________________________________________________________________________
+template <typename V>
+std::unique_ptr<sj::GeometryStore>
+GeoVocabulary<V>::makeGeometryStoreForWriting(const std::string& filename) {
+  // The store depends on the `useBoxIds` and `useDiagBox` options of the
+  // configuration, whose defaults are also used by the spatial join at query
+  // time (see `LibspatialjoinAlgorithm::sweeperConfig`). The empty directory
+  // makes the prefix the full path of the files.
+  sj::SpatialJoinCfg cfg;
+  cfg.numThreads = 1;
+  return std::make_unique<sj::GeometryStore>(
+      cfg, "", getGeometryStorePrefix(filename), true);
+}
+
+// ____________________________________________________________________________
+template <typename V>
+template <typename Words>
+std::unique_ptr<sj::WriteBatch> GeoVocabulary<V>::parseGeometries(
+    bool buildGeometryStore, sj::GeometryStore& store, const Words& words,
+    uint64_t firstPosition, ql::span<const GeometryInfoBuffer> records) {
+  AD_CONTRACT_CHECK(words.size() == records.size());
+  auto geometries = std::make_unique<sj::WriteBatch>();
+  if (!buildGeometryStore) {
+    return geometries;
+  }
+  GeometryStoreParser parser{&store};
+  for (size_t i = 0; i < words.size(); ++i) {
+    if (records[i] != invalidGeoInfoBuffer) {
+      parser.parse(std::string{words[i]}, geometryStoreGid(firstPosition + i),
+                   *geometries);
+    }
+  }
+  return geometries;
+}
+
+// ____________________________________________________________________________
+template <typename V>
+void GeoVocabulary<V>::addToGeometryStore(sj::GeometryStore& store,
+                                          ComputedBatch& batch) {
+  // `libspatialjoin` reports exactly one ID per `gid`.
+  store.addBatch(*batch.geometries_, 0,
+                 [&batch](size_t, const std::string& gid,
+                          const sj::PreparedGeomMeta& meta) {
+                   auto position = positionOfGeometryStoreGid(gid);
+                   AD_CORRECTNESS_CHECK(position.has_value());
+                   auto& record = batch.records_.at(position.value() -
+                                                    batch.firstPosition_);
+                   auto info = absl::bit_cast<GeometryInfo>(record);
+                   AD_CORRECTNESS_CHECK(!info.getGeometryStoreId().has_value());
+                   info.setGeometryStoreId(meta.id);
+                   record = absl::bit_cast<GeometryInfoBuffer>(info);
+                 });
 }
 
 // ____________________________________________________________________________
@@ -78,6 +167,7 @@ template <typename V>
 void GeoVocabulary<V>::close() {
   literals_.close();
   geoInfoFile_.close();
+  geometryStorePrefix_ = std::nullopt;
   endIndex_ = 0;
 }
 
@@ -127,9 +217,11 @@ VocabBatchLookupResult GeoVocabulary<V>::lookupBatch(
 template <typename V>
 GeoVocabulary<V>::WordWriter::WordWriter(
     const V& vocabulary, const std::string& filename,
-    std::optional<ad_utility::GeoCellGrid> grid)
+    std::optional<ad_utility::GeoCellGrid> grid, bool buildGeometryStore)
     : underlyingWordWriter_{vocabulary.makeDiskWriterPtr(filename)},
       geoInfoFile_{getGeoInfoFilename(filename), "w"},
+      geometryStore_{makeGeometryStoreForWriting(filename)},
+      buildGeometryStore_{buildGeometryStore},
       grid_{grid} {
   // Initialize the geo info file with its header. Like the records (see
   // `flushBatch`), it is written with a positioned write, because positioned
@@ -220,35 +312,44 @@ void GeoVocabulary<V>::WordWriter::flushBatch() {
   const size_t maxNumPendingBatches =
       2 * ad_utility::globalExecutorNumThreads();
   while (pendingBatches_.size() >= maxNumPendingBatches) {
-    pendingBatches_.front().get();
-    pendingBatches_.pop_front();
+    writeOldestBatch();
   }
-  // Compute the `GeometryInfo` of every word of the batch and write it to its
-  // position in the `geoInfoFile_`, or write a zero buffer of the same size
-  // (indicating an invalid geometry), so that direct access by position stays
-  // possible.
-  //
-  // NOTE: The positioned `File::write` is a `pwrite`, so the batches can write
-  // concurrently.
-  auto computeAndWrite = [this, words = std::move(currentBatch_),
-                          firstPosition = firstPositionOfCurrentBatch_]() {
-    // The records of the batch are contiguous in the file, so they are
-    // written with a single call.
+  // Compute the `GeometryInfo` of every word of the batch, or a zero buffer of
+  // the same size (indicating an invalid geometry), so that direct access by
+  // position stays possible. Also parse the valid geometries for the
+  // `geometryStore_`.
+  auto compute = [this, words = std::move(currentBatch_),
+                  firstPosition = firstPositionOfCurrentBatch_]() {
     std::vector<GeometryInfoBuffer> records;
     records.reserve(words.size());
     for (const auto& word : words) {
       records.push_back(computeGeoInfoRecord(word, numInvalidGeometries_,
                                              numInvalidPolygonArea_));
     }
-    auto offset =
-        static_cast<off_t>(geoInfoHeader + firstPosition * geoInfoOffset);
-    geoInfoFile_.write(records.data(), records.size() * geoInfoOffset, offset);
+    auto geometries = parseGeometries(buildGeometryStore_, *geometryStore_,
+                                      words, firstPosition, records);
+    return ComputedBatch{firstPosition, std::move(records),
+                         std::move(geometries)};
   };
   pendingBatches_.push_back(
       boost::asio::post(ad_utility::globalExecutor(),
-                        boost::asio::use_future(std::move(computeAndWrite))));
+                        boost::asio::use_future(std::move(compute))));
   currentBatch_.clear();
   currentBatchSize_ = 0;
+}
+
+// ____________________________________________________________________________
+template <typename V>
+void GeoVocabulary<V>::WordWriter::writeOldestBatch() {
+  ComputedBatch batch = pendingBatches_.front().get();
+  pendingBatches_.pop_front();
+  addToGeometryStore(*geometryStore_, batch);
+  // The records of the batch are contiguous in the file, so they are written
+  // with a single call.
+  auto offset =
+      static_cast<off_t>(geoInfoHeader + batch.firstPosition_ * geoInfoOffset);
+  geoInfoFile_.write(batch.records_.data(),
+                     batch.records_.size() * geoInfoOffset, offset);
 }
 
 // ____________________________________________________________________________
@@ -257,14 +358,14 @@ void GeoVocabulary<V>::WordWriter::finishImpl() {
   // `WordWriterBase` ensures that this is not called twice and we thus do not
   // try to close the file handle twice
   underlyingWordWriter_->finish();
-  // Wait for the batches on the thread pool (and rethrow their exceptions)
-  // before the file is closed.
+  // Write the batches on the thread pool (and rethrow their exceptions)
+  // before the files are closed.
   flushBatch();
-  for (auto& batch : pendingBatches_) {
-    batch.get();
+  while (!pendingBatches_.empty()) {
+    writeOldestBatch();
   }
-  pendingBatches_.clear();
   geoInfoFile_.close();
+  geometryStore_->flush();
 
   if (numInvalidGeometries_ > 0) {
     AD_LOG_WARN << "Geometry preprocessing skipped " << numInvalidGeometries_
@@ -292,12 +393,22 @@ GeoVocabulary<V>::WordWriter::~WordWriter() {
 template <typename V>
 GeoVocabulary<V>::BlockWriter::BlockWriter(
     const V& vocabulary, const std::string& filename,
-    std::optional<ad_utility::GeoCellGrid> grid)
+    std::optional<ad_utility::GeoCellGrid> grid, bool buildGeometryStore)
     : underlyingWriter_{vocabulary.makeBlockWriterPtr(filename)},
       geoInfoFile_{getGeoInfoFilename(filename), "w"},
+      geometryStore_{makeGeometryStoreForWriting(filename)},
+      buildGeometryStore_{buildGeometryStore},
       grid_{grid} {
   // The header, with a positioned write, see `WordWriter::WordWriter`.
   geoInfoFile_.write(&ad_utility::GEOMETRY_INFO_VERSION, geoInfoHeader, 0);
+}
+
+// ____________________________________________________________________________
+template <typename V>
+GeoVocabulary<V>::BlockWriter::~BlockWriter() {
+  ad_utility::terminateIfThrows([this]() { this->finish(); },
+                                "Calling `finish` from the destructor of "
+                                "`GeoVocabulary::BlockWriter`");
 }
 
 // ____________________________________________________________________________
@@ -356,24 +467,34 @@ AppendBlock GeoVocabulary<V>::BlockWriter::prepare(WordBlock block) {
       lastCellIndex = cellIndex;
     }
   }
-  return [this, firstPosition, records = std::move(records), firstCellIndex,
-          lastCellIndex,
+  // Parse the valid geometries of the block, which are added to the
+  // `geometryStore_` in the append step (see `addToGeometryStore`).
+  std::vector<std::string_view> words;
+  words.reserve(block.numWords());
+  for (size_t i = 0; i < block.numWords(); ++i) {
+    words.push_back(block.word(i));
+  }
+  auto geometries = parseGeometries(buildGeometryStore_, *geometryStore_, words,
+                                    firstPosition, records);
+  return [this,
+          batch = ComputedBatch{firstPosition, std::move(records),
+                                std::move(geometries)},
+          firstCellIndex, lastCellIndex,
           appendUnderlying =
               underlyingWriter_->prepare(std::move(block))]() mutable {
-    appendRecords(firstPosition, std::move(records), firstCellIndex,
-                  lastCellIndex, std::move(appendUnderlying));
+    appendRecords(std::move(batch), firstCellIndex, lastCellIndex,
+                  std::move(appendUnderlying));
   };
 }
 
 // ____________________________________________________________________________
 template <typename V>
 void GeoVocabulary<V>::BlockWriter::appendRecords(
-    uint64_t firstPosition, std::vector<GeometryInfoBuffer> records,
-    std::optional<GeoCellGrid::CellIndex> firstCellIndex,
+    ComputedBatch batch, std::optional<GeoCellGrid::CellIndex> firstCellIndex,
     std::optional<GeoCellGrid::CellIndex> lastCellIndex,
     AppendBlock appendUnderlying) {
-  AD_CONTRACT_CHECK(firstPosition == numWords_);
-  const size_t numWords = records.size();
+  AD_CONTRACT_CHECK(batch.firstPosition_ == numWords_);
+  const size_t numWords = batch.records_.size();
   if (grid_.has_value() && numWords > 0) {
     // Keep one position free, see `WordWriter::operator()`.
     AD_CONTRACT_CHECK(numWords_ + numWords < grid_->maxNumWords(),
@@ -388,6 +509,7 @@ void GeoVocabulary<V>::BlockWriter::appendRecords(
   auto offset = static_cast<off_t>(geoInfoHeader + numWords_ * geoInfoOffset);
   numWords_ += numWords;
   std::move(appendUnderlying)();
+  addToGeometryStore(*geometryStore_, batch);
   // The records are written by the pool, see `WordWriter::flushBatch` for
   // the bound on the writes in flight.
   const size_t maxNumPendingWrites = 2 * ad_utility::globalExecutorNumThreads();
@@ -397,10 +519,11 @@ void GeoVocabulary<V>::BlockWriter::appendRecords(
   }
   pendingWrites_.push_back(boost::asio::post(
       ad_utility::globalExecutor(),
-      boost::asio::use_future([this, records = std::move(records), offset]() {
-        geoInfoFile_.write(records.data(), records.size() * geoInfoOffset,
-                           offset);
-      })));
+      boost::asio::use_future(
+          [this, records = std::move(batch.records_), offset]() {
+            geoInfoFile_.write(records.data(), records.size() * geoInfoOffset,
+                               offset);
+          })));
 }
 
 // ____________________________________________________________________________
@@ -414,6 +537,7 @@ void GeoVocabulary<V>::BlockWriter::finishImpl() {
   }
   pendingWrites_.clear();
   geoInfoFile_.close();
+  geometryStore_->flush();
   if (numInvalidGeometries_ > 0) {
     AD_LOG_WARN << "Geometry preprocessing skipped " << numInvalidGeometries_
                 << " invalid WKT literal"

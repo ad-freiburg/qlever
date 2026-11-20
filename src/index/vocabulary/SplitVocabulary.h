@@ -363,6 +363,21 @@ class SplitVocabulary {
     }
   }
 
+  // Forward `setBuildGeometryStore` to the underlying `GeoVocabulary`, if
+  // there is one (see there for the effect). No-op otherwise.
+  void setBuildGeometryStore(bool buildGeometryStore) {
+    for (auto& vocab : underlying_) {
+      std::visit(
+          [buildGeometryStore](auto& v) {
+            using T = std::decay_t<decltype(v)>;
+            if constexpr (ad_utility::isInstantiation<T, GeoVocabulary>) {
+              v.setBuildGeometryStore(buildGeometryStore);
+            }
+          },
+          vocab);
+    }
+  }
+
   // The geo cell grid of the underlying `GeoVocabulary` (there is at most
   // one, see the `static_assert` above), or `std::nullopt` if there is none
   // or it has no grid.
@@ -379,6 +394,39 @@ class SplitVocabulary {
           vocab);
     }
     return result;
+  }
+
+  // The prefix of the files of the `sj::GeometryStore` of the underlying
+  // `GeoVocabulary`, or `std::nullopt` if there is none or it has no such
+  // files (see `GeoVocabulary::getGeometryStorePrefix`).
+  std::optional<std::string> getGeometryStorePrefix() const {
+    std::optional<std::string> result = std::nullopt;
+    for (const auto& vocab : underlying_) {
+      std::visit(
+          [&result](const auto& v) {
+            using T = std::decay_t<decltype(v)>;
+            if constexpr (ad_utility::isInstantiation<T, GeoVocabulary>) {
+              result = v.getGeometryStorePrefix();
+            }
+          },
+          vocab);
+    }
+    return result;
+  }
+
+  // The position of the word with the given index in the underlying
+  // `GeoVocabulary` (see `GeoVocabulary::positionFromIndex`), or
+  // `std::nullopt` if the word is in another underlying vocabulary.
+  std::optional<uint64_t> getGeoVocabularyPosition(
+      uint64_t indexWithMarker) const {
+    return ad_utility::visitIf(
+        underlying_[getMarker(indexWithMarker)],
+        CPP_template_lambda(indexWithMarker)(typename T)(const T& v)(
+            requires ad_utility::isInstantiation<T, GeoVocabulary>) {
+          return std::optional<uint64_t>{
+              v.positionFromIndex(getVocabIndex(indexWithMarker))};
+        },
+        [](const auto&) -> std::optional<uint64_t> { return std::nullopt; });
   }
 
   // The past-the-end index of an underlying vocabulary, which is also the
