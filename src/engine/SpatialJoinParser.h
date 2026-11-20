@@ -24,28 +24,47 @@ struct SpatialJoinParseJob {
   size_t line;
   std::string wkt;
   std::optional<BoundingBox> boundingBox;
+  std::optional<uint64_t> geometryStoreId;
 };
 
 // Compare two `SpatialJoinParseJob` objects. The member attribute `wkt` is used
 // only as an internal buffer during processing and is otherwise empty,
-// therefore it is not compared here. The `boundingBox` is used for internal
-// prefiltering and is therefore also not compared here.
+// therefore it is not compared here. The `boundingBox` and `geometryStoreId`
+// only save lookups in the `GeoVocabulary` and are therefore also not compared
+// here.
 inline bool operator==(const SpatialJoinParseJob& a,
                        const SpatialJoinParseJob& b) {
   return a.line == b.line && a.valueId == b.valueId;
 }
 
+// A row of the input whose geometry is in the persisted `sj::GeometryStore`
+// of the index (see `GeoVocabulary`), so it is not parsed again (see
+// `WKTParser::takeStoredRows`).
+struct StoredGeometryRow {
+  // The position of the geometry in the geo vocabulary, which identifies it
+  // in the results of `libspatialjoin` (see `GeoVocabulary::geometryStoreGid`).
+  uint64_t position_;
+  size_t row_;
+  // The ID of the geometry in the store and its (slightly padded) bounding
+  // box.
+  uint64_t geometryStoreId_;
+  ::util::geo::I32Box boundingBox_;
+};
+
 // Custom parallel WKT parser, which receives only `ValueId`s instead of
 // literals and fetches the corresponding bounding boxes and literals from the
 // vocabulary on the fly (and in parallel). The parsed geometries are added to
 // `store`, and `metaCb` is called for each of them (usually the `addCb` of the
-// `sj::SweepEventList` of one side of the spatial join).
+// `sj::SweepEventList` of one side of the spatial join). With
+// `usePersistedGeometries`, the geometries that are in the persisted
+// `sj::GeometryStore` of the index are not parsed, but collected (see
+// `takeStoredRows`).
 class WKTParser : public sj::WKTParserBase<SpatialJoinParseJob> {
  public:
   WKTParser(sj::GeometryStore* store, sj::PreparedGeomMetaCb metaCb,
             size_t numThreads, bool usePrefiltering,
             const std::optional<::util::geo::DBox>& prefilterLatLngBox,
-            const Index& index);
+            const Index& index, bool usePersistedGeometries = false);
 
   // Stop the worker threads if the parsing ends without `done()`, for example
   // because the query was cancelled.
@@ -63,9 +82,16 @@ class WKTParser : public sj::WKTParserBase<SpatialJoinParseJob> {
   // Enqueue a new row from the input table (given the `ValueId` of the
   // geometry: `GeoPoint` or `VocabIndex` or `LocalVocabIndex` and the
   // `rowIndex` in the input table). If available as part of the `IdTable`,
-  // this function accepts a precomputed bounding box for prefiltering.
-  void addValueIdToQueue(ValueId valueId, size_t rowIndex,
-                         std::optional<BoundingBox> boundingBox);
+  // this function accepts a precomputed bounding box for prefiltering and the
+  // ID of the geometry in the persisted `sj::GeometryStore`.
+  void addValueIdToQueue(
+      ValueId valueId, size_t rowIndex, std::optional<BoundingBox> boundingBox,
+      std::optional<uint64_t> geometryStoreId = std::nullopt);
+
+  // The rows whose geometry is in the persisted store (see
+  // `usePersistedGeometries`), sorted by the position of the geometry and
+  // then by row. Only valid after `done()`, and only once.
+  std::vector<StoredGeometryRow> takeStoredRows();
 
   // Accumulate the counters across all threads. They count the number of
   // geometries skipped by bounding box prefilter and the number of parsed (that
@@ -78,6 +104,13 @@ class WKTParser : public sj::WKTParserBase<SpatialJoinParseJob> {
  protected:
   void processQueue(size_t t) override;
 
+  // The `StoredGeometryRow` of a job with a `VocabIndex`, or `std::nullopt` if
+  // its geometry is not in the persisted store (or that is not used). If the
+  // job has a precomputed bounding box and geometry store ID, the
+  // `GeometryInfo` is not read from the `GeoVocabulary`.
+  std::optional<StoredGeometryRow> storedGeometryRow(
+      const SpatialJoinParseJob& job) const;
+
  private:
   // Members are named `_member`, not `member_` for consistency with the base
   // class from `libspatialjoin`.
@@ -86,6 +119,10 @@ class WKTParser : public sj::WKTParserBase<SpatialJoinParseJob> {
   // that were skipped by prefilter or actually parsed for each of the threads.
   std::vector<size_t> _numSkipped;
   std::vector<size_t> _numParsed;
+
+  // See `takeStoredRows`, per thread.
+  bool _usePersistedGeometries;
+  std::vector<std::vector<StoredGeometryRow>> _storedRows;
 
   // Configure prefiltering geometries by bounding box.
   bool _usePrefiltering;

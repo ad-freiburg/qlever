@@ -356,6 +356,76 @@ TEST(GeoBlockWriter, sameFilesAndIndicesWithGrid) {
   EXPECT_EQ(recomputedIndices, indicesA);
 }
 
+// Test that with the geometry store, the `BlockWriter` of a `GeoVocabulary`
+// writes the same files as its `WordWriter` (the geometries are added to the
+// store in the order of their positions, although the blocks are prepared
+// concurrently).
+TEST(GeoBlockWriter, sameGeometryStoreAsWordWriter) {
+  using GV = GeoVocabulary<VocabularyInMemory>;
+  const std::string filenameA =
+      absl::StrCat(gtestCurrentTestName(), ".wordByWord");
+  const std::string filenameB = absl::StrCat(gtestCurrentTestName(), ".blocks");
+  auto cleanupA = vocabulary_test::makeVocabFileCleanup<GV>(filenameA);
+  auto cleanupB = vocabulary_test::makeVocabFileCleanup<GV>(filenameB);
+
+  // More than two blocks of mostly invalid literals, with small polygons and
+  // lines in between.
+  std::vector<std::pair<std::string, bool>> words;
+  for (size_t i = 0; i < 2 * DEFAULT_WORDS_PER_VOCABULARY_BLOCK + 1; ++i) {
+    double lng = static_cast<double>(i % 300) - 150;
+    double lat = static_cast<double>(i % 130) / 2;
+    std::string word = wkt("NOTAGEOMETRY");
+    if (i % 100 == 0) {
+      word = wkt(absl::StrCat("POLYGON((", lng, " ", lat, ", ", lng + 0.01, " ",
+                              lat, ", ", lng, " ", lat + 0.01, ", ", lng, " ",
+                              lat, "))"));
+    } else if (i % 100 == 50) {
+      word = wkt(absl::StrCat("LINESTRING(", lng, " ", lat, ", ", lng + 0.01,
+                              " ", lat + 0.01, ")"));
+    }
+    words.emplace_back(std::move(word), true);
+  }
+
+  // The word-by-word writer and the block writer.
+  {
+    GV vocabulary;
+    vocabulary.setBuildGeometryStore(true);
+    auto writer = vocabulary.makeDiskWriterPtr(filenameA);
+    for (const auto& [word, isExternal] : words) {
+      (*writer)(word, isExternal);
+    }
+    writer->finish();
+  }
+  {
+    GV vocabulary;
+    vocabulary.setBuildGeometryStore(true);
+    SingleVocabularyParallelWriter writer{
+        vocabulary.makeBlockWriterPtr(filenameB)};
+    writeInBlocks(writer, words);
+  }
+
+  // Both writers write the same files.
+  //
+  // TODO<ullingerc>: Also compare the contents of the files of the geometry
+  // store, once `libspatialjoin` no longer writes the padding bytes of its
+  // `BoxId`s (`std::pair<int32_t, uint8_t>`) uninitialized to them.
+  for (const auto& suffix : GV::fileSuffixes()) {
+    auto fileA = readFile(absl::StrCat(filenameA, suffix));
+    auto fileB = readFile(absl::StrCat(filenameB, suffix));
+    if (ql::starts_with(suffix, ".geostore.")) {
+      EXPECT_EQ(fileA.size(), fileB.size()) << suffix;
+    } else {
+      EXPECT_EQ(fileA, fileB) << suffix;
+    }
+  }
+
+  // The geometries are actually stored.
+  GV vocabulary;
+  vocabulary.open(filenameB);
+  EXPECT_TRUE(vocabulary.getGeoInfo(0).value().getGeometryStoreId());
+  EXPECT_TRUE(vocabulary.getGeoInfo(50).value().getGeometryStoreId());
+}
+
 // Test that the `BlockWriter` of a `GeoVocabulary` with a geo cell grid
 // rejects words that are not ordered by their cell, within a block and across
 // blocks.

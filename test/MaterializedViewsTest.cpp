@@ -36,6 +36,7 @@
 #ifndef __EMSCRIPTEN__
 #include "engine/Server.h"
 #endif
+#include "engine/SpatialJoin.h"
 #include "engine/SpatialJoinConfig.h"
 #include "engine/StripColumns.h"
 #include "engine/VariableToColumnMap.h"
@@ -2930,6 +2931,69 @@ TEST(MaterializedViewsSpatialJoinTest, BoundingBoxBindRewrite) {
         &RuntimeParameters::enableMaterializedViewQueryRewrite_>(false);
     EXPECT_FALSE(hasBoundingBoxColumns());
   }
+}
+
+// Test that a `SpatialJoin` also adds the column of `ql:geometryStoreId` to
+// its child `IndexScan`s, if the materialized view has it besides the bounding
+// box.
+TEST(MaterializedViewsSpatialJoinTest, GeometryStoreIdBindRewrite) {
+  const std::string onDiskBase = gtestCurrentTestName();
+  const std::string viewName = "geoms";
+
+  // A view of the geometries with their bounding boxes and geometry store IDs.
+  materializedViewsTestHelpers::makeTestIndex(onDiskBase, std::string{geoTtl});
+  auto cleanUp = absl::Cleanup(
+      [&]() { materializedViewsTestHelpers::removeTestIndex(onDiskBase); });
+  qlever::EngineConfig config;
+  config.baseName_ = onDiskBase;
+  qlever::Qlever qlv{config};
+  qlv.writeMaterializedView(viewName, R"(
+    PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+    SELECT ?osm_id ?intermediate ?geometry ?lower_left ?upper_right ?id {
+      ?osm_id geo:hasGeometry ?intermediate .
+      ?intermediate geo:asWKT ?geometry .
+      BIND (ql:envelopeLowerLeft(?geometry) AS ?lower_left)
+      BIND (ql:envelopeUpperRight(?geometry) AS ?upper_right)
+      BIND (ql:geometryStoreId(?geometry) AS ?id)
+    }
+  )");
+
+  // Both children of the `SpatialJoin` read the three columns from the view.
+  const std::string query = R"(
+    PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
+    PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+    SELECT * {
+      ?osm_id1 view:geoms-geometry ?geometry1 .
+      ?osm_id2 view:geoms-geometry ?geometry2 .
+      FILTER geof:sfIntersects(?geometry1, ?geometry2)
+    }
+  )";
+  auto plannedQuery = qlv.parseAndPlanQuery(query);
+  auto& qet = plannedQuery.queryExecutionTree();
+  auto children = qet.getRootOperation()->getChildren();
+  ASSERT_EQ(children.size(), 2);
+  for (const auto& [child, i] :
+       {std::pair{children[0], "1"}, std::pair{children[1], "2"}}) {
+    auto geometry = V{absl::StrCat("?geometry", i)};
+    auto [lowerLeft, upperRight] =
+        SpatialJoin::getBoundingBoxColumnNames(geometry);
+    EXPECT_TRUE(child->containsVariable(lowerLeft));
+    EXPECT_TRUE(child->containsVariable(upperRight));
+    EXPECT_TRUE(child->containsVariable(
+        SpatialJoin::getGeometryStoreIdColumnName(geometry)));
+  }
+
+  // The index has no geometry store, so all IDs are `UNDEF`, and the
+  // geometries are parsed as without the columns (with query rewriting using
+  // materialized views disabled).
+  auto numRows = qet.getResult()->idTableView().numRows();
+  auto cleanup = setRuntimeParameterForTest<
+      &RuntimeParameters::enableMaterializedViewQueryRewrite_>(false);
+  auto plannedWithout = qlv.parseAndPlanQuery(query);
+  EXPECT_GT(numRows, 0);
+  EXPECT_EQ(
+      plannedWithout.queryExecutionTree().getResult()->idTableView().numRows(),
+      numRows);
 }
 
 // _____________________________________________________________________________

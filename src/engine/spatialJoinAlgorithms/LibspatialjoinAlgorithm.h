@@ -20,6 +20,7 @@
 #include <array>
 #include <string>
 
+#include "engine/SpatialJoinParser.h"
 #include "engine/spatialJoinAlgorithms/SpatialJoinAlgorithmBase.h"
 #include "index/Index.h"
 #include "util/memorySize/MemorySize.h"
@@ -45,20 +46,23 @@ class LibspatialjoinAlgorithm : public SpatialJoinAlgorithmBase {
 
   Result run() override;
 
-  // Parse the WKT geometries from the given `column` in `idTable`, add them to
-  // `store` and call `metaCb` for each of them (usually the `addCb` of the
+  // Parse the WKT geometries from the given `column` in `idTable` into the
+  // `store_` of the `target` and add them to its `events_` (the
   // `sj::SweepEventList` of one side of the spatial join), using up to
-  // `numThreads` threads. Return the bounding box of all added geometries and
-  // the counters described in `ParseMetadata`. This function is only `public`
-  // for testing purposes and should otherwise not be used outside of this
-  // class.
+  // `numThreads` threads. A geometry from the persisted store of the index (if
+  // the `target` has a `persistedStoreId_`) is added to the `events_` without
+  // parsing, once for all of its rows. Return the bounding box of all added
+  // geometries and the counters described in `ParseMetadata`. This function is
+  // only `public` for testing purposes and should otherwise not be used outside
+  // of this class.
   //
   // NOTE 1: If a `prefilterBox` is given, geometries whose precomputed
   // bounding box (from the `GeoVocabulary` or the bounding box columns) does
-  // not intersect it are neither parsed nor added to `store`, unless the box is
-  // too large (see `maxAreaPrefilterBox`). The same holds for `GeoPoint`s
-  // outside of it, regardless of the size of the box. All other geometries are
-  // parsed (see the filter box of `store` in `run()`).
+  // not intersect it are neither parsed nor added, unless the box is too large
+  // (see `maxAreaPrefilterBox`). The same holds for `GeoPoint`s and geometries
+  // from the persisted store outside of it, regardless of the size of the box.
+  // All other geometries are parsed (see the filter box of `store_` in
+  // `run()`).
   //
   // NOTE 2: For a proximity search, the bounding box of each geometry is
   // padded by half the distance (see `sj::GeometryStore::add`).
@@ -79,9 +83,22 @@ class LibspatialjoinAlgorithm : public SpatialJoinAlgorithmBase {
     // Actual number of threads used (might be lower than result of
     // `getNumThreads` for small inputs)
     size_t numThreadsUsed_;
+    // The rows whose geometry is from the persisted store, see
+    // `WKTParser::takeStoredRows`.
+    std::vector<ad_utility::detail::parallel_wkt_parser::StoredGeometryRow>
+        storedRows_;
   };
-  ParseMetadata parse(ParseInput input, sj::GeometryStore& store,
-                      const sj::PreparedGeomMetaCb& metaCb, size_t numThreads,
+  struct ParseTarget {
+    // The temporary store for the parsed geometries and its ID in the
+    // `sj::GeometryCache`.
+    sj::GeometryStore& store_;
+    uint8_t storeId_;
+    // The ID of the persisted store of the index in the `sj::GeometryCache`,
+    // or `std::nullopt` if it is not used.
+    std::optional<uint8_t> persistedStoreId_;
+    sj::SweepEventList& events_;
+  };
+  ParseMetadata parse(ParseInput input, ParseTarget target, size_t numThreads,
                       std::optional<util::geo::I32Box> prefilterBox) const;
 
   // Prepare a libspatialjoin `SpatialJoinCfg`. The result doesn't have any of
@@ -139,6 +156,12 @@ class LibspatialjoinAlgorithm : public SpatialJoinAlgorithmBase {
   // Helper for `parse` to get the bounding box from an `IdTable` if
   // available.
   static std::optional<ad_utility::BoundingBox> getBoundingBoxFromIdTable(
+      const IdTableView<0>* idTable,
+      const SpatialJoinBoundingBoxColumns& boundingBoxes, size_t row);
+
+  // Helper for `parse` to get the ID of the geometry in the persisted
+  // `sj::GeometryStore` from an `IdTable` if available.
+  static std::optional<uint64_t> getGeometryStoreIdFromIdTable(
       const IdTableView<0>* idTable,
       const SpatialJoinBoundingBoxColumns& boundingBoxes, size_t row);
 

@@ -483,6 +483,7 @@ void IndexImpl::prepareIndexBuild() {
   }
 
   vocab_.resetToType(vocabularyTypeForIndexBuilding_);
+  vocab_.setBuildGeometryStore(buildGeometryStoreForIndexBuilding_);
 
   readIndexBuilderSettingsFromFile();
 }
