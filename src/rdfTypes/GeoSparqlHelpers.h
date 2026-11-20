@@ -76,10 +76,10 @@ double wktDistImpl(GeoPoint point1, GeoPoint point2);
 // Helper to avoid including `GeometryInfoHelpersImpl.h`
 std::optional<std::string> geometryNAsWkt(GeoPointOrWkt wkt, int64_t n);
 
-// Helper to avoid including `GeometryInfoHelpersImpl.h`
-// Project geometry contained in `wkt` to CRS defined in `crs` and return as
-// WKT. Returns `std::nullopt` for invalid `wkt` or invalid/unsupported CRS
-// `iri`.
+// Helper to avoid including `GeometryInfoHelpersImpl.h`. Project the geometry
+// given by `wkt` to `targetCrs` and return it as WKT, with the IRI of the
+// target CRS in front (none for the default CRS). Returns `std::nullopt` for
+// invalid WKT or an unsupported source or target CRS.
 std::optional<std::string> transformAsWkt(
     const GeoPointOrWkt& wkt, const ::util::geo::CRSType& targetCrs);
 
@@ -279,7 +279,8 @@ class WktGeometryN {
   }
 };
 
-// Projects to coordinate reference system given by `iri`.
+// Project a geometry to the coordinate reference system `crs`, see
+// `detail::transformAsWkt`.
 class WktTransform {
  public:
   sparqlExpression::IdOrLiteralOrIri operator()(
@@ -291,9 +292,8 @@ class WktTransform {
     }
 
     // TODO<yarox-1> The function should return UNDEF if a transformation is
-    // not mathematically possible. (Currently, all transformations between the
-    // supported coordinate reference systems are possible, so this case cannot
-    // occur yet.)
+    // not possible. Currently `pb_util` clamps latitudes beyond the Web
+    // Mercator range (about 85.05 degrees) instead.
     auto resultWkt = detail::transformAsWkt(wkt.value(), crs);
 
     if (!resultWkt.has_value()) {

@@ -614,32 +614,16 @@ struct ParseGeoPointOrWktVisitor {
 
 static constexpr ParseGeoPointOrWktVisitor parseGeoPointOrWkt;
 
-// Helper to extract a source CRS type from the `GeoPointOrWkt` variant.
-// Returns default CRS for a `GeoPoint`. For a WKT literal extract the source
-// CRS type from the string.
-struct SourceCrsFromGeoPointOrWktVisitor {
-  CRSType operator()(const GeoPoint&) const { return defaultCrs; }
-
-  CRSType operator()(const std::string& wkt) const { return getCRSType(wkt); }
-
-  CRSType operator()(const GeoPointOrWkt& geoPointOrWkt) const {
-    return std::visit(
-        [](const auto& value) {
-          return SourceCrsFromGeoPointOrWktVisitor{}(value);
-        },
-        geoPointOrWkt);
-  }
-
-  template <typename T>
-  CRSType operator()(const std::optional<T>& geoPointOrWkt) const {
-    if (!geoPointOrWkt.has_value()) {
-      return CRSType::UNSUPPORTED;
-    }
-    return SourceCrsFromGeoPointOrWktVisitor{}(geoPointOrWkt.value());
-  }
-};
-
-static constexpr SourceCrsFromGeoPointOrWktVisitor sourceCrsFromGeoPointOrWkt;
+// Helper to get the CRS of a `GeoPointOrWkt` variant. A `GeoPoint` is always
+// in the default CRS. For a WKT literal (with quotation marks and datatype),
+// the CRS is given by the IRI at its start, or it is the default CRS if there
+// is none (`getCRSType` skips the opening quotation mark).
+inline CRSType sourceCrsFromGeoPointOrWkt(const GeoPointOrWkt& geoPointOrWkt) {
+  return std::visit(ad_utility::OverloadCallOperator{
+                        [](const GeoPoint&) { return defaultCrs; },
+                        [](const std::string& wkt) { return getCRSType(wkt); }},
+                    geoPointOrWkt);
+}
 
 // Helper to convert a geometry from `pb_util` to a WKT string.
 struct UtilGeomToWktVisitor {
@@ -672,7 +656,10 @@ struct UtilGeomToWktVisitor {
 
 static constexpr UtilGeomToWktVisitor utilGeomToWkt;
 
-// Helper to extract a WKT literal from `GeoPointOrWkt` variant.
+// Helper to get the WKT string (without quotation marks and datatype) of a
+// `GeoPointOrWkt` variant. The `std::string` alternative holds the full
+// literal with quotation marks and datatype, as the `GeoPointOrWktValueGetter`
+// yields it.
 inline std::optional<std::string> wktFromGeoPointOrWkt(
     const GeoPointOrWkt& geoPointOrWkt) {
   return std::visit(
@@ -681,9 +668,6 @@ inline std::optional<std::string> wktFromGeoPointOrWkt(
             return utilGeomToWkt(geoPointToUtilPoint(point));
           },
           [](const std::string& wkt) -> std::optional<std::string> {
-            // If the input wkt string still contains the WKT
-            // literal suffix, we need to remove the datatype
-            // suffix and the surrounding quotes.
             return removeDatatype(wkt);
           }},
       geoPointOrWkt);

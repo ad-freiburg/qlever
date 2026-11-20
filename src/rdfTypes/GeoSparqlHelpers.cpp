@@ -93,21 +93,20 @@ std::optional<std::string> transformAsWkt(
   if (targetCrs == ::util::geo::CRSType::UNSUPPORTED) {
     return std::nullopt;
   }
-  ::util::geo::CRSType sourceCrs = sourceCrsFromGeoPointOrWkt(wkt);
-  // No need to transform the input. We deliberately skip validation of the WKT
-  // here and return it unchanged for better performance.
-  if (targetCrs == sourceCrs) {
+  // Return the input unchanged if it already is in the target CRS (deliberately
+  // without validating the WKT, to save the parsing).
+  if (sourceCrsFromGeoPointOrWkt(wkt) == targetCrs) {
     return wktFromGeoPointOrWkt(wkt);
   }
-  // This projects the coordinates of `wkt` to `targetCrs` during parsing.
+  // Parsing projects the coordinates to `targetCrs`.
   auto parseResult = parseGeoPointOrWkt(wkt, targetCrs);
-  // TODO<yarox-1> this can be shortened after the geo-functions PR is merged ->
-  // `utilGeomToWkt(parseResult.parsedWkt_, targetCrs)`.
+  // TODO<yarox-1> This can be shortened to
+  // `utilGeomToWkt(parseResult.parsedWkt_, targetCrs)` once #3787 is merged.
   auto wktResult = utilGeomToWkt(parseResult.parsedWkt_);
   if (!wktResult.has_value()) {
     return std::nullopt;
   }
-  // `getCrsIri` hides the CRS IRI for the default CRS.
+  // `getCrsIri` returns an empty string for the default CRS.
   return absl::StrCat(::util::geo::getCrsIri(targetCrs), wktResult.value());
 }
 
