@@ -904,6 +904,15 @@ TEST_F(ServiceTest, idToValueForValuesClause) {
   EXPECT_EQ(idToVc(index, Id::makeFromDouble(3.14), localVocab), "3.14");
   EXPECT_EQ(idToVc(index, Id::makeFromBool(true), localVocab), "true");
 
+  // Non-finite doubles have no bare SPARQL syntax -> typed literal.
+  auto xsdDouble = absl::StrCat("\"^^<", XSD_DOUBLE_TYPE, ">");
+  EXPECT_EQ(idToVc(index, Id::makeFromDouble(INFINITY), localVocab),
+            absl::StrCat("\"INF", xsdDouble));
+  EXPECT_EQ(idToVc(index, Id::makeFromDouble(-INFINITY), localVocab),
+            absl::StrCat("\"-INF", xsdDouble));
+  EXPECT_EQ(idToVc(index, Id::makeFromDouble(NAN), localVocab),
+            absl::StrCat("\"NaN", xsdDouble));
+
   // Escape Quotes within literals.
   auto getLocalVocabId = ad_utility::testing::makeGetLocalVocabId();
   auto str = LocalVocabEntry::literalWithoutQuotes(

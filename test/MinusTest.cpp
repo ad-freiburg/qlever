@@ -527,6 +527,27 @@ TEST(Minus, repeatingMatchesDontProduceDuplicates) {
   testMinus(std::move(leftTables), std::move(rightTables), std::move(expected));
 }
 
+// Test that a left row is removed when its matches end inside the last of the
+// `FETCH_BLOCKS` (3) right blocks fetched at once and the right input continues
+// beyond that block.
+TEST(Minus, matchesEndInThirdFetchedBlockOfTheRightInput) {
+  // One left row and the right blocks [1] [1] [1] [1, 2] [3], the same blocks
+  // as in `OptionalJoin.lazyOptionalJoinMatchesEndInThirdFetchedBlock`.
+  std::vector<IdTable> leftTables;
+  leftTables.push_back(makeIdTableFromVector({{1, 11}}));
+  std::vector<IdTable> rightTables;
+  rightTables.push_back(makeIdTableFromVector({{1, 21}}));
+  rightTables.push_back(makeIdTableFromVector({{1, 22}}));
+  rightTables.push_back(makeIdTableFromVector({{1, 23}}));
+  rightTables.push_back(makeIdTableFromVector({{1, 24}, {2, 25}}));
+  rightTables.push_back(makeIdTableFromVector({{3, 26}}));
+
+  // The left row has a match, so the result is empty.
+  std::vector<IdTable> expected;
+
+  testMinus(std::move(leftTables), std::move(rightTables), std::move(expected));
+}
+
 // _____________________________________________________________________________
 TEST(Minus, lazyMinusWithUndefRight) {
   std::vector<IdTable> expected;
