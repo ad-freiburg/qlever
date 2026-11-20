@@ -24,6 +24,9 @@ add_library(engine
         DistinctGraphs.cpp)
 add_subdirectory(spatialJoinAlgorithms)
 add_subdirectory(binaryExport)
+if (USE_GDAL)
+    add_subdirectory(raster)
+endif ()
 
 # `Boost::program_options` is not used inside `engine` itself, but the
 # `qlever-server` target reuses the engine PCH (`target_precompile_headers
