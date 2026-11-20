@@ -11,6 +11,7 @@
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include "engine/binaryExport/BinaryFormat.h"
 
+#include <algorithm>
 #include <array>
 #include <type_traits>
 
@@ -40,7 +41,18 @@ static constexpr auto datatypesOfVersion1 = []() {
                         Date, GeoPoint, WordVocabIndex, BlankNodeIndex,
                         EncodedVal});
 }();
-static_assert(isListOfAllDatatypesInOrder(datatypesOfVersion1));
+// The datatypes of version 1 are exactly the first ones of the current enum,
+// which has exactly one more (`TripleTermIndex`).
+//
+// NOTE: We never transmit `TripleTermIndex` in the binary export because
+// `StringMapping::remapId` rejects it. The existing datatype tags are
+// unchanged, so the export remains compatible with version 1, which predates
+// this datatype. If that rejection is removed, reassess
+// `binaryQleverExportVersion` and these format checks before transmitting
+// triple-term references.
+static_assert(std::equal(datatypesOfVersion1.begin(), datatypesOfVersion1.end(),
+                         qlever::allEnumValues<Datatype>.begin()));
+static_assert(datatypesOfVersion1.size() + 1 == qlever::enumSize<Datatype>);
 
 // _____________________________________________________________________________
 std::string Header::serialize() const {

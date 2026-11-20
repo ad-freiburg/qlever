@@ -789,11 +789,19 @@ class IndexImpl {
 
   // TODO<joka921> Get rid of the `numColumns` by including them into the
   // `sortedTriples` argument.
+  //
+  // The `sortedTriples` are either a sequential range of sorted blocks
+  // (`BlocksOfTriples`), or a `ChunkwiseInput` (see below). Each of the
+  // `callbacks` is invoked for every block of the input. It is either a
+  // `PushToNextSorter` (see `IndexImpl.cpp`), or a callable that takes a
+  // `const IdTableStatic<0>&`. For a `ChunkwiseInput`, the latter is invoked
+  // concurrently for several blocks and in an arbitrary order of the blocks, so
+  // it has to be thread-safe.
   template <typename T, typename... Callbacks>
   std::tuple<size_t, IndexMetaData, IndexMetaData> createPermutationPairImpl(
       size_t numColumns, const std::string& fileName1,
       const std::string& fileName2, T&& sortedTriples,
-      Permutation::KeyOrder permutation, Callbacks&&... perTripleCallbacks);
+      Permutation::KeyOrder permutation, Callbacks&&... callbacks);
 
   // Write a single permutation to disk. `numColumns` specifies the number of
   // columns in the relation (usually 4, sometimes 6 with patterns).
@@ -828,10 +836,11 @@ class IndexImpl {
                      const std::string& filename) const;
 
   template <typename SortedTriplesType, typename... CallbackTypes>
-  [[nodiscard]] size_t createPermutationPair(
-      size_t numColumns, SortedTriplesType&& sortedTriples,
-      const Permutation& p1, const Permutation& p2,
-      CallbackTypes&&... perTripleCallbacks);
+  [[nodiscard]] size_t createPermutationPair(size_t numColumns,
+                                             SortedTriplesType&& sortedTriples,
+                                             const Permutation& p1,
+                                             const Permutation& p2,
+                                             CallbackTypes&&... callbacks);
 
   // wrapper for createPermutation that saves a lot of code duplications
   // Writes the permutation that is specified by argument permutation
@@ -845,7 +854,7 @@ class IndexImpl {
   template <typename T, typename... Callbacks>
   std::tuple<size_t, IndexMetaData, IndexMetaData> createPermutations(
       size_t numColumns, T&& sortedTriples, const Permutation& p1,
-      const Permutation& p2, Callbacks&&... perTripleCallbacks);
+      const Permutation& p2, Callbacks&&... callbacks);
 
  public:
   // Write a single permutation to disk. `numColumns` specifies the number of
@@ -1012,47 +1021,70 @@ class IndexImpl {
 
   using BlocksOfTriples = ad_utility::InputRangeTypeErased<IdTableStatic<0>>;
 
+  // The sorted input of a pair of permutations that is written directly from
+  // the chunks of the parallel merge of the `sorter_` (instead of from a
+  // sequential range of sorted blocks), see
+  // `index/chunkwisePermutationWriter/ChunkwisePermutationWriter.h`. The
+  // callbacks for such an input are invoked concurrently and in an arbitrary
+  // order of the blocks (see `createPermutationPairImpl`). With
+  // `removeDuplicates_` set to `RemoveDuplicates::True`, consecutive duplicate
+  // rows are removed first (like `ad_utility::uniqueBlockView` does for a
+  // sequential input).
+  enum struct RemoveDuplicates { False, True };
+  template <typename Sorter>
+  struct ChunkwiseInput {
+    Sorter& sorter_;
+    RemoveDuplicates removeDuplicates_;
+
+    // NOTE: This constructor enables the class template argument deduction,
+    // which C++17 doesn't support for aggregates.
+    ChunkwiseInput(Sorter& sorter, RemoveDuplicates removeDuplicates)
+        : sorter_{sorter}, removeDuplicates_{removeDuplicates} {}
+  };
+
   // Functions to create the pairs of permutations during the index build. Each
   // of them takes the following arguments:
   // * `sortedInput`  The input, must be sorted by the first permutation in the
-  //    function name.
-  // * `nextSorter` A callback that is invoked for each row in each of the
-  //    blocks in the input. Typically used to set up the sorting for the
-  //    subsequent pair of permutations.
+  //    function name. It is either a `BlocksOfTriples` or a `ChunkwiseInput`
+  //    (see above and `createPermutationPairImpl`).
+  // * `nextSorter` An external sorter to which all the blocks of the input are
+  //    pushed. Typically used to set up the sorting for the subsequent pair of
+  //    permutations.
 
   // Create the SPO and SOP permutations. Additionally, count the number of
   // distinct actual (not internal) subjects in the input and write it to the
-  // metadata. Also builds the patterns if specified.
-  CPP_template(typename... NextSorter)(requires(sizeof...(NextSorter) <=
-                                                      1))
+  // metadata. Also builds the patterns if specified, which is not possible
+  // for a `ChunkwiseInput`, because the pattern creation needs the triples in
+  // order.
+  CPP_template(typename Input, typename... NextSorter)(
+      requires(sizeof...(NextSorter) <= 1))
   std::optional<PatternCreator::TripleSorter> createSPOAndSOP(
-      size_t numColumns, BlocksOfTriples sortedTriples,
-      NextSorter&&... nextSorter);
+      size_t numColumns, Input sortedTriples, NextSorter&... nextSorter);
 
   // Create the OSP and OPS permutations. Additionally, count the number of
   // distinct objects and write it to the metadata.
-  CPP_template(typename... NextSorter)(requires(sizeof...(NextSorter) <=
-                                                      1))
-  void createOSPAndOPS(size_t numColumns, BlocksOfTriples sortedTriples,
-                       NextSorter&&... nextSorter);
+  CPP_template(typename Input, typename... NextSorter)(
+      requires(sizeof...(NextSorter) <= 1))
+  void createOSPAndOPS(size_t numColumns, Input sortedTriples,
+                       NextSorter&... nextSorter);
 
   // Create the PSO and POS permutations. Additionally, count the number of
   // distinct predicates and the number of actual triples and write them to the
   // metadata. The meta-data JSON file for the index statistics will only be
   // written iff `doWriteConfiguration` is true. That parameter is set to
   // `false` when building the additional permutations for the internal triples.
-  CPP_template(typename... NextSorter)(requires(sizeof...(NextSorter) <=
-                                                      1))
-  void createPSOAndPOSImpl(size_t numColumns, BlocksOfTriples sortedTriples,
+  CPP_template(typename Input, typename... NextSorter)(
+      requires(sizeof...(NextSorter) <= 1))
+  void createPSOAndPOSImpl(size_t numColumns, Input sortedTriples,
                            bool doWriteConfiguration,
-                           NextSorter&&... nextSorter);
+                           NextSorter&... nextSorter);
 
   // Call `createPSOAndPOSImpl` with the given arguments and with
   // `doWriteConfiguration` set to `true` (see above).
-  CPP_template(typename... NextSorter)(requires(sizeof...(NextSorter) <=
-                                                      1))
-  void createPSOAndPOS(size_t numColumns, BlocksOfTriples sortedTriples,
-                       NextSorter&&... nextSorter);
+  CPP_template(typename Input, typename... NextSorter)(
+      requires(sizeof...(NextSorter) <= 1))
+  void createPSOAndPOS(size_t numColumns, Input sortedTriples,
+                       NextSorter&... nextSorter);
 
   // Create the internal PSO and POS permutations from the sorted internal
   // triples. Return `(numInternalTriples, numInternalPredicates)`.
