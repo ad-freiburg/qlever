@@ -272,6 +272,15 @@ addLinkAndDiscoverTestNoLibs(StringPairHashMapTest)
 
 addLinkAndDiscoverTest(HashSetTest)
 
+addLinkAndDiscoverTest(HashContainersWithAllocatorTest)
+# Emscripten's clang crashes on this file at -O2/-O3 (in `Instruction::clone`
+# in a loop pass on `testExceptionSafety`). The precompiled header is compiled
+# with -O3 and hence cannot be used.
+if (EMSCRIPTEN)
+    set_source_files_properties(HashContainersWithAllocatorTest.cpp PROPERTIES
+            COMPILE_OPTIONS "-O1" SKIP_PRECOMPILE_HEADERS ON)
+endif ()
+
 addLinkAndDiscoverTest(GroupByTest engine)
 
 addLinkAndDiscoverTest(VocabularyGeneratorTest index)
@@ -320,9 +329,13 @@ addLinkAndDiscoverTestNoLibs(SynchronizedTest)
 
 addLinkAndDiscoverTest(VectorWithMemoryLimitTest)
 
+addLinkAndDiscoverTest(ContainersWithAllocatorTest)
+
 addLinkAndDiscoverTestNoLibs(AllocatorPmrTest)
 
 addLinkAndDiscoverTestNoLibs(AllocateSharedTest)
+
+addLinkAndDiscoverTestNoLibs(AllocatorMemoryResourceTest)
 
 addLinkAndDiscoverTestNoLibs(AllocatorBackendTest)
 
@@ -351,6 +364,8 @@ addLinkAndDiscoverTest(TaskQueueTest)
 addLinkAndDiscoverTest(TaskQueueOnExecutorTest)
 
 addLinkAndDiscoverTest(ConcurrencyLimitedExecutorTest)
+
+addLinkAndDiscoverTest(FairShareExecutorTest)
 
 addLinkAndDiscoverTest(SetOfIntervalsTest sparqlExpressions)
 
@@ -417,6 +432,8 @@ addLinkAndDiscoverTest(DateYearDurationTest qlever_util sparqlParser)
 addLinkAndDiscoverTest(DurationTest qlever_util)
 
 addLinkAndDiscoverTest(TripleComponentTest)
+
+addLinkAndDiscoverTest(IdBaseTest qlever_util)
 
 addLinkAndDiscoverTest(FoldedValueIdTest qlever_util)
 
@@ -570,6 +587,8 @@ endif ()
 
 addLinkAndDiscoverTest(AsyncResourcePoolTest)
 
+addLinkAndDiscoverTest(ThreadSafeReorderBufferTest)
+
 addLinkAndDiscoverTest(UniqueCleanupTest)
 
 addLinkAndDiscoverTest(WebSocketSessionTest http)
@@ -635,6 +654,8 @@ addLinkAndDiscoverTest(GeoCellGridTest vocabulary)
 
 addLinkAndDiscoverTest(QueryRewriteUtilTest engine)
 
+addLinkAndDiscoverTest(FilterFactsTest filterFacts sparqlParser)
+
 addLinkAndDiscoverTest(HttpErrorTest engine)
 
 addLinkAndDiscoverTest(TimeTracerTest)
@@ -677,6 +698,8 @@ addLinkAndDiscoverTest(ExportIdsTest engine sparqlParser)
 
 addLinkAndDiscoverTestNoLibs(EnumWithStringsTest Boost::program_options)
 
+addLinkAndDiscoverTestNoLibs(EnumSizeTest)
+
 addLinkAndDiscoverTest(ConstructTripleGeneratorTest engine)
 
 addLinkAndDiscoverTest(ConstructDeduplicatorTest engine)
@@ -694,3 +717,5 @@ addLinkAndDiscoverTest(MetricsTest metrics)
 addLinkAndDiscoverTest(InstrumentedExecutorTest metrics)
 
 addLinkAndDiscoverTest(ResourceMonitorTest qlever_util)
+
+addLinkAndDiscoverTest(KernelBugWorkaroundTest qlever_util)

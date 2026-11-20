@@ -32,8 +32,8 @@
 #include "parser/RdfParser.h"
 #include "util/Forward.h"
 #include "util/Iterators.h"
-#include "util/MemorySize/MemorySize.h"
 #include "util/ThreadSafeQueue.h"
+#include "util/memorySize/MemorySize.h"
 
 // TEST-ONLY. Drive an asynchronous RDF parser from its own thread pool and
 // expose it through the synchronous `RdfParserBase` interface. The index

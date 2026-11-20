@@ -22,8 +22,10 @@ size_t Distinct::getResultWidth() const { return subtree_->getResultWidth(); }
 // _____________________________________________________________________________
 Distinct::Distinct(QueryExecutionContext* qec,
                    std::shared_ptr<QueryExecutionTree> subtree,
-                   const std::vector<ColumnIndex>& keepIndices)
-    : Operation{qec}, subtree_{std::move(subtree)}, keepIndices_{keepIndices} {
+                   ql::span<const ColumnIndex> keepIndices)
+    : Operation{qec},
+      subtree_{std::move(subtree)},
+      keepIndices_{keepIndices.begin(), keepIndices.end(), allocator()} {
   AD_CORRECTNESS_CHECK(subtree_);
   subtree_ = QueryExecutionTree::createSortedTreeAnyPermutation(
       std::move(subtree_), keepIndices_);
@@ -74,7 +76,8 @@ Result::LazyResult Distinct::lazyDistinct(Result::LazyResult input,
     return Result::LazyResult{lazySingleValueRange(
         [getDistinctResult,
          aggregateTable = IdTable{subtree_->getResultWidth(), allocator()},
-         aggregateVocab = LocalVocab{}, input = std::move(input)]() mutable {
+         aggregateVocab = LocalVocab{allocator()},
+         input = std::move(input)]() mutable {
           for (auto& [idTable, localVocab] : input) {
             IdTable result = getDistinctResult(std::move(idTable));
             if (!result.empty()) {

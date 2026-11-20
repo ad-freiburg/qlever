@@ -25,8 +25,8 @@
 #include "index/compressedRelationWriter/RelationBlockCutter.h"
 #include "index/compressedRelationWriter/SmallRelationsBlockBuilder.h"
 #include "util/InputRangeUtils.h"
-#include "util/MemorySize/MemorySize.h"
 #include "util/NoCopyNoMove.h"
+#include "util/memorySize/MemorySize.h"
 
 namespace chunkwisePermutationWriter {
 // The blocks of sorted triples that the writer consumes, and a block that is

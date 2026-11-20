@@ -35,9 +35,8 @@
 #include "parser/ParsedQuery.h"
 #include "parser/SparqlParser.h"
 #include "util/AsioHelpers.h"
-#include "util/ConcurrencyLimitedExecutor.h"
 #include "util/Exception.h"
-#include "util/MemorySize/MemorySize.h"
+#include "util/FairShareExecutor.h"
 #include "util/ParseException.h"
 #include "util/ParseableDuration.h"
 #include "util/QueryEventLog.h"
@@ -48,6 +47,7 @@
 #include "util/http/HttpUtils.h"
 #include "util/http/UrlParser.h"
 #include "util/http/websocket/MessageSender.h"
+#include "util/memorySize/MemorySize.h"
 
 using namespace std::string_literals;
 using namespace ad_utility::url_parser::sparqlOperation;
@@ -292,9 +292,9 @@ class QueryAlreadyInUseError : public std::runtime_error {
 namespace {
 // Return an executor for a single query, which runs at most
 // `max-num-threads-per-query` tasks on the `executor` at the same time.
-qlever::Executor makeQueryExecutor(qlever::Executor executor) {
-  return ad_utility::makeConcurrencyLimitedExecutor(
-      std::move(executor),
+qlever::Executor makeQueryExecutor(const qlever::Executor& executor) {
+  return ad_utility::makeFairShareClientExecutor(
+      executor, ad_utility::FairShareClass::Foreground,
       getRuntimeParameter<&RuntimeParameters::maxNumThreadsPerQuery_>());
 }
 }  // namespace

@@ -11,6 +11,7 @@
 #include "rdfTypes/GeometryInfo.h"
 
 #include <absl/base/casts.h>
+#include <absl/strings/str_cat.h>
 
 #include <array>
 #include <cmath>
@@ -25,6 +26,10 @@
 #include "util/Log.h"
 
 namespace ad_utility {
+
+// Check that the constant `crsTypeUnsupported` of `GeometryInfo.h` (which only
+// forward-declares `CRSType`) is the enum value it stands for.
+static_assert(crsTypeUnsupported == ::util::geo::CRSType::UNSUPPORTED);
 
 // ____________________________________________________________________________
 GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
@@ -214,6 +219,14 @@ std::optional<std::string_view> SourceCrsType::asIri() const {
   return detail::crsTypeToIri(type_);
 }
 
+// _____________________________________________________________________________
+::util::geo::CRSType SourceCrsType::iriToCrsType(std::string_view uri) {
+  // Wrap the IRI in angle brackets, because `getCRSType` parses the CRS
+  // prefix of a WKT literal (`<http://...> POINT(...)`) and treats a missing
+  // opening bracket as "no CRS given", which is CRS84 and not `UNSUPPORTED`.
+  return ::util::geo::getCRSType(absl::StrCat("<", uri, ">"));
+}
+
 // ____________________________________________________________________________
 Centroid GeometryInfo::getCentroid() const {
   return Centroid{GeoPoint::fromBitRepresentation(geometryTypeAndCentroid_ &
@@ -375,6 +388,10 @@ std::optional<RequestedInfo> GeometryInfo::getRequestedInfo() const {
     return getMetricArea();
   } else if constexpr (std::is_same_v<RequestedInfo, SerializationType>) {
     return getSerializationType();
+  } else if constexpr (isInstantiation<RequestedInfo, WithSourceCrs>) {
+    return detail::getWithSourceCrs(
+        getRequestedInfo<typename RequestedInfo::InfoType>(),
+        getSourceCrsType());
   } else {
     static_assert(ad_utility::alwaysFalse<RequestedInfo>);
   }
@@ -399,6 +416,10 @@ template std::optional<MetricArea> GeometryInfo::getRequestedInfo<MetricArea>()
     const;
 template std::optional<SerializationType>
 GeometryInfo::getRequestedInfo<SerializationType>() const;
+template std::optional<WithSourceCrs<Centroid>>
+GeometryInfo::getRequestedInfo<WithSourceCrs<Centroid>>() const;
+template std::optional<WithSourceCrs<BoundingBox>>
+GeometryInfo::getRequestedInfo<WithSourceCrs<BoundingBox>>() const;
 
 // ____________________________________________________________________________
 CPP_template_def(typename RequestedInfo)(
@@ -423,6 +444,9 @@ std::optional<RequestedInfo> GeometryInfo::getRequestedInfo(
     return GeometryInfo::getMetricArea(wkt);
   } else if constexpr (std::is_same_v<RequestedInfo, SerializationType>) {
     return GeometryInfo::getSerializationType(wkt);
+  } else if constexpr (isInstantiation<RequestedInfo, WithSourceCrs>) {
+    return detail::getWithSourceCrsFromWkt<typename RequestedInfo::InfoType>(
+        wkt);
   } else {
     static_assert(ad_utility::alwaysFalse<RequestedInfo>);
   }
@@ -447,5 +471,10 @@ template std::optional<MetricArea> GeometryInfo::getRequestedInfo<MetricArea>(
     std::string_view wkt);
 template std::optional<SerializationType>
 GeometryInfo::getRequestedInfo<SerializationType>(std::string_view wkt);
+template std::optional<WithSourceCrs<Centroid>>
+GeometryInfo::getRequestedInfo<WithSourceCrs<Centroid>>(std::string_view wkt);
+template std::optional<WithSourceCrs<BoundingBox>>
+GeometryInfo::getRequestedInfo<WithSourceCrs<BoundingBox>>(
+    std::string_view wkt);
 
 }  // namespace ad_utility

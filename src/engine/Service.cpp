@@ -9,12 +9,15 @@
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
 
+#include <cmath>
+
 #include "backports/StartsWithAndEndsWith.h"
 #include "engine/CallFixedSize.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/Sort.h"
 #include "engine/StripColumns.h"
 #include "engine/VariableToColumnMap.h"
+#include "engine/binaryExport/BinaryImport.h"
 #include "global/RuntimeParameters.h"
 #include "index/ExportIds.h"
 #include "index/TripleComponentConversions.h"
@@ -138,15 +141,20 @@ std::string Service::getGraphPattern() const {
 
 // _____________________________________________________________________________
 Result Service::computeResult(bool requestLaziness) {
+  // With `SILENT`, compute the result eagerly, so that every error of the
+  // remote endpoint is thrown inside the `try` below.
+  //
+  // NOTE: A lazy result is consumed only after this function has returned,
+  // when the rows that were already passed on can no longer be replaced by the
+  // neutral element.
   try {
-    return computeResultImpl(requestLaziness);
+    return computeResultImpl(requestLaziness && !parsedServiceClause_.silent_);
   } catch (const ad_utility::CancellationException&) {
     throw;
   } catch (const ad_utility::detail::AllocationExceedsLimitException&) {
     throw;
   } catch (const std::exception&) {
-    // if the `SILENT` keyword is set in the service clause, catch the error and
-    // return a neutral Element.
+    // With `SILENT`, return the neutral element instead of throwing.
     if (parsedServiceClause_.silent_) {
       return makeNeutralElementResultForSilentFail();
     }
@@ -205,6 +213,18 @@ Result Service::computeResultImpl(bool requestLaziness) {
               << ", target: " << serviceUrl.target() << ")" << std::endl
               << serviceQuery << std::endl;
 
+  // If enabled, prefer QLever's binary format (which only other QLever
+  // instances that support the same version of the format understand, see
+  // `ad_utility::binaryQleverExportVersion`) over JSON.
+  const std::string& sparqlJson =
+      ad_utility::toString(ad_utility::MediaType::sparqlJson);
+  const std::string accept =
+      getRuntimeParameter<&RuntimeParameters::binaryServiceEnabled_>()
+          ? absl::StrCat(
+                ad_utility::toString(ad_utility::MediaType::binaryQleverExport),
+                ",", sparqlJson, ";q=0.9")
+          : sparqlJson;
+
   // Send the query to the remote endpoint. Redirects are handled automatically
   // by the HTTP client up to the limit specified by the runtime parameter
   // `service-max-redirects`.
@@ -212,8 +232,7 @@ Result Service::computeResultImpl(bool requestLaziness) {
       getRuntimeParameter<&RuntimeParameters::serviceMaxRedirects_>();
   HttpOrHttpsResponse response = getResultFunction_(
       serviceUrl, cancellationHandle(), boost::beast::http::verb::post,
-      serviceQuery, "application/sparql-query",
-      "application/sparql-results+json", maxRedirects);
+      serviceQuery, "application/sparql-query", accept, maxRedirects);
 
   auto throwErrorWithContext = [this, &response](std::string_view sv) {
     this->throwErrorWithContext(sv, std::move(response).readResponseHead(100));
@@ -226,12 +245,19 @@ Result Service::computeResultImpl(bool requestLaziness) {
         static_cast<int>(response.status_), ", ",
         toStd(boost::beast::http::obsolete_reason(response.status_))));
   }
-  if (!ql::starts_with(ad_utility::utf8ToLower(response.contentType_),
-                       "application/sparql-results+json")) {
+
+  if (ad_utility::toMediaType(response.contentType_) ==
+      ad_utility::MediaType::binaryQleverExport) {
+    AD_LOG_DEBUG << "The result of the SERVICE is transferred in QLever's "
+                    "binary format"
+                 << std::endl;
+    return computeBinaryResult(requestLaziness, std::move(response));
+  }
+  auto contentType = ad_utility::utf8ToLower(response.contentType_);
+  if (!ql::starts_with(contentType, sparqlJson)) {
     throwErrorWithContext(absl::StrCat(
-        "QLever requires the endpoint of a SERVICE to send the result as "
-        "'application/sparql-results+json' but the endpoint sent '",
-        response.contentType_, "'"));
+        "QLever requires the endpoint of a SERVICE to send the result as '",
+        sparqlJson, "' but the endpoint sent '", response.contentType_, "'"));
   }
 
   // Prepare the expected Variables as keys for the JSON-bindings. We can't wait
@@ -256,6 +282,18 @@ Result Service::computeResultImpl(bool requestLaziness) {
                       resultSortedOn()};
 }
 
+// _____________________________________________________________________________
+Result Service::computeBinaryResult(bool requestLaziness,
+                                    HttpOrHttpsResponse response) {
+  return qlever::binary_export::importBinaryHttpResponse(
+      requestLaziness, std::move(response), *getExecutionContext(),
+      ad_utility::transform(parsedServiceClause_.visibleVariables_,
+                            &Variable::name),
+      getRuntimeParameter<&RuntimeParameters::serviceMaxBinaryBatchSize_>(),
+      cancellationHandle());
+}
+
+// _____________________________________________________________________________
 template <size_t I>
 void Service::writeJsonResult(const std::vector<std::string>& vars,
                               const nlohmann::json& partJson,
@@ -323,7 +361,7 @@ Result::LazyResult Service::computeResultLazily(
   // into it; the words of the bindings stay in the per-block `localVocab`.
   auto get = [service = this, vars = std::move(vars), singleIdTable,
               inputRange = moveToCachingInputRange(std::move(body)),
-              localVocab = LocalVocab{},
+              localVocab = LocalVocab{allocator()},
               blankNodeAdder =
                   BlankNodeAdder{getIndex().getBlankNodeManager(),
                                  getExecutionContext()->getAllocator()},
@@ -354,7 +392,7 @@ Result::LazyResult Service::computeResultLazily(
         if (!singleIdTable) {
           Result::IdTableVocabPair pair = yieldPair();
           idTable.clear();
-          localVocab = LocalVocab{};
+          localVocab = LocalVocab{service->allocator()};
           rowIdx = 0;
           return LC::yieldValue(std::move(pair));
         }
@@ -502,7 +540,7 @@ Result Service::makeNeutralElementResultForSilentFail() const {
   for (size_t colIdx = 0; colIdx < getResultWidth(); ++colIdx) {
     idTable(0, colIdx) = Id::makeUndefined();
   }
-  return {std::move(idTable), resultSortedOn(), LocalVocab{}};
+  return {std::move(idTable), resultSortedOn(), LocalVocab{allocator()}};
 }
 
 // ____________________________________________________________________________
@@ -575,9 +613,14 @@ std::optional<std::string> Service::idToValueForValuesClause(
       // them.
       return std::nullopt;
     case Int:
-    case Double:
     case Bool:
       return value;
+    case Double:
+      // `NaN`, `INF` and `-INF` are only valid as typed literals.
+      if (std::isfinite(id.getDouble())) {
+        return value;
+      }
+      return absl::StrCat("\"", value, "\"^^<", xsdType, ">");
     default:
       if (xsdType) {
         return absl::StrCat("\"", value, "\"^^<", xsdType, ">");
@@ -626,11 +669,10 @@ VariableToColumnMap getSiblingVariables(const Operation& sibling,
   auto variables = sibling.getExternallyVisibleVariableColumns();
   const auto& visibleLeft = outerLeft.getExternallyVisibleVariableColumns();
   const auto& visibleRight = outerRight.getExternallyVisibleVariableColumns();
-  absl::erase_if(
-      variables, [&visibleLeft, &visibleRight](const auto& varAndCol) {
-        const auto& var = varAndCol.first;
-        return !visibleLeft.contains(var) || !visibleRight.contains(var);
-      });
+  ql::erase_if(variables, [&visibleLeft, &visibleRight](const auto& varAndCol) {
+    const auto& var = varAndCol.first;
+    return !visibleLeft.contains(var) || !visibleRight.contains(var);
+  });
   return variables;
 }
 }  // namespace
@@ -744,7 +786,8 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
   // The `siblingResult` has been fully materialized, so it can now be
   // used in both sibling and service.
   Result::IdTableVocabPair siblingPair(
-      IdTable{sibling->getResultWidth(), sibling->allocator()}, LocalVocab{});
+      IdTable{sibling->getResultWidth(), sibling->allocator()},
+      LocalVocab{sibling->allocator()});
   siblingPair.idTable_.reserve(rows);
 
   for (auto& pair : resultPairs) {
