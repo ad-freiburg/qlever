@@ -1277,13 +1277,6 @@ GraphPattern Visitor::visit(Parser::GroupGraphPatternContext* ctx) {
   pattern._graphPatterns = std::move(subOps);
   for (auto& filter : filters) {
     selectExistsVariables(filter);
-    if (auto langFilterData = filter.expression_.getLanguageFilterExpression();
-        langFilterData.has_value()) {
-      const auto& [variable, language] = langFilterData.value();
-      if (pattern.addLanguageFilter(variable, language)) {
-        continue;
-      }
-    }
     pattern._filters.push_back(std::move(filter));
   }
   return pattern;

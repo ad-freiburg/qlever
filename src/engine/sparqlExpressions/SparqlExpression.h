@@ -103,10 +103,6 @@ class SparqlExpression {
   virtual bool isYearExpression() const;
 
   // ___________________________________________________________________________
-  using LangFilterData = SparqlExpressionPimpl::LangFilterData;
-  virtual std::optional<LangFilterData> getLanguageFilterExpression() const;
-
-  // ___________________________________________________________________________
   using Estimates = SparqlExpressionPimpl::Estimates;
   virtual Estimates getEstimatesForFilterExpression(
       uint64_t inputSizeEstimate,

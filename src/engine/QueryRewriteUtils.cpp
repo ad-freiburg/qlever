@@ -10,9 +10,11 @@
 #include "engine/SpatialJoin.h"
 #include "engine/Values.h"
 #include "engine/filterFacts/Recognizers.h"
+#include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/QueryRewriteExpressionHelpers.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
+#include "parser/GraphPattern.h"
 
 namespace {
 
@@ -119,28 +121,91 @@ std::shared_ptr<SpatialJoin> rewriteFilterToSpatialJoin(
       std::move(left.child_), std::move(right.child_), true);
 }
 
-// _____________________________________________________________________________
-void splitFiltersWithFacts(std::vector<SparqlFilter>& filters) {
-  std::vector<SparqlFilter> result;
-  for (auto& filter : filters) {
-    auto conjuncts = filterFacts::canonicalize(filter.expression_);
-    bool hasFact = ql::ranges::any_of(conjuncts, [](const auto& conjunct) {
-      return filterFacts::recognizeDistanceBound(conjunct).has_value();
-    });
+namespace {
 
-    // Split the FILTER only if one of its conjuncts is a fact.
+// Return a FILTER that is equivalent to `bound`, namely
+// `geof:metricDistance(a, b) <= maxMeters`.
+SparqlFilter distanceBoundToFilter(const filterFacts::DistanceBound& bound) {
+  using namespace sparqlExpression;
+  // The operands of a `DistanceBound` are variables or constants (see
+  // `getGeoDistanceExpressionParameters`).
+  auto toExpression =
+      [](const TripleComponent& operand) -> SparqlExpression::Ptr {
+    if (operand.isVariable()) {
+      return std::make_unique<VariableExpression>(operand.getVariable());
+    } else if (operand.isLiteral()) {
+      return std::make_unique<StringLiteralExpression>(operand.getLiteral());
+    }
+    AD_CORRECTNESS_CHECK(operand.isId());
+    return std::make_unique<IdExpression>(operand.getId());
+  };
+  auto expression =
+      std::make_unique<LessEqualExpression>(LessEqualExpression::Children{
+          makeMetricDistExpression(toExpression(bound.distance_.a_),
+                                   toExpression(bound.distance_.b_)),
+          std::make_unique<IdExpression>(
+              Id::makeFromDouble(bound.maxMeters_))});
+  auto descriptor =
+      absl::StrCat("geof:metricDistance(", bound.distance_.a_.toString(), ", ",
+                   bound.distance_.b_.toString(), ") <= ", bound.maxMeters_);
+  return SparqlFilter{
+      SparqlExpressionPimpl{std::move(expression), std::move(descriptor)}};
+}
+
+}  // namespace
+
+// _____________________________________________________________________________
+void rewriteFiltersWithFacts(parsedQuery::GraphPattern& group) {
+  auto defs = filterFacts::collectDefinitions(group._graphPatterns);
+  std::vector<SparqlFilter> result;
+  for (auto& filter : group._filters) {
+    // Recognize the `DistanceBound` of each conjunct of `filter`.
+    auto conjuncts = filterFacts::canonicalize(filter.expression_, defs);
+    auto bounds = ::ranges::to<std::vector>(
+        conjuncts | ql::views::transform(&filterFacts::recognizeDistanceBound));
+
+    // Apply the `LangIn` fact of each conjunct to the triples of `group`. The
+    // conjunct is replaced iff this succeeds and the fact is exact.
+    std::vector<bool> isReplaced;
+    for (const auto& conjunct : conjuncts) {
+      auto langIn = filterFacts::recognizeLangIn(conjunct);
+      bool isApplied = langIn.has_value() &&
+                       group.addLanguageFilter(langIn->var_, langIn->langs_);
+      isReplaced.push_back(isApplied && langIn->exact_);
+    }
+
+    // Keep a FILTER without a `DistanceBound` or a replaced conjunct as it is.
     //
-    // NOTE: This is for efficiency, not for correctness. Splitting every
-    // FILTER would also be correct (a FILTER holds iff all its conjuncts
-    // hold), but each conjunct would then become its own `Filter` operation
-    // and its own filter in the query planning, without any rewrite.
-    if (conjuncts.size() > 1 && hasFact) {
-      for (auto& conjunct : conjuncts) {
+    // NOTE: Keeping such a FILTER unsplit is for efficiency, not for
+    // correctness. Splitting every FILTER would also be correct (a FILTER
+    // holds iff all its conjuncts hold), but each conjunct would then become
+    // its own `Filter` operation and its own filter in the query planning,
+    // without any rewrite.
+    if (ql::ranges::none_of(bounds,
+                            [](const auto& b) { return b.has_value(); }) &&
+        ql::ranges::none_of(isReplaced, std::identity{})) {
+      result.push_back(std::move(filter));
+      continue;
+    }
+
+    // Split `filter` into its conjuncts. Drop the replaced conjuncts. Replace a
+    // conjunct whose fact needs the definitions by an equivalent FILTER without
+    // them, which can be rewritten on its own.
+    for (auto&& [conjunct, bound, replaced] :
+         ::ranges::views::zip(conjuncts, bounds, isReplaced)) {
+      if (replaced) {
+        continue;
+      }
+      bool needsDefinitions =
+          bound.has_value() &&
+          !filterFacts::recognizeDistanceBound(
+              filterFacts::canonicalize(conjunct.expression_)[0]);
+      if (needsDefinitions) {
+        result.push_back(distanceBoundToFilter(bound.value()));
+      } else {
         result.push_back(SparqlFilter{std::move(conjunct.expression_)});
       }
-    } else {
-      result.push_back(std::move(filter));
     }
   }
-  filters = std::move(result);
+  group._filters = std::move(result);
 }

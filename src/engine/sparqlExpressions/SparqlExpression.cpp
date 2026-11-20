@@ -100,13 +100,6 @@ std::optional<::Variable> SparqlExpression::getVariableOrNullopt() const {
 bool SparqlExpression::isYearExpression() const { return false; }
 
 // _____________________________________________________________________________
-using LangFilterData = SparqlExpressionPimpl::LangFilterData;
-std::optional<LangFilterData> SparqlExpression::getLanguageFilterExpression()
-    const {
-  return std::nullopt;
-}
-
-// _____________________________________________________________________________
 using Estimates = SparqlExpressionPimpl::Estimates;
 Estimates SparqlExpression::getEstimatesForFilterExpression(
     uint64_t inputSizeEstimate,

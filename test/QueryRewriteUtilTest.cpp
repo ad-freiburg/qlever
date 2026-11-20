@@ -303,17 +303,19 @@ TEST(QueryRewriteUtilTest, GetGeoFunctionExpressionParametersWithFixedValue) {
 }
 
 // Test that a FILTER is split into its conjuncts iff one of them is a fact,
-// and that each conjunct keeps its original input as descriptor.
-TEST(QueryRewriteUtilTest, SplitFiltersWithFacts) {
-  auto split = [](std::string_view filter) {
+// that each conjunct keeps its original input as descriptor, that a conjunct
+// which is a fact only with the definitions of its group is replaced, and that
+// a conjunct with an exact language filter is applied to the triples.
+TEST(QueryRewriteUtilTest, RewriteFiltersWithFacts) {
+  auto rewrite = [](std::string_view filter,
+                    std::string_view definitions = "") {
     auto query = ad_utility::testing::parseQuery(absl::StrCat(
         "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
-        "SELECT * { ?a <p> ?b . ?x <p> ?y . FILTER(",
-        filter, ") }"));
-    auto filters = query._rootGraphPattern._filters;
-    splitFiltersWithFacts(filters);
+        "SELECT * { ?a <p> ?b . ?x <p> ?y . ",
+        definitions, " FILTER(", filter, ") }"));
+    rewriteFiltersWithFacts(query._rootGraphPattern);
     std::vector<std::string> descriptors;
-    for (const auto& f : filters) {
+    for (const auto& f : query._rootGraphPattern._filters) {
       descriptors.push_back(f.expression_.getDescriptor());
     }
     return descriptors;
@@ -321,17 +323,29 @@ TEST(QueryRewriteUtilTest, SplitFiltersWithFacts) {
   using ::testing::ElementsAre;
 
   // A conjunct that is a fact, also in a nested `&&`.
-  EXPECT_THAT(split("geof:distance(?y, ?b) <= 0.5 && ?x != ?a"),
+  EXPECT_THAT(rewrite("geof:distance(?y, ?b) <= 0.5 && ?x != ?a"),
               ElementsAre("geof:distance(?y, ?b) <= 0.5", "?x != ?a"));
   EXPECT_THAT(
-      split("?x != ?a && (geof:distance(?y, ?b) < 0.5 && ?x != <c>)"),
+      rewrite("?x != ?a && (geof:distance(?y, ?b) < 0.5 && ?x != <c>)"),
       ElementsAre("?x != ?a", "geof:distance(?y, ?b) < 0.5", "?x != <c>"));
 
   // No conjunct is a fact, or the FILTER is no `&&`.
   for (std::string_view filter : {"geof:distance(?y, ?b) > 0.5 && ?x != ?a",
                                   "geof:distance(?y, ?b) <= 0.5 || ?x != ?a"}) {
-    EXPECT_THAT(split(filter), ElementsAre(absl::StrCat("(", filter, ")")));
+    EXPECT_THAT(rewrite(filter), ElementsAre(absl::StrCat("(", filter, ")")));
   }
+
+  // A fact with the maximum distance from `VALUES` is replaced.
+  EXPECT_THAT(
+      rewrite("geof:distance(?y, ?b) <= ?r && ?x != ?a", "VALUES ?r { 0.5 }"),
+      ElementsAre("geof:metricDistance(?y, ?b) <= 500", "?x != ?a"));
+
+  // A conjunct with a language filter is replaced by it, unless the language
+  // differs between the rows.
+  EXPECT_THAT(rewrite("LANG(?y) = \"en\" && ?x != ?a"),
+              ElementsAre("?x != ?a"));
+  EXPECT_THAT(rewrite("LANG(?y) = ?l", "VALUES ?l { \"en\" \"de\" }"),
+              ElementsAre("(LANG(?y) = ?l)"));
 }
 
 }  // namespace

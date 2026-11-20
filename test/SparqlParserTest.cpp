@@ -10,6 +10,7 @@
 #include <variant>
 
 #include "./parser/SparqlAntlrParserTestHelpers.h"
+#include "engine/QueryRewriteUtils.h"
 #include "global/Constants.h"
 #include "parser/SparqlParser.h"
 #include "rdfTypes/Iri.h"
@@ -1286,13 +1287,22 @@ TEST(ParserTest, Group) {
   }
 }
 
-// _____________________________________________________________________________
+// Parse `query` and apply the language filters of its root group graph pattern
+// (as the `QueryPlanner` does, see `rewriteFiltersWithFacts`).
+ParsedQuery parseWithLanguageFilters(std::string query) {
+  auto parsedQuery = parseQuery(std::move(query));
+  rewriteFiltersWithFacts(parsedQuery._rootGraphPattern);
+  return parsedQuery;
+}
+
+// Test that a FILTER on the language of a variable is applied to the triples
+// of its group.
 TEST(ParserTest, LanguageFilterPostProcessing) {
   auto makeTaggedPath = [](std::string_view iriString, std::string langTag) {
     return PropertyPath::fromIri(iri(iriString).withLanguageTag(langTag));
   };
   {
-    ParsedQuery q = parseQuery(
+    ParsedQuery q = parseWithLanguageFilters(
         "SELECT * WHERE {?x <label> ?y . FILTER (LANG(?y) = \"en\")}");
     ASSERT_TRUE(q._rootGraphPattern._filters.empty());
     const auto& triples =
@@ -1304,8 +1314,8 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
   }
   {
     // The empty language tag can't be optimized.
-    ParsedQuery q =
-        parseQuery("SELECT * { ?x <label> ?y . FILTER (LANG(?y) = \"\")}");
+    ParsedQuery q = parseWithLanguageFilters(
+        "SELECT * { ?x <label> ?y . FILTER (LANG(?y) = \"\")}");
     EXPECT_FALSE(q._rootGraphPattern._filters.empty());
     const auto& triples =
         q._rootGraphPattern._graphPatterns[0].getBasic()._triples;
@@ -1314,8 +1324,8 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
                              Var{"?y"}}));
   }
   {
-    ParsedQuery q =
-        parseQuery("SELECT * { ?x <label> ?y . FILTER (LANG(?y) IN (\"en\"))}");
+    ParsedQuery q = parseWithLanguageFilters(
+        "SELECT * { ?x <label> ?y . FILTER (LANG(?y) IN (\"en\"))}");
     EXPECT_TRUE(q._rootGraphPattern._filters.empty());
     const auto& triples =
         q._rootGraphPattern._graphPatterns[0].getBasic()._triples;
@@ -1324,7 +1334,7 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
                     Var{"?x"}, makeTaggedPath("<label>", "en"), Var{"?y"}}));
   }
   {
-    ParsedQuery q = parseQuery(
+    ParsedQuery q = parseWithLanguageFilters(
         "SELECT * { ?x <label> ?y . FILTER (LANG(?y) IN (\"en\", \"de\"))}");
     EXPECT_TRUE(q._rootGraphPattern._filters.empty());
     const auto& triples =
@@ -1345,7 +1355,7 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
                 ::testing::ElementsAre(::testing::AnyOf(variantA, variantB)));
   }
   {
-    ParsedQuery q = parseQuery(
+    ParsedQuery q = parseWithLanguageFilters(
         "SELECT * { ?x <label> ?y . "
         "FILTER (LANG(?y) = \"en\" || LANG(?y) = \"de\")}");
     EXPECT_TRUE(q._rootGraphPattern._filters.empty());
@@ -1369,7 +1379,7 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
   // Test the case when we have no predicate to work with and more than one
   // language.
   {
-    ParsedQuery q = parseQuery(
+    ParsedQuery q = parseWithLanguageFilters(
         "SELECT * { <somebody> ?p ?y . FILTER (LANG(?y) IN (\"en\", \"de\"))}");
 
     EXPECT_TRUE(q._rootGraphPattern._filters.empty());
@@ -1409,7 +1419,7 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
                                           hasSingleTriple(tripleB)))));
   }
   {
-    ParsedQuery q = parseQuery(
+    ParsedQuery q = parseWithLanguageFilters(
         "SELECT * WHERE {<somebody> ?p ?y . FILTER (LANG(?y) = \"en\")}");
     ASSERT_TRUE(q._rootGraphPattern._filters.empty());
     const auto& triples =
@@ -1425,7 +1435,7 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
               triples[1]);
   }
   {
-    ParsedQuery q = parseQuery(
+    ParsedQuery q = parseWithLanguageFilters(
         "SELECT * { <somebody> ?p ?y OPTIONAL {} . FILTER (LANG(?y) = "
         "\"en\")}");
     ASSERT_TRUE(q._rootGraphPattern._filters.empty());
@@ -1443,7 +1453,7 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
   // Test that the language filter never changes triples with
   // `ql:contains-entity` etc.
   {
-    ParsedQuery q = parseQuery(
+    ParsedQuery q = parseWithLanguageFilters(
         "SELECT * WHERE {?x <label> ?y . ?text ql:contains-entity ?y. FILTER "
         "(LANG(?y) = \"en\")}");
     ASSERT_TRUE(q._rootGraphPattern._filters.empty());
@@ -1460,7 +1470,7 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
         triples[1]);
   }
   {
-    ParsedQuery q = parseQuery(
+    ParsedQuery q = parseWithLanguageFilters(
         "SELECT * WHERE {<somebody> ?p ?y . ?text ql:contains-entity ?y FILTER "
         "(LANG(?y) = \"en\")}");
     ASSERT_TRUE(q._rootGraphPattern._filters.empty());
@@ -1485,7 +1495,7 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
   // Ensure filter is applied regularly if variable does not originate from
   // triple
   {
-    ParsedQuery q = parseQuery(
+    ParsedQuery q = parseWithLanguageFilters(
         "SELECT * { VALUES ?x { \"test\"@en } . FILTER (LANG(?x) = \"en\")}");
 
     EXPECT_TRUE(std::holds_alternative<parsedQuery::Values>(
@@ -1494,23 +1504,10 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
     ASSERT_EQ(q._rootGraphPattern._filters[0].expression_.getDescriptor(),
               "(LANG(?x) = \"en\")");
   }
-  // Ensure filter is applied regularly if the language is a literal with a
-  // language tag or a datatype (which `LANG(?y)` never equals).
-  auto filtersFor = [](std::string_view language) {
-    return parseQuery(
-               absl::StrCat("PREFIX xsd: <http://www.w3.org/2001/XMLSchema#> "
-                            "SELECT * { ?x <label> ?y . FILTER (LANG(?y) = ",
-                            language, ")}"))
-        ._rootGraphPattern._filters.size();
-  };
-  EXPECT_EQ(filtersFor("\"en\"@de"), 1u);
-  EXPECT_EQ(filtersFor("\"en\"^^<x>"), 1u);
-  // A literal with the datatype `xsd:string` is a plain literal.
-  EXPECT_EQ(filtersFor("\"en\"^^xsd:string"), 0u);
   // Ensure filter is applied regularly if list is empty.
   {
-    ParsedQuery q =
-        parseQuery("SELECT * { ?x <label> ?y . FILTER (LANG(?x) IN ())}");
+    ParsedQuery q = parseWithLanguageFilters(
+        "SELECT * { ?x <label> ?y . FILTER (LANG(?x) IN ())}");
 
     ASSERT_EQ(q._rootGraphPattern._filters.size(), 1);
     ASSERT_EQ(q._rootGraphPattern._filters[0].expression_.getDescriptor(),
@@ -1519,22 +1516,22 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
   // Verify the filter is not applied as a regular filter if it is used
   // somewhere in a triple
   {
-    ParsedQuery q =
-        parseQuery("SELECT * { ?x ?y ?z . FILTER (LANG(?x) = \"en\")}");
+    ParsedQuery q = parseWithLanguageFilters(
+        "SELECT * { ?x ?y ?z . FILTER (LANG(?x) = \"en\")}");
     ASSERT_TRUE(q._rootGraphPattern._filters.empty());
   }
   {
-    ParsedQuery q =
-        parseQuery("SELECT * { ?x ?y ?z . FILTER (LANG(?z) = \"en\")}");
+    ParsedQuery q = parseWithLanguageFilters(
+        "SELECT * { ?x ?y ?z . FILTER (LANG(?z) = \"en\")}");
     ASSERT_TRUE(q._rootGraphPattern._filters.empty());
   }
   {
-    ParsedQuery q =
-        parseQuery("SELECT * { ?x ?y ?z . FILTER (LANG(?y) = \"en\")}");
+    ParsedQuery q = parseWithLanguageFilters(
+        "SELECT * { ?x ?y ?z . FILTER (LANG(?y) = \"en\")}");
     ASSERT_TRUE(q._rootGraphPattern._filters.empty());
   }
   {
-    ParsedQuery q = parseQuery(
+    ParsedQuery q = parseWithLanguageFilters(
         "SELECT * { ?x ?y ?z . ?a ?b ?c ."
         "?d <a> ?f . FILTER (LANG(?a) = \"en\")}");
     ASSERT_TRUE(q._rootGraphPattern._filters.empty());

@@ -11,8 +11,10 @@
 #define QLEVER_SRC_ENGINE_FILTERFACTS_RECOGNIZERS_H
 
 #include <optional>
+#include <string>
 
 #include "engine/filterFacts/Canonicalizer.h"
+#include "util/HashSet.h"
 
 // The recognition of typed facts in the canonical conjuncts of a FILTER (see
 // `Canonicalizer.h`). A fact holds iff its conjunct holds (up to the rounding
@@ -33,6 +35,20 @@ struct DistanceBound {
 // distance is the largest `double` below `c` (because a `SpatialJoin` includes
 // the pairs at exactly its maximum distance).
 std::optional<DistanceBound> recognizeDistanceBound(const Conjunct& conjunct);
+
+// The language tag of the literal bound to `var_` is one of `langs_`.
+struct LangIn {
+  Variable var_;
+  ad_utility::HashSet<std::string> langs_;
+  // True iff the fact holds exactly when its conjunct holds.
+  bool exact_ = true;
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR(LangIn, var_, langs_, exact_)
+};
+
+// Recognize `LANG(?x) = "l"` (also with `IN` and `||`, see `LangEquals`) for
+// plain string literals `"l"` (`LANG` returns such a literal, so it can only be
+// equal to one).
+std::optional<LangIn> recognizeLangIn(const Conjunct& conjunct);
 
 }  // namespace filterFacts
 

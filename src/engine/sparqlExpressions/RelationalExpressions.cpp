@@ -327,58 +327,6 @@ ql::span<SparqlExpression::Ptr> RelationalExpression<Comp>::childrenImpl() {
 }
 
 namespace {
-// Return the language of `LANG(?x) = expression` if `expression` is a literal
-// with neither a language tag nor a datatype (e.g. "en"), and `std::nullopt`
-// otherwise.
-//
-// NOTE 1: `LANG(?x)` never equals a literal with a language tag or a datatype
-// (e.g. "en"@de or "en"^^<x>), so such a FILTER must not become a language
-// filter on the triple of `?x`.
-//
-// NOTE 2: A literal with the datatype `xsd:string` (e.g. "en"^^xsd:string) is
-// the same RDF term as the plain literal, and `hasDatatype()` is false for it.
-std::optional<std::string> getLanguage(const SparqlExpression* expression) {
-  const auto* literal =
-      dynamic_cast<const StringLiteralExpression*>(expression);
-  if (literal == nullptr || literal->value().hasLanguageTag() ||
-      literal->value().hasDatatype()) {
-    return std::nullopt;
-  }
-  return std::string{literal->value().getContent()};
-}
-}  // namespace
-
-// _____________________________________________________________________________
-template <Comparison Comp>
-std::optional<SparqlExpression::LangFilterData>
-RelationalExpression<Comp>::getLanguageFilterExpression() const {
-  if (Comp != Comparison::EQ) {
-    return std::nullopt;
-  }
-
-  // We support both directions: LANG(?x) = "en" and "en" = LANG(?x).
-  auto getLangFilterData =
-      [](const auto& left, const auto& right) -> std::optional<LangFilterData> {
-    std::optional<Variable> optVar = getVariableFromLangExpression(left.get());
-    auto language = getLanguage(right.get());
-    if (!optVar.has_value() || !language.has_value()) {
-      return std::nullopt;
-    }
-    return LangFilterData{std::move(optVar.value()),
-                          {std::move(language).value()}};
-  };
-
-  const auto& child1 = children_[0];
-  const auto& child2 = children_[1];
-
-  if (auto langFilterData = getLangFilterData(child1, child2)) {
-    return langFilterData;
-  } else {
-    return getLangFilterData(child2, child1);
-  }
-}
-
-namespace {
 // _____________________________________________________________________________
 template <typename Children>
 SparqlExpression::Estimates getEstimatesForFilterExpressionImpl(
@@ -620,26 +568,6 @@ auto InExpression::getEstimatesForFilterExpression(
     const std::optional<Variable>& firstSortedVariable) const -> Estimates {
   return getEstimatesForFilterExpressionImpl(
       inputSizeEstimate, reductionFactorEquals, children_, firstSortedVariable);
-}
-
-// _____________________________________________________________________________
-std::optional<SparqlExpression::LangFilterData>
-InExpression::getLanguageFilterExpression() const {
-  const auto& left = children_[0];
-  std::optional<Variable> optVar = getVariableFromLangExpression(left.get());
-  if (!optVar.has_value() || children_.size() < 2) {
-    return std::nullopt;
-  }
-  ad_utility::HashSet<std::string> languages;
-  for (const auto& child : children_ | ql::views::drop(1)) {
-    auto language = getLanguage(child.get());
-    if (!language.has_value()) {
-      return std::nullopt;
-    }
-    languages.emplace(std::move(language).value());
-  }
-
-  return LangFilterData{std::move(optVar.value()), std::move(languages)};
 }
 
 // Explicit instantiations

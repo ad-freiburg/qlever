@@ -36,10 +36,6 @@ class RelationalExpression : public SparqlExpression {
   [[nodiscard]] std::string getCacheKey(
       const VariableToColumnMap& varColMap) const override;
 
-  // Check if this expression has the form `LANG(?var) = "literal"` and return
-  // the appropriate data.
-  std::optional<LangFilterData> getLanguageFilterExpression() const override;
-
   // If this `RelationalExpression` is binary evaluable, return the
   // corresponding `PrefilterExpression` for the pre-filtering procedure on
   // `CompressedBlockMetadata`. In addition we return the `Variable` that
@@ -92,8 +88,6 @@ class InExpression : public SparqlExpression {
   Estimates getEstimatesForFilterExpression(
       uint64_t inputSizeEstimate,
       const std::optional<Variable>& firstSortedVariable) const override;
-
-  std::optional<LangFilterData> getLanguageFilterExpression() const override;
 
   [[nodiscard]] bool isDeterministic() const override {
     return areChildrenDeterministic();
