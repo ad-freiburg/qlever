@@ -6,6 +6,8 @@
 
 #include <absl/strings/str_format.h>
 
+#include <ctre-unicode.hpp>
+
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/type_traits.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
@@ -81,6 +83,7 @@ NumericValue NumericValueGetter::operator()(
     case Datatype::WordVocabIndex:
     case Datatype::Date:
     case Datatype::GeoPoint:
+    case Datatype::TripleTermIndex:
     case Datatype::BlankNodeIndex:
     case Datatype::SecondaryVocabIndex:
       return NotNumeric{};
@@ -108,6 +111,7 @@ NumericOrDateValue NumericOrDateValueGetter::operator()(
     case Datatype::Date:
       return id.getDate();
     case Datatype::GeoPoint:
+    case Datatype::TripleTermIndex:
     case Datatype::BlankNodeIndex:
     case Datatype::SecondaryVocabIndex:
       return NotNumeric{};
@@ -128,6 +132,10 @@ auto EffectiveBooleanValueGetter::operator()(
       return (id.getInt() != 0) ? True : False;
     case Datatype::Bool:
       return id.getBool() ? True : False;
+    case Datatype::TripleTermIndex:
+      // SPARQL 1.2 section 17.2.3: EBV of a non-literal is an error.
+      // `Undef` represents that error, not an unbound triple term.
+      return Undef;
     case Datatype::Undefined:
     case Datatype::BlankNodeIndex:
       return Undef;
@@ -223,34 +231,40 @@ std::optional<std::string> ReplacementStringGetter::operator()(
   return convertToReplacementString(s.getContent());
 }
 
+// Each token of a replacement string is either literal text, an escaped `\` or
+// `$`, or a reference to a group (with all the digits that follow the `$`).
+// Regex pattern at namespace scope for C++17 compatibility.
+namespace {
+constexpr ctll::fixed_string replacementTokenRegex =
+    "[^\\\\$]+|\\\\[\\\\$]|\\$[0-9]+";
+}  // namespace
+
 // ____________________________________________________________________________
-std::string ReplacementStringGetter::convertToReplacementString(
+std::optional<std::string> ReplacementStringGetter::convertToReplacementString(
     std::string_view view) {
   std::string result;
   // Rough estimate of the size of the result string.
   result.reserve(view.size());
-  for (size_t i = 0; i < view.size(); i++) {
-    char c = view.at(i);
-    switch (c) {
-      case '$':
-        // Re2 used \1, \2, ... for backreferences, so we change $ to \.
-        result.push_back('\\');
-        break;
-      case '\\':
-        // "\$" is unescaped to "$"
-        if (i + 1 < view.size() && view.at(i + 1) == '$') {
-          result.push_back('$');
-          i++;
-        } else {
-          // Escape existing backslashes.
-          result.push_back(c);
-          result.push_back(c);
-        }
-        break;
-      default:
-        result.push_back(c);
-        break;
+  size_t numConsumed = 0;
+  for (auto match : ctre::tokenize<replacementTokenRegex>(view)) {
+    std::string_view token = match.to_view();
+    numConsumed += token.size();
+    if (token == "\\$") {
+      // A literal dollar needs no escaping in RE2.
+      result.push_back('$');
+    } else if (token.front() == '$') {
+      // Re2 uses `\N` instead of `$N` to refer to a group.
+      result.push_back('\\');
+      result.append(token.substr(1));
+    } else {
+      // Literal text, or `\\`, which is a literal backslash in RE2 too.
+      result.append(token);
     }
+  }
+  // `ctre::tokenize` stops at the first position where no token starts, so
+  // the replacement string is valid iff all of it was consumed.
+  if (numConsumed != view.size()) {
+    return std::nullopt;
   }
   return result;
 }
@@ -283,6 +297,10 @@ Id IsSomethingValueGetter<isSomethingFunction, prefix>::operator()(
     case Datatype::Date:
     case Datatype::GeoPoint:
       return Id::makeFromBool(prefix == isLiteralPrefix);
+    case Datatype::TripleTermIndex:
+      // A triple term is neither an IRI nor a literal (SPARQL 1.2 sections
+      // 17.4.2.3 and 17.4.2.5).
+      return Id::makeFromBool(false);
     case Datatype::TextRecordIndex:
     case Datatype::WordVocabIndex:
     case Datatype::BlankNodeIndex:
@@ -319,6 +337,9 @@ bool IsValidValueGetter::operator()(
 IntDoubleStr ToNumericValueGetter::operator()(
     ValueId id, [[maybe_unused]] const EvaluationContext* context) const {
   switch (id.getDatatype()) {
+    // A triple term cannot be cast to a numeric or boolean literal, the
+    // `monostate` becomes an undefined expression result.
+    case Datatype::TripleTermIndex:
     case Datatype::Undefined:
       return std::monostate{};
     case Datatype::Int:
@@ -380,6 +401,7 @@ OptIri DatatypeValueGetter::operator()(ValueId id,
     case SecondaryVocabIndex:
       return (*this)(getLiteralOrIri(id, context), context);
     case Undefined:
+    case TripleTermIndex:
     case BlankNodeIndex:
     case TextRecordIndex:
     case WordVocabIndex:
@@ -492,6 +514,7 @@ std::optional<ad_utility::GeoPointOrWkt> GeoPointOrWktValueGetter::operator()(
     case Undefined:
     case TextRecordIndex:
     case WordVocabIndex:
+    case TripleTermIndex:
     case BlankNodeIndex:
     case EncodedVal:
       return std::nullopt;
@@ -525,6 +548,7 @@ T getValue(ValueId id, const sparqlExpression::EvaluationContext* context,
       return valueGetter(getLiteralOrIri(id, context), context);
     case TextRecordIndex:
     case WordVocabIndex:
+    case TripleTermIndex:
     case BlankNodeIndex:
     case Bool:
     case Int:
@@ -566,6 +590,7 @@ std::optional<std::string> LanguageTagValueGetter::operator()(
     case LocalVocabIndex:
     case TextRecordIndex:
     case WordVocabIndex:
+    case TripleTermIndex:
     case BlankNodeIndex:
     case SecondaryVocabIndex:
       return getValue<std::optional<std::string>>(id, context, *this);
@@ -649,6 +674,7 @@ std::optional<RequestedInfo> GeometryInfoValueGetter<CPP_sfinae_args(
           .getRequestedInfo<RequestedInfo>();
     case TextRecordIndex:
     case WordVocabIndex:
+    case TripleTermIndex:
     case BlankNodeIndex:
     case Bool:
     case Int:
