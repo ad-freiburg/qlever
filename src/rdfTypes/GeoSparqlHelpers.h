@@ -92,27 +92,25 @@ const auto wktLiteralIri =
 std::optional<double> wktDistLibSpatialJoinImpl(const GeoPointOrWkt& a,
                                                 const GeoPointOrWkt& b);
 
+// Helper functions for computation of longitude and latitude.
+double getLongitude(const std::optional<GeoPointOrWkt>& point);
+double getLatitude(const std::optional<GeoPointOrWkt>& point);
+
 }  // namespace detail
 
 // Return the longitude coordinate from a WKT point.
 class WktLongitude {
  public:
-  double operator()(const std::optional<GeoPoint>& point) const {
-    if (!point.has_value()) {
-      return std::numeric_limits<double>::quiet_NaN();
-    }
-    return point.value().getLng();
+  double operator()(const std::optional<GeoPointOrWkt>& point) const {
+    return ad_utility::detail::getLongitude(point);
   }
 };
 
 // Return the latitude coordinate from a WKT point.
 class WktLatitude {
  public:
-  double operator()(const std::optional<GeoPoint>& point) const {
-    if (!point.has_value()) {
-      return std::numeric_limits<double>::quiet_NaN();
-    }
-    return point.value().getLat();
+  double operator()(const std::optional<GeoPointOrWkt>& point) const {
+    return ad_utility::detail::getLatitude(point);
   }
 };
 

@@ -115,6 +115,16 @@ std::optional<double> wktDistLibSpatialJoinImpl(const GeoPointOrWkt& a,
   return computeMetricDistance(a, b);
 }
 
+// _____________________________________________________________________________
+double getLongitude(const std::optional<GeoPointOrWkt>& point) {
+  return longitudeFromGeoPointOrWkt(point);
+}
+
+// _____________________________________________________________________________
+double getLatitude(const std::optional<GeoPointOrWkt>& point) {
+  return latitudeFromGeoPointOrWkt(point);
+}
+
 }  // namespace detail
 
 }  // namespace ad_utility
