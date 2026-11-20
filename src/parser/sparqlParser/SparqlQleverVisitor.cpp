@@ -870,8 +870,8 @@ ParsedQuery Visitor::visit(Parser::LoadContext* ctx) {
       Quad{Variable("?s"), Variable("?p"), Variable("?o"),
            ctx->graphRef() ? Quad::Graph(visit(ctx->graphRef()))
                            : Quad::Graph(std::monostate{})}};
-  parsedQuery_._clause =
-      parsedQuery::UpdateClause{GraphUpdate{{toInsert, LocalVocab{}}, {}}};
+  parsedQuery_._clause = parsedQuery::UpdateClause{GraphUpdate{
+      {toInsert, LocalVocab{ad_utility::makeUnlimitedAllocator<Id>()}}, {}}};
   return parsedQuery_;
 }
 
@@ -954,8 +954,10 @@ ParsedQuery Visitor::makeClear(const GraphRefAll& graph) {
       graph);
   parsedQuery_._rootGraphPattern._graphPatterns.push_back(
       std::move(graphPattern));
-  parsedQuery_._clause = parsedQuery::UpdateClause{GraphUpdate{
-      {}, {{makeAllTripleTemplate(std::move(updatePattern))}, LocalVocab{}}}};
+  parsedQuery_._clause = parsedQuery::UpdateClause{
+      GraphUpdate{{},
+                  {{makeAllTripleTemplate(std::move(updatePattern))},
+                   LocalVocab{ad_utility::makeUnlimitedAllocator<Id>()}}}};
   parsedQuery_.datasetClauses_ = activeDatasetClauses_;
   return parsedQuery_;
 }
@@ -965,8 +967,10 @@ ParsedQuery Visitor::makeAdd(const GraphOrDefault& source,
                              const GraphOrDefault& target) {
   parsedQuery_._rootGraphPattern._graphPatterns.push_back(
       makeAllTripleGraphPattern(transformGraph(source)));
-  parsedQuery_._clause = parsedQuery::UpdateClause{GraphUpdate{
-      {{makeAllTripleTemplate(transformGraph(target))}, LocalVocab{}}, {}}};
+  parsedQuery_._clause = parsedQuery::UpdateClause{
+      GraphUpdate{{{makeAllTripleTemplate(transformGraph(target))},
+                   LocalVocab{ad_utility::makeUnlimitedAllocator<Id>()}},
+                  {}}};
   parsedQuery_.datasetClauses_ = activeDatasetClauses_;
   return parsedQuery_;
 }
