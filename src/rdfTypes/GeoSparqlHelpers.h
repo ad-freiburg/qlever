@@ -201,9 +201,9 @@ class WktCentroid {
     // appropriate CRS IRI).
     auto resultWkt = ad_utility::detail::geoPointToWktInCrs(centroid.centroid(),
                                                             sourceCrs.value());
-    if (!resultWkt.has_value()) {
-      return ValueId::makeUndefined();
-    }
+    // `geoPointToWktInCrs` should only return `std::nullopt` if one of the
+    // arguments is `std::nullopt`.
+    AD_CORRECTNESS_CHECK(resultWkt.has_value());
 
     using namespace triple_component;
     auto lit = Literal::literalWithoutQuotes(resultWkt.value());

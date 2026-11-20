@@ -2183,6 +2183,14 @@ TEST(SparqlExpression, geoSparqlExpressions) {
               "^^<http://www.opengis.net/ont/geosparql#wktLiteral>")},
       geoLit("<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(20 50)"));
 
+  checkCentroid(
+      IdOrLocalVocabEntry{lit(
+          "\"<http://www.opengis.net/def/crs/EPSG/0/3857> "
+          "POLYGON((0 0, 10000000 0, 10000000 10000000, 0 10000000, 0 0))\"",
+          "^^<http://www.opengis.net/ont/geosparql#wktLiteral>")},
+      geoLit("<http://www.opengis.net/def/crs/EPSG/0/3857> POINT(5000000 "
+             "5000000)"));
+
   checkEnvelope(
       IdOrLocalVocabEntryVec{U, D(1.0), GP({4, 2}),
                              geoLit("LINESTRING(2 4, 8 8)"),
