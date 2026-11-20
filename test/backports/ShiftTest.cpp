@@ -5,7 +5,9 @@
 
 #include <gmock/gmock.h>
 
+#include <cstddef>
 #include <forward_list>
+#include <iterator>
 #include <list>
 #include <vector>
 
@@ -88,6 +90,57 @@ TYPED_TEST(ShiftTest, ShiftLeftPartialRange) {
   ql::shift_left(std::next(data.begin(), 2), std::next(data.begin(), 6), 2);
   const std::vector expected{1, 2, 5, 6, 5, 6, 7, 8};
   EXPECT_THAT(data, ::testing::ElementsAreArray(expected));
+}
+
+namespace {
+// A forward iterator over `int`s whose `*it` returns a proxy and not an `int&`,
+// like the iterator of a split column. Its `reference` is `int&` on purpose,
+// so that the classic `std::move` rejects it.
+struct ProxyIterator {
+  struct Proxy {
+    int* ptr_;
+    explicit Proxy(int* ptr) : ptr_{ptr} {}
+    Proxy(const Proxy&) = default;
+    operator int() const { return *ptr_; }
+    const Proxy& operator=(const Proxy& other) const {
+      *ptr_ = *other.ptr_;
+      return *this;
+    }
+  };
+  using iterator_category = std::forward_iterator_tag;
+  using difference_type = std::ptrdiff_t;
+  using value_type = int;
+  using reference = int&;
+  using pointer = void;
+
+  int* ptr_ = nullptr;
+  Proxy operator*() const { return Proxy{ptr_}; }
+  ProxyIterator& operator++() {
+    ++ptr_;
+    return *this;
+  }
+  ProxyIterator operator++(int) {
+    auto copy = *this;
+    ++ptr_;
+    return copy;
+  }
+  bool operator==(const ProxyIterator& other) const {
+    return ptr_ == other.ptr_;
+  }
+  bool operator!=(const ProxyIterator& other) const {
+    return ptr_ != other.ptr_;
+  }
+};
+}  // namespace
+
+// Test that `ql::shift_left` also works for an iterator with proxy references
+// and without a member `shiftLeft`.
+TEST(ShiftLeftTest, proxyIterator) {
+  std::vector data{1, 2, 3, 4, 5, 6, 7, 8};
+  const auto result = ql::shift_left(
+      ProxyIterator{data.data()}, ProxyIterator{data.data() + data.size()}, 3);
+  EXPECT_EQ(result.ptr_, data.data() + 5);
+  EXPECT_THAT(data, ::testing::ElementsAre(4, 5, 6, 7, 8, 6, 7, 8));
 }
 
 // Given an input (random access iterator) and a shift value,

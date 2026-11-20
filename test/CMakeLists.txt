@@ -351,6 +351,8 @@ addLinkAndDiscoverTest(MinusTest engine)
 
 addLinkAndDiscoverTestNoLibs(SerializerTest)
 
+addLinkAndDiscoverTestNoLibs(SerializeParallelArraysTest)
+
 addLinkAndDiscoverTestNoLibs(ParametersTest qlever_util)
 
 addLinkAndDiscoverTestNoLibs(ConstructDeduplicationModeTest)

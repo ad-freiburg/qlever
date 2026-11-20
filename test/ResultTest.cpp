@@ -106,7 +106,8 @@ TEST(Result, cloneIdTableReturnsCopy) {
   IdTable cloned = result.cloneIdTable();
   EXPECT_EQ(cloned, idTable);
   // Verify it is a deep copy, not a reference to the same data.
-  EXPECT_NE(&cloned(0, 0), &result.idTableView()(0, 0));
+  EXPECT_NE(memoryOf(cloned.getColumn(0)),
+            memoryOf(result.idTableView().getColumn(0)));
 }
 
 // _____________________________________________________________________________
@@ -757,7 +758,8 @@ TEST(Result, viewBackedResultIsFullyMaterialized) {
   Result result{view, sortOrder(), makeLocalVocab()};
   EXPECT_TRUE(result.isFullyMaterialized());
   // The returned view must alias the original data, not a copy.
-  EXPECT_EQ(&result.idTableView()(0, 0), &idTable(0, 0));
+  EXPECT_EQ(memoryOf(result.idTableView().getColumn(0)),
+            memoryOf(idTable.getColumn(0)));
   EXPECT_EQ(result.idTableView(), idTable);
 }
 
@@ -769,7 +771,7 @@ TEST(Result, viewBackedResultCloneIdTable) {
   IdTable cloned = result.cloneIdTable();
   EXPECT_EQ(cloned, idTable);
   // Must be a deep copy, not an alias into the original data.
-  EXPECT_NE(&cloned(0, 0), &idTable(0, 0));
+  EXPECT_NE(memoryOf(cloned.getColumn(0)), memoryOf(idTable.getColumn(0)));
 }
 
 // _____________________________________________________________________________
@@ -793,13 +795,15 @@ TEST(Result, viewBackedApplyLimitOffset) {
                                            const IdTableView<0>& innerTable) {
     EXPECT_EQ(innerTable, comparisonTable);
     // The sub-view must alias the original data at offset 2 (no copy).
-    EXPECT_EQ(&innerTable(0, 0), &idTable(2, 0));
+    EXPECT_EQ(memoryOf(innerTable.getColumn(0)),
+              memoryOf(idTable.getColumn(0).subspan(2)));
     ++callCounter;
   });
   EXPECT_EQ(callCounter, 1);
   EXPECT_EQ(result.idTableView(), comparisonTable);
   // After the limit/offset the result view still aliases the original data.
-  EXPECT_EQ(&result.idTableView()(0, 0), &idTable(2, 0));
+  EXPECT_EQ(memoryOf(result.idTableView().getColumn(0)),
+            memoryOf(idTable.getColumn(0).subspan(2)));
 }
 
 // _____________________________________________________________________________
