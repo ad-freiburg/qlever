@@ -685,7 +685,6 @@ inline std::optional<std::string> wktFromGeoPointOrWkt(
             // literal suffix, we need to remove the datatype
             // suffix and the surrounding quotes.
             return removeDatatype(wkt);
-            ;
           }},
       geoPointOrWkt);
 }
