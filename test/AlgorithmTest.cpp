@@ -225,9 +225,16 @@ TEST(AlgorithmTest, transformArray) {
   auto str = [](size_t x) { return std::string(x, 'a'); };
   ASSERT_EQ(transformArray(std::array{1, 3, 5}, str),
             (std::array{"a"s, "aaa"s, "aaaaa"s}));
-  // Also an lvalue (in particular a `const` one) can be transformed.
-  static constexpr std::array input{1, 3, 5};
-  ASSERT_EQ(transformArray(input, inc), (std::array{3, 5, 7}));
+
+  // An lvalue array is passed by reference to the `function`.
+  std::array input{1, 3, 5};
+  auto addressOf = [](auto&& x) { return &x; };
+  ASSERT_EQ(transformArray(input, addressOf),
+            (std::array{&input[0], &input[1], &input[2]}));
+
+  // A `const` lvalue array can be transformed, too.
+  static constexpr std::array constInput{1, 3, 5};
+  ASSERT_EQ(transformArray(constInput, inc), (std::array{3, 5, 7}));
 }
 
 TEST(AlgorithmTest, lowerUpperBoundIterator) {
