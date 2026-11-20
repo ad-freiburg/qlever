@@ -830,38 +830,43 @@ TransitivePathBase::makeTreeWithStrippedColumns(
 void TransitivePathBase::addPayloadColumns(
     const std::shared_ptr<QueryExecutionTree>& startTree,
     ColumnIndex joinColumn) {
+  std::optional<ColumnIndex> leftCol;
+  std::optional<ColumnIndex> rightCol;
+
+  if (lhs_.isBoundVariable() && lhs_.treeAndCol_->first == startTree) {
+    leftCol = lhs_.treeAndCol_->second;
+  }
+  if (rhs_.isBoundVariable() && rhs_.treeAndCol_->first == startTree) {
+    rightCol = rhs_.treeAndCol_->second;
+  }
+
+  AD_CORRECTNESS_CHECK(leftCol == joinColumn || rightCol == joinColumn);
+
+  auto payloadCols = computePayloadColumns(startTree, leftCol, rightCol);
+
   for (auto [variable, columnIndexWithType] : startTree->getVariableColumns()) {
     ColumnIndex columnIndex = columnIndexWithType.columnIndex_;
+    auto payloadPosition = ql::ranges::find(payloadCols, columnIndex);
 
-    if (columnIndex == joinColumn || variable == graphVariable_) {
+    if (payloadPosition == payloadCols.end()) {
       continue;
     }
 
-    columnIndexWithType.columnIndex_ += columnIndex > joinColumn ? 1 : 2;
-
-    // When we have a graph variable, we write it last, so we have to account
-    // for that.
-    if (graphVariable_.has_value()) {
-      auto graphColumn = startTree->getVariableColumnOrNullopt(*graphVariable_);
-
-      if (columnIndex >
-          graphColumn.value_or(std::numeric_limits<size_t>::max())) {
-        columnIndexWithType.columnIndex_ -= 1;
-      }
-    }
+    columnIndexWithType.columnIndex_ =
+        firstGraphOrPayloadColumnIndex() +
+        ql::ranges::distance(payloadCols.begin(), payloadPosition);
 
     AD_CORRECTNESS_CHECK(!variableColumns_.contains(variable));
     variableColumns_[variable] = columnIndexWithType;
   }
 
-  resultWidth_ +=
-      startTree->getResultWidth() - numJoinColumnsWith(startTree, joinColumn);
+  resultWidth_ += payloadCols.size();
 
   // Make sure mapping actually points to the last column if it's not one of the
   // regular variables.
   if (graphVariable_.has_value()) {
     auto& graphIndex = variableColumns_[*graphVariable_].columnIndex_;
-    if (graphIndex == 2) {
+    if (graphIndex == firstGraphOrPayloadColumnIndex()) {
       graphIndex = resultWidth_ - 1;
     }
   }
