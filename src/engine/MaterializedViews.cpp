@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <ctre-unicode.hpp>
 #include <memory>
 #include <nlohmann/json.hpp>
 #include <optional>
@@ -962,7 +963,7 @@ std::shared_ptr<IndexScan> MaterializedViewsManager::makeIndexScan(
 
 // _____________________________________________________________________________
 std::shared_ptr<IndexScan> MaterializedViewsManager::makeIndexScan(
-    QueryExecutionContext* qec, const std::string& cacheKey,
+    QueryExecutionContext* qec, std::string_view cacheKey,
     const VariableToColumnMap& varToCol) const {
   // TODO<ullingerc> Do we want to forcefully disable query rewriting if delta
   // triples are present in the current index to prevent diverging results?
@@ -1032,7 +1033,7 @@ MaterializedView::computeCacheKey(
       }
       mapping.insert({col.columnIndex_, it->second.columnIndex_});
     }
-    return CacheKeyAndColumnMapping{executionTree->getCacheKey(),
+    return CacheKeyAndColumnMapping{std::string{executionTree->getCacheKey()},
                                     std::move(mapping)};
   };
 

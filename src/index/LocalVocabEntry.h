@@ -18,7 +18,7 @@
 #include "global/TypedIndex.h"
 #include "global/VocabIndex.h"
 #include "index/IdBitRepresentation.h"
-#include "parser/LiteralOrIri.h"
+#include "rdfTypes/LiteralOrIri.h"
 #include "util/CopyableSynchronization.h"
 #include "util/Exception.h"
 #include "util/TypeTraits.h"

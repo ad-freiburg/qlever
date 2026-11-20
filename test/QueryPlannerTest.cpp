@@ -20,6 +20,7 @@
 #include "util/AllocatorTestHelpers.h"
 #include "util/ContainersWithAllocator.h"
 #include "util/GTestHelpers.h"
+#include "util/ParseException.h"
 #include "util/ParsedQueryTestHelpers.h"
 #include "util/RuntimeParametersTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
@@ -710,7 +711,7 @@ qet-width: 3
 }
 )xxx");
 
-  auto actual = strip(qet->getCacheKey());
+  auto actual = strip(std::string{qet->getCacheKey()});
 
   if (actual != possible1 && actual != possible2 && actual != possible3 &&
       actual != possible4 && actual != possible5) {
