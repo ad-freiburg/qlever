@@ -363,6 +363,37 @@ class QueryPlanner {
   virtual FiltersAndOptionalSubstitutes seedFilterSubstitutes(
       const std::vector<SparqlFilter>& filters);
 
+  // Break the cycles of `SpatialJoin` substitutes by copying operands. For
+  // example, for `geof:sfContains(?fg, ?rg)`, `geof:sfContains(?fg, ?tg)` and
+  // `geof:distance(?rg, ?tg) <= 250`, the triples that bind `?fg` are planned
+  // once more, the variables of this copy are renamed (with a `BIND` each and
+  // by hiding the originals, like the `SELECT` clause of a subquery), and the
+  // copy is added to `initialPlans` as a single node. The substitute of one of
+  // the filters then uses the copy of `?fg`, and a filter is added that checks
+  // that each variable equals its copy.
+  //
+  // NOTE 1: A `SpatialJoin` joins two subtrees that share no variable, so the
+  // substitutes that become a `SpatialJoin` connect the units (the connected
+  // components of `initialPlans` without the substitutes) like a tree. All
+  // other substitutes would have to be evaluated as a regular filter, which is
+  // not implemented for geometric relations like `geof:sfContains`. Therefore,
+  // the substitutes are added to a union-find of the units, and each one that
+  // closes a cycle uses a copy of its smaller unit (the substitutes with the
+  // largest units come first). A unit that several substitutes use without a
+  // cycle (e.g. for only the first two filters above) is not copied.
+  //
+  // NOTE 2: Only units of simple triples are copied. Their result has no
+  // duplicate rows, so each row is only equal to its own copy.
+  //
+  // TODO<ullingerc> This is a draft: copies are added regardless of their size
+  // estimate, and the check uses `=` instead of `sameTerm` (which QLever does
+  // not have yet), so two different terms with the same numeric value would
+  // count as equal.
+  void cloneSpatialJoinOperandsOnCycles(
+      const TripleGraph& tg, SubtreePlanVec& initialPlans,
+      std::vector<SparqlFilter>& filters,
+      FiltersAndOptionalSubstitutes& filtersAndOptSubstitutes);
+
   // Wrap `filters` as `FiltersAndOptionalSubstitutes` without computing any
   // substitutes. This is sufficient for the filter modes that never apply
   // substitutes and avoids constructing throwaway substitute plans (which

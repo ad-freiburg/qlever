@@ -131,6 +131,8 @@ class SpatialJoin : public Operation {
   // GeoSPARQL filter operation
   bool getSubstitutesFilterOp() const { return substitutesFilterOp_; }
 
+  const SpatialJoinConfiguration& getConfig() const { return config_; }
+
   // Helper functions for unit tests
   std::pair<double, size_t> onlyForTestingGetTask() const {
     return std::pair{getMaxDist().value_or(-1.0), getMaxResults().value_or(-1)};

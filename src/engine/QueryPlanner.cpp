@@ -1863,6 +1863,216 @@ QueryPlanner::FiltersAndOptionalSubstitutes QueryPlanner::seedFilterSubstitutes(
 }
 
 // _____________________________________________________________________________
+void QueryPlanner::cloneSpatialJoinOperandsOnCycles(
+    const TripleGraph& tg, SubtreePlanVec& initialPlans,
+    std::vector<SparqlFilter>& filters,
+    FiltersAndOptionalSubstitutes& filtersAndOptSubstitutes) {
+  if (activeGraphVariable_.has_value()) {
+    return;
+  }
+
+  // Compute the units (the connected components of `initialPlans` without the
+  // substitutes) with their variables, their size estimate (the smallest one
+  // of their plans), and their triples. A unit with a plan that is not a
+  // simple triple of `tg` (e.g. a subquery) is never copied.
+  struct Unit {
+    size_t sizeEstimate_ = std::numeric_limits<size_t>::max();
+    std::vector<size_t> nodes_;
+    bool isCopyable_ = true;
+  };
+  auto unitIndices = QueryGraph::computeConnectedComponents(
+      initialPlans, wrapFiltersWithoutSubstitutes(filters));
+  std::vector<Unit> units(
+      unitIndices.empty() ? 0 : ql::ranges::max(unitIndices) + 1);
+  ad_utility::HashMap<Variable, size_t> unitOfVariable;
+  for (size_t i = 0; i < initialPlans.size(); ++i) {
+    const auto& plan = initialPlans.at(i);
+    auto& unit = units.at(unitIndices.at(i));
+    unit.sizeEstimate_ = std::min(unit.sizeEstimate_, plan.getSizeEstimate());
+    for (const auto& variable :
+         plan._qet->getVariableColumns() | ql::views::keys) {
+      unitOfVariable.try_emplace(variable, unitIndices.at(i));
+    }
+    for (size_t id = 0; id < 64; ++id) {
+      if (((plan._idsOfIncludedNodes >> id) & 1) == 0 ||
+          ad_utility::contains(unit.nodes_, id)) {
+        continue;
+      }
+      const auto* node = id < tg._nodeMap.size() ? tg._nodeMap.at(id) : nullptr;
+      const auto* path = node == nullptr
+                             ? nullptr
+                             : std::get_if<PropertyPath>(&node->triple_.p_);
+      unit.isCopyable_ &= node != nullptr && !node->cvar_.has_value() &&
+                          node->triple_.additionalScanColumns_.empty() &&
+                          (path == nullptr || path->isIri());
+      unit.nodes_.push_back(id);
+    }
+  }
+
+  // Collect the spatial edges: the substitutes that are a `SpatialJoin` without
+  // a child (both operands are variables) between two different units. Sort
+  // them by the size estimate of their smaller unit, the largest first, so
+  // that the edges that close a cycle are those at the smallest units.
+  struct Edge {
+    size_t filter_;
+    std::array<Variable, 2> operands_;
+    std::array<size_t, 2> units_;
+  };
+  std::vector<Edge> edges;
+  for (size_t i = 0; i < filtersAndOptSubstitutes.size(); ++i) {
+    const auto& substitute = filtersAndOptSubstitutes.at(i).substitute_;
+    auto spatialJoin = substitute.has_value()
+                           ? std::dynamic_pointer_cast<const SpatialJoin>(
+                                 substitute->_qet->getRootOperation())
+                           : nullptr;
+    if (spatialJoin == nullptr || !spatialJoin->getChildren().empty()) {
+      continue;
+    }
+    const auto& config = spatialJoin->getConfig();
+    auto left = unitOfVariable.find(config.left_);
+    auto right = unitOfVariable.find(config.right_);
+    if (left != unitOfVariable.end() && right != unitOfVariable.end() &&
+        left->second != right->second) {
+      edges.push_back(
+          {i, {config.left_, config.right_}, {left->second, right->second}});
+    }
+  }
+  auto smallerUnitSize = [&units](const Edge& edge) {
+    return std::min(units.at(edge.units_[0]).sizeEstimate_,
+                    units.at(edge.units_[1]).sizeEstimate_);
+  };
+  ql::ranges::stable_sort(edges, std::greater{}, smallerUnitSize);
+
+  // Add the edges to a union-find of the units. Copy the smaller (copyable)
+  // unit of each edge that closes a cycle, except for a second edge between
+  // the same two units (which stays a regular filter as so far).
+  //
+  // TODO<ullingerc> Copying for such an edge would make e.g.
+  // `geof:sfCovers(?n, ?b) && geof:sfContains(?n, ?b)` computable, but the
+  // greedy planner fails with the copy.
+  std::vector<size_t> parent(units.size());
+  std::iota(parent.begin(), parent.end(), size_t{0});
+  auto find = [&parent](size_t unit) {
+    while (parent.at(unit) != unit) {
+      unit = parent.at(unit) = parent.at(parent.at(unit));
+    }
+    return unit;
+  };
+  ad_utility::HashSet<std::pair<size_t, size_t>> directlyConnected;
+  for (const auto& edge : edges) {
+    auto [first, second] = std::minmax(edge.units_[0], edge.units_[1]);
+    bool isParallel = !directlyConnected.emplace(first, second).second;
+    auto rootLeft = find(edge.units_[0]);
+    auto rootRight = find(edge.units_[1]);
+    if (rootLeft != rootRight) {
+      parent.at(rootLeft) = rootRight;
+      continue;
+    }
+    if (isParallel) {
+      continue;
+    }
+    size_t side = units.at(edge.units_[0]).sizeEstimate_ <=
+                          units.at(edge.units_[1]).sizeEstimate_
+                      ? 0
+                      : 1;
+    if (!units.at(edge.units_[side]).isCopyable_) {
+      side = 1 - side;
+    }
+    uint64_t usedNodes = 0;
+    for (const auto& plan : initialPlans) {
+      usedNodes |= plan._idsOfIncludedNodes;
+    }
+    auto copyNodeId = static_cast<size_t>(absl::bit_width(usedNodes));
+    if (!units.at(edge.units_[side]).isCopyable_ || copyNodeId >= 64 ||
+        filters.size() >= 64) {
+      continue;
+    }
+
+    // Plan the triples of the unit on their own.
+    QueryPlanner planner{_qec, cancellationHandle_};
+    planner._internalVarCount = _internalVarCount;
+    planner.activeDatasetClauses_ = activeDatasetClauses_;
+    parsedQuery::BasicGraphPattern triples;
+    for (size_t id : units.at(edge.units_[side]).nodes_) {
+      triples._triples.push_back(tg._nodeMap.at(id)->triple_);
+    }
+    ParsedQuery::GraphPattern pattern;
+    pattern._graphPatterns.emplace_back(std::move(triples));
+    auto plans = planner.optimize(&pattern);
+    _internalVarCount = planner._internalVarCount;
+    SubtreePlan copy =
+        std::move(plans.at(planner.findCheapestExecutionTree(plans)));
+
+    // Rename each variable of the copy with a `BIND` and hide the originals
+    // (like the `SELECT` clause of a subquery).
+    using namespace sparqlExpression;
+    std::vector<std::pair<Variable, Variable>> renamed;
+    for (const auto& [variable, column] :
+         copySortedByColumnIndex(copy._qet->getVariableColumns())) {
+      renamed.emplace_back(variable, generateUniqueVarName());
+      copy._qet = ad_utility::makeExecutionTree<Bind>(
+          _qec, std::move(copy._qet),
+          parsedQuery::Bind{SparqlExpressionPimpl{
+                                std::make_unique<VariableExpression>(variable),
+                                variable.name()},
+                            renamed.back().second});
+    }
+    std::set<Variable> visible;
+    for (const auto& variable : renamed | ql::views::values) {
+      visible.insert(variable);
+    }
+    if (getRuntimeParameter<&RuntimeParameters::stripColumns_>()) {
+      copy._qet = QueryExecutionTree::makeTreeWithStrippedColumns(
+          std::move(copy._qet), visible, HideStrippedColumns::True);
+    } else {
+      copy._qet->getRootOperation()->setSelectedVariablesForSubquery(
+          {visible.begin(), visible.end()});
+    }
+    copy._idsOfIncludedNodes = uint64_t{1} << copyNodeId;
+    copy._idsOfIncludedFilters = 0;
+    copy.idsOfIncludedTextLimits_ = 0;
+    initialPlans.push_back(std::move(copy));
+
+    // Let the substitute of the edge use the copy of its operand.
+    const auto& operand = edge.operands_[side];
+    const auto& copiedOperand =
+        ql::ranges::find(renamed, operand,
+                         &std::pair<Variable, Variable>::first)
+            ->second;
+    auto& substitute =
+        filtersAndOptSubstitutes.at(edge.filter_).substitute_.value();
+    auto config = std::dynamic_pointer_cast<const SpatialJoin>(
+                      substitute._qet->getRootOperation())
+                      ->getConfig();
+    (config.left_ == operand ? config.left_ : config.right_) = copiedOperand;
+    auto newSubstitute = makeSubtreePlan(_qec->makeShared<SpatialJoin>(
+        _qec, std::move(config), std::nullopt, std::nullopt, true));
+    newSubstitute._idsOfIncludedFilters = substitute._idsOfIncludedFilters;
+    newSubstitute.containsFilterSubstitute_ = true;
+    substitute = std::move(newSubstitute);
+
+    // Add a filter that checks that each variable equals its copy.
+    SparqlExpression::Ptr check;
+    std::vector<std::string> descriptors;
+    for (const auto& [variable, copied] : renamed) {
+      SparqlExpression::Ptr equal = std::make_unique<EqualExpression>(
+          std::array<SparqlExpression::Ptr, 2>{
+              std::make_unique<VariableExpression>(variable),
+              std::make_unique<VariableExpression>(copied)});
+      descriptors.push_back(
+          absl::StrCat(variable.name(), " = ", copied.name()));
+      check = check == nullptr
+                  ? std::move(equal)
+                  : makeAndExpression(std::move(check), std::move(equal));
+    }
+    SparqlFilter filter{SparqlExpressionPimpl{
+        std::move(check), absl::StrJoin(descriptors, " && ")}};
+    filters.push_back(filter);
+    filtersAndOptSubstitutes.push_back({std::move(filter), std::nullopt});
+  }
+}
+
+// _____________________________________________________________________________
 QueryPlanner::FiltersAndOptionalSubstitutes
 QueryPlanner::wrapFiltersWithoutSubstitutes(
     const std::vector<SparqlFilter>& filters) const {
@@ -1889,6 +2099,8 @@ SubtreePlanMatrix QueryPlanner::fillDpTab(const QueryPlanner::TripleGraph& tg,
   if (filters.size() > 64) {
     AD_THROW("At most 64 filters allowed at the moment.");
   }
+  cloneSpatialJoinOperandsOnCycles(tg, initialPlans, filters,
+                                   filtersAndOptSubstitutes);
 
   auto componentIndices = QueryGraph::computeConnectedComponents(
       initialPlans, filtersAndOptSubstitutes);
@@ -2359,11 +2571,14 @@ SubtreePlanVec QueryPlanner::createJoinCandidates(
   // if one of the inputs is the spatial join and the other input is compatible
   // with the SpatialJoin, add it as a child to the spatialJoin. As unbound
   // SpatialJoin operations are incompatible with normal join operations, we
-  // return immediately instead of creating a normal join below as well.
-  // Note, that this if statement should be evaluated first, such that no other
-  // join options get considered, when one of the candidates is a SpatialJoin.
-  if (auto opt = createSpatialJoin(a, b, jcs)) {
-    candidates.push_back(std::move(opt.value()));
+  // return immediately instead of creating a normal join below as well (also if
+  // the other input is not compatible). Note, that this if statement should be
+  // evaluated first, such that no other join options get considered, when one
+  // of the candidates is a SpatialJoin.
+  if (auto [aIs, bIs] = checkSpatialJoin(a, b); aIs || bIs) {
+    if (auto opt = createSpatialJoin(a, b, jcs)) {
+      candidates.push_back(std::move(opt.value()));
+    }
     return candidates;
   }
 
@@ -2461,6 +2676,25 @@ auto QueryPlanner::createSpatialJoin(const SubtreePlan& a, const SubtreePlan& b,
   auto spatialJoin = static_cast<SpatialJoin*>(op.get());
 
   if (spatialJoin->isConstructed()) {
+    return std::nullopt;
+  }
+
+  // Do not attach `otherSubtreePlan` if it shares a variable with the child
+  // that is already attached (another subtree may still be attached later).
+  //
+  // NOTE: The `SpatialJoin` only joins on its two spatial variables, so it
+  // would not check that the values of the shared variable are equal. Such a
+  // variable is not contained in `jcs`, because an incomplete `SpatialJoin`
+  // only has a column for its missing spatial variable (see
+  // `SpatialJoin::computeVariableToColumnMap`).
+  const auto& otherVariables = otherSubtreePlan._qet->getVariableColumns();
+  auto sharesVariable = [&otherVariables](const QueryExecutionTree* child) {
+    return ql::ranges::any_of(child->getVariableColumns() | ql::views::keys,
+                              [&otherVariables](const Variable& variable) {
+                                return otherVariables.contains(variable);
+                              });
+  };
+  if (ql::ranges::any_of(spatialJoin->getChildren(), sharesVariable)) {
     return std::nullopt;
   }
 
@@ -2948,10 +3182,12 @@ void QueryPlanner::QueryGraph::setupGraph(
                   ._qet->getRootOperation()
                   ->getExternallyVisibleVariableColumns();
 
-          for (auto var : filter.expression_.containedVariables()) {
-            if (varToNode.contains(*var)) {
-              varsToBeConnected.push_back(var);
-              AD_CORRECTNESS_CHECK(substituteVariables.contains(*var));
+          // NOTE: These are the variables of the filter, except if the
+          // substitute uses the clone of a variable (see
+          // `cloneSpatialJoinOperandsOnCycles`).
+          for (const auto& var : substituteVariables | ql::views::keys) {
+            if (varToNode.contains(var)) {
+              varsToBeConnected.push_back(&var);
             }
           }
 
