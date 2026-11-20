@@ -187,11 +187,12 @@ auto removeDuplicates(const Range& input)
   return result;
 }
 
-// Return a new `std::input` that is obtained by applying the `function` to each
+// Return a new `std::array` that is obtained by applying the `function` to each
 // of the elements of the `input`.
 CPP_template(typename Array, typename Function)(
     requires ad_utility::isArray<std::decay_t<Array>> &&
-    ql::concepts::invocable<Function, typename Array::value_type>)
+    ql::concepts::invocable<Function,
+                            decltype(std::get<0>(std::declval<Array>()))>)
 auto transformArray(Array&& input, Function function) {
   return std::apply(
       [&function](auto&&... vals) {

@@ -9,6 +9,8 @@
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
 
+#include <cmath>
+
 #include "backports/StartsWithAndEndsWith.h"
 #include "engine/CallFixedSize.h"
 #include "engine/ExportQueryExecutionTrees.h"
@@ -605,9 +607,14 @@ std::optional<std::string> Service::idToValueForValuesClause(
       // them.
       return std::nullopt;
     case Int:
-    case Double:
     case Bool:
       return value;
+    case Double:
+      // `NaN`, `INF` and `-INF` are only valid as typed literals.
+      if (std::isfinite(id.getDouble())) {
+        return value;
+      }
+      return absl::StrCat("\"", value, "\"^^<", xsdType, ">");
     default:
       if (xsdType) {
         return absl::StrCat("\"", value, "\"^^<", xsdType, ">");
