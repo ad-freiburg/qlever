@@ -817,12 +817,13 @@ std::unique_ptr<Operation> Service::cloneImpl() const {
 std::optional<std::shared_ptr<QueryExecutionTree>>
 Service::makeTreeWithStrippedColumns(
     const std::set<Variable>& requestedVariables) const {
-  std::vector<Variable> visibleVariables;
-  for (const auto& var : parsedServiceClause_.visibleVariables_) {
-    if (ad_utility::contains(requestedVariables, var)) {
-      visibleVariables.push_back(var);
-    }
-  }
+  auto contained = [&](const auto& var) {
+  return ad_utility::contains(requestedVariables, var);
+};
+auto visibleVariables =
+    parsedServiceClause_.visibleVariables_ |
+    ql::views::filter(contained) |
+    ::ranges::to_vector;
   if (parsedServiceClause_.visibleVariables_.size() ==
       visibleVariables.size()) {
     return std::nullopt;
