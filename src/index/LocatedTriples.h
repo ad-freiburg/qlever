@@ -19,6 +19,7 @@
 #include "index/CompressedRelationMetadata.h"
 #include "index/KeyOrder.h"
 #include "util/CancellationHandle.h"
+#include "util/CopyOnWriteChunkedVector.h"
 #include "util/CopyOnWritePtr.h"
 #include "util/HashMap.h"
 #include "util/HashSet.h"
@@ -127,16 +128,19 @@ class LocatedTriplesPerBlock {
   ad_utility::HashMap<size_t, ad_utility::CopyOnWritePtr<LocatedTriples>> map_;
 
   // The blocks that were modified since the last call to
-  // `consolidateAllBlocks`, which then only has to consolidate these blocks.
+  // `consolidateAllBlocks` and `updateAugmentedMetadata`, respectively. Both
+  // only have to process these blocks, so that their cost is proportional to
+  // the size of an update and not to the total number of delta triples.
   ad_utility::HashSet<size_t> unconsolidatedBlocks_;
+  ad_utility::HashSet<size_t> blocksWithUpdatedTriples_;
 
   FRIEND_TEST(LocatedTriplesTest, numTriplesInBlock);
   FRIEND_TEST(LocatedTriplesTest, copyOnWrite);
 
   // Return the located triples of the block with the given index for
   // modification. Create the block if it does not exist and clone it if it is
-  // shared with a copy of this class (see `map_`), and remember it as
-  // unconsolidated. A clone gets spare capacity for `numNewTriples` triples.
+  // shared with a copy of this class (see `map_`), and remember it in the two
+  // sets above. A clone gets spare capacity for `numNewTriples` triples.
   LocatedTriples& mutableBlock(size_t blockIndex, size_t numNewTriples = 0);
 
   // Implementation of the `mergeTriples` function (which has `numIndexColumns`
@@ -144,13 +148,19 @@ class LocatedTriplesPerBlock {
   template <size_t numIndexColumns, bool includeGraphColumn>
   IdTable mergeTriplesImpl(size_t blockIndex, const IdTable& block) const;
 
-  // Stores the block metadata where the block borders have been adjusted for
-  // the updated triples.
-  std::optional<std::vector<CompressedBlockMetadata>> augmentedMetadata_;
+  // The block metadata where the block borders have been adjusted for the
+  // updated triples, engaged once the first update arrives. Copying the
+  // chunked copy-on-write vector (for every snapshot of the delta triples) only
+  // copies one pointer per chunk, and an update clones only the chunks of the
+  // blocks that it touches.
+  std::optional<ad_utility::CopyOnWriteChunkedVector<CompressedBlockMetadata>>
+      augmentedMetadata_;
   std::optional<std::shared_ptr<const std::vector<CompressedBlockMetadata>>>
       originalMetadata_;
 
  public:
+  // Recompute the augmented metadata of the blocks whose located triples have
+  // changed since the last call.
   void updateAugmentedMetadata();
 
  public:
@@ -259,21 +269,23 @@ class LocatedTriplesPerBlock {
             std::move(metadata)));
   }
 
-  // Returns the block metadata where the block borders have been updated to
+  // Return the block metadata where the block borders have been updated to
   // account for the update triples. All triples (both insert and delete) will
-  // enlarge the block borders.
-  const std::vector<CompressedBlockMetadata>& getAugmentedMetadata() const {
-    if (augmentedMetadata_.has_value()) {
-      return augmentedMetadata_.value();
-    }
-    AD_CONTRACT_CHECK(originalMetadata_.has_value());
-    return *originalMetadata_.value();
-  }
+  // enlarge the block borders. The metadata is returned as a sequence of
+  // contiguous chunks whose concatenation is the metadata of all blocks in
+  // order (one chunk if there are no updates yet). The spans stay valid as long
+  // as the located triples they were obtained from are alive and unmodified.
+  std::vector<BlockMetadataSpan> getAugmentedMetadata() const;
+
+  // Return a copy of the augmented metadata in a single vector. Only for tests
+  // and expensive checks, because it copies the metadata of all blocks.
+  std::vector<CompressedBlockMetadata> getAugmentedMetadataForTesting() const;
 
   // Remove all located triples.
   void clear() {
     map_.clear();
     unconsolidatedBlocks_.clear();
+    blocksWithUpdatedTriples_.clear();
     augmentedMetadata_.reset();
   }
 

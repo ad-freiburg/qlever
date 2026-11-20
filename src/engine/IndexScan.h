@@ -331,6 +331,12 @@ class IndexScan final : public Operation {
   // is not a lot of redundant triples in different graphs in the data set.
   std::pair<bool, size_t> computeSizeEstimate() const;
 
+  // For a scan with two fixed columns, none of whose blocks lies completely in
+  // the scan, return the multiplicity of the second column in the relation of
+  // the first column, if that relation has an entry in the per-relation
+  // metadata. Otherwise return `std::nullopt`.
+  std::optional<float> col1MultiplicityIfNoBlockIsCompletelyInScan() const;
+
   std::string getCacheKeyImpl() const override;
 
   // If `ScanSpecAndBlocks` contains prefiltered `BlockMetadataRanges`, the

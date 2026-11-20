@@ -109,6 +109,9 @@ struct SparqlErrorType {
   static constexpr MetricLabel inUse{key, "in_use"};
   // The execution of the operation timed out.
   static constexpr MetricLabel timeout{key, "timeout"};
+  // The query waited longer than `query-queue-max-wait` for a free thread of
+  // the query thread pool and was rejected without being run.
+  static constexpr MetricLabel queueFull{key, "queue_full"};
   // Other unspecified errors.
   static constexpr MetricLabel internal{key, "internal"};
 };

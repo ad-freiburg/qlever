@@ -8,6 +8,8 @@
 #include <absl/strings/str_join.h>
 
 #include <algorithm>
+#include <functional>
+#include <iterator>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -306,12 +308,49 @@ IndexScan::getUpdatedQueryExecutionTreeWithPrefilterApplied(
   auto it =
       ql::ranges::find(prefilterVariablePairs, sortedVar, ad_utility::second);
   if (it != prefilterVariablePairs.end()) {
-    const auto& blockMetadataRanges =
-        prefilterExpressions::detail::logicalOps::getIntersectionOfBlockRanges(
-            it->first->evaluate(getIndex(),
-                                getScanSpecAndBlocks().getBlockMetadataSpan(),
-                                colIndex),
-            scanSpecAndBlocks_.blockMetadata_);
+    // The freshly computed (not yet prefiltered) block metadata of this scan
+    // consists of one contiguous range per chunk of the augmented metadata
+    // (see `LocatedTriplesPerBlock::getAugmentedMetadata`). The current block
+    // metadata (possibly prefiltered before) consists of sub-ranges of these
+    // fresh ranges, in the same order.
+    const auto& currentRanges = scanSpecAndBlocks_.blockMetadata_;
+    auto currentIt = currentRanges.begin();
+    auto isSubrangeOf = [](const BlockMetadataRange& sub,
+                           const BlockMetadataRange& range) {
+      // `std::less` gives a total order also for iterators into different
+      // chunks, where the built-in `<` is unspecified.
+      return !std::less<>{}(sub.begin(), range.begin()) &&
+             !std::less<>{}(range.end(), sub.end());
+    };
+
+    // Evaluate the prefilter on each fresh range and intersect the result with
+    // the current ranges inside it. Evaluating per range is conservative (it
+    // yields a superset of the relevant blocks). Intersecting only ranges from
+    // the same chunk matters, because `getIntersectionOfBlockRanges` compares
+    // iterators, which is only meaningful within one contiguous chunk.
+    BlockMetadataRanges blockMetadataRanges;
+    for (const BlockMetadataRange& freshRange :
+         getScanSpecAndBlocks().blockMetadata_) {
+      BlockMetadataRanges currentRangesInFreshRange;
+      while (currentIt != currentRanges.end() &&
+             isSubrangeOf(*currentIt, freshRange)) {
+        currentRangesInFreshRange.push_back(*currentIt);
+        ++currentIt;
+      }
+      if (currentRangesInFreshRange.empty()) {
+        continue;
+      }
+      ql::ranges::move(
+          prefilterExpressions::detail::logicalOps::
+              getIntersectionOfBlockRanges(
+                  it->first->evaluate(
+                      getIndex(),
+                      BlockMetadataSpan{freshRange.begin(), freshRange.end()},
+                      colIndex),
+                  currentRangesInFreshRange),
+          std::back_inserter(blockMetadataRanges));
+    }
+    AD_CORRECTNESS_CHECK(currentIt == currentRanges.end());
 
     return makeCopyWithPrefilteredScanSpecAndBlocks(
         {scanSpecAndBlocks_.scanSpec_, blockMetadataRanges});
@@ -529,7 +568,56 @@ std::pair<bool, size_t> IndexScan::computeSizeEstimate() const {
   // mean of `lower` and `upper` in a safe way.
   auto [lower, upper] = permutation().getSizeEstimateForScan(
       scanSpecAndBlocks_, locatedTriplesState());
-  return {lower == upper, lower + (upper - lower) / 2};
+  size_t sizeEstimate = lower + (upper - lower) / 2;
+
+  // For a scan with two fixed columns (think `<s> <p> ?o` in the PSO
+  // permutation), the estimate is at most the average number of rows per value
+  // of the second column in the relation of the first column (in the example:
+  // the average number of objects per subject of `<p>`).
+  //
+  // NOTE: This only applies if no block lies completely in the scan. Then the
+  // blocks only say that the result is a part of them, and the estimate from
+  // above is a fixed fraction of their size, whatever the relation (see
+  // `small-index-scan-size-estimate-divisor`). The multiplicity is only used
+  // if it is stored in the per-relation metadata, because computing it for a
+  // small relation reads its block.
+  if (auto multiplicity = col1MultiplicityIfNoBlockIsCompletelyInScan()) {
+    auto rowsPerValue =
+        static_cast<size_t>(std::ceil(std::max(1.0f, multiplicity.value())));
+    if (rowsPerValue < sizeEstimate) {
+      return {false, rowsPerValue};
+    }
+  }
+  return {lower == upper, sizeEstimate};
+}
+
+// _____________________________________________________________________________
+std::optional<float> IndexScan::col1MultiplicityIfNoBlockIsCompletelyInScan()
+    const {
+  if (numVariables() != 1) {
+    return std::nullopt;
+  }
+
+  // With three or more blocks, all but the first and the last one lie
+  // completely in the scan.
+  const auto& scanSpec = scanSpecAndBlocks_.scanSpec_;
+  if (scanSpecAndBlocks_.sizeBlockMetadata_ > 2 ||
+      ql::ranges::any_of(
+          scanSpecAndBlocks_.getBlockMetadataView(),
+          [&scanSpec](const auto& block) {
+            return CompressedRelationReader::isBlockCompletelyInScan(scanSpec,
+                                                                     block);
+          })) {
+    return std::nullopt;
+  }
+
+  const auto& col0Id = scanSpec.col0Id();
+  AD_CORRECTNESS_CHECK(col0Id.has_value());
+  auto metadata = permutation().metaData().getMetaDataIfPresent(*col0Id);
+  if (!metadata.has_value()) {
+    return std::nullopt;
+  }
+  return metadata->getCol1Multiplicity();
 }
 
 // _____________________________________________________________________________

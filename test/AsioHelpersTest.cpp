@@ -2,10 +2,16 @@
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
+
+#include <atomic>
+#include <future>
+#include <thread>
 
 #include "util/AsioHelpers.h"
 #include "util/AsyncTestHelpers.h"
+#include "util/GTestHelpers.h"
 #include "util/http/beast.h"
 
 using namespace ad_utility;
@@ -328,4 +334,98 @@ TEST(AsioHelpers, makeSureRunAndWaitForAwaitablePropagatesErrorCorrectly) {
 
   EXPECT_THROW(ad_utility::runAndWaitForAwaitable(std::move(task), ioContext),
                std::exception);
+}
+
+namespace {
+// Occupy the single thread of the `pool` until the returned promise is
+// fulfilled, and return only once the thread is occupied.
+std::shared_ptr<std::promise<void>> occupyPool(net::static_thread_pool& pool) {
+  auto release = std::make_shared<std::promise<void>>();
+  auto occupied = std::make_shared<std::promise<void>>();
+  net::post(pool, [release = release->get_future().share(), occupied]() {
+    occupied->set_value();
+    release.wait();
+  });
+  occupied->get_future().wait();
+  return release;
+}
+
+// Wait until all tasks that were posted to the single-threaded `pool` before
+// this call have run.
+void waitForPool(net::static_thread_pool& pool) {
+  std::promise<void> done;
+  net::post(pool, [&done]() { done.set_value(); });
+  done.get_future().wait();
+}
+}  // namespace
+
+// Test that `runOnThreadPoolWithQueueDeadline` throws when no thread of the
+// pool picks the function up in time and the pool then skips the function,
+// and that a function which is picked up in time runs as usual.
+TEST(AsioHelpers, runOnThreadPoolWithQueueDeadline) {
+  using namespace std::chrono_literals;
+  net::static_thread_pool pool{1};
+  std::atomic<bool> functionHasRun{false};
+  auto function = [&functionHasRun]() {
+    functionHasRun = true;
+    return 42;
+  };
+  // Run the `function` on the `pool` with the given `maxQueueWait` and return
+  // its result (the coroutine runs on a strand of a fresh `io_context`).
+  auto run = [&pool](std::chrono::milliseconds maxQueueWait, auto function) {
+    net::io_context ctx;
+    return runAndWaitForAwaitable(
+        runOnThreadPoolWithQueueDeadline(pool, std::move(function),
+                                         maxQueueWait, "deadline passed"),
+        ctx);
+  };
+
+  // The thread of the pool is busy: the deadline passes, and the pool skips
+  // the function when the thread is free again.
+  auto release = occupyPool(pool);
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(run(50ms, function),
+                                        ::testing::StrEq("deadline passed"),
+                                        ThreadPoolQueueDeadlineError);
+  release->set_value();
+  waitForPool(pool);
+  EXPECT_FALSE(functionHasRun);
+
+  // The thread is free: the function runs, also when it takes longer than the
+  // deadline, also when it returns nothing, and its exception is propagated.
+  EXPECT_EQ(run(50ms, function), 42);
+  EXPECT_TRUE(functionHasRun);
+  EXPECT_EQ(run(50ms,
+                []() {
+                  std::this_thread::sleep_for(150ms);
+                  return 7;
+                }),
+            7);
+  bool voidFunctionHasRun = false;
+  run(50ms, [&voidFunctionHasRun]() { voidFunctionHasRun = true; });
+  EXPECT_TRUE(voidFunctionHasRun);
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      run(50ms, []() -> int { throw std::runtime_error{"function failed"}; }),
+      ::testing::StrEq("function failed"), std::runtime_error);
+
+  // The thread is busy and the coroutine is cancelled (via `interruptible`)
+  // while waiting: the pool skips the function as well.
+  functionHasRun = false;
+  release = occupyPool(pool);
+  auto handle = std::make_shared<CancellationHandle<>>();
+  std::thread cancelAfterDelay{[&handle]() {
+    std::this_thread::sleep_for(100ms);
+    handle->cancel(CancellationState::MANUAL);
+  }};
+  net::io_context ctx;
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      runAndWaitForAwaitable(
+          interruptible(runOnThreadPoolWithQueueDeadline(pool, function, 10s,
+                                                         "deadline passed"),
+                        handle),
+          ctx),
+      ::testing::_, CancellationException);
+  cancelAfterDelay.join();
+  release->set_value();
+  waitForPool(pool);
+  EXPECT_FALSE(functionHasRun);
 }

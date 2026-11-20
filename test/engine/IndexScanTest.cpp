@@ -798,6 +798,56 @@ TEST(IndexScan, getResultSizeOfScanFromRelationMetadata) {
   EXPECT_EQ(sizeEstimate("<p>"), EstimateAndExact(50, true));
 }
 
+// Test that the size estimate of a scan with two fixed columns, none of whose
+// blocks lies completely in the scan, is at most the average number of rows
+// per value of the second column in the relation of the first column.
+TEST(IndexScan, getSizeEstimateFromMultiplicityOfRelation) {
+  // A relation `<p>` with two objects for each of 300 subjects, a relation
+  // `<q>` with 90 objects for each of three subjects, and a small relation
+  // `<r>`. With 100 rows per block, `<p>` and `<q>` are stored in blocks of
+  // their own and have a metadata entry, `<r>` has none.
+  std::string kg;
+  for (size_t i = 0; i < 300; ++i) {
+    kg += absl::StrCat("<x", i, "> <p> <y", i, "> , <z", i, "> .\n");
+  }
+  for (size_t i = 0; i < 3; ++i) {
+    for (size_t j = 0; j < 90; ++j) {
+      kg += absl::StrCat("<x", i, "> <q> <y", j, "> .\n");
+    }
+  }
+  kg += "<x0> <r> <y0> . <x1> <r> <y1> .";
+  TestIndexConfig config{kg};
+  config.rowsPerBlock = 100;
+  auto qec = getQec(std::move(config));
+  auto getId = makeGetId(qec->getIndex());
+  const auto& pso = qec->getIndex().getImpl().getPermutation(Permutation::PSO);
+  ASSERT_TRUE(pso.metaData().getMetaDataIfPresent(getId("<p>")).has_value());
+  ASSERT_TRUE(pso.metaData().getMetaDataIfPresent(getId("<q>")).has_value());
+  ASSERT_FALSE(pso.metaData().getMetaDataIfPresent(getId("<r>")).has_value());
+
+  // The size estimate of the scan `<x1> <predicate> ?y`.
+  auto sizeEstimate = [&](const std::string& predicate) {
+    SparqlTripleSimple scanTriple{TripleComponent::Iri::fromIriref("<x1>"),
+                                  TripleComponent::Iri::fromIriref(predicate),
+                                  Variable{"?y"}};
+    IndexScan scan{qec, Permutation::PSO, scanTriple};
+    return scan.getSizeEstimate();
+  };
+
+  // For `<p>`, the estimate is the two objects per subject, and not the fixed
+  // fraction of the block (100 / 5 with the default divisor).
+  EXPECT_EQ(sizeEstimate("<p>"), 2);
+
+  // For `<q>`, the fixed fraction of the block is smaller than the 90 objects
+  // per subject and remains the estimate. The 90 rows of `<x1>` lie in two
+  // blocks, neither of them completely in the scan.
+  EXPECT_EQ(sizeEstimate("<q>"), 40);
+
+  // For `<r>`, there is no stored multiplicity, and the estimate is unchanged
+  // (the block of `<r>` has fewer rows than the divisor).
+  EXPECT_EQ(sizeEstimate("<r>"), 1);
+}
+
 // _____________________________________________________________________________
 TEST(IndexScan, getResultSizeOfScanWithDeltaTriples) {
   auto index = std::make_shared<Index>(
@@ -1168,6 +1218,76 @@ TEST(IndexScan, checkEvaluationWithPrefiltering) {
       kgFirstAndLastIncomplete, triple, Permutation::POS,
       pr(andExpr(gt(IntId(10)), lt(IntId(194))), Variable{"?price"}),
       {I(10), I(12), I(18), I(22), I(25), I(147), I(189), I(194)}, true);
+}
+
+// Test the prefiltering of an `IndexScan` whose block metadata comes in
+// several chunks (see `LocatedTriplesPerBlock::getAugmentedMetadata`), where
+// the chunks have 512 blocks and the test index has two triples per block.
+TEST(IndexScan, checkEvaluationWithPrefilteringOnSeveralChunks) {
+  using namespace makeFilterExpression;
+  using namespace filterHelper;
+  auto I = ad_utility::testing::IntId;
+
+  // 1200 triples `<P1> <price_tag> 1`, ..., `<P1200> <price_tag> 1200`, that
+  // is, 600 blocks of the `POS` permutation and hence two chunks.
+  std::string kg;
+  for (int i = 1; i <= 1200; ++i) {
+    absl::StrAppend(&kg, "<P", i, "> <price_tag> ", i, " .\n");
+  }
+  SparqlTripleSimple triple{Tc{Variable{"?x"}}, iri("<price_tag>"),
+                            Tc{Variable{"?price"}}};
+
+  // Insert the triple `<P0> <price_tag> 0` as an update and let the scans see
+  // it. The augmented metadata is only chunked once there is an update. The
+  // index of the cached test `QueryExecutionContext` is const, and this update
+  // is the only mutation.
+  auto* qec = getQec(kg);
+  auto& index = const_cast<Index&>(qec->getIndex());
+  auto getId = ad_utility::testing::makeGetId(index);
+  index.deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
+    LocalVocab localVocab = makeLocalVocab();
+    Id p0 = Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
+        iriLocalVocabEntry("<P0>", index.getLocalVocabContext())));
+    deltaTriples.insertTriples(
+        std::make_shared<ad_utility::CancellationHandle<>>(),
+        {IdTriple<>{{p0, getId("<price_tag>"), I(0),
+                     qlever::specialIds().at(DEFAULT_GRAPH_IRI)}}});
+  });
+  qec->setLocatedTriplesForEvaluation(
+      index.deltaTriplesManager().getCurrentLocatedTriplesSharedState());
+  auto prices = [&I](int from, int to) {
+    std::vector<Id> result;
+    for (int i = from; i <= to; ++i) {
+      result.push_back(I(i));
+    }
+    return result;
+  };
+
+  // A prefilter that selects blocks in the second chunk only. The result
+  // contains the complete blocks (two prices each) that the prefilter cannot
+  // exclude, here and in the following cases.
+  testSetAndMakeScanWithPrefilterExpr(kg, triple, Permutation::POS,
+                                      pr(ge(IntId(1100)), Variable{"?price"}),
+                                      prices(1099, 1200), true);
+
+  // A prefilter that selects blocks across the chunk boundary (between the
+  // prices 1024 and 1025).
+  testSetAndMakeScanWithPrefilterExpr(
+      kg, triple, Permutation::POS,
+      pr(andExpr(gt(IntId(1020)), lt(IntId(1030))), Variable{"?price"}),
+      prices(1021, 1030), true);
+
+  // A second prefilter on the already prefiltered blocks across the boundary.
+  testSetAndMakeScanWithPrefilterExpr(
+      kg, triple, Permutation::POS,
+      pr(andExpr(gt(IntId(1020)), lt(IntId(1030))), Variable{"?price"}),
+      prices(1023, 1026), true,
+      pr(andExpr(gt(IntId(1022)), lt(IntId(1027))), Variable{"?price"}));
+
+  // A prefilter that selects the inserted triple (in the first chunk).
+  testSetAndMakeScanWithPrefilterExpr(kg, triple, Permutation::POS,
+                                      pr(lt(IntId(5)), Variable{"?price"}),
+                                      prices(0, 4), true);
 }
 
 // _____________________________________________________________________________

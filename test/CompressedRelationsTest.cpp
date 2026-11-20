@@ -360,8 +360,8 @@ void testCompressedRelations(const Inputs& inputsOriginalBeforeCopy,
   locatedTriples.consolidateAllBlocks();
   locatedTriples.setOriginalMetadata(blocksOriginal);
   locatedTriples.updateAugmentedMetadata();
-  auto blocks =
-      getBlockMetadataRangesfromVec(locatedTriples.getAugmentedMetadata());
+  auto augmentedMetadata = locatedTriples.getAugmentedMetadataForTesting();
+  auto blocks = getBlockMetadataRangesfromVec(augmentedMetadata);
 
   auto& reader = *readerPtr;
 
@@ -622,8 +622,8 @@ TEST(CompressedRelationWriter, getFirstAndLastTripleWithUpdates) {
   auto testFirstAndLastBlock = [&](ScanSpecification spec, auto matcher,
                                    Loc loc = AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(loc);
-    auto blockMetadata =
-        getBlockMetadataRangesfromVec(locatedTriples.getAugmentedMetadata());
+    auto augmentedMetadata = locatedTriples.getAugmentedMetadataForTesting();
+    auto blockMetadata = getBlockMetadataRangesfromVec(augmentedMetadata);
     auto firstAndLastTriple = readerPtr->getFirstAndLastTripleIgnoringGraph(
         {spec, blockMetadata}, locatedTriples);
     EXPECT_THAT(firstAndLastTriple, matcher);
@@ -1434,10 +1434,11 @@ TEST(CompressedRelationReader, getDistinctCol0IdsWithDeltaTriples) {
                           bool addGraphColumn = false,
                           ScanSpecification::GraphFilter graphFilter =
                               ScanSpecification::GraphFilter::All()) {
+    auto augmentedMetadata = locatedTriples.getAugmentedMetadataForTesting();
     CompressedRelationReader::ScanSpecAndBlocks scanSpecAndBlocks{
         ScanSpecification{std::nullopt, std::nullopt, std::nullopt,
                           makeLocalVocab(), std::move(graphFilter)},
-        getBlockMetadataRangesfromVec(locatedTriples.getAugmentedMetadata())};
+        getBlockMetadataRangesfromVec(augmentedMetadata)};
     return getDistinctCol0Ids(*reader, scanSpecAndBlocks, addGraphColumn,
                               std::nullopt, locatedTriples);
   };
@@ -1686,9 +1687,10 @@ TEST(CompressedRelationReader, getResultSizeOfScanIsCancellable) {
   ASSERT_EQ(blocks.size(), 3);
   auto locatedTriples = makeLocatedTriplesPerBlock(
       blocks, {IdTriple<>{{V(1), V(0), V(17), g}}}, true);
+  auto augmentedMetadata = locatedTriples.getAugmentedMetadataForTesting();
   CompressedRelationReader::ScanSpecAndBlocks scanSpecAndBlocks{
       ScanSpecification{V(1), std::nullopt, std::nullopt},
-      getBlockMetadataRangesfromVec(locatedTriples.getAugmentedMetadata())};
+      getBlockMetadataRangesfromVec(augmentedMetadata)};
 
   // With a handle that is not cancelled, the inserted triple is counted.
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();

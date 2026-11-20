@@ -59,8 +59,10 @@ class QueryId {
 };
 
 // Terminal status of a query, observed at `OwningQueryId` destruction.
-enum class QueryStatus { OK, FAILED, CANCELLED, TIMEOUT };
-QLEVER_ENUM_SIZE(QueryStatus, 4);
+// `REJECTED` means that the query waited longer than `query-queue-max-wait`
+// for a free thread of the query thread pool and was never run.
+enum class QueryStatus { OK, FAILED, CANCELLED, TIMEOUT, REJECTED };
+QLEVER_ENUM_SIZE(QueryStatus, 5);
 
 inline std::string_view toString(QueryStatus s) noexcept {
   using enum QueryStatus;
@@ -73,6 +75,8 @@ inline std::string_view toString(QueryStatus s) noexcept {
       return "cancelled";
     case TIMEOUT:
       return "timeout";
+    case REJECTED:
+      return "rejected";
   }
   return "unknown";
 }

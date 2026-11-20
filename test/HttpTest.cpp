@@ -213,6 +213,31 @@ TYPED_TEST(HttpServerBodyTest, EchoGetNoBody) {
   EXPECT_EQ(toString(std::move(response.body_)), "GET\n/other\n");
 }
 
+// Test that the response to an HTTP/1.0 request is sent exactly once. The body
+// of such a response is not chunked, but delimited by the end of the stream.
+TYPED_TEST(HttpServerBodyTest, Http10ResponseSentOnce) {
+  auto server = makeEchoServer<TypeParam::value>(this->lazyChunkSize);
+  server.runInOwnThread();
+
+  // Send a GET request with HTTP version 1.0 (the `HttpClient` always uses
+  // version 1.1) and read the response until the server closes the connection.
+  boost::asio::io_context ioContext;
+  boost::beast::tcp_stream stream{ioContext};
+  stream.connect(boost::asio::ip::tcp::endpoint{
+      boost::asio::ip::make_address("127.0.0.1"), server.getPort()});
+  http::request<http::empty_body> request{verb::get, "/other", 10};
+  request.set(field::host, "localhost");
+  http::write(stream, request);
+  boost::beast::flat_buffer buffer;
+  http::response<http::string_body> response;
+  http::read(stream, buffer, response);
+
+  // Everything the server sends after the headers is the body, so a second
+  // copy of the response would show up here.
+  EXPECT_EQ(response.result(), status::ok);
+  EXPECT_EQ(response.body(), "GET\n/other\n");
+}
+
 // Body that spans multiple chunks (3 × lazyChunkSize bytes) is echoed in full.
 TYPED_TEST(HttpServerBodyTest, EchoPostMultipleChunks) {
   auto server = makeEchoServer<TypeParam::value>(this->lazyChunkSize);
