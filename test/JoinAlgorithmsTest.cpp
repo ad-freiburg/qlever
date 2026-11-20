@@ -9,9 +9,12 @@
 #include <set>
 
 #include "./util/GTestHelpers.h"
+#include "./util/LocalVocabTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/TransparentFunctors.h"
 #include "util/joinAlgorithms/JoinAlgorithms.h"
+
+using ad_utility::testing::makeLocalVocab;
 
 using namespace ad_utility;
 namespace {
@@ -677,10 +680,10 @@ void testSpecialOptionalJoin(IdNestedBlock a, IdNestedBlock b,
   std::vector<TableWithJoinCols> wrappedA;
   std::vector<TableWithJoinCols> wrappedB;
   for (auto& table : a) {
-    wrappedA.emplace_back(std::move(table), LocalVocab{});
+    wrappedA.emplace_back(std::move(table), makeLocalVocab());
   }
   for (auto& table : b) {
-    wrappedB.emplace_back(std::move(table), LocalVocab{});
+    wrappedB.emplace_back(std::move(table), makeLocalVocab());
   }
 
   ad_utility::specialOptionalJoinForBlocks(

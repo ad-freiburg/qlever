@@ -134,7 +134,7 @@ class IdBase {
   // `canBeComparedBitwise()` below.
   static constexpr std::array<bool, qlever::enumSize<Datatype>>
       isTypeBitwiseComparable_{true, true, true, true, true, false, true,
-                               true, true, true, true, true, true};
+                               true, true, true, true, true, true,  true};
 
   // Constant to be used in `static_assert` statements to indicate that
   // behavior is relying on the local vocab entry to be the only datatype that
@@ -301,6 +301,10 @@ class IdBase {
     return makeFromIndex(index.get(), Datatype::SecondaryVocabIndex);
   }
 
+  static constexpr Derived makeFromTripleTermIndex(TripleTermIndex index) {
+    return makeFromIndex(index.get(), Datatype::TripleTermIndex);
+  }
+
   // Obtain the unsigned index that this `Id` encodes. If `getDatatype()` is not
   // the index type that the respective getter below is named after, then the
   // result is unspecified.
@@ -333,6 +337,10 @@ class IdBase {
   [[nodiscard]] constexpr SecondaryVocabIndex getSecondaryVocabIndex()
       const noexcept {
     return SecondaryVocabIndex::make(derived().getPayloadBits());
+  }
+
+  [[nodiscard]] constexpr TripleTermIndex getTripleTermIndex() const noexcept {
+    return TripleTermIndex::make(derived().getPayloadBits());
   }
 
   // Store or load a `Date` object.
@@ -399,6 +407,8 @@ class IdBase {
         return std::invoke(visitor, getBlankNodeIndex());
       case Datatype::SecondaryVocabIndex:
         return std::invoke(visitor, getSecondaryVocabIndex());
+      case Datatype::TripleTermIndex:
+        return std::invoke(visitor, getTripleTermIndex());
     }
     AD_FAIL();
   }

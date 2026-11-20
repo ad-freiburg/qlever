@@ -17,7 +17,9 @@ namespace updateClause {
 struct UpdateTriples {
   using Vec = std::vector<SparqlTripleSimpleWithGraph>;
   Vec triples_{};
-  LocalVocab localVocab_{};
+  // The parser has no access to the allocator of the query, but the size of
+  // the local vocab is bounded by the size of the update.
+  LocalVocab localVocab_{ad_utility::makeUnlimitedAllocator<Id>()};
 
   // Constructors
   UpdateTriples() = default;

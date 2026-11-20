@@ -304,7 +304,7 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
     auto Id = ad_utility::testing::makeGetId(qec->getIndex());
     defaultGraphId = Id(std::string{DEFAULT_GRAPH_IRI});
 
-    LocalVocab localVocab;
+    LocalVocab localVocab{ad_utility::testing::makeAllocator()};
     auto LVI = [&localVocab, qec](std::string_view iri) {
       return Id::makeFromLocalVocabIndex(
           localVocab.getIndexAndAddIfNotContained(

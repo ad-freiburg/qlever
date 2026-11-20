@@ -190,7 +190,7 @@ Result::Generator TransitivePathBase::fillTableWithHullImpl(
   ad_utility::Timer timer{ad_utility::Timer::Stopped};
   size_t outputRow = 0;
   IdTableStatic<OUTPUT_WIDTH> table{getResultWidth(), allocator()};
-  LocalVocab mergedVocab{};
+  LocalVocab mergedVocab{allocator()};
   for (auto& [node, graph, linkedNodes, localVocab, idTable, inputRow] : hull) {
     timer.cont();
     // As an optimization nodes without any linked nodes should not get yielded
@@ -244,8 +244,8 @@ Result::Generator TransitivePathBase::fillTableWithHullImpl(
 }
 
 // _____________________________________________________________________________
-std::string TransitivePathBase::getCacheKeyImpl() const {
-  std::ostringstream os;
+qlm::string TransitivePathBase::getCacheKeyImpl() const {
+  qlm::ostringstream os{allocator()};
   os << "TRANSITIVE PATH ";
   if (graphVariable_.has_value()) {
     os << "with graph " << graphVariable_.value().name() << ' ';
@@ -259,10 +259,10 @@ std::string TransitivePathBase::getCacheKeyImpl() const {
   os << "minDist " << minDist_ << " maxDist " << maxDist_ << "\n";
 
   os << "Left side:\n";
-  os << lhs_.getCacheKey();
+  os << lhs_.getCacheKey(allocator());
 
   os << "Right side:\n";
-  os << rhs_.getCacheKey();
+  os << rhs_.getCacheKey(allocator());
 
   os << "Subtree:\n" << subtree_->getCacheKey() << '\n';
 

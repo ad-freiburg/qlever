@@ -291,6 +291,10 @@ std::shared_ptr<QueryExecutionTree> QueryPlanner::createExecutionTree(
 
 // _____________________________________________________________________________
 SubtreePlanVec QueryPlanner::optimize(ParsedQuery::GraphPattern* rootPattern) {
+  // Split each FILTER with a conjunct that is a fact (e.g. a maximum
+  // distance) into its conjuncts, so that the fact can be rewritten on its
+  // own (e.g. to a `SpatialJoin`).
+  splitFiltersWithFacts(rootPattern->_filters);
   QueryPlanner::GraphPatternPlanner optimizer{*this, rootPattern};
   for (auto& child : rootPattern->_graphPatterns) {
     child.visit([&optimizer](auto& arg) {
@@ -3541,8 +3545,8 @@ void QueryPlanner::GraphPatternPlanner::visitSpatialSearch(
     // This helper function adds a subtree plan to the output candidates, which
     // either has the child graph pattern as a right child or no child at all.
     // If it has no child at all, the query planner may look for the right child
-    // of the SpatialJoin outside of the SERVICE. This is only allowed for max
-    // distance joins.
+    // of the SpatialJoin outside of the SERVICE. This is allowed for all joins
+    // except for nearest neighbors joins.
     auto addCandidateSpatialJoin = [this, &sub, &config,
                                     &candidatesOut](bool rightVarOutside) {
       std::optional<std::shared_ptr<QueryExecutionTree>> right = std::nullopt;
@@ -3559,10 +3563,12 @@ void QueryPlanner::GraphPatternPlanner::visitSpatialSearch(
       // The version using the child graph pattern
       addCandidateSpatialJoin(false);
     } else {
-      // The version without using the child graph pattern
-      if (std::holds_alternative<MaxDistanceConfig>(config.task_)) {
-        addCandidateSpatialJoin(true);
-      }
+      // The version without using the child graph pattern (a nearest neighbors
+      // search without child graph pattern is already rejected by
+      // `SpatialQuery::toSpatialJoinConfiguration`).
+      AD_CORRECTNESS_CHECK(
+          !std::holds_alternative<NearestNeighborsConfig>(config.task_));
+      addCandidateSpatialJoin(true);
     }
   }
   visitGroupOptionalOrMinus(std::move(candidatesOut));

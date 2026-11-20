@@ -62,12 +62,15 @@ qlm::vector<QueryExecutionTree*> CartesianProductJoin::getChildrenImpl() const {
 }
 
 // ____________________________________________________________________________
-std::string CartesianProductJoin::getCacheKeyImpl() const {
-  return "CARTESIAN PRODUCT JOIN " +
-         ad_utility::lazyStrJoin(
-             ql::views::transform(
-                 childView(), [](auto& child) { return child.getCacheKey(); }),
-             " ");
+qlm::string CartesianProductJoin::getCacheKeyImpl() const {
+  qlm::ostringstream os{allocator()};
+  os << "CARTESIAN PRODUCT JOIN ";
+  ad_utility::lazyStrJoin(
+      &os,
+      ql::views::transform(childView(),
+                           [](auto& child) { return child.getCacheKey(); }),
+      " ");
+  return std::move(os).str();
 }
 
 // ____________________________________________________________________________
@@ -146,11 +149,11 @@ void CartesianProductJoin::writeResultColumn(IdColumnRef targetColumn,
 Result CartesianProductJoin::computeResult(bool requestLaziness) {
   if (knownEmptyResult()) {
     return {IdTable{getResultWidth(), getExecutionContext()->getAllocator()},
-            resultSortedOn(), LocalVocab{}};
+            resultSortedOn(), LocalVocab{allocator()}};
   }
   auto [subResults, lazyResult] = calculateSubResults(requestLaziness);
 
-  LocalVocab staticMergedVocab{};
+  LocalVocab staticMergedVocab{allocator()};
   staticMergedVocab.mergeWith(
       subResults |
       ql::views::transform([](const auto& result) -> const LocalVocab& {

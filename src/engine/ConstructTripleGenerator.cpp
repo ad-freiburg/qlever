@@ -110,7 +110,8 @@ InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
     InputRangeTypeErased<TableWithRange> rowIndices, size_t rowOffset,
     const EvaluationConfig& config) {
   auto preprocessedTemplate = ConstructTemplatePreprocessor::preprocess(
-      templateTriples, variableColumns, config.index_);
+      templateTriples, variableColumns, config.index_,
+      config.qec_.get().getAllocator());
   IdCache cache = makeIdCache(preprocessedTemplate);
 
   const QueryExecutionContext& qec = config.qec_;
