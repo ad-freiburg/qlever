@@ -15,12 +15,13 @@
 #include <string_view>
 #include <variant>
 
+#include "./AllocatorTestHelpers.h"
 #include "global/Id.h"
 #include "index/LocalVocab.h"
 #include "index/LocalVocabContext.h"
 #include "index/LocalVocabEntry.h"
 #include "index/TripleComponentConversions.h"
-#include "parser/LiteralOrIri.h"
+#include "rdfTypes/LiteralOrIri.h"
 #include "util/Exception.h"
 
 namespace ad_utility::testing {
@@ -75,8 +76,8 @@ inline LocalVocabEntry localVocabEntryFromStringRepresentation(
 // by default, the tests for both layouts of an `Id` pass it explicitly.
 template <typename IdType = Id>
 auto makeGetLocalVocabId() {
-  return [localVocab =
-              std::make_shared<LocalVocab>()](const LocalVocabEntry& entry) {
+  return [localVocab = std::make_shared<LocalVocab>(makeAllocator())](
+             const LocalVocabEntry& entry) {
     return IdType::makeFromLocalVocabIndex(
         localVocab->getIndexAndAddIfNotContained(entry));
   };
