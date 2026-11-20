@@ -13,7 +13,9 @@
 #include <sys/resource.h>
 
 #include <algorithm>
+#include <cerrno>
 #include <csignal>
+#include <cstring>
 #include <fstream>
 #include <string>
 #include <vector>
@@ -503,13 +505,14 @@ TEST(FilesystemHelpers, readFileIntoBufferFailures) {
       HasSubstr("expected 10 bytes, but read 3"));
 
   // A directory can be opened on Linux, but reading from it fails (with
-  // `EISDIR`), so `pread` returns a negative value. On other platforms, the
-  // opening may already fail.
+  // `EISDIR`), so `pread` returns a negative value, the reason of which is
+  // reported. On other platforms, the opening may already fail.
   std::vector<char> oneByte(1);
 #ifdef __linux__
   AD_EXPECT_THROW_WITH_MESSAGE(
       qlever::util::detail::readFileIntoBuffer(dir.path(), oneByte),
-      HasSubstr("Could not read the complete file"));
+      ::testing::AllOf(HasSubstr("Could not read the file"),
+                       HasSubstr(std::strerror(EISDIR))));
 #else
   EXPECT_ANY_THROW(
       qlever::util::detail::readFileIntoBuffer(dir.path(), oneByte));
@@ -521,7 +524,8 @@ TEST(FilesystemHelpers, readFileIntoBufferFailures) {
 // target nor a temporary file behind. The failure is provoked by lowering the
 // limit of the file size (`RLIMIT_FSIZE`) of this process, so that the `write`
 // fails with `EFBIG` (the signal `SIGXFSZ` that is raised in this case is
-// ignored, as it would otherwise terminate the process).
+// ignored, as it would otherwise terminate the process). The reason of the
+// failure is part of the message.
 TEST(FilesystemHelpers, writeFileAtomicallyWriteFailure) {
   TempDir dir;
   auto file = dir.path() / "file";
@@ -540,8 +544,104 @@ TEST(FilesystemHelpers, writeFileAtomicallyWriteFailure) {
 
   AD_EXPECT_THROW_WITH_MESSAGE(
       writeFileAtomically(file, std::vector<char>(100, 'x')),
-      HasSubstr("Could not write the file"));
+      ::testing::AllOf(HasSubstr("Could not write the file"),
+                       HasSubstr(std::strerror(EFBIG))));
   std::move(restore).Invoke();
 
   EXPECT_TRUE(entryNames(dir.path()).empty());
+}
+
+// Test that `writeFileAtomically` works for a file name of the maximal length,
+// for which the name of the temporary file has to be shortened.
+TEST(FilesystemHelpers, writeFileAtomicallyLongFilename) {
+  TempDir dir;
+  std::string filename(255, 'a');
+  auto file = dir.path() / filename;
+  writeFileAtomically(file, [](const fs::path& temporaryPath) {
+    EXPECT_LE(temporaryPath.filename().string().size(), 255u);
+    EXPECT_THAT(temporaryPath.filename().string(), ::testing::EndsWith(".tmp"));
+    ad_utility::makeOfstream(temporaryPath) << "content";
+  });
+  EXPECT_EQ(readBinaryFile<std::string>(file), "content");
+  EXPECT_THAT(entryNames(dir.path()), ::testing::ElementsAre(filename));
+}
+
+// Test that `writeFileAtomically` and `copyFileAtomically` write to the file
+// that a symbolic link points to (and keep the link), and that `readBinaryFile`
+// reads through a symbolic link.
+TEST(FilesystemHelpers, symbolicLinks) {
+  TempDir dir;
+  auto real = dir.path() / "real";
+  auto link = dir.path() / "link";
+  auto linkToLink = dir.path() / "linkToLink";
+  writeFileAtomically(real, std::string{"original"});
+  // A relative link, which is resolved relative to its directory.
+  fs::create_symlink("real", link);
+  fs::create_symlink(link, linkToLink);
+  EXPECT_EQ(readBinaryFile<std::string>(linkToLink), "original");
+
+  writeFileAtomically(linkToLink, std::string{"new"});
+  EXPECT_TRUE(fs::is_symlink(link));
+  EXPECT_TRUE(fs::is_symlink(linkToLink));
+  EXPECT_EQ(readBinaryFile<std::string>(real), "new");
+
+  auto source = dir.path() / "source";
+  writeFileAtomically(source, std::string{"copied"});
+  copyFileAtomically(source, link);
+  EXPECT_TRUE(fs::is_symlink(link));
+  EXPECT_EQ(readBinaryFile<std::string>(real), "copied");
+  EXPECT_THAT(entryNames(dir.path()),
+              ::testing::ElementsAre("link", "linkToLink", "real", "source"));
+
+  // A dangling link cannot be read, but writing to it creates its target.
+  auto dangling = dir.path() / "dangling";
+  fs::create_symlink("target", dangling);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      readBinaryFile(dangling),
+      HasSubstr("does not exist or is not a regular file"));
+  writeFileAtomically(dangling, std::string{"created"});
+  EXPECT_TRUE(fs::is_symlink(dangling));
+  EXPECT_EQ(readBinaryFile<std::string>(dir.path() / "target"), "created");
+
+  // A cycle of links is reported.
+  fs::create_symlink("cycleB", dir.path() / "cycleA");
+  fs::create_symlink("cycleA", dir.path() / "cycleB");
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      writeFileAtomically(dir.path() / "cycleA", std::string{"x"}),
+      HasSubstr("too many levels of symbolic links"));
+}
+
+// Test that a file that is replaced by `writeFileAtomically` keeps its
+// permissions.
+TEST(FilesystemHelpers, writeFileAtomicallyKeepsPermissions) {
+  TempDir dir;
+  auto file = dir.path() / "file";
+  writeFileAtomically(file, std::string{"first"});
+  const auto ownerOnly = fs::perms::owner_read | fs::perms::owner_write;
+  fs::permissions(file, ownerOnly);
+  writeFileAtomically(file, std::string{"second"});
+  EXPECT_EQ(fs::status(file).permissions(), ownerOnly);
+  EXPECT_EQ(readBinaryFile<std::string>(file), "second");
+}
+
+// Test that the exception of a failing callback is propagated (and the process
+// is not terminated), also if the temporary file cannot be removed because the
+// directory is not writable. (When the test runs as `root`, the removal
+// succeeds anyway.)
+TEST(FilesystemHelpers, writeFileAtomicallyFailingRemovalOfTemporaryFile) {
+  TempDir dir;
+  auto subdir = dir.path() / "subdir";
+  fs::create_directory(subdir);
+  absl::Cleanup restorePermissions = [&subdir] {
+    fs::permissions(subdir, fs::perms::owner_all);
+  };
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      writeFileAtomically(subdir / "file",
+                          [&subdir](const fs::path& temporaryPath) {
+                            ad_utility::makeOfstream(temporaryPath) << "x";
+                            fs::permissions(subdir, fs::perms::owner_read |
+                                                        fs::perms::owner_exec);
+                            throw std::runtime_error{"callback failed"};
+                          }),
+      HasSubstr("callback failed"));
 }

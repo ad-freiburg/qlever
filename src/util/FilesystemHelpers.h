@@ -68,14 +68,14 @@ std::vector<ql::filesystem::path> directoriesWithPrefix(
 bool isSubdirectoryOf(const std::string& path1, const std::string& path2);
 
 namespace detail {
-// Return the size of the file `path` in bytes. Throw if `path` does not exist
-// or is not a regular file (a directory, for example, can be opened like a
-// file, but its reported size is meaningless).
+// Return the size of the file `path` in bytes. Symbolic links are followed.
+// Throw if `path` does not exist or is not a regular file (a directory, for
+// example, can be opened like a file, but its reported size is meaningless).
 size_t sizeOfRegularFile(const ql::filesystem::path& path);
 
 // Read exactly `buffer.size()` bytes from the beginning of the file `path` into
-// `buffer`. Throw if the file cannot be opened or read, or if it holds fewer
-// bytes.
+// `buffer`. Throw if the file cannot be opened or read (with the reason in the
+// message), or if it holds fewer bytes.
 void readFileIntoBuffer(const ql::filesystem::path& path,
                         ql::span<char> buffer);
 }  // namespace detail
@@ -87,9 +87,9 @@ void readFileIntoBuffer(const ql::filesystem::path& path,
 // determined up front, so the bytes are read with a single allocation and
 // without a byte-wise copy; with an allocator that default-initializes (see
 // `ad_utility::default_init_allocator`) the buffer is also not zeroed before it
-// is overwritten. Throw if `path` does not exist, is not a regular file, or
-// cannot be read completely (for example because it is truncated while it is
-// being read).
+// is overwritten. Symbolic links are followed. Throw if `path` does not exist,
+// is not a regular file (or a symbolic link to one), or cannot be read
+// completely (for example because it is truncated while it is being read).
 template <typename Container = std::vector<char>>
 Container readBinaryFile(const ql::filesystem::path& path,
                          typename Container::allocator_type allocator = {}) {
@@ -103,17 +103,23 @@ Container readBinaryFile(const ql::filesystem::path& path,
 }
 
 // Create the file `path` atomically: call `writeTemporaryFile` with the path of
-// a temporary file in the same directory (the name of which consists of `path`,
-// a random UUID, and the suffix `.tmp`, so that concurrent writers of the same
-// `path` do not collide), which has to create that file, and then rename the
-// temporary file to `path`. An existing file `path` is replaced. If
-// `writeTemporaryFile` or the renaming throws, the temporary file is removed,
-// `path` is left unchanged, and the exception is propagated.
+// a temporary file in the same directory, which has to create that file, and
+// then rename the temporary file to `path`. The name of the temporary file
+// consists of the file name of `path` (shortened if necessary, so that the name
+// does not exceed the maximal length of a file name), a random component (so
+// that concurrent writers of the same `path` do not collide), and the suffix
+// `.tmp`. If `path` is a symbolic link, the file it (finally) points to is
+// written instead, so that the link is kept. An existing file is replaced and
+// keeps its permissions. If `writeTemporaryFile` or the renaming throws, the
+// temporary file is removed, the file is left unchanged, and the exception is
+// propagated.
 //
-// NOTE: The data is not explicitly synced to disk (no `fsync`), so the
-// replacement is atomic with respect to other processes and to crashes of this
-// process, but not necessarily with respect to a crash of the operating
-// system.
+// NOTE: The replacement creates a new file, which requires write permission on
+// the directory of the file, and which neither keeps the owner nor the hard
+// links of a replaced file. The data is not explicitly synced to disk (no
+// `fsync`), so the replacement is atomic with respect to other processes and to
+// crashes of this process, but not necessarily with respect to a crash of the
+// operating system.
 void writeFileAtomically(
     const ql::filesystem::path& path,
     absl::FunctionRef<void(const ql::filesystem::path& temporaryPath)>
@@ -121,7 +127,8 @@ void writeFileAtomically(
 
 // Write `bytes` atomically to `path` (via a temporary file, see the overload
 // above). An existing file `path` is replaced. Throw if the file cannot be
-// written.
+// opened, written, or closed, with the reason (e.g. a full disk) in the
+// message.
 void writeFileAtomically(const ql::filesystem::path& path,
                          ql::span<const char> bytes);
 
