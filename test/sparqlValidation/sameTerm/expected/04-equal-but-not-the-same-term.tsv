@@ -1,0 +1,17 @@
+?a	?b
+<http://example.org/booleanOne>	<http://example.org/booleanTrue>
+<http://example.org/decimal>	<http://example.org/double>
+<http://example.org/decimal>	<http://example.org/int>
+<http://example.org/decimal>	<http://example.org/integer>
+<http://example.org/decimal>	<http://example.org/integerAgain>
+<http://example.org/decimal>	<http://example.org/integerWithLeadingZero>
+<http://example.org/double>	<http://example.org/int>
+<http://example.org/double>	<http://example.org/integer>
+<http://example.org/double>	<http://example.org/integerAgain>
+<http://example.org/double>	<http://example.org/integerWithLeadingZero>
+<http://example.org/doubleNegativeZero>	<http://example.org/doubleZero>
+<http://example.org/int>	<http://example.org/integer>
+<http://example.org/int>	<http://example.org/integerAgain>
+<http://example.org/int>	<http://example.org/integerWithLeadingZero>
+<http://example.org/integer>	<http://example.org/integerWithLeadingZero>
+<http://example.org/integerAgain>	<http://example.org/integerWithLeadingZero>

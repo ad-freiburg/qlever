@@ -1,0 +1,7 @@
+?a	?b
+<http://example.org/blankNode>	<http://example.org/blankNodeAgain>
+<http://example.org/integer>	<http://example.org/integerAgain>
+<http://example.org/iri>	<http://example.org/iriAgain>
+<http://example.org/string>	<http://example.org/stringAgain>
+<http://example.org/string>	<http://example.org/xsdString>
+<http://example.org/stringAgain>	<http://example.org/xsdString>

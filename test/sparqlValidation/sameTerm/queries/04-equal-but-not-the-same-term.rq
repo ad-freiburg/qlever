@@ -1,0 +1,8 @@
+# Pairs of terms that are equal (`=`) but not the same term.
+PREFIX : <http://example.org/>
+SELECT ?a ?b WHERE {
+  ?a :p ?x .
+  ?b :p ?y .
+  FILTER (?x = ?y && !sameTerm(?x, ?y) && STR(?a) < STR(?b))
+}
+ORDER BY ?a ?b
