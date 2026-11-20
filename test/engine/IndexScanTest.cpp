@@ -1245,7 +1245,7 @@ TEST(IndexScan, checkEvaluationWithPrefilteringOnSeveralChunks) {
   auto& index = const_cast<Index&>(qec->getIndex());
   auto getId = ad_utility::testing::makeGetId(index);
   index.deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
-    LocalVocab localVocab;
+    LocalVocab localVocab = makeLocalVocab();
     Id p0 = Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
         iriLocalVocabEntry("<P0>", index.getLocalVocabContext())));
     deltaTriples.insertTriples(
