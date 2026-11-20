@@ -14,7 +14,10 @@
 #include <boost/asio/thread_pool.hpp>
 #include <boost/asio/use_future.hpp>
 #include <future>
+#include <optional>
+#include <set>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 #include "../../util/AllocatorTestHelpers.h"
@@ -226,4 +229,97 @@ TEST(AsyncIdTablePusher, completionHandlerRunsOnItsExecutor) {
   auto future = pusher.asyncPushBlock(
       viewOf(table), net::bind_executor(handlerExecutor, std::move(task)));
   EXPECT_TRUE(future.get());
+}
+
+// _____________________________________________________________________________
+TEST(AsyncIdTablePusher, sinkThatRecyclesBlocks) {
+  auto alloc = ad_utility::testing::makeAllocator();
+  net::thread_pool pool{4};
+  constexpr size_t blocksize = 64;
+  // The sink keeps the block that it was handed last, and hands back the one
+  // before (like the sorter, which hands back the block that its background
+  // thread is done with). It records the contents of each block and the
+  // address of its first column. NOTE: The sink runs on the strand of the
+  // pusher, so its state needs no further synchronization.
+  IdTable actual{3, alloc};
+  std::set<const Id*> buffers;
+  std::optional<IdTableStatic<0>> previous;
+  size_t numBlocks = 0;
+  Pusher pusher{pool.get_executor(), 3, blocksize, alloc,
+                [&](IdTableStatic<0> block) -> std::optional<IdTableStatic<0>> {
+                  EXPECT_EQ(block.numRows(), blocksize);
+                  ++numBlocks;
+                  buffers.insert(block.getColumn(0).data());
+                  actual.insertAtEnd(block);
+                  return std::exchange(previous, std::move(block));
+                }};
+  auto tables = makeTables(8, 3);
+  for (auto& future : pushConcurrently(pusher, tables)) {
+    future.get();
+  }
+  actual.insertAtEnd(pusher.finish());
+
+  IdTable expected{3, alloc};
+  for (const auto& table : tables) {
+    expected.insertAtEnd(table);
+  }
+  EXPECT_EQ(sortedRows(actual), sortedRows(expected));
+  // The first block is allocated by the constructor, the second one after the
+  // sink has handed back nothing, and from then on the two blocks alternate.
+  // NOTE: Both blocks stay alive (one in the pusher, one in `previous`), so
+  // a fresh allocation can never have the address of one of them.
+  ASSERT_GT(numBlocks, 2u);
+  EXPECT_EQ(buffers.size(), 2u);
+}
+
+// _____________________________________________________________________________
+TEST(AsyncIdTablePusher, recycledBlockWithWrongNumberOfColumnsIsIgnored) {
+  auto alloc = ad_utility::testing::makeAllocator();
+  net::thread_pool pool{4};
+  constexpr size_t blocksize = 16;
+  IdTable actual{2, alloc};
+  size_t numBlocks = 0;
+  // The sink hands back a nonempty block with a different number of columns,
+  // which the pusher must not use as its next block.
+  Pusher pusher{pool.get_executor(), 2, blocksize, alloc,
+                [&](IdTableStatic<0> block) -> std::optional<IdTableStatic<0>> {
+                  EXPECT_EQ(block.numRows(), blocksize);
+                  ++numBlocks;
+                  actual.insertAtEnd(block);
+                  return createRandomlyFilledIdTable(5, 3).toStatic<0>();
+                }};
+  auto tables = makeTables(4, 2);
+  for (auto& future : pushConcurrently(pusher, tables)) {
+    future.get();
+  }
+  auto remainder = pusher.finish();
+  EXPECT_EQ(remainder.numColumns(), 2u);
+  actual.insertAtEnd(remainder);
+
+  IdTable expected{2, alloc};
+  for (const auto& table : tables) {
+    expected.insertAtEnd(table);
+  }
+  EXPECT_GT(numBlocks, 0u);
+  EXPECT_EQ(sortedRows(actual), sortedRows(expected));
+}
+
+// _____________________________________________________________________________
+TEST(AsyncIdTablePusher, sinkThatReturnsNothing) {
+  // A sink that has the signature of `Pusher::Sink`, but never hands back a
+  // block, behaves like a sink that returns `void`.
+  auto alloc = ad_utility::testing::makeAllocator();
+  net::thread_pool pool{2};
+  size_t numBlocks = 0;
+  Pusher pusher{pool.get_executor(), 2, 10, alloc,
+                Pusher::Sink{[&numBlocks](IdTableStatic<0> block)
+                                 -> std::optional<IdTableStatic<0>> {
+                  EXPECT_EQ(block.numRows(), 10u);
+                  ++numBlocks;
+                  return std::nullopt;
+                }}};
+  auto table = createRandomlyFilledIdTable(25, 2);
+  pusher.asyncPushBlock(viewOf(table), net::use_future).get();
+  EXPECT_EQ(numBlocks, 2u);
+  EXPECT_EQ(pusher.finish().numRows(), 5u);
 }
