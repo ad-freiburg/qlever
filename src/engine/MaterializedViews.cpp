@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <ctre-unicode.hpp>
 #include <memory>
 #include <nlohmann/json.hpp>
 #include <optional>
