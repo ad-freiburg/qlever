@@ -21,7 +21,9 @@ qlever_target_link_libraries(qlever_util antlrErrorHandling s2 pb_util pb_util_g
 
 # The ZSTD helpers for frames that consist of independently compressed
 # segments, see `compressionUsingZstd/SegmentedZstdFrame.h`.
-add_library(zstdHelpers compressionUsingZstd/ZstdFrameFormat.cpp
+add_library(zstdHelpers compressionUsingZstd/ZstdFrameHeader.cpp
+        compressionUsingZstd/ZstdFrameBlocks.cpp
+        compressionUsingZstd/ZstdSkippableFrame.cpp
         compressionUsingZstd/ZstdHandWrittenBlocks.cpp
         compressionUsingZstd/ZstdIndependentUnit.cpp
         compressionUsingZstd/SegmentedZstdFrame.cpp)

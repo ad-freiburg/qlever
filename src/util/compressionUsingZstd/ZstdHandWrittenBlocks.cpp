@@ -15,7 +15,7 @@
 #include <algorithm>
 
 #include "util/Exception.h"
-#include "util/compressionUsingZstd/ZstdFrameFormat.h"
+#include "util/compressionUsingZstd/ZstdFrameBlocks.h"
 
 namespace ad_utility::zstd {
 

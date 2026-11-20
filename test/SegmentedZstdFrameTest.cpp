@@ -16,7 +16,7 @@
 
 #include "backports/algorithm.h"
 #include "util/compressionUsingZstd/SegmentedZstdFrame.h"
-#include "util/compressionUsingZstd/ZstdFrameFormat.h"
+#include "util/compressionUsingZstd/ZstdFrameBlocks.h"
 #include "util/compressionUsingZstd/ZstdWrapper.h"
 
 using namespace ad_utility::zstd;
@@ -283,8 +283,8 @@ TEST(SegmentedZstdFrame, readRejectsInvalidInput) {
   // Bit 4 of the frame header descriptor (byte 4) is unused, ZSTD ignores it.
   constexpr size_t descriptorByte = 4;
   for (size_t i = 0; i < compressed.size(); ++i) {
-    if ((i >= singleSegmentFrameHeaderSize && i < frameSize) || isHashByte(i) ||
-        i == descriptorByte) {
+    if ((i >= SingleSegmentFrame::headerSize && i < frameSize) ||
+        isHashByte(i) || i == descriptorByte) {
       continue;
     }
     auto corrupted = compressed;

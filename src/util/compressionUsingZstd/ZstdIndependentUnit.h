@@ -19,7 +19,8 @@
 // An "independent unit" is a sequence of ZSTD blocks that encodes some data
 // such that the blocks can be put into any ZSTD frame at any position where
 // the decoder is in the state of a frame start, and also be decompressed on
-// their own (see `decompressBlocks` in `ZstdFrameFormat.h`).
+// their own (see `SingleSegmentFrame::decompressBlocks` in
+// `ZstdFrameBlocks.h`).
 //
 // A compressed block of a ZSTD frame may depend on the state of the decoder
 // after the previous blocks: (1) the window of the previous output, (2) the

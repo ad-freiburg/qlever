@@ -17,8 +17,10 @@
 #include "backports/algorithm.h"
 #include "util/CryptographicHashUtils.h"
 #include "util/Exception.h"
-#include "util/compressionUsingZstd/ZstdFrameFormat.h"
+#include "util/compressionUsingZstd/ZstdFrameBlocks.h"
+#include "util/compressionUsingZstd/ZstdFrameHeader.h"
 #include "util/compressionUsingZstd/ZstdIndependentUnit.h"
+#include "util/compressionUsingZstd/ZstdSkippableFrame.h"
 #include "util/serializer/ByteBufferSerializer.h"
 
 namespace ad_utility::zstd {
@@ -229,7 +231,7 @@ std::optional<UninitializedBuffer> SegmentedFrame::decompressUnit(
   const uint64_t size = segmentBegin(firstSegmentOfUnit(u + 1)) -
                         segmentBegin(firstSegmentOfUnit(u));
   UninitializedBuffer result(size);
-  if (!decompressBlocks(unitBlocks(u), size, result)) {
+  if (!SingleSegmentFrame::decompressBlocks(unitBlocks(u), size, result)) {
     return std::nullopt;
   }
   return result;
@@ -239,7 +241,7 @@ std::optional<UninitializedBuffer> SegmentedFrame::decompressUnit(
 SegmentedFrameBuilder::SegmentedFrameBuilder(int compressionLevel)
     : compressionLevel_{compressionLevel} {
   // The content size is not known yet, it is written by `finish`.
-  appendSingleSegmentFrameHeader(frame_, 0);
+  SingleSegmentFrame::appendHeader(frame_, 0);
 }
 
 // _____________________________________________________________________________
@@ -345,7 +347,7 @@ std::vector<char> SegmentedFrameBuilder::finish() && {
   }
   setLastBlockFlag(frame_, lastBlockHeader_.value(), true);
   std::vector<char> header;
-  appendSingleSegmentFrameHeader(header, contentSize_);
+  SingleSegmentFrame::appendHeader(header, contentSize_);
   ql::ranges::copy(header, frame_.begin());
   appendIndexFrame(frame_, index_);
   return std::move(frame_);

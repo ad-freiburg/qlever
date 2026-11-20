@@ -18,7 +18,7 @@
 
 #include "backports/algorithm.h"
 #include "util/Exception.h"
-#include "util/compressionUsingZstd/ZstdFrameFormat.h"
+#include "util/compressionUsingZstd/ZstdFrameBlocks.h"
 #include "util/compressionUsingZstd/ZstdHandWrittenBlocks.h"
 #include "util/compressionUsingZstd/ZstdWrapper.h"
 
@@ -127,7 +127,7 @@ void checkEndsInStartState(ql::span<const char> data,
   for (uint32_t seed : {1u, 2u}) {
     std::string probe = makeProbe(seed);
     std::vector<char> frame;
-    appendSingleSegmentFrameHeader(frame, expected.size() + probe.size());
+    SingleSegmentFrame::appendHeader(frame, expected.size() + probe.size());
     appendRawBlocks(frame, expected.first(8));
     frame.insert(frame.end(), tailBlocks.begin(), tailBlocks.end());
     appendCompressedBlocks(frame, probe, seed == 1 ? 1 : 3, true);
