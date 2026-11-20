@@ -328,7 +328,7 @@ FetchContent_Declare(
 FetchContent_Declare(
         spatialjoin
         GIT_REPOSITORY https://github.com/ad-freiburg/spatialjoin
-        GIT_TAG 74f526a2f06a107d5c151bcf076802505c1a28ce
+        GIT_TAG 17a7cfd817e1189a8a27562a03e176cda98ae872
         SYSTEM
         EXCLUDE_FROM_ALL
 )
@@ -933,6 +933,23 @@ endif ()
 option(COVERAGE_FRIENDLY_CHECKS "Evaluate the conditions of `AD_CORRECTNESS_CHECK` in a way that is friendlier to coverage measurements" OFF)
 if (COVERAGE_FRIENDLY_CHECKS)
     add_compile_definitions(QLEVER_COVERAGE_FRIENDLY_CHECKS)
+endif ()
+
+# Use the `SplitLayoutId` (a full 64-bit payload and a datatype byte) instead of
+# the legacy `ValueId` as `Id`, see `src/global/Id.h`.
+# TODO<pas-kes> Make this an `option()` once the split layout is usable.
+if (USE_SPLIT_LAYOUT)
+    message(WARNING "USE_SPLIT_LAYOUT is experimental and not usable yet")
+    add_compile_definitions(QLEVER_USE_SPLIT_LAYOUT)
+    # `LocalVocabEntry` caches its position in the vocabulary in atomics of the
+    # bit representation of an `Id`, which has 16 bytes in the split layout.
+    # On Linux (for example with GCC), atomics of 16 bytes are calls into
+    # `libatomic`. Apple Clang inlines them, so no library is needed there.
+    # This is only needed until these atomics are replaced (see the TODO at
+    # `LocalVocabEntry::lowerBoundInVocab_`).
+    if (NOT APPLE)
+        link_libraries(atomic)
+    endif ()
 endif ()
 
 ##################################################

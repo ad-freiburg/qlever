@@ -973,6 +973,11 @@ Operation::pushDownBindToChild(
   auto& child = children.at(childIndex);
   AD_CORRECTNESS_CHECK(child != nullptr);
 
+  // Refuse a `BIND` of a constant (see the header).
+  if (bind._expression.getConstantValue().has_value()) {
+    return std::nullopt;
+  }
+
   // Return true iff any of the `children` (except the one at `excludedIndex`,
   // if given) contains `var`. Compare by position, not by identity: the same
   // tree might be used twice.

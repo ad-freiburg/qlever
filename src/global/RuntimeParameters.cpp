@@ -33,6 +33,7 @@ RuntimeParameters::RuntimeParameters() {
   add(lazyIndexScanNumBlocksInFlight_);
   add(maxNumThreadsPerQuery_);
   add(rebuildIndexMaxNumThreads_);
+  add(backgroundThreadSharePercent_);
   add(rebuildMaxConcurrentPermutationPairs_);
   add(queryQueueMaxWait_);
   add(queryQueueFullStatusCode_);
@@ -78,6 +79,8 @@ RuntimeParameters::RuntimeParameters() {
   add(disableCaching_);
   add(logLevel_);
   add(constructDeduplication_);
+  add(binaryServiceEnabled_);
+  add(serviceMaxBinaryBatchSize_);
 
 #ifdef QLEVER_HAS_REFLECTION
   // Check that all the parameters above were added. Without reflection, this
@@ -144,6 +147,17 @@ RuntimeParameters::RuntimeParameters() {
               "Parameter ", parameterName,
               " must be a known HTTP status code of class 4xx or 5xx, was ",
               value)};
+        }
+      });
+
+  // The share of the background class must be a proper percentage.
+  backgroundThreadSharePercent_.setParameterConstraint(
+      [](double value, std::string_view parameterName) {
+        // NOTE: The negated form also rejects NaN.
+        if (!(value > 0 && value < 100)) {
+          throw std::runtime_error{
+              absl::StrCat("Parameter ", parameterName,
+                           " must be strictly between 0 and 100, was ", value)};
         }
       });
 }

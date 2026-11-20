@@ -18,6 +18,7 @@
 #include "backports/three_way_comparison.h"
 #include "backports/type_traits.h"
 #include "util/CancellationHandle.h"
+#include "util/EnumSize.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
 #include "util/Synchronized.h"
@@ -61,6 +62,7 @@ class QueryId {
 // `REJECTED` means that the query waited longer than `query-queue-max-wait`
 // for a free thread of the query thread pool and was never run.
 enum class QueryStatus { OK, FAILED, CANCELLED, TIMEOUT, REJECTED };
+QLEVER_ENUM_SIZE(QueryStatus, 5);
 
 inline std::string_view toString(QueryStatus s) noexcept {
   using enum QueryStatus;

@@ -19,7 +19,7 @@
 namespace {
 
 using namespace valueGetterTestHelpers;
-using namespace unitVGTestHelpers;
+using namespace enumVGTestHelpers;
 using namespace geoInfoVGTestHelpers;
 
 // One input for the two `LiteralValueGetter`s below, together with the content
@@ -122,91 +122,180 @@ TEST(LiteralValueGetterWithoutStrFunction, OperatorWithLiteralOrIri) {
                                                  literalValueGetter);
 }
 
-// _____________________________________________________________________________
+// Test that the `UnitOfMeasurementValueGetter` turns IDs into the corresponding
+// `UnitOfMeasurement` value.
 TEST(UnitOfMeasurementValueGetter, OperatorWithId) {
   sparqlExpression::detail::UnitOfMeasurementValueGetter unitValueGetter;
-  checkUnitValueGetterFromId("<http://qudt.org/vocab/unit/M>",
+  checkEnumValueGetterFromId("<http://qudt.org/vocab/unit/M>",
                              UnitOfMeasurement::METERS, unitValueGetter);
-  checkUnitValueGetterFromId("<http://qudt.org/vocab/unit/KiloM>",
+  checkEnumValueGetterFromId("<http://qudt.org/vocab/unit/KiloM>",
                              UnitOfMeasurement::KILOMETERS, unitValueGetter);
-  checkUnitValueGetterFromId("<http://qudt.org/vocab/unit/MI>",
+  checkEnumValueGetterFromId("<http://qudt.org/vocab/unit/MI>",
                              UnitOfMeasurement::MILES, unitValueGetter);
-  checkUnitValueGetterFromId(
+  checkEnumValueGetterFromId(
       "\"http://qudt.org/vocab/unit/M\"^^<http://www.w3.org/2001/"
       "XMLSchema#anyURI>",
       UnitOfMeasurement::METERS, unitValueGetter);
-  checkUnitValueGetterFromId(
+  checkEnumValueGetterFromId(
       "\"http://qudt.org/vocab/unit/KiloM\"^^<http://www.w3.org/2001/"
       "XMLSchema#anyURI>",
       UnitOfMeasurement::KILOMETERS, unitValueGetter);
-  checkUnitValueGetterFromId(
+  checkEnumValueGetterFromId(
       "\"http://qudt.org/vocab/unit/MI\"^^<http://www.w3.org/2001/"
       "XMLSchema#anyURI>",
       UnitOfMeasurement::MILES, unitValueGetter);
 
-  checkUnitValueGetterFromId(
+  checkEnumValueGetterFromId(
       "\"http://qudt.org/vocab/unit/example\"^^<http://www.w3.org/2001/"
       "XMLSchema#anyURI>",
       UnitOfMeasurement::UNKNOWN, unitValueGetter);
 
-  checkUnitValueGetterFromId(
+  checkEnumValueGetterFromId(
       "\"http://example.com\"^^<http://www.w3.org/2001/XMLSchema#anyURI>",
       UnitOfMeasurement::UNKNOWN, unitValueGetter);
-  checkUnitValueGetterFromId("\"x\"", UnitOfMeasurement::UNKNOWN,
+  checkEnumValueGetterFromId("\"x\"", UnitOfMeasurement::UNKNOWN,
                              unitValueGetter);
-  checkUnitValueGetterFromId("\"1.5\"^^<http://example.com>",
+  checkEnumValueGetterFromId("\"1.5\"^^<http://example.com>",
                              UnitOfMeasurement::UNKNOWN, unitValueGetter);
-  checkUnitValueGetterFromId("\"http://qudt.org/vocab/unit/MI\"",
+  checkEnumValueGetterFromId("\"http://qudt.org/vocab/unit/MI\"",
                              UnitOfMeasurement::UNKNOWN, unitValueGetter);
 
   // A word of a secondary vocabulary is resolved just like a word of the
   // vocabulary of the main index.
-  checkUnitValueGetterFromSecondaryVocabId(
+  checkEnumValueGetterFromSecondaryVocabId(
       secondaryUnitIri, UnitOfMeasurement::METERS, unitValueGetter);
-  checkUnitValueGetterFromSecondaryVocabId(
+  checkEnumValueGetterFromSecondaryVocabId(
       secondaryIri, UnitOfMeasurement::UNKNOWN, unitValueGetter);
-  checkUnitValueGetterFromSecondaryVocabId(
+  checkEnumValueGetterFromSecondaryVocabId(
       secondaryPlainLiteral, UnitOfMeasurement::UNKNOWN, unitValueGetter);
 }
 
-// _____________________________________________________________________________
+// Test that the `UnitOfMeasurementValueGetter` skips encoded values.
 TEST(UnitOfMeasurementValueGetter, OperatorWithIdSkipEncodedValue) {
   sparqlExpression::detail::UnitOfMeasurementValueGetter getter;
-  checkUnitValueGetterFromIdEncodedValue(ValueId::makeFromBool(true), getter);
-  checkUnitValueGetterFromIdEncodedValue(ValueId::makeFromBool(false), getter);
-  checkUnitValueGetterFromIdEncodedValue(ValueId::makeFromInt(-50), getter);
-  checkUnitValueGetterFromIdEncodedValue(ValueId::makeFromInt(1000), getter);
-  checkUnitValueGetterFromIdEncodedValue(ValueId::makeFromDouble(1000.5),
+  checkEnumValueGetterFromIdEncodedValue(ValueId::makeFromBool(true), getter);
+  checkEnumValueGetterFromIdEncodedValue(ValueId::makeFromBool(false), getter);
+  checkEnumValueGetterFromIdEncodedValue(ValueId::makeFromInt(-50), getter);
+  checkEnumValueGetterFromIdEncodedValue(ValueId::makeFromInt(1000), getter);
+  checkEnumValueGetterFromIdEncodedValue(ValueId::makeFromDouble(1000.5),
                                          getter);
-  checkUnitValueGetterFromIdEncodedValue(
+  checkEnumValueGetterFromIdEncodedValue(
       ValueId::makeFromGeoPoint(GeoPoint{20.0, 20.0}), getter);
 }
 
-// _____________________________________________________________________________
+// Test that the `UnitOfMeasurementValueGetter` turns a `LiteralOrIri` into the
+// corresponding `UnitOfMeasurement` value.
 TEST(UnitOfMeasurementValueGetter, OperatorWithLiteralOrIri) {
   sparqlExpression::detail::UnitOfMeasurementValueGetter unitValueGetter;
-  checkUnitValueGetterFromLiteralOrIri("http://qudt.org/vocab/unit/M",
+  checkEnumValueGetterFromLiteralOrIri("http://qudt.org/vocab/unit/M",
                                        UnitOfMeasurement::METERS,
                                        unitValueGetter);
-  checkUnitValueGetterFromLiteralOrIri("http://qudt.org/vocab/unit/MI",
+  checkEnumValueGetterFromLiteralOrIri("http://qudt.org/vocab/unit/MI",
                                        UnitOfMeasurement::MILES,
                                        unitValueGetter);
-  checkUnitValueGetterFromLiteralOrIri("http://qudt.org/vocab/unit/KiloM",
+  checkEnumValueGetterFromLiteralOrIri("http://qudt.org/vocab/unit/KiloM",
                                        UnitOfMeasurement::KILOMETERS,
                                        unitValueGetter);
 
-  checkUnitValueGetterFromLiteralOrIri("http://qudt.org/vocab/unit/m",
+  checkEnumValueGetterFromLiteralOrIri("http://qudt.org/vocab/unit/m",
                                        UnitOfMeasurement::UNKNOWN,
                                        unitValueGetter);
-  checkUnitValueGetterFromLiteralOrIri("http://qudt.org/vocab/unit/",
+  checkEnumValueGetterFromLiteralOrIri("http://qudt.org/vocab/unit/",
                                        UnitOfMeasurement::UNKNOWN,
                                        unitValueGetter);
-  checkUnitValueGetterFromLiteralOrIri(
+  checkEnumValueGetterFromLiteralOrIri(
       "http://example.com/", UnitOfMeasurement::UNKNOWN, unitValueGetter);
-  checkUnitValueGetterFromLiteralOrIri("", UnitOfMeasurement::UNKNOWN,
+  checkEnumValueGetterFromLiteralOrIri("", UnitOfMeasurement::UNKNOWN,
                                        unitValueGetter);
-  checkUnitValueGetterFromLiteralOrIri("x", UnitOfMeasurement::UNKNOWN,
+  checkEnumValueGetterFromLiteralOrIri("x", UnitOfMeasurement::UNKNOWN,
                                        unitValueGetter);
+}
+
+// Test that the `CRSTypeValueGetter` turns IDs into the corresponding `CRSType`
+// value.
+TEST(CRSTypeValueGetter, OperatorWithId) {
+  sparqlExpression::detail::CRSTypeValueGetter crsValueGetter;
+  using CRSType = ::util::geo::CRSType;
+  checkEnumValueGetterFromId("<http://www.opengis.net/def/crs/OGC/1.3/CRS84>",
+                             CRSType::CRS84, crsValueGetter);
+  checkEnumValueGetterFromId("<http://www.opengis.net/def/crs/EPSG/0/4326>",
+                             CRSType::WGS84, crsValueGetter);
+  checkEnumValueGetterFromId("<http://www.opengis.net/def/crs/EPSG/0/3857>",
+                             CRSType::WEB_MERCATOR, crsValueGetter);
+  checkEnumValueGetterFromId(
+      "\"http://www.opengis.net/def/crs/OGC/1.3/CRS84\"^^<http://www.w3.org/"
+      "2001/"
+      "XMLSchema#anyURI>",
+      CRSType::CRS84, crsValueGetter);
+  checkEnumValueGetterFromId(
+      "\"http://www.opengis.net/def/crs/EPSG/0/4326\"^^<http://www.w3.org/2001/"
+      "XMLSchema#anyURI>",
+      CRSType::WGS84, crsValueGetter);
+  checkEnumValueGetterFromId(
+      "\"http://www.opengis.net/def/crs/EPSG/0/3857\"^^<http://www.w3.org/2001/"
+      "XMLSchema#anyURI>",
+      CRSType::WEB_MERCATOR, crsValueGetter);
+  checkEnumValueGetterFromId(
+      "\"http://www.opengis.net/def/crs/EPSG/0/unsupported\"^^<http://"
+      "www.w3.org/2001/"
+      "XMLSchema#anyURI>",
+      CRSType::UNSUPPORTED, crsValueGetter);
+
+  checkEnumValueGetterFromId("\"x\"", CRSType::UNSUPPORTED, crsValueGetter);
+  checkEnumValueGetterFromId("\"1.5\"^^<http://example.com>",
+                             CRSType::UNSUPPORTED, crsValueGetter);
+
+  // A word of a secondary vocabulary is resolved just like a word of the
+  // vocabulary of the main index.
+  checkEnumValueGetterFromSecondaryVocabId(secondaryCrsIri, CRSType::WGS84,
+                                           crsValueGetter);
+  checkEnumValueGetterFromSecondaryVocabId(
+      secondaryUnitIri, CRSType::UNSUPPORTED, crsValueGetter);
+  checkEnumValueGetterFromSecondaryVocabId(secondaryIri, CRSType::UNSUPPORTED,
+                                           crsValueGetter);
+  checkEnumValueGetterFromSecondaryVocabId(
+      secondaryPlainLiteral, CRSType::UNSUPPORTED, crsValueGetter);
+}
+
+// Test that the `CRSTypeValueGetter` skips encoded values.
+TEST(CRSTypeValueGetter, OperatorWithIdSkipEncodedValue) {
+  sparqlExpression::detail::CRSTypeValueGetter getter;
+  checkEnumValueGetterFromIdEncodedValue(ValueId::makeFromBool(true), getter);
+  checkEnumValueGetterFromIdEncodedValue(ValueId::makeFromBool(false), getter);
+  checkEnumValueGetterFromIdEncodedValue(ValueId::makeFromInt(-50), getter);
+  checkEnumValueGetterFromIdEncodedValue(ValueId::makeFromInt(1000), getter);
+  checkEnumValueGetterFromIdEncodedValue(ValueId::makeFromDouble(1000.5),
+                                         getter);
+  checkEnumValueGetterFromIdEncodedValue(
+      ValueId::makeFromGeoPoint(GeoPoint{20.0, 20.0}), getter);
+}
+
+// Test that the `CRSTypeValueGetter` turns a `LiteralOrIri` into the
+// corresponding `CRSType` value.
+TEST(CRSTypeValueGetter, OperatorWithLiteralOrIri) {
+  sparqlExpression::detail::CRSTypeValueGetter crsValueGetter;
+  using CRSType = ::util::geo::CRSType;
+  checkEnumValueGetterFromLiteralOrIri(
+      "http://www.opengis.net/def/crs/OGC/1.3/CRS84", CRSType::CRS84,
+      crsValueGetter);
+  checkEnumValueGetterFromLiteralOrIri(
+      "http://www.opengis.net/def/crs/EPSG/0/4326", CRSType::WGS84,
+      crsValueGetter);
+  checkEnumValueGetterFromLiteralOrIri(
+      "http://www.opengis.net/def/crs/EPSG/0/3857", CRSType::WEB_MERCATOR,
+      crsValueGetter);
+
+  checkEnumValueGetterFromLiteralOrIri(
+      "http://www.opengis.net/def/crs/EPSG/0/unsupported", CRSType::UNSUPPORTED,
+      crsValueGetter);
+  checkEnumValueGetterFromLiteralOrIri("http://www.opengis.net/def/crs/EPSG/0/",
+                                       CRSType::UNSUPPORTED, crsValueGetter);
+  checkEnumValueGetterFromLiteralOrIri("http://example.com/",
+                                       CRSType::UNSUPPORTED, crsValueGetter);
+  checkEnumValueGetterFromLiteralOrIri("", CRSType::UNSUPPORTED,
+                                       crsValueGetter);
+  checkEnumValueGetterFromLiteralOrIri("x", CRSType::UNSUPPORTED,
+                                       crsValueGetter);
 }
 
 // _____________________________________________________________________________
@@ -403,6 +492,8 @@ TEST(GeometryInfoValueGetterTest, OperatorWithIdGeoPoint) {
 TEST(GeometryInfoValueGetterTest, OperatorWithUnrelatedId) {
   GeoInfoTester t;
   auto noGeoInfo = geoInfoMatcher(std::nullopt);
+  t.checkFromValueId(
+      ValueId::makeFromTripleTermIndex(TripleTermIndex::make(17)), noGeoInfo);
   t.checkFromValueId(ValueId::makeUndefined(), noGeoInfo);
   t.checkFromValueId(ValueId::makeFromBool(true), noGeoInfo);
   t.checkFromValueId(ValueId::makeFromInt(42), noGeoInfo);
@@ -422,6 +513,9 @@ TEST(GeoPointOrWktValueGetterTest, OperatorWithIdGeoPoint) {
   t.checkFromValueId(p2id, geoPointOrWktMatcher(p2));
 
   auto noGeoInfoOrWkt = geoPointOrWktMatcher(std::nullopt);
+  t.checkFromValueId(
+      ValueId::makeFromTripleTermIndex(TripleTermIndex::make(17)),
+      noGeoInfoOrWkt);
   t.checkFromValueId(ValueId::makeUndefined(), noGeoInfoOrWkt);
   t.checkFromValueId(ValueId::makeFromBool(true), noGeoInfoOrWkt);
   t.checkFromValueId(ValueId::makeFromInt(42), noGeoInfoOrWkt);
@@ -505,6 +599,9 @@ TEST(NumericOrDateValueGetterTest, OperatorWithId) {
           DayTimeDuration(DayTimeDuration::Type::Positive, 102))));
   auto isNotNumeric =
       Optional(VariantWith<sparqlExpression::detail::NotNumeric>(_));
+  t.checkFromValueId(
+      ValueId::makeFromTripleTermIndex(TripleTermIndex::make(17)),
+      isNotNumeric);
   t.checkFromValueId(ValueId::makeUndefined(), isNotNumeric);
   t.checkFromValueId(ValueId::makeFromGeoPoint({3, 4}), isNotNumeric);
 
@@ -552,6 +649,7 @@ class ValueGetterFixture : public ::testing::Test {
   Id blankNode_ = Id::makeFromBlankNodeIndex(BlankNodeIndex::make(0));
   Id textRecord_ = Id::makeFromTextRecordIndex(TextRecordIndex::make(0));
   Id wordVocab_ = Id::makeFromWordVocabIndex(WordVocabIndex::make(0));
+  Id tripleTerm_ = Id::makeFromTripleTermIndex(TripleTermIndex::make(17));
 
   // An IRI that is encoded directly in the `Id`.
   Id encodedIri_ = context_.encodedIriId();
@@ -653,11 +751,11 @@ TEST_F(NumericValueGetterTest, OperatorWithId) {
   EXPECT_THAT(get<Getter>(boolFalse_), VariantWith<int64_t>(0));
   // Nothing else is numeric, in particular no word of one of the three
   // vocabularies that store strings, and no encoded IRI.
-  expectAll<Getter>(
-      {undefined_, date_, geoPoint_, blankNode_, textRecord_, wordVocab_,
-       encodedIri_, plainLiteral_, localPlainLiteral_, secondaryPlainLiteral_,
-       wktLiteral_, secondaryWktLiteral_, iri_, localIri_, secondaryIri_},
-      VariantWith<NotNumeric>(_));
+  expectAll<Getter>({undefined_, date_, geoPoint_, blankNode_, textRecord_,
+                     wordVocab_, encodedIri_, plainLiteral_, localPlainLiteral_,
+                     secondaryPlainLiteral_, wktLiteral_, secondaryWktLiteral_,
+                     iri_, localIri_, secondaryIri_, tripleTerm_},
+                    VariantWith<NotNumeric>(_));
 }
 
 // _____________________________________________________________________________
@@ -695,7 +793,9 @@ TEST_F(EffectiveBooleanValueGetterTest, OperatorWithId) {
       {intZero_, doubleZero_, boolFalse_, Id::makeFromDouble(std::nan("")),
        localEmptyLiteral_, secondaryEmptyLiteral_},
       Eq(Result::False));
-  expectAll<Getter>({undefined_, blankNode_}, Eq(Result::Undef));
+  // A triple term is a bound RDF term, but its EBV is an error because it is
+  // not a literal (SPARQL 1.2 section 17.2.3).
+  expectAll<Getter>({undefined_, blankNode_, tripleTerm_}, Eq(Result::Undef));
 }
 
 // _____________________________________________________________________________
@@ -730,9 +830,9 @@ TEST_F(DatatypeValueGetterTest, OperatorWithId) {
 
   // An IRI has no datatype, and neither have the remaining datatypes.
   expectAllWords<Getter>(iris_, ignoreContent(Eq(std::nullopt)));
-  expectAll<Getter>(
-      {encodedIri_, undefined_, blankNode_, textRecord_, wordVocab_},
-      Eq(std::nullopt));
+  expectAll<Getter>({encodedIri_, undefined_, blankNode_, textRecord_,
+                     wordVocab_, tripleTerm_},
+                    Eq(std::nullopt));
 }
 
 // _____________________________________________________________________________
@@ -757,7 +857,7 @@ TEST_F(LanguageTagValueGetterTest, OperatorWithId) {
   // An IRI is not a literal, so it has no language tag at all, and neither have
   // the remaining datatypes.
   expectAll<Getter>({iri_, localIri_, secondaryIri_, encodedIri_, undefined_,
-                     blankNode_, textRecord_, wordVocab_},
+                     blankNode_, textRecord_, wordVocab_, tripleTerm_},
                     Eq(std::nullopt));
 }
 
@@ -782,7 +882,7 @@ TEST_F(ToNumericValueGetterTest, OperatorWithId) {
   // An IRI is not a literal, so there is nothing to convert, and the remaining
   // datatypes have no string representation that this getter uses.
   expectAll<Getter>({iri_, localIri_, secondaryIri_, encodedIri_, undefined_,
-                     date_, blankNode_, textRecord_, wordVocab_},
+                     date_, blankNode_, textRecord_, wordVocab_, tripleTerm_},
                     VariantWith<std::monostate>(_));
 }
 
@@ -820,6 +920,8 @@ TEST_F(IsIriAndIsLiteralValueGetterTest, OperatorWithId) {
                           true);
   // The remaining datatypes are neither.
   expectIsIriAndIsLiteral({blankNode_, textRecord_, wordVocab_}, false, false);
+  // A triple term is bound, but is neither an IRI nor a literal.
+  expectIsIriAndIsLiteral({tripleTerm_}, false, false);
   // An unbound argument is an error.
   expectAll<IsIriValueGetter>({undefined_}, Eq(Id::makeUndefined()));
   expectAll<IsLiteralValueGetter>({undefined_}, Eq(Id::makeUndefined()));
@@ -846,7 +948,7 @@ TEST_F(IriOrUriValueGetterTest, OperatorWithId) {
   // For all the other datatypes there is no IRI, which the getter signals with
   // an undefined `Id`.
   expectAll<Getter>({undefined_, boolTrue_, int_, double_, date_, geoPoint_,
-                     blankNode_, textRecord_, wordVocab_},
+                     blankNode_, textRecord_, wordVocab_, tripleTerm_},
                     VariantWith<Id>(Eq(Id::makeUndefined())));
 }
 };  // namespace

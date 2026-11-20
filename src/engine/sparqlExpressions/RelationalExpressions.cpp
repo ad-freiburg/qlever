@@ -6,14 +6,10 @@
 
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 
-#include <cmath>
-#include <limits>
-
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressionHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
-#include "rdfTypes/GeoSparqlHelpers.h"
 #include "util/TypeTraits.h"
 
 using namespace sparqlExpression;
@@ -330,6 +326,28 @@ ql::span<SparqlExpression::Ptr> RelationalExpression<Comp>::childrenImpl() {
   return {children_.data(), children_.size()};
 }
 
+namespace {
+// Return the language of `LANG(?x) = expression` if `expression` is a literal
+// with neither a language tag nor a datatype (e.g. "en"), and `std::nullopt`
+// otherwise.
+//
+// NOTE 1: `LANG(?x)` never equals a literal with a language tag or a datatype
+// (e.g. "en"@de or "en"^^<x>), so such a FILTER must not become a language
+// filter on the triple of `?x`.
+//
+// NOTE 2: A literal with the datatype `xsd:string` (e.g. "en"^^xsd:string) is
+// the same RDF term as the plain literal, and `hasDatatype()` is false for it.
+std::optional<std::string> getLanguage(const SparqlExpression* expression) {
+  const auto* literal =
+      dynamic_cast<const StringLiteralExpression*>(expression);
+  if (literal == nullptr || literal->value().hasLanguageTag() ||
+      literal->value().hasDatatype()) {
+    return std::nullopt;
+  }
+  return std::string{literal->value().getContent()};
+}
+}  // namespace
+
 // _____________________________________________________________________________
 template <Comparison Comp>
 std::optional<SparqlExpression::LangFilterData>
@@ -342,18 +360,12 @@ RelationalExpression<Comp>::getLanguageFilterExpression() const {
   auto getLangFilterData =
       [](const auto& left, const auto& right) -> std::optional<LangFilterData> {
     std::optional<Variable> optVar = getVariableFromLangExpression(left.get());
-    const auto* langPtr =
-        dynamic_cast<const StringLiteralExpression*>(right.get());
-
-    if (!optVar.has_value() || !langPtr) {
+    auto language = getLanguage(right.get());
+    if (!optVar.has_value() || !language.has_value()) {
       return std::nullopt;
     }
-
-    // TODO<joka921> Check that the language string doesn't contain a datatype
-    // etc.
-    // TODO<joka921> Is this even allowed by the grammar?
     return LangFilterData{std::move(optVar.value()),
-                          {std::string{langPtr->value().getContent()}}};
+                          {std::move(language).value()}};
   };
 
   const auto& child1 = children_[0];
@@ -620,12 +632,11 @@ InExpression::getLanguageFilterExpression() const {
   }
   ad_utility::HashSet<std::string> languages;
   for (const auto& child : children_ | ql::views::drop(1)) {
-    const auto* langPtr =
-        dynamic_cast<const StringLiteralExpression*>(child.get());
-    if (!langPtr) {
+    auto language = getLanguage(child.get());
+    if (!language.has_value()) {
       return std::nullopt;
     }
-    languages.emplace(langPtr->value().getContent());
+    languages.emplace(std::move(language).value());
   }
 
   return LangFilterData{std::move(optVar.value()), std::move(languages)};
@@ -668,71 +679,6 @@ std::optional<valueIdComparators::Comparison> getComparison(
     return GE;
   }
   return std::nullopt;
-}
-
-// _____________________________________________________________________________
-std::optional<std::pair<sparqlExpression::GeoFunctionCall, double>>
-getGeoDistanceFilter(const SparqlExpression& expr) {
-  // TODO<ullingerc> Add support for more optimizable filters:
-  // * `constant > geof:distance()`
-  // * `constant >= geof:distance()`
-  // The supported patterns are documented in the header declaration of this
-  // function.
-
-  // Supported comparison operators
-  bool isLessThan = isExpressionOfType<LessThanExpression>(expr);
-  if (!isLessThan && !isExpressionOfType<LessEqualExpression>(expr)) {
-    return std::nullopt;
-  }
-
-  // Left child must be distance function
-  auto children = expr.children();
-  const auto& leftChild = *children[0];
-
-  // Right child must be constant
-  auto rightChild = children[1].get();
-  auto literalExpr =
-      dynamic_cast<detail::LiteralExpression<ValueId>*>(rightChild);
-  if (literalExpr == nullptr) {
-    return std::nullopt;
-  }
-  ValueId constant = literalExpr->value();
-  // Extract distance. Here we don't know the unit of this number yet. It is
-  // extracted from the function call in the next step.
-  double maxDistAnyUnit = 0;
-  if (constant.getDatatype() == Datatype::Double) {
-    maxDistAnyUnit = constant.getDouble();
-  } else if (constant.getDatatype() == Datatype::Int) {
-    maxDistAnyUnit = static_cast<double>(constant.getInt());
-  } else {
-    return std::nullopt;
-  }
-
-  // Extract variables and distance unit from function call
-  auto geoFuncCall = getGeoDistanceExpressionParameters(leftChild);
-  if (!geoFuncCall.has_value()) {
-    return std::nullopt;
-  }
-
-  // Convert unit to meters. For `<`, use the largest `double` below the
-  // maximum distance (the spatial join includes the maximum distance).
-  double maxDist = ad_utility::detail::valueInUnitToKilometer(
-                       maxDistAnyUnit, geoFuncCall.value().unit_) *
-                   1000;
-  if (isLessThan) {
-    maxDist = std::nextafter(maxDist, -std::numeric_limits<double>::infinity());
-  }
-
-  // A negative maximum distance (`< 0` or a negative constant) matches
-  // nothing, leave such a filter to the regular `Filter` operation.
-  //
-  // NOTE: `libspatialjoin` treats a negative maximum distance as "no distance
-  // limit" and would report all intersecting pairs instead.
-  if (maxDist < 0) {
-    return std::nullopt;
-  }
-
-  return std::pair<GeoFunctionCall, double>{geoFuncCall.value(), maxDist};
 }
 
 }  // namespace sparqlExpression
