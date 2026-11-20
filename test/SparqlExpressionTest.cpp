@@ -2169,6 +2169,9 @@ TEST(SparqlExpression, geoSparqlExpressions) {
   checkDist(U, v, IdOrLocalVocabEntry{lit("NotAPoint")});
   checkDist(U, IdOrLocalVocabEntry{lit("NotAPoint")}, v);
 
+  // The centroid of a literal in CRS84 (with or without the IRI) is a
+  // `GeoPoint`, the centroid of a literal in another CRS is a WKT literal in
+  // that CRS.
   checkCentroid(
       IdOrLocalVocabEntry{lit(
           "\"<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(26.8 24.3)\"",
@@ -2194,6 +2197,9 @@ TEST(SparqlExpression, geoSparqlExpressions) {
               "^^<http://www.opengis.net/ont/geosparql#wktLiteral>")},
       geoLit("<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(20 50)"));
 
+  // The centroid of a Web Mercator polygon is computed in Web Mercator (the
+  // center of this square), the projection of its CRS84 centroid would be
+  // `POINT(5000000 3924942.872771)`.
   checkCentroid(
       IdOrLocalVocabEntry{lit(
           "\"<http://www.opengis.net/def/crs/EPSG/0/3857> "

@@ -313,9 +313,14 @@ class GeometryInfo {
   // The centroid is computed in the source CRS of the literal (see
   // `sourceCrs_`), then projected to CRS84 and stored in CRS84.
   //
-  // NOTE: Projecting the geometry to CRS84 first and computing the centroid
+  // NOTE 1: Projecting the geometry to CRS84 first and computing the centroid
   // there would give a different result, e.g. for Web Mercator, because its y
   // axis is not linear in the latitude.
+  //
+  // NOTE 2: Records written before this rule (indices built between #3583 and
+  // #3787) hold the centroid computed in CRS84, which `geof:centroid` returns
+  // projected to the source CRS. Rebuild such an index if it has Web Mercator
+  // literals (for WGS84 both centroids are the same).
   uint64_t geometryTypeAndCentroid_;
   uint32_t numGeometries_;
   // The CRS named by the IRI of the literal (before the projection to CRS84),
