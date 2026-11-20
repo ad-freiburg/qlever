@@ -13,19 +13,25 @@
 
 #include <array>
 #include <cstdint>
+#include <string>
 
 #include "util/compressionUsingZstd/ZstdLittleEndian.h"
 
 namespace ad_utility::zstd {
 
 // _____________________________________________________________________________
-std::optional<FrameHeader> parseFrameHeader(ql::span<const char> bytes) {
-  using detail::byteAt;
-  using detail::readValue;
+Expected<FrameHeader> parseFrameHeader(ql::span<const char> bytes) {
+  using detail::readLittleEndian;
   // The header starts with the magic number (4 bytes) and the frame header
   // descriptor (1 byte), which are always present.
-  if (bytes.size() < 5 || readValue<uint32_t>(bytes) != ZSTD_MAGICNUMBER) {
-    return std::nullopt;
+  if (bytes.size() < 5) {
+    return ZstdError{
+        "A ZSTD frame header must have at least 5 bytes, but only " +
+        std::to_string(bytes.size()) + " bytes are given"};
+  }
+  if (readLittleEndian<4>(bytes) != ZSTD_MAGICNUMBER) {
+    return ZstdError{
+        "The data does not start with the magic number of a ZSTD frame"};
   }
   // The bits of the frame header descriptor (bit 7 is the most significant
   // bit):
@@ -36,14 +42,14 @@ std::optional<FrameHeader> parseFrameHeader(ql::span<const char> bytes) {
   //   bit  3  : reserved, must be zero.
   //   bit  2  : checksum flag.
   //   bits 1-0: dictionary ID flag (encodes the size of the dictionary ID).
-  const uint32_t descriptor = byteAt(bytes, 4);
-  const uint32_t contentSizeFlag = descriptor >> 6;
+  const uint64_t descriptor = readLittleEndian<1>(bytes.subspan(4));
+  const uint64_t contentSizeFlag = descriptor >> 6;
   const bool singleSegment = (descriptor >> 5) & 1;
   const bool reservedBit = (descriptor >> 3) & 1;
   const bool hasChecksum = (descriptor >> 2) & 1;
-  const uint32_t dictionaryIdFlag = descriptor & 3;
+  const uint64_t dictionaryIdFlag = descriptor & 3;
   if (reservedBit) {
-    return std::nullopt;
+    return ZstdError{"The reserved bit of a ZSTD frame header is set"};
   }
   // The two-bit flags encode the sizes of the dictionary ID and the content
   // size fields, which follow the descriptor (in this order, after the
@@ -62,7 +68,9 @@ std::optional<FrameHeader> parseFrameHeader(ql::span<const char> bytes) {
                             dictionaryIdSizes[dictionaryIdFlag] +
                             contentSizeSize;
   if (bytes.size() < headerSize) {
-    return std::nullopt;
+    return ZstdError{"The ZSTD frame header is truncated: it needs " +
+                     std::to_string(headerSize) + " bytes, but only " +
+                     std::to_string(bytes.size()) + " bytes are given"};
   }
   return FrameHeader{headerSize, hasChecksum};
 }

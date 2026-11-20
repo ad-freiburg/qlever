@@ -41,7 +41,7 @@ TEST(ZstdFrameHeader, framesWrittenByZstd) {
   for (size_t size : {size_t{0}, size_t{100}, size_t{1'000'000}}) {
     auto frame = compress(someData(size, 1));
     auto header = parseFrameHeader(frame);
-    ASSERT_TRUE(header.has_value()) << size;
+    ASSERT_TRUE(hasValue(header)) << size;
     EXPECT_FALSE(header->hasChecksum_);
     // The header is followed by exactly one frame's worth of blocks, so it
     // has to be shorter than the frame, and ZSTD has to be able to read the
@@ -61,11 +61,12 @@ TEST(ZstdFrameHeader, handWrittenHeaders) {
                          bool expectedChecksum = false) {
     auto bytes = handWrittenHeader(descriptor, expectedSize - 5);
     auto header = parseFrameHeader(bytes);
-    ASSERT_TRUE(header.has_value()) << static_cast<int>(descriptor);
+    ASSERT_TRUE(hasValue(header)) << static_cast<int>(descriptor);
     EXPECT_EQ(header->headerSize_, expectedSize);
     EXPECT_EQ(header->hasChecksum_, expectedChecksum);
-    EXPECT_FALSE(
-        parseFrameHeader(ql::span<const char>{bytes}.first(expectedSize - 1)));
+    EXPECT_TRUE(isError(
+        parseFrameHeader(ql::span<const char>{bytes}.first(expectedSize - 1)),
+        "truncated"));
   };
   // Single segment flag (`1 << 5`) and the content size flag in bits 6-7:
   // no window descriptor, and 1 (for flag 0), 2, 4, or 8 bytes of content size.
@@ -94,18 +95,19 @@ TEST(ZstdFrameHeader, handWrittenHeaders) {
 // Invalid frame headers are rejected.
 TEST(ZstdFrameHeader, invalidHeaders) {
   // Wrong magic number, empty, or too short for the descriptor.
-  EXPECT_FALSE(parseFrameHeader(Bytes(20, 'x')));
-  EXPECT_FALSE(parseFrameHeader(Bytes{}));
+  EXPECT_TRUE(isError(parseFrameHeader(Bytes(20, 'x')), "magic number"));
+  EXPECT_TRUE(isError(parseFrameHeader(Bytes{}), "at least 5 bytes"));
   auto valid = handWrittenHeader(0xE0, 8);
-  ASSERT_TRUE(parseFrameHeader(valid).has_value());
-  EXPECT_FALSE(parseFrameHeader(ql::span<const char>{valid}.first(4)));
+  ASSERT_TRUE(hasValue(parseFrameHeader(valid)));
+  EXPECT_TRUE(isError(parseFrameHeader(ql::span<const char>{valid}.first(4)),
+                      "at least 5 bytes"));
   // The reserved bit (bit 3) is set.
   auto reserved = valid;
   reserved[4] = static_cast<char>(reserved[4] | (1 << 3));
-  EXPECT_FALSE(parseFrameHeader(reserved));
+  EXPECT_TRUE(isError(parseFrameHeader(reserved), "reserved bit"));
   // A skippable frame is not a regular frame.
   Bytes skippable(16, 0);
   uint32_t magic = ZSTD_MAGIC_SKIPPABLE_START;
   std::memcpy(skippable.data(), &magic, sizeof(magic));
-  EXPECT_FALSE(parseFrameHeader(skippable));
+  EXPECT_TRUE(isError(parseFrameHeader(skippable), "magic number"));
 }

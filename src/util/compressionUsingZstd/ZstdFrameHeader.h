@@ -11,16 +11,17 @@
 #define QLEVER_SRC_UTIL_COMPRESSIONUSINGZSTD_ZSTDFRAMEHEADER_H
 
 #include <cstddef>
-#include <optional>
 
 #include "backports/span.h"
+#include "util/compressionUsingZstd/ZstdExpected.h"
 
 // THE ZSTD FRAME FORMAT (RFC 8878), AS FAR AS IT IS NEEDED IN QLEVER.
 //
 // The helpers in `ZstdFrameHeader.h`, `ZstdFrameBlocks.h`, and
 // `ZstdSkippableFrame.h` take ZSTD frames apart and assemble new frames from
-// the blocks of other frames (see `SegmentedZstdFrame.h`). This comment
-// introduces the terminology that all of them use.
+// the blocks of other frames. This comment introduces the terminology that all
+// of them use. None of them throws for invalid input; errors are reported via
+// `Expected` (see `ZstdExpected.h`).
 //
 // FRAME: The unit of data that `ZSTD_compress` produces. A compressed file or
 // buffer is a sequence of frames, and decompressing it yields the
@@ -56,12 +57,6 @@
 // (with different window sizes), see `SingleSegmentFrame` in
 // `ZstdFrameBlocks.h`.
 //
-// WARNING: The "segment" of a ZSTD single segment frame is unrelated to the
-// "segments" of a `SegmentedFrame` (see `SegmentedZstdFrame.h`), which are
-// parts of the content of a frame that are chosen by its writer. A segmented
-// frame happens to be a single segment frame in the ZSTD sense, but it
-// typically consists of many segments in the sense of `SegmentedZstdFrame.h`.
-//
 // BLOCK: The content of a frame is split into blocks of at most 128 KiB of
 // decompressed content each. A block consists of a 3-byte block header and the
 // block content. The block header stores whether this is the last block of the
@@ -72,9 +67,8 @@
 // may depend on the preceding blocks of the same frame, not only via matches
 // into the window, but also via the entropy tables and the most recent match
 // offsets (the repeat offsets), which the decoder carries over from block to
-// block. See `ZstdFrameBlocks.h` for the details of the block header and
-// `ZstdIndependentUnit.h` for how blocks can be made independent of their
-// predecessors.
+// block. Blocks can therefore in general not be moved to another frame. See
+// `ZstdFrameBlocks.h` for the details of the block header.
 //
 // SKIPPABLE FRAME: A frame with one of the 16 magic numbers
 // `ZSTD_MAGIC_SKIPPABLE_START + i` (`i` in `[0, 16)`, the "magic variant"),
@@ -85,8 +79,7 @@
 // NOTE: Everything here only uses the stable API of ZSTD. The stable API has no
 // functions for the headers of frames and blocks, nor for skippable frames,
 // which is why these are implemented here. All integers of the frame format
-// are little endian, which is the native byte order on all platforms that
-// QLever currently supports.
+// are little endian (see `ZstdLittleEndian.h`).
 namespace ad_utility::zstd {
 
 // The parts of the header of a (regular, not skippable) ZSTD frame that are
@@ -99,10 +92,9 @@ struct FrameHeader {
   bool hasChecksum_ = false;
 };
 
-// Parse the header of the regular ZSTD frame at the start of `bytes`. Return
-// `std::nullopt` if `bytes` does not start with a complete and valid frame
-// header. Do not throw for any input.
-std::optional<FrameHeader> parseFrameHeader(ql::span<const char> bytes);
+// Parse the header of the regular ZSTD frame at the start of `bytes`. Return an
+// error if `bytes` does not start with a complete and valid frame header.
+Expected<FrameHeader> parseFrameHeader(ql::span<const char> bytes);
 
 }  // namespace ad_utility::zstd
 

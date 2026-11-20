@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "backports/span.h"
+#include "util/compressionUsingZstd/ZstdExpected.h"
 
 // Writers for two kinds of ZSTD blocks (RFC 8878, section 3.1.1.2) that are
 // written by hand instead of by the ZSTD compressor, because the compressor
@@ -37,8 +38,9 @@ void appendRawBlocks(std::vector<char>& out, ql::span<const char> literals);
 // The block uses the "RLE" mode for all three symbol tables (a single sequence
 // has a single symbol of each kind), so it needs no entropy coding and does not
 // depend on the tables of previous blocks. It is 10 bytes large for small
-// offsets.
-void appendSingleMatchBlock(std::vector<char>& out, uint32_t offset);
+// offsets. Return an error (and append nothing) if `offset` is 0 or not smaller
+// than `1 << 30`.
+Expected<void> appendSingleMatchBlock(std::vector<char>& out, uint32_t offset);
 
 }  // namespace ad_utility::zstd
 

@@ -19,13 +19,22 @@
 using namespace ad_utility::zstd;
 using namespace zstdFrameTestHelpers;
 
+namespace {
+// The magic variants that are used in the tests.
+constexpr auto variant0 = SkippableMagicVariant::make<0>();
+constexpr auto variant4 = SkippableMagicVariant::make<4>();
+constexpr auto variant5 = SkippableMagicVariant::make<5>();
+constexpr auto variant15 = SkippableMagicVariant::make<15>();
+static_assert(variant15.value() == 15);
+}  // namespace
+
 // A trailing skippable frame is ignored by ZSTD and can be found from the end.
 TEST(ZstdSkippableFrame, trailingSkippableFrame) {
   auto data = someData(1000, 3);
   auto blob = compress(data);
   const size_t frameSize = blob.size();
   std::string content = "some content";
-  appendTrailingSkippableFrame(blob, 5, content);
+  ASSERT_TRUE(hasValue(appendTrailingSkippableFrame(blob, variant5, content)));
   EXPECT_EQ(blob.size(), frameSize + skippableFrameHeaderSize + content.size() +
                              sizeof(uint32_t));
   // Every decompressor ignores the skippable frame.
@@ -40,17 +49,18 @@ TEST(ZstdSkippableFrame, trailingSkippableFrame) {
   EXPECT_EQ(ZSTD_findFrameCompressedSize(skippable.data(), skippable.size()),
             skippable.size());
 
-  auto read = readTrailingSkippableFrame(blob, 5);
-  ASSERT_TRUE(read.has_value());
+  auto read = readTrailingSkippableFrame(blob, variant5);
+  ASSERT_TRUE(hasValue(read));
   EXPECT_EQ(std::string(read->begin(), read->end()), content);
   // An empty content.
   Bytes empty;
-  appendTrailingSkippableFrame(empty, 0, {});
-  EXPECT_EQ(readTrailingSkippableFrame(empty, 0)->size(), 0u);
+  ASSERT_TRUE(hasValue(appendTrailingSkippableFrame(empty, variant0, {})));
+  EXPECT_EQ(readTrailingSkippableFrame(empty, variant0)->size(), 0u);
   // The largest magic variant.
   Bytes last;
-  appendTrailingSkippableFrame(last, 15, content);
-  EXPECT_EQ(readTrailingSkippableFrame(last, 15)->size(), content.size());
+  ASSERT_TRUE(hasValue(appendTrailingSkippableFrame(last, variant15, content)));
+  EXPECT_EQ(readTrailingSkippableFrame(last, variant15)->size(),
+            content.size());
 }
 
 // Data that does not end in a matching trailing skippable frame is rejected.
@@ -59,24 +69,29 @@ TEST(ZstdSkippableFrame, invalidTrailingSkippableFrame) {
   auto blob = compress(data);
   const size_t frameSize = blob.size();
   std::string content = "some content";
-  appendTrailingSkippableFrame(blob, 5, content);
+  ASSERT_TRUE(hasValue(appendTrailingSkippableFrame(blob, variant5, content)));
   // Wrong magic variant, no frame, empty, or truncated.
-  EXPECT_FALSE(readTrailingSkippableFrame(blob, 4));
-  EXPECT_FALSE(readTrailingSkippableFrame(compress(data), 5));
-  EXPECT_FALSE(readTrailingSkippableFrame(Bytes{}, 5));
-  EXPECT_FALSE(readTrailingSkippableFrame(
-      ql::span<const char>{blob}.first(blob.size() - 1), 5));
+  EXPECT_TRUE(
+      isError(readTrailingSkippableFrame(blob, variant4), "magic variant 4"));
+  EXPECT_TRUE(isError(readTrailingSkippableFrame(compress(data), variant5)));
+  EXPECT_TRUE(
+      isError(readTrailingSkippableFrame(Bytes{}, variant5), "too short"));
+  EXPECT_TRUE(
+      isError(readTrailingSkippableFrame(
+                  ql::span<const char>{blob}.first(blob.size() - 1), variant5),
+              "invalid trailing frame size"));
   // A corrupted content size in the header.
   auto corrupted = blob;
   corrupted[frameSize + 4] ^= 1;
-  EXPECT_FALSE(readTrailingSkippableFrame(corrupted, 5));
+  EXPECT_TRUE(isError(readTrailingSkippableFrame(corrupted, variant5),
+                      "does not match its total size"));
   // A corrupted trailing total size (too large, and too small).
   corrupted = blob;
   corrupted.back() = 0x7F;
-  EXPECT_FALSE(readTrailingSkippableFrame(corrupted, 5));
+  EXPECT_TRUE(isError(readTrailingSkippableFrame(corrupted, variant5),
+                      "invalid trailing frame size"));
   corrupted = blob;
   corrupted[corrupted.size() - 4] = 3;
-  EXPECT_FALSE(readTrailingSkippableFrame(corrupted, 5));
-  // Only 16 magic variants exist.
-  EXPECT_ANY_THROW(appendTrailingSkippableFrame(blob, 16, content));
+  EXPECT_TRUE(isError(readTrailingSkippableFrame(corrupted, variant5),
+                      "invalid trailing frame size"));
 }

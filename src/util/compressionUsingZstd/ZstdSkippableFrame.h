@@ -12,10 +12,10 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <optional>
 #include <vector>
 
 #include "backports/span.h"
+#include "util/compressionUsingZstd/ZstdExpected.h"
 
 // Helpers for SKIPPABLE FRAMES, which every ZSTD decompressor ignores, and
 // which can therefore store metadata next to ZSTD-compressed data. For the
@@ -39,23 +39,48 @@
 //   ╰────────────────────────── total frame size ─────────────────────────╯
 //
 // ZSTD's content size of the skippable frame includes the trailing 4 bytes,
-// such that ZSTD skips them together with the frame.
+// such that ZSTD skips them together with the frame. None of the functions
+// throws for invalid input; errors are reported via `Expected` (see
+// `ZstdExpected.h`).
 namespace ad_utility::zstd {
 
 // The size of the header of a skippable frame (its magic number and the size
 // of its content).
 constexpr size_t skippableFrameHeaderSize = 8;
 
-// Append a trailing skippable frame with the `magicVariant` (in `[0, 16)`) and
-// the `content` to `out` (see above).
-void appendTrailingSkippableFrame(std::vector<char>& out, uint32_t magicVariant,
-                                  ql::span<const char> content);
+// One of the 16 magic variants of a skippable frame (see above). The value is
+// checked at compile time, so an invalid magic variant cannot be constructed.
+class SkippableMagicVariant {
+ private:
+  uint32_t value_;
+
+ public:
+  // Return the magic variant `Value`, which has to be in `[0, 16)`.
+  template <uint32_t Value>
+  static constexpr SkippableMagicVariant make() {
+    static_assert(Value < 16, "There are only 16 magic variants");
+    return SkippableMagicVariant{Value};
+  }
+
+  // Return the magic variant as an integer in `[0, 16)`.
+  constexpr uint32_t value() const { return value_; }
+
+ private:
+  constexpr explicit SkippableMagicVariant(uint32_t value) : value_{value} {}
+};
+
+// Append a trailing skippable frame with the `magicVariant` and the `content`
+// to `out` (see above). Return an error (and append nothing) if the frame
+// would be larger than 4 GiB, which is the limit of the format.
+Expected<void> appendTrailingSkippableFrame(std::vector<char>& out,
+                                            SkippableMagicVariant magicVariant,
+                                            ql::span<const char> content);
 
 // If `bytes` ends with a skippable frame that was written by
 // `appendTrailingSkippableFrame` with the `magicVariant`, then return its
-// `content`, else `std::nullopt`. Do not throw for any input.
-std::optional<ql::span<const char>> readTrailingSkippableFrame(
-    ql::span<const char> bytes, uint32_t magicVariant);
+// `content`, else an error.
+Expected<ql::span<const char>> readTrailingSkippableFrame(
+    ql::span<const char> bytes, SkippableMagicVariant magicVariant);
 
 }  // namespace ad_utility::zstd
 

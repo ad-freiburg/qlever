@@ -13,6 +13,7 @@
 #include <zstd.h>
 
 #include <algorithm>
+#include <string>
 
 #include "util/Exception.h"
 #include "util/compressionUsingZstd/ZstdFrameBlocks.h"
@@ -24,17 +25,21 @@ void appendRawBlocks(std::vector<char>& out, ql::span<const char> literals) {
   while (!literals.empty()) {
     auto chunk =
         literals.first(std::min<size_t>(literals.size(), ZSTD_BLOCKSIZE_MAX));
-    BlockHeader{false, BlockHeader::Type::Raw,
-                static_cast<uint32_t>(chunk.size())}
-        .append(out);
+    // A raw block of at most `ZSTD_BLOCKSIZE_MAX` bytes is always valid.
+    BlockHeader header{false, BlockHeader::Type::Raw,
+                       static_cast<uint32_t>(chunk.size())};
+    AD_CORRECTNESS_CHECK(header.append(out).hasValue());
     out.insert(out.end(), chunk.begin(), chunk.end());
     literals = literals.subspan(chunk.size());
   }
 }
 
 // _____________________________________________________________________________
-void appendSingleMatchBlock(std::vector<char>& out, uint32_t offset) {
-  AD_CONTRACT_CHECK(offset >= 1 && offset < (1u << 30));
+Expected<void> appendSingleMatchBlock(std::vector<char>& out, uint32_t offset) {
+  if (offset < 1 || offset >= (1u << 30)) {
+    return ZstdError{"Invalid offset " + std::to_string(offset) +
+                     " for a hand-written ZSTD match"};
+  }
   // An explicit offset is stored as the "offset value" `offset + 3` (the
   // values 1 to 3 denote repeat offsets). The offset code is the number of
   // extra bits, and the value is `(1 << code) + extraBits`.
@@ -68,10 +73,12 @@ void appendSingleMatchBlock(std::vector<char>& out, uint32_t offset) {
     content.push_back(static_cast<char>((bitstream >> (8 * i)) & 0xFF));
   }
 
-  BlockHeader{false, BlockHeader::Type::Compressed,
-              static_cast<uint32_t>(content.size())}
-      .append(out);
+  // The block has at most 10 bytes, so its header is always valid.
+  BlockHeader header{false, BlockHeader::Type::Compressed,
+                     static_cast<uint32_t>(content.size())};
+  AD_CORRECTNESS_CHECK(header.append(out).hasValue());
   out.insert(out.end(), content.begin(), content.end());
+  return {};
 }
 
 }  // namespace ad_utility::zstd

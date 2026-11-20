@@ -14,12 +14,15 @@
 #include <string>
 #include <vector>
 
+#include "util/ZstdFrameTestHelpers.h"
 #include "util/compressionUsingZstd/ZstdFrameBlocks.h"
 #include "util/compressionUsingZstd/ZstdHandWrittenBlocks.h"
 #include "util/compressionUsingZstd/ZstdIndependentUnit.h"
 
 using namespace ad_utility::zstd;
 using Bytes = std::vector<char>;
+using zstdFrameTestHelpers::hasValue;
+using zstdFrameTestHelpers::isError;
 
 namespace {
 // Bytes that resemble typical binary data: numbers as text, separated by
@@ -70,7 +73,8 @@ Bytes frameOf(const Bytes& blocks, uint64_t contentSize) {
   frame.insert(frame.end(), blocks.begin(), blocks.end());
   auto blockSpan =
       ql::span<char>{frame}.subspan(SingleSegmentFrame::headerSize);
-  setLastBlockFlag(blockSpan, lastBlockHeaderOffset(blockSpan).value(), true);
+  EXPECT_TRUE(hasValue(setLastBlockFlag(
+      blockSpan, lastBlockHeaderOffset(blockSpan).value(), true)));
   return frame;
 }
 
@@ -91,10 +95,9 @@ TEST(ZstdHandWrittenBlocks, singleMatchBlock) {
   Bytes literals = randomBytes(2000, 1);
   Bytes blocks;
   appendRawBlocks(blocks, literals);
-  appendSingleMatchBlock(blocks, 8);
-  appendSingleMatchBlock(blocks, 1);
-  appendSingleMatchBlock(blocks, 1000);
-  appendSingleMatchBlock(blocks, 2000);
+  for (uint32_t offset : {8u, 1u, 1000u, 2000u}) {
+    EXPECT_TRUE(hasValue(appendSingleMatchBlock(blocks, offset)));
+  }
 
   Bytes expected = literals;
   auto copyMatch = [&expected](size_t offset) {
@@ -108,6 +111,13 @@ TEST(ZstdHandWrittenBlocks, singleMatchBlock) {
   copyMatch(2000);
   EXPECT_EQ(decompress(frameOf(blocks, expected.size()), expected.size()),
             expected);
+
+  // Invalid offsets are rejected, and nothing is appended.
+  const auto sizeBefore = blocks.size();
+  EXPECT_TRUE(isError(appendSingleMatchBlock(blocks, 0), "Invalid offset"));
+  EXPECT_TRUE(
+      isError(appendSingleMatchBlock(blocks, 1u << 30), "Invalid offset"));
+  EXPECT_EQ(blocks.size(), sizeBefore);
 }
 
 // Large literals are split into several raw blocks.
@@ -128,13 +138,13 @@ TEST(ZstdIndependentUnit, unitsCanBeCombined) {
   auto first = binaryLike(500'000, 3);
   auto second = binaryLike(200'000, 4);
   auto firstUnit = compressIndependentUnit(first, 3, true);
-  ASSERT_TRUE(firstUnit.has_value());
+  ASSERT_TRUE(hasValue(firstUnit));
   EXPECT_TRUE(firstUnit->endsInStartState_);
   // The compression is not much worse than a regular compression.
   auto regularSize = compressIndependentUnit(first, 3, false)->blocks_.size();
   EXPECT_LT(firstUnit->blocks_.size(), regularSize + regularSize / 20);
   auto secondUnit = compressIndependentUnit(second, 1, false);
-  ASSERT_TRUE(secondUnit.has_value());
+  ASSERT_TRUE(hasValue(secondUnit));
   EXPECT_FALSE(secondUnit->endsInStartState_);
 
   auto combined = concat(firstUnit->blocks_, secondUnit->blocks_);
@@ -146,8 +156,8 @@ TEST(ZstdIndependentUnit, unitsCanBeCombined) {
   for (const auto& [unit, data] : {std::pair{&firstUnit.value(), &first},
                                    std::pair{&secondUnit.value(), &second}}) {
     Bytes out(data->size());
-    EXPECT_TRUE(
-        SingleSegmentFrame::decompressBlocks(unit->blocks_, data->size(), out));
+    EXPECT_TRUE(hasValue(SingleSegmentFrame::decompressBlocks(
+        unit->blocks_, data->size(), out)));
     EXPECT_EQ(out, *data);
   }
 }
@@ -163,21 +173,21 @@ TEST(ZstdIndependentUnit, withoutFinalMatches) {
     while (position < unit.blocks_.size()) {
       auto block = BlockHeader::read(
           ql::span<const char>{unit.blocks_}.subspan(position));
-      if (!block.has_value() || block->type_ != BlockHeader::Type::Raw) {
+      if (!block.hasValue() || block->type_ != BlockHeader::Type::Raw) {
         return false;
       }
       position += block->totalSize();
     }
     return unit.endsInStartState_ &&
-           SingleSegmentFrame::decompressBlocks(unit.blocks_, data.size(),
-                                                out) &&
+           SingleSegmentFrame::decompressBlocks(unit.blocks_, data.size(), out)
+               .hasValue() &&
            out == data;
   };
   for (const auto& data :
        {randomBytes(500'000, 5), Bytes(5, 'x'), Bytes{},
         concat(Bytes(1000, '\0'), randomBytes(500'000, 6))}) {
     auto unit = compressIndependentUnit(data, 3, true);
-    ASSERT_TRUE(unit.has_value());
+    ASSERT_TRUE(hasValue(unit));
     EXPECT_TRUE(isRawUnitOf(unit.value(), data));
     // A raw unit can be followed by any other unit.
     auto next = binaryLike(10'000, 8);
@@ -188,27 +198,33 @@ TEST(ZstdIndependentUnit, withoutFinalMatches) {
                          expected.size()),
               expected);
   }
-  // Compressible data without final matches cannot end in the start state.
+  // Compressible data without final matches cannot end in the start state, so
+  // it is compressed regularly.
+  auto withoutMatches =
+      compressIndependentUnit(compressibleWithoutFinalMatches(7), 3, true);
+  ASSERT_TRUE(hasValue(withoutMatches));
+  EXPECT_FALSE(withoutMatches->endsInStartState_);
   EXPECT_EQ(
-      compressIndependentUnit(compressibleWithoutFinalMatches(7), 3, true),
-      std::nullopt);
+      withoutMatches->blocks_,
+      compressIndependentUnit(compressibleWithoutFinalMatches(7), 3, false)
+          ->blocks_);
   // Followed by a few zeros, it is compressed with the final matches.
   auto withZeros = concat(compressibleWithoutFinalMatches(7), Bytes(20, '\0'));
   auto unit = compressIndependentUnit(withZeros, 3, true);
-  ASSERT_TRUE(unit.has_value());
+  ASSERT_TRUE(hasValue(unit));
   EXPECT_LT(unit->blocks_.size(), withZeros.size() / 2);
   Bytes out(withZeros.size());
-  EXPECT_TRUE(SingleSegmentFrame::decompressBlocks(unit->blocks_,
-                                                   withZeros.size(), out));
+  EXPECT_TRUE(hasValue(SingleSegmentFrame::decompressBlocks(
+      unit->blocks_, withZeros.size(), out)));
   EXPECT_EQ(out, withZeros);
 
   // Without the start state, everything can be compressed, also empty data.
   for (const auto& data : {randomBytes(1000, 7), Bytes{}}) {
     auto plain = compressIndependentUnit(data, 3, false);
-    ASSERT_TRUE(plain.has_value());
+    ASSERT_TRUE(hasValue(plain));
     Bytes decompressed(data.size());
-    EXPECT_TRUE(SingleSegmentFrame::decompressBlocks(
-        plain->blocks_, data.size(), decompressed));
+    EXPECT_TRUE(hasValue(SingleSegmentFrame::decompressBlocks(
+        plain->blocks_, data.size(), decompressed)));
     EXPECT_EQ(decompressed, data);
   }
 }

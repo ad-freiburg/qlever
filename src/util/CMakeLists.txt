@@ -20,13 +20,13 @@ add_library(qlever_util GlobalExecutor.cpp BinaryDiffApplier.cpp RegexSet.cpp Pa
 qlever_target_link_libraries(qlever_util antlrErrorHandling s2 pb_util pb_util_geo pb_util_json rdfTypes antlr4_umbrella)
 
 # The ZSTD helpers for frames that consist of independently compressed
-# segments, see `compressionUsingZstd/SegmentedZstdFrame.h`.
+# sections, see `compressionUsingZstd/SectionedZstdFrame.h`.
 add_library(zstdHelpers compressionUsingZstd/ZstdFrameHeader.cpp
         compressionUsingZstd/ZstdFrameBlocks.cpp
         compressionUsingZstd/ZstdSkippableFrame.cpp
         compressionUsingZstd/ZstdHandWrittenBlocks.cpp
         compressionUsingZstd/ZstdIndependentUnit.cpp
-        compressionUsingZstd/SegmentedZstdFrame.cpp)
+        compressionUsingZstd/SectionedZstdFrame.cpp)
 qlever_target_link_libraries(zstdHelpers)
 
 add_subdirectory(metrics)

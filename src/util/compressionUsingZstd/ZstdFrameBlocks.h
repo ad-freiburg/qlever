@@ -12,16 +12,18 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <optional>
 #include <vector>
 
 #include "backports/span.h"
+#include "util/compressionUsingZstd/ZstdExpected.h"
 
 // Helpers for the BLOCKS of ZSTD frames: reading and writing block headers,
 // finding the blocks of a frame, changing their last-block flag, and wrapping
 // blocks (possibly taken from several other frames) in a new SINGLE SEGMENT
 // FRAME. For the terminology (frame, block, window, single segment frame, ...)
-// see the comment at the top of `ZstdFrameHeader.h`.
+// see the comment at the top of `ZstdFrameHeader.h`. None of the functions
+// throws for invalid input; errors are reported via `Expected` (see
+// `ZstdExpected.h`).
 //
 // The blocks of a frame are stored back to back right after the frame header.
 // Each block consists of a 3-byte block header and the block content:
@@ -31,7 +33,7 @@
 //   │ (3 bytes)    │               │ (3 bytes)    │               │     │
 //   └──────────────┴───────────────┴──────────────┴───────────────┴─────┘
 //
-// The frame ends after the block whose header has the last-block flag set
+// The blocks end with the block whose header has the last-block flag set
 // (followed by the checksum, if the frame has one). The blocks contain no
 // information about where they start or end other than their headers, so a
 // sequence of blocks can only be traversed from its beginning.
@@ -59,6 +61,8 @@ struct BlockHeader {
   };
   // The size of the header in bytes.
   static constexpr size_t size = 3;
+  // The largest `blockSize_` that fits into the 21 bits of the header.
+  static constexpr uint32_t maxBlockSize = (1u << 21) - 1;
 
   // True iff this is the last block of its frame.
   bool isLast_ = false;
@@ -67,7 +71,7 @@ struct BlockHeader {
   // For `Raw` and `Compressed` blocks: the size of the block content in bytes
   // (without the header). For `Rle` blocks: the number of times that the single
   // byte of the block content is repeated, i.e. the size of the decompressed
-  // content. It has 21 bits, so it must be smaller than `1 << 21`.
+  // content. It has 21 bits, so it must be at most `maxBlockSize`.
   uint32_t blockSize_ = 0;
 
   // Return the number of bytes of the block including its header.
@@ -76,17 +80,18 @@ struct BlockHeader {
     return size + (type_ == Type::Rle ? 1 : blockSize_);
   }
 
-  // Read the header of the block at the start of `bytes`. Return
-  // `std::nullopt` if `bytes` is too short for the header or for the complete
-  // block, or if the block has the reserved type.
-  static std::optional<BlockHeader> read(ql::span<const char> bytes);
+  // Read the header of the block at the start of `bytes`. Return an error if
+  // `bytes` is too short for the header or for the complete block, or if the
+  // block has the reserved type.
+  static Expected<BlockHeader> read(ql::span<const char> bytes);
 
-  // Append the header to `out`.
-  void append(std::vector<char>& out) const;
+  // Append the header to `out`. Return an error (and append nothing) if the
+  // `blockSize_` is larger than `maxBlockSize`, or the type is `Reserved`.
+  Expected<void> append(std::vector<char>& out) const;
 };
 
 // The blocks of a single frame that was written by the ZSTD compressor,
-// without the frame header and without a checksum.
+// without the frame header and without the checksum.
 struct FrameBlocks {
   // All the blocks of the frame (each with its header), back to back. This is
   // a view into the frame that was passed to `blocksOfFrame`.
@@ -95,19 +100,25 @@ struct FrameBlocks {
   size_t lastHeader_;
 };
 
-// Return the blocks of `frame`, which has to be exactly one valid ZSTD frame
-// without a checksum. Throw if it is not.
-FrameBlocks blocksOfFrame(ql::span<const char> frame);
+// Return the blocks of `frame`, or an error if `frame` is not exactly one valid
+// ZSTD frame. If the frame has a checksum, then the checksum is not part of the
+// blocks: it is the checksum of the content of the whole frame, so it cannot be
+// used for the blocks when they are put into another frame (and the frames that
+// are assembled from blocks never have a checksum, see `SingleSegmentFrame`).
+Expected<FrameBlocks> blocksOfFrame(ql::span<const char> frame);
 
 // If `blocks` consists of one or more complete blocks, of which only the last
 // one may have the last-block flag set, then return the offset of the header of
-// the last block, else `std::nullopt`. Do not throw for any input.
-std::optional<size_t> lastBlockHeaderOffset(ql::span<const char> blocks);
+// the last block, else an error.
+Expected<size_t> lastBlockHeaderOffset(ql::span<const char> blocks);
 
 // Set or clear the last-block flag of the block whose header starts at
 // `blocks[headerOffset]`. This is needed to concatenate the blocks of several
-// frames, where only the very last block may have the flag set.
-void setLastBlockFlag(ql::span<char> blocks, size_t headerOffset, bool isLast);
+// frames, where only the very last block may have the flag set. Return an error
+// (and change nothing) if `blocks` is too short for a header at
+// `headerOffset`.
+Expected<void> setLastBlockFlag(ql::span<char> blocks, size_t headerOffset,
+                                bool isLast);
 
 // A SINGLE SEGMENT FRAME (see `ZstdFrameHeader.h`) that is assembled by hand:
 // a frame header with the single segment flag and the content size, followed
@@ -127,7 +138,8 @@ void setLastBlockFlag(ql::span<char> blocks, size_t headerOffset, bool isLast);
 //
 // NOTE: A streaming decompressor needs a buffer for the whole window, so it has
 // to allow a window of the size of the content (see `ZSTD_d_windowLogMax`). The
-// one-shot decompression (`ZSTD_decompress`) is not affected.
+// one-shot decompression (`ZSTD_decompress`) is not affected by the possibly
+// large window size.
 struct SingleSegmentFrame {
   // The size of the frame header that is written by `appendHeader`. The
   // content size is always stored with 8 bytes, so the size of the header does
@@ -145,10 +157,11 @@ struct SingleSegmentFrame {
   // blocks must not depend on blocks that precede them (see
   // `ZstdIndependentUnit.h`). They are copied after a new frame header (and
   // their last block gets the last-block flag), which is cheap compared to the
-  // decompression itself. Return false if the blocks are corrupted. Do not
-  // throw for any input.
-  static bool decompressBlocks(ql::span<const char> blocks,
-                               uint64_t contentSize, ql::span<char> out);
+  // decompression itself. Return an error if the blocks are corrupted, if they
+  // do not decode to exactly `contentSize` bytes, or if `out` is too small.
+  static Expected<void> decompressBlocks(ql::span<const char> blocks,
+                                         uint64_t contentSize,
+                                         ql::span<char> out);
 };
 
 }  // namespace ad_utility::zstd

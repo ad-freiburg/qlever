@@ -11,97 +11,137 @@
 
 #include <zstd.h>
 
+#include <string>
+
 #include "util/Exception.h"
 #include "util/compressionUsingZstd/ZstdFrameHeader.h"
 #include "util/compressionUsingZstd/ZstdLittleEndian.h"
 
 namespace ad_utility::zstd {
 
+namespace {
+// The size of the checksum at the end of a frame with the checksum flag.
+constexpr size_t checksumSize = 4;
+}  // namespace
+
 // _____________________________________________________________________________
-std::optional<BlockHeader> BlockHeader::read(ql::span<const char> bytes) {
-  using detail::byteAt;
+Expected<BlockHeader> BlockHeader::read(ql::span<const char> bytes) {
   if (bytes.size() < size) {
-    return std::nullopt;
+    return ZstdError{"A ZSTD block header is truncated"};
   }
-  // Assemble the 24-bit little-endian integer from its three bytes, and
-  // extract its fields: bit 0 is the last-block flag, bits 1-2 are the type,
-  // and bits 3-23 are the size of the block.
-  uint32_t value =
-      byteAt(bytes, 0) | byteAt(bytes, 1) << 8 | byteAt(bytes, 2) << 16;
+  // The header is a 24-bit little-endian integer. Extract its fields: bit 0 is
+  // the last-block flag, bits 1-2 are the type, and bits 3-23 are the size of
+  // the block.
+  const auto value = static_cast<uint32_t>(detail::readLittleEndian<3>(bytes));
   BlockHeader header{(value & 1) != 0, static_cast<Type>((value >> 1) & 3),
                      value >> 3};
+  if (header.type_ == Type::Reserved) {
+    return ZstdError{"A ZSTD block has the reserved block type"};
+  }
   // Also check that the complete block (not only its header) is contained in
   // `bytes`, such that the caller can safely skip to the next block.
-  if (header.type_ == Type::Reserved || header.totalSize() > bytes.size()) {
-    return std::nullopt;
+  if (header.totalSize() > bytes.size()) {
+    return ZstdError{"A ZSTD block is truncated: it needs " +
+                     std::to_string(header.totalSize()) + " bytes, but only " +
+                     std::to_string(bytes.size()) + " bytes are given"};
   }
   return header;
 }
 
 // _____________________________________________________________________________
-void BlockHeader::append(std::vector<char>& out) const {
-  // The size has to fit into the 21 bits of the size field.
-  AD_CONTRACT_CHECK(blockSize_ < (1u << 21) && type_ != Type::Reserved);
-  // Assemble the 24-bit integer (see `read` for the layout) and append its
-  // three bytes, least significant byte first.
-  uint32_t value = static_cast<uint32_t>(isLast_) |
-                   static_cast<uint32_t>(type_) << 1 | blockSize_ << 3;
-  out.push_back(static_cast<char>(value & 0xFF));
-  out.push_back(static_cast<char>((value >> 8) & 0xFF));
-  out.push_back(static_cast<char>(value >> 16));
+Expected<void> BlockHeader::append(std::vector<char>& out) const {
+  if (blockSize_ > maxBlockSize) {
+    return ZstdError{"The size " + std::to_string(blockSize_) +
+                     " of a ZSTD block does not fit into the 21 bits of its "
+                     "header"};
+  }
+  if (type_ == Type::Reserved) {
+    return ZstdError{"A ZSTD block cannot have the reserved block type"};
+  }
+  // Assemble the 24-bit integer (see `read` for the layout).
+  const uint32_t value = static_cast<uint32_t>(isLast_) |
+                         static_cast<uint32_t>(type_) << 1 | blockSize_ << 3;
+  detail::appendLittleEndian<size>(out, value);
+  return {};
 }
 
 // _____________________________________________________________________________
-FrameBlocks blocksOfFrame(ql::span<const char> frame) {
-  // The blocks start right after the frame header. A checksum would follow the
-  // last block, which is not supported (callers compress without checksums).
+Expected<FrameBlocks> blocksOfFrame(ql::span<const char> frame) {
+  // The blocks start right after the frame header.
   auto header = parseFrameHeader(frame);
-  AD_CORRECTNESS_CHECK(header.has_value() && !header->hasChecksum_);
+  if (!header.hasValue()) {
+    return std::move(header).error();
+  }
   // Let ZSTD check that `frame` is exactly one complete frame (no trailing
   // bytes, nothing missing).
-  AD_CORRECTNESS_CHECK(
-      ZSTD_findFrameCompressedSize(frame.data(), frame.size()) == frame.size());
-  auto blocks = frame.subspan(header->headerSize_);
-  // Without a checksum, the blocks extend to the end of the frame, and the last
-  // of them has to have the last-block flag set.
+  const size_t frameSize =
+      ZSTD_findFrameCompressedSize(frame.data(), frame.size());
+  if (ZSTD_isError(frameSize)) {
+    return ZstdError{std::string{"Invalid ZSTD frame: "} +
+                     ZSTD_getErrorName(frameSize)};
+  }
+  if (frameSize != frame.size()) {
+    return ZstdError{"The data is not exactly one ZSTD frame: the frame has " +
+                     std::to_string(frameSize) + " bytes, but the data has " +
+                     std::to_string(frame.size()) + " bytes"};
+  }
+  // The blocks extend to the end of the frame, except for the checksum (if
+  // any). ZSTD has checked that the frame is complete, so the subtraction
+  // cannot underflow.
+  const size_t blocksSize = frame.size() - header->headerSize_ -
+                            (header->hasChecksum_ ? checksumSize : 0);
+  auto blocks = frame.subspan(header->headerSize_, blocksSize);
+  // The last of the blocks has to have the last-block flag set.
   auto lastHeader = lastBlockHeaderOffset(blocks);
-  AD_CORRECTNESS_CHECK(lastHeader.has_value());
-  AD_CORRECTNESS_CHECK(
-      BlockHeader::read(blocks.subspan(lastHeader.value()))->isLast_);
-  return {blocks, lastHeader.value()};
+  if (!lastHeader.hasValue()) {
+    return std::move(lastHeader).error();
+  }
+  if (!BlockHeader::read(blocks.subspan(lastHeader.value()))->isLast_) {
+    return ZstdError{"The last block of a ZSTD frame has no last-block flag"};
+  }
+  return FrameBlocks{blocks, lastHeader.value()};
 }
 
 // _____________________________________________________________________________
-std::optional<size_t> lastBlockHeaderOffset(ql::span<const char> blocks) {
+Expected<size_t> lastBlockHeaderOffset(ql::span<const char> blocks) {
+  if (blocks.empty()) {
+    return ZstdError{"A sequence of ZSTD blocks must not be empty"};
+  }
   // Walk over the blocks from header to header, the only way to find the block
   // boundaries (see the comment at the top of `ZstdFrameBlocks.h`).
   size_t position = 0;
-  std::optional<size_t> lastHeader;
+  size_t lastHeader = 0;
   while (position < blocks.size()) {
     // `read` fails if the header or the block is truncated.
     auto block = BlockHeader::read(blocks.subspan(position));
-    if (!block.has_value()) {
-      return std::nullopt;
+    if (!block.hasValue()) {
+      return std::move(block).error();
     }
     lastHeader = position;
     position += block->totalSize();
     // A decoder stops after a block with the last-block flag, so if there are
     // more bytes after such a block, the blocks are not valid.
     if (block->isLast_ && position != blocks.size()) {
-      return std::nullopt;
+      return ZstdError{
+          "A ZSTD block with the last-block flag is followed by more data"};
     }
   }
-  // If `blocks` is empty, `lastHeader` is still `std::nullopt`.
   return lastHeader;
 }
 
 // _____________________________________________________________________________
-void setLastBlockFlag(ql::span<char> blocks, size_t headerOffset, bool isLast) {
-  AD_CONTRACT_CHECK(headerOffset + BlockHeader::size <= blocks.size());
+Expected<void> setLastBlockFlag(ql::span<char> blocks, size_t headerOffset,
+                                bool isLast) {
+  if (headerOffset > blocks.size() ||
+      blocks.size() - headerOffset < BlockHeader::size) {
+    return ZstdError{"There is no ZSTD block header at offset " +
+                     std::to_string(headerOffset)};
+  }
   // The last-block flag is bit 0 of the 24-bit little-endian header, so it is
   // the least significant bit of the first byte of the header.
   auto& byte = blocks[headerOffset];
   byte = static_cast<char>(isLast ? (byte | 1) : (byte & ~1));
+  return {};
 }
 
 // _____________________________________________________________________________
@@ -117,10 +157,9 @@ void SingleSegmentFrame::appendHeader(std::vector<char>& out,
   // (`3 << 6`), and the single segment flag (`1 << 5`); no checksum, no
   // dictionary.
   constexpr uint8_t descriptor = (3 << 6) | (1 << 5);
-  auto serializer = detail::appendingSerializer(out);
-  serializer << static_cast<uint32_t>(ZSTD_MAGICNUMBER);
-  serializer << descriptor;
-  serializer << contentSize;
+  detail::appendLittleEndian<4>(out, ZSTD_MAGICNUMBER);
+  detail::appendLittleEndian<1>(out, descriptor);
+  detail::appendLittleEndian<8>(out, contentSize);
   AD_CORRECTNESS_CHECK(out.size() - begin == headerSize);
   // Let ZSTD and `parseFrameHeader` check that they parse the header as
   // intended.
@@ -132,14 +171,19 @@ void SingleSegmentFrame::appendHeader(std::vector<char>& out,
 }
 
 // _____________________________________________________________________________
-bool SingleSegmentFrame::decompressBlocks(ql::span<const char> blocks,
-                                          uint64_t contentSize,
-                                          ql::span<char> out) {
+Expected<void> SingleSegmentFrame::decompressBlocks(ql::span<const char> blocks,
+                                                    uint64_t contentSize,
+                                                    ql::span<char> out) {
   // Validate the block structure first, so that `ZSTD_decompress` never sees a
   // frame whose blocks are truncated.
   auto lastHeader = lastBlockHeaderOffset(blocks);
-  if (!lastHeader.has_value() || out.size() < contentSize) {
-    return false;
+  if (!lastHeader.hasValue()) {
+    return std::move(lastHeader).error();
+  }
+  if (out.size() < contentSize) {
+    return ZstdError{"The output buffer of " + std::to_string(out.size()) +
+                     " bytes is too small for " + std::to_string(contentSize) +
+                     " bytes of decompressed content"};
   }
   // The stable API of ZSTD can only decompress complete frames, so wrap the
   // blocks in a new single segment frame, and make sure that their last block
@@ -149,13 +193,24 @@ bool SingleSegmentFrame::decompressBlocks(ql::span<const char> blocks,
   frame.reserve(headerSize + blocks.size());
   appendHeader(frame, contentSize);
   frame.insert(frame.end(), blocks.begin(), blocks.end());
-  setLastBlockFlag(ql::span<char>{frame}.subspan(headerSize),
-                   lastHeader.value(), true);
+  AD_CORRECTNESS_CHECK(
+      setLastBlockFlag(ql::span<char>{frame}.subspan(headerSize),
+                       lastHeader.value(), true)
+          .hasValue());
   // The content size in the header lets ZSTD detect blocks that decode to too
   // many or too few bytes.
-  size_t size =
+  const size_t size =
       ZSTD_decompress(out.data(), contentSize, frame.data(), frame.size());
-  return !ZSTD_isError(size) && size == contentSize;
+  if (ZSTD_isError(size)) {
+    return ZstdError{std::string{"Decompressing ZSTD blocks failed: "} +
+                     ZSTD_getErrorName(size)};
+  }
+  if (size != contentSize) {
+    return ZstdError{"ZSTD blocks decoded to " + std::to_string(size) +
+                     " bytes instead of the expected " +
+                     std::to_string(contentSize) + " bytes"};
+  }
+  return {};
 }
 
 }  // namespace ad_utility::zstd

@@ -15,40 +15,43 @@
 #include <vector>
 
 #include "backports/span.h"
-#include "util/serializer/ByteBufferSerializer.h"
-#include "util/serializer/FromCallableSerializer.h"
+#include "util/Exception.h"
 
-// Low-level helpers to read and write the integers of the ZSTD frame format
-// (see `ZstdFrameHeader.h`), which are shared by `ZstdFrameHeader.cpp`,
-// `ZstdFrameBlocks.cpp`, and `ZstdSkippableFrame.cpp`. All integers of the
-// frame format are little endian, which is the native byte order on all
-// platforms that QLever currently supports, so they are simply (de)serialized
-// via their in-memory representation.
+// Read and write the little-endian integers of the ZSTD frame format (see
+// `ZstdFrameHeader.h`): the magic numbers, the content size, the block headers
+// (3 bytes), and the sizes of skippable frames. The bytes are assembled and
+// taken apart explicitly, so the result does not depend on the byte order of
+// the platform.
 namespace ad_utility::zstd::detail {
 
-// Return a serializer that appends the bytes of everything that is written to
-// it to the end of `out`.
-inline auto appendingSerializer(std::vector<char>& out) {
-  return serialization::WriteViaCallableSerializer{
-      [&out](const char* bytes, size_t numBytes) {
-        out.insert(out.end(), bytes, bytes + numBytes);
-      }};
+// Return the unsigned integer that is stored in the first `NumBytes` bytes of
+// `bytes` in little-endian order (the least significant byte first). `bytes`
+// has to contain at least `NumBytes` bytes.
+template <size_t NumBytes>
+uint64_t readLittleEndian(ql::span<const char> bytes) {
+  static_assert(NumBytes >= 1 && NumBytes <= 8);
+  AD_CORRECTNESS_CHECK(bytes.size() >= NumBytes);
+  uint64_t result = 0;
+  for (size_t i = 0; i < NumBytes; ++i) {
+    // Convert via `uint8_t`, because `char` may be signed, and a plain
+    // conversion would sign-extend the bytes >= 128.
+    result |= uint64_t{static_cast<uint8_t>(bytes[i])} << (8 * i);
+  }
+  return result;
 }
 
-// Read the `T` that is stored in the first `sizeof(T)` bytes of `bytes`, which
-// has to be at least that large.
-template <typename T>
-T readValue(ql::span<const char> bytes) {
-  serialization::ByteBufferReadSerializerT reader{bytes.first(sizeof(T))};
-  T value;
-  reader >> value;
-  return value;
-}
-
-// Return the byte at `bytes[i]` as an unsigned integer (`char` may be signed,
-// so a plain conversion would sign-extend bytes >= 128).
-inline uint32_t byteAt(ql::span<const char> bytes, size_t i) {
-  return static_cast<uint8_t>(bytes[i]);
+// Append the lowest `NumBytes` bytes of `value` to `out` in little-endian order
+// (the least significant byte first). `value` has to fit into `NumBytes`
+// bytes.
+template <size_t NumBytes>
+void appendLittleEndian(std::vector<char>& out, uint64_t value) {
+  static_assert(NumBytes >= 1 && NumBytes <= 8);
+  if constexpr (NumBytes < 8) {
+    AD_CORRECTNESS_CHECK(value >> (8 * NumBytes) == 0);
+  }
+  for (size_t i = 0; i < NumBytes; ++i) {
+    out.push_back(static_cast<char>((value >> (8 * i)) & 0xFF));
+  }
 }
 
 }  // namespace ad_utility::zstd::detail

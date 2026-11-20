@@ -11,10 +11,10 @@
 #define QLEVER_SRC_UTIL_COMPRESSIONUSINGZSTD_ZSTDINDEPENDENTUNIT_H
 
 #include <cstddef>
-#include <optional>
 #include <vector>
 
 #include "backports/span.h"
+#include "util/compressionUsingZstd/ZstdExpected.h"
 
 // An "independent unit" is a sequence of ZSTD blocks that encodes some data
 // such that the blocks can be put into any ZSTD frame at any position where
@@ -45,24 +45,33 @@
 // neither use nor change the repeat offsets or the entropy tables. This is
 // done if it costs at most a little more than an ordinary compression, which
 // is the case for short, empty, random, or already compressed data.
+//
+// The hand-written end of a unit is verified by decoding it (see
+// `checkEndsInStartState` in `ZstdIndependentUnit.cpp`). If a future version of
+// ZSTD decodes it differently, the unit is treated like data without the three
+// matches, so the result is always correct.
 namespace ad_utility::zstd {
 
 // A compressed unit: its blocks (without a frame header, and with the
 // last-block flag cleared), and whether it ends in the start state (see
 // above).
 struct CompressedUnit {
+  // The compressed blocks of the unit, each with its block header.
   std::vector<char> blocks_;
+  // True iff the decoder is in the start state after the blocks (see above).
   bool endsInStartState_ = false;
 };
 
 // Compress `data` as an independent unit with the ZSTD `compressionLevel`. If
 // `endInStartState` is false, the blocks are those of an ordinary compression.
-// If it is true, the unit ends in the start state, or `std::nullopt` is
-// returned if this is not possible for the `data` without a significantly
-// worse compression (see above).
-std::optional<CompressedUnit> compressIndependentUnit(ql::span<const char> data,
-                                                      int compressionLevel,
-                                                      bool endInStartState);
+// If it is true, the unit ends in the start state, unless this is not possible
+// for the `data` without a significantly worse compression (see above). In
+// that case, the blocks of an ordinary compression are returned, and their
+// `endsInStartState_` is false. Return an error if ZSTD fails to compress (for
+// example, because memory cannot be allocated).
+Expected<CompressedUnit> compressIndependentUnit(ql::span<const char> data,
+                                                 int compressionLevel,
+                                                 bool endInStartState);
 
 }  // namespace ad_utility::zstd
 

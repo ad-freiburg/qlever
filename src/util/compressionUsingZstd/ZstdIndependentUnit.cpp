@@ -18,9 +18,9 @@
 
 #include "backports/algorithm.h"
 #include "util/Exception.h"
+#include "util/UninitializedAllocator.h"
 #include "util/compressionUsingZstd/ZstdFrameBlocks.h"
 #include "util/compressionUsingZstd/ZstdHandWrittenBlocks.h"
-#include "util/compressionUsingZstd/ZstdWrapper.h"
 
 namespace ad_utility::zstd {
 
@@ -81,14 +81,33 @@ std::optional<FinalMatches> findFinalMatches(ql::span<const char> data) {
 
 // Compress `data` with a fresh ZSTD compressor and append the blocks to
 // `out`. The last-block flag of the last block is set iff `isLast` is true.
-void appendCompressedBlocks(std::vector<char>& out, ql::span<const char> data,
-                            int compressionLevel, bool isLast = false) {
-  auto frame =
-      ZstdWrapper::compressToUninitializedBuffer(data, compressionLevel);
-  auto [blocks, lastHeader] = blocksOfFrame(frame);
+// Return an error if ZSTD fails to compress.
+Expected<void> appendCompressedBlocks(std::vector<char>& out,
+                                      ql::span<const char> data,
+                                      int compressionLevel,
+                                      bool isLast = false) {
+  // The buffer for the worst-case size of the frame is not zero-initialized,
+  // so only the pages that are actually written are touched.
+  std::vector<char, ad_utility::default_init_allocator<char>> frame(
+      ZSTD_compressBound(data.size()));
+  const size_t frameSize = ZSTD_compress(
+      frame.data(), frame.size(), data.data(), data.size(), compressionLevel);
+  if (ZSTD_isError(frameSize)) {
+    return ZstdError{std::string{"ZSTD compression failed: "} +
+                     ZSTD_getErrorName(frameSize)};
+  }
+  frame.resize(frameSize);
+  // The frame was just written by ZSTD, so it has to be valid.
+  auto frameBlocks = blocksOfFrame(frame);
+  AD_CORRECTNESS_CHECK(frameBlocks.hasValue(),
+                       [&frameBlocks] { return frameBlocks.error().message_; });
+  auto [blocks, lastHeader] = frameBlocks.value();
   const size_t begin = out.size();
   out.insert(out.end(), blocks.begin(), blocks.end());
-  setLastBlockFlag(ql::span<char>{out}.subspan(begin), lastHeader, isLast);
+  AD_CORRECTNESS_CHECK(
+      setLastBlockFlag(ql::span<char>{out}.subspan(begin), lastHeader, isLast)
+          .hasValue());
+  return {};
 }
 
 // Return a deterministic sequence of bytes that consists of random literals
@@ -114,15 +133,16 @@ std::string makeProbe(uint32_t seed) {
   return probe;
 }
 
-// Check that the hand-written `tailBlocks`, which encode `data` from
+// Return true iff the hand-written `tailBlocks`, which encode `data` from
 // `matches.match8_` on, decode correctly and leave the decoder in the start
 // state. For this purpose, the 8 bytes before `match8_` (which the first match
 // refers to) are stored as a raw block, followed by the `tailBlocks`, followed
 // by the blocks of fresh compressions of probes that use all three repeat
-// offsets. This only takes time proportional to the size of the tail.
-void checkEndsInStartState(ql::span<const char> data,
-                           const FinalMatches& matches,
-                           ql::span<const char> tailBlocks) {
+// offsets. This only takes time proportional to the size of the tail. Return
+// an error if ZSTD fails to compress the probes.
+Expected<bool> checkEndsInStartState(ql::span<const char> data,
+                                     const FinalMatches& matches,
+                                     ql::span<const char> tailBlocks) {
   auto expected = data.subspan(matches.match8_ - 8);
   for (uint32_t seed : {1u, 2u}) {
     std::string probe = makeProbe(seed);
@@ -130,18 +150,22 @@ void checkEndsInStartState(ql::span<const char> data,
     SingleSegmentFrame::appendHeader(frame, expected.size() + probe.size());
     appendRawBlocks(frame, expected.first(8));
     frame.insert(frame.end(), tailBlocks.begin(), tailBlocks.end());
-    appendCompressedBlocks(frame, probe, seed == 1 ? 1 : 3, true);
+    auto probeBlocks =
+        appendCompressedBlocks(frame, probe, seed == 1 ? 1 : 3, true);
+    if (!probeBlocks.hasValue()) {
+      return std::move(probeBlocks).error();
+    }
     std::vector<char> decompressed(expected.size() + probe.size());
     size_t size = ZSTD_decompress(decompressed.data(), decompressed.size(),
                                   frame.data(), frame.size());
     auto output = ql::span<const char>{decompressed};
-    AD_CORRECTNESS_CHECK(
-        !ZSTD_isError(size) && size == decompressed.size() &&
-            ql::ranges::equal(output.first(expected.size()), expected) &&
-            ql::ranges::equal(output.subspan(expected.size()), probe),
-        "The end of a ZSTD unit does not leave the decoder in the state of a "
-        "frame start, this is a bug in `ZstdIndependentUnit.cpp`");
+    if (ZSTD_isError(size) || size != decompressed.size() ||
+        !ql::ranges::equal(output.first(expected.size()), expected) ||
+        !ql::ranges::equal(output.subspan(expected.size()), probe)) {
+      return false;
+    }
   }
+  return true;
 }
 
 // Return a unit that stores `data` uncompressed in raw blocks. Raw blocks
@@ -151,7 +175,8 @@ void checkEndsInStartState(ql::span<const char> data,
 CompressedUnit rawUnit(ql::span<const char> data) {
   CompressedUnit result{{}, true};
   if (data.empty()) {
-    BlockHeader{false, BlockHeader::Type::Raw, 0}.append(result.blocks_);
+    BlockHeader emptyBlock{false, BlockHeader::Type::Raw, 0};
+    AD_CORRECTNESS_CHECK(emptyBlock.append(result.blocks_).hasValue());
   } else {
     appendRawBlocks(result.blocks_, data);
   }
@@ -167,43 +192,67 @@ bool rawIsCheap(size_t rawSize, size_t compressedSize) {
 }  // namespace
 
 // _____________________________________________________________________________
-std::optional<CompressedUnit> compressIndependentUnit(ql::span<const char> data,
-                                                      int compressionLevel,
-                                                      bool endInStartState) {
-  CompressedUnit result;
+Expected<CompressedUnit> compressIndependentUnit(ql::span<const char> data,
+                                                 int compressionLevel,
+                                                 bool endInStartState) {
+  CompressedUnit regular;
   if (!endInStartState) {
-    appendCompressedBlocks(result.blocks_, data, compressionLevel);
-    return result;
-  }
-  auto matches = findFinalMatches(data);
-  if (!matches.has_value()) {
-    // Without the final matches, the data is stored uncompressed if this is
-    // cheap (for example for short, empty, or random data).
-    auto raw = rawUnit(data);
-    auto compressed = compressIndependentUnit(data, compressionLevel, false);
-    if (rawIsCheap(raw.blocks_.size(), compressed.value().blocks_.size())) {
-      return raw;
+    auto compressed =
+        appendCompressedBlocks(regular.blocks_, data, compressionLevel);
+    if (!compressed.hasValue()) {
+      return std::move(compressed).error();
     }
-    return std::nullopt;
+    return regular;
   }
-  const auto [match8, match4, match1] = matches.value();
-  // Everything before the first match is compressed regularly, the rest is
-  // written by hand (see `ZstdIndependentUnit.h`).
-  appendCompressedBlocks(result.blocks_, data.first(match8), compressionLevel);
-  const size_t tailBegin = result.blocks_.size();
-  auto& blocks = result.blocks_;
-  appendSingleMatchBlock(blocks, 8);
-  appendRawBlocks(blocks, data.subspan(match8 + matchLength,
-                                       match4 - (match8 + matchLength)));
-  appendSingleMatchBlock(blocks, 4);
-  appendRawBlocks(blocks, data.subspan(match4 + matchLength,
-                                       match1 - (match4 + matchLength)));
-  appendSingleMatchBlock(blocks, 1);
-  appendRawBlocks(blocks, data.subspan(match1 + matchLength));
-  checkEndsInStartState(data, matches.value(),
-                        ql::span<const char>{blocks}.subspan(tailBegin));
-  result.endsInStartState_ = true;
-  return result;
+  if (auto matches = findFinalMatches(data); matches.has_value()) {
+    const auto [match8, match4, match1] = matches.value();
+    // Everything before the first match is compressed regularly, the rest is
+    // written by hand (see `ZstdIndependentUnit.h`).
+    CompressedUnit result;
+    auto& blocks = result.blocks_;
+    auto compressed =
+        appendCompressedBlocks(blocks, data.first(match8), compressionLevel);
+    if (!compressed.hasValue()) {
+      return std::move(compressed).error();
+    }
+    const size_t tailBegin = blocks.size();
+    // The offsets 8, 4, and 1 are always valid for a hand-written match.
+    auto appendMatch = [&blocks](uint32_t offset) {
+      AD_CORRECTNESS_CHECK(appendSingleMatchBlock(blocks, offset).hasValue());
+    };
+    appendMatch(8);
+    appendRawBlocks(blocks, data.subspan(match8 + matchLength,
+                                         match4 - (match8 + matchLength)));
+    appendMatch(4);
+    appendRawBlocks(blocks, data.subspan(match4 + matchLength,
+                                         match1 - (match4 + matchLength)));
+    appendMatch(1);
+    appendRawBlocks(blocks, data.subspan(match1 + matchLength));
+    auto endsInStartState = checkEndsInStartState(
+        data, matches.value(), ql::span<const char>{blocks}.subspan(tailBegin));
+    if (!endsInStartState.hasValue()) {
+      return std::move(endsInStartState).error();
+    }
+    if (endsInStartState.value()) {
+      result.endsInStartState_ = true;
+      return result;
+    }
+    // Otherwise, the installed version of ZSTD decodes the hand-written
+    // blocks differently than expected; continue as if there were no matches.
+  }
+  // Without the final matches, the data is stored uncompressed if this is
+  // cheap (for example for short, empty, or random data), else it is
+  // compressed regularly (and does not end in the start state).
+  auto compressed =
+      appendCompressedBlocks(regular.blocks_, data, compressionLevel);
+  if (!compressed.hasValue()) {
+    return std::move(compressed).error();
+  }
+  auto raw = rawUnit(data);
+  if (rawIsCheap(raw.blocks_.size(), regular.blocks_.size())) {
+    return raw;
+  }
+  return regular;
 }
 
 }  // namespace ad_utility::zstd
