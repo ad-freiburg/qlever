@@ -436,8 +436,11 @@ class IndexScan final : public Operation {
     bool hasSubset = varsToKeep_.has_value();
     auto cols =
         hasSubset ? std::optional{getSubsetForStrippedColumns()} : std::nullopt;
+    // NOTE: The `table` is moved out of, the callers (the blocks of a lazy
+    // scan, see `getLazyScan`, and `materializedIndexScan`) do not use it
+    // afterwards. Taking it by value would copy each block of a lazy scan.
     return [cols = std::move(cols),
-            constantColumns = constantColumns_](auto&& table) {
+            constantColumns = constantColumns_](auto& table) {
       for (Id id : constantColumns | ql::views::keys) {
         table.addEmptyColumn();
         ql::ranges::fill(table.getColumn(table.numColumns() - 1), id);
