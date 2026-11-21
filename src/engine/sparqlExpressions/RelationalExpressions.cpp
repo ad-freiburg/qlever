@@ -13,9 +13,11 @@
 
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
+#include "engine/sparqlExpressions/QueryRewriteExpressionHelpers.h"
 #include "engine/sparqlExpressions/RelationalExpressionHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "util/TypeTraits.h"
+#include "util/UnitOfMeasurement.h"
 
 using namespace sparqlExpression;
 
@@ -519,6 +521,34 @@ static std::optional<std::pair<Variable, bool>> getOptVariableAndIsYear(
   // No Variable for pre-filtering available.
   return std::nullopt;
 }
+
+namespace {
+// If `expr` (a comparison with `<=`) has the form `distance <= number`, where
+// `distance` is a call of `geof:distance` or `geof:metricDistance` with a unit
+// of length, return the call and the number in meters. Otherwise return
+// `std::nullopt`.
+//
+// NOTE: The query planner recognizes these filters via `engine/filterFacts`,
+// which also resolves variables with the definitions of the query. Here, only
+// the expression is available.
+std::optional<std::pair<GeoFunctionCall, double>> getGeoDistanceFilter(
+    const SparqlExpression& expr) {
+  auto children = expr.children();
+  auto call = getGeoDistanceExpressionParameters(*children[0]);
+  auto constant = children[1]->getConstantValue();
+  auto number = constant.has_value() ? constant->getNumber() : std::nullopt;
+  if (!call.has_value() || !ad_utility::detail::isLengthUnit(call->unit_) ||
+      !number.has_value()) {
+    return std::nullopt;
+  }
+  double meters = call->unit_ == UnitOfMeasurement::METERS
+                      ? number.value()
+                      : ad_utility::detail::valueInUnitToKilometer(
+                            number.value(), call->unit_) *
+                            1000;
+  return std::pair{GeoFunctionCall{call.value()}, meters};
+}
+}  // namespace
 
 // _____________________________________________________________________________
 template <Comparison comp>

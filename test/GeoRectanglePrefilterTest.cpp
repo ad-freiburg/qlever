@@ -888,7 +888,7 @@ TEST(GeoRectanglePrefilterGrid, evaluateKeepsInsertedLiterals) {
   auto [cell10First, cell10Last] =
       std::minmax({getId(wkt("LINESTRING(10 10, 11 10)")),
                    getId(wkt("LINESTRING(12 10, 13 10)"))});
-  LocalVocab localVocab;
+  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
   Id inserted = Id::makeFromLocalVocabIndex(
       localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{
           ad_utility::triple_component::Literal::fromStringRepresentation(
