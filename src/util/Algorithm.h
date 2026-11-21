@@ -13,11 +13,13 @@
 #include <numeric>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 
 #include "backports/algorithm.h"
 #include "backports/iterator.h"
 #include "backports/shift.h"
+#include "util/Allocator.h"
 #include "util/ContainersWithAllocator.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
@@ -121,29 +123,41 @@ void appendVector(std::vector<T, Alloc>& destination, U&& source) {
                      ad_utility::makeForwardingIterator<U>(source.end()));
 }
 
+namespace algorithm::detail {
+// Apply `unaryOp` to all elements of `input` and collect the results in a
+// `Vector` (a class template like `std::vector` or `qlm::vector`), which is
+// constructed with the `vectorArgs` (for example an allocator).
+template <template <typename...> typename Vector, typename Range, typename F,
+          typename... VectorArgs>
+auto transformToVector(Range&& input, F unaryOp,
+                       const VectorArgs&... vectorArgs) {
+  return ql::ranges::subrange(
+             ad_utility::makeForwardingIterator<Range>(input.begin()),
+             ad_utility::makeForwardingIterator<Range>(input.end())) |
+         ql::views::transform(std::move(unaryOp)) |
+         ::ranges::to<Vector>(vectorArgs...);
+}
+}  // namespace algorithm::detail
+
 /**
  * Applies the UnaryOperation to all elements of the range and return a new
  * vector which contains the results.
  */
 template <typename Range, typename F>
 auto transform(Range&& input, F unaryOp) {
-  return ql::ranges::subrange(
-             ad_utility::makeForwardingIterator<Range>(input.begin()),
-             ad_utility::makeForwardingIterator<Range>(input.end())) |
-         ql::views::transform(std::move(unaryOp)) | ::ranges::to_vector;
+  return algorithm::detail::transformToVector<std::vector>(AD_FWD(input),
+                                                           std::move(unaryOp));
 }
 
 /**
  * Like the overload above, but the result is a `qlm::vector` that uses the
- * given `allocator`.
+ * given `allocator`, which has to be a `qlever::Allocator`.
  */
-template <typename Range, typename F, typename Alloc>
+CPP_template(typename Range, typename F, typename Alloc)(
+    requires qlever::isQleverAllocator<Alloc>)
 auto transform(Range&& input, F unaryOp, const Alloc& allocator) {
-  return ql::ranges::subrange(
-             ad_utility::makeForwardingIterator<Range>(input.begin()),
-             ad_utility::makeForwardingIterator<Range>(input.end())) |
-         ql::views::transform(std::move(unaryOp)) |
-         ::ranges::to<qlm::vector>(allocator);
+  return algorithm::detail::transformToVector<qlm::vector>(
+      AD_FWD(input), std::move(unaryOp), allocator);
 }
 
 /*

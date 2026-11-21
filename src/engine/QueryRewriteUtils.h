@@ -11,6 +11,7 @@
 
 #include "parser/data/SparqlFilter.h"
 #include "rdfTypes/Variable.h"
+#include "util/ContainersWithAllocator.h"
 
 class QueryExecutionContext;
 class SpatialJoin;
@@ -31,6 +32,6 @@ std::shared_ptr<SpatialJoin> rewriteFilterToSpatialJoin(
 // `engine/filterFacts`) into its conjuncts. Then this conjunct can be rewritten
 // on its own (e.g. to a `SpatialJoin`), and the other conjuncts are applied as
 // regular FILTERs.
-void splitFiltersWithFacts(std::vector<SparqlFilter>& filters);
+void splitFiltersWithFacts(qlm::vector<SparqlFilter>& filters);
 
 #endif  // QLEVER_SRC_ENGINE_QUERYREWRITEUTILS_H

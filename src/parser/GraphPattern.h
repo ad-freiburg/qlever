@@ -8,8 +8,11 @@
 #include <string>
 #include <vector>
 
+#include "global/Id.h"
 #include "parser/data/SparqlFilter.h"
 #include "rdfTypes/Variable.h"
+#include "util/Allocator.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/HashSet.h"
 
 namespace parsedQuery {
@@ -32,8 +35,9 @@ struct TextLimitMetaObject {
 class GraphPattern {
  public:
   // The constructor has to be implemented in the .cpp file because of the
-  // circular dependencies of `GraphPattern` and `GraphPatternOperation`.
-  GraphPattern();
+  // circular dependencies of `GraphPattern` and `GraphPatternOperation`. The
+  // `allocator` is used for the containers of the pattern.
+  explicit GraphPattern(const qlever::Allocator<Id>& allocator);
   GraphPattern(GraphPattern&& other) noexcept;
   GraphPattern(const GraphPattern& other);
   GraphPattern& operator=(const GraphPattern& other);
@@ -57,8 +61,8 @@ class GraphPattern {
   // Filters always apply to the complete GraphPattern, no matter where
   // they appear. For VALUES and Triples, the order matters, so they
   // become children.
-  std::vector<SparqlFilter> _filters;
-  std::vector<GraphPatternOperation> _graphPatterns;
+  qlm::vector<SparqlFilter> _filters;
+  qlm::vector<GraphPatternOperation> _graphPatterns;
 
   // Hashmap that stores for each text variable the corresponding
   // TextLimitMetaObject

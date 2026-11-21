@@ -149,14 +149,15 @@ class GraphStoreProtocol {
         convertTriples(effectiveGraph, std::move(triples), bn, allocator);
     updateClause::GraphUpdate up{std::move(convertedTriples),
                                  updateClause::UpdateTriples{allocator}};
-    ParsedQuery res;
-    res._clause = parsedQuery::UpdateClause{std::move(up)};
+    ParsedQuery res{allocator};
+    res._clause = parsedQuery::UpdateClause{allocator, std::move(up)};
     if (insertIntoNewGraph) {
       AD_CORRECTNESS_CHECK(
           std::holds_alternative<ad_utility::triple_component::Iri>(
               effectiveGraph));
-      res.responseMiddleware_ = makePostNewGraphMiddleware(
-          std::get<ad_utility::triple_component::Iri>(effectiveGraph));
+      res.responseMiddleware_ =
+          std::make_shared<const ResponseMiddleware>(makePostNewGraphMiddleware(
+              std::get<ad_utility::triple_component::Iri>(effectiveGraph)));
     }
     // Graph store protocol POST requests might have a very large body. Limit
     // the length used for the string representation.
@@ -182,8 +183,8 @@ class GraphStoreProtocol {
         convertTriples(graph, std::move(triples), bn, allocator);
     updateClause::GraphUpdate up{updateClause::UpdateTriples{allocator},
                                  std::move(convertedTriples)};
-    ParsedQuery res;
-    res._clause = parsedQuery::UpdateClause{std::move(up)};
+    ParsedQuery res{allocator};
+    res._clause = parsedQuery::UpdateClause{allocator, std::move(up)};
     res._originalString = truncatedStringRepresentation("TSOP", rawRequest);
     return res;
   }
@@ -236,13 +237,13 @@ class GraphStoreProtocol {
         convertTriples(graph, std::move(triples), bn, allocator);
     updateClause::GraphUpdate up{std::move(convertedTriples),
                                  updateClause::UpdateTriples{allocator}};
-    ParsedQuery insertData;
+    ParsedQuery insertData{allocator};
     // Interpretation of the very vague GSP 5.3:
     // - 201 Created if a new graph is created
     // - 200 Ok or 204 No Content if an existing graph is modified
     // When the drop (first operation) deletes triples then the graph has
     // existed before in our model of implicit graph existence.
-    drop.responseMiddleware_ = ResponseMiddleware(
+    drop.responseMiddleware_ = std::make_shared<const ResponseMiddleware>(
         [](ResponseMiddleware::ResponseT response,
            const std::vector<UpdateMetadata>& updateMetadata) {
           AD_CORRECTNESS_CHECK(updateMetadata.size() == 2);
@@ -255,7 +256,7 @@ class GraphStoreProtocol {
           }
           return response;
         });
-    insertData._clause = parsedQuery::UpdateClause{std::move(up)};
+    insertData._clause = parsedQuery::UpdateClause{allocator, std::move(up)};
     insertData._originalString = stringRepresentation;
     return {std::move(drop), std::move(insertData)};
   }
