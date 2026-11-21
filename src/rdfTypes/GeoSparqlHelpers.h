@@ -178,27 +178,38 @@ class WktMetricLength {
   }
 };
 
-// Get the centroid of a geometry.
+// Get the centroid of a geometry, as a `GeoPoint` for a geometry in CRS84 and
+// as a WKT literal in the CRS of the geometry otherwise.
 class WktCentroid {
  public:
-  ValueId operator()(const std::optional<Centroid>& geom) const {
+  sparqlExpression::IdOrLiteralOrIri operator()(
+      const std::optional<WithSourceCrs<Centroid>>& geom) const {
     if (!geom.has_value()) {
       return ValueId::makeUndefined();
     }
-    return ValueId::makeFromGeoPoint(geom.value().centroid());
+    const auto& [centroid, sourceCrs] = geom.value();
+    if (sourceCrs == SourceCrsType{crsTypeCrs84}) {
+      return ValueId::makeFromGeoPoint(centroid.centroid());
+    }
+    using namespace triple_component;
+    auto lit = Literal::literalWithoutQuotes(centroid.asWkt(sourceCrs));
+    lit.addDatatype(detail::wktLiteralIri);
+    return {LiteralOrIri{std::move(lit)}};
   }
 };
 
-// Get the bounding box of a geometry.
+// Get the bounding box of a geometry as a WKT literal in the CRS of the
+// geometry.
 class WktEnvelope {
  public:
   sparqlExpression::IdOrLiteralOrIri operator()(
-      const std::optional<BoundingBox>& boundingBox) const {
-    if (!boundingBox.has_value()) {
+      const std::optional<WithSourceCrs<BoundingBox>>& geom) const {
+    if (!geom.has_value()) {
       return ValueId::makeUndefined();
     }
+    const auto& [boundingBox, sourceCrs] = geom.value();
     using namespace triple_component;
-    auto lit = Literal::literalWithoutQuotes(boundingBox.value().asWkt());
+    auto lit = Literal::literalWithoutQuotes(boundingBox.asWkt(sourceCrs));
     lit.addDatatype(detail::wktLiteralIri);
     return {LiteralOrIri{std::move(lit)}};
   }

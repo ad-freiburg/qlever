@@ -297,4 +297,51 @@ TEST(GeoSparqlHelpers, WktTransform) {
   EXPECT_EQ(WktTransform{}(std::nullopt, util::geo::CRSType::WGS84), undef);
 }
 
+// Test that the centroid and the envelope of a geometry are returned in the
+// CRS of the geometry: for CRS84 as a `GeoPoint` (the centroid) or a plain WKT
+// literal (the envelope), otherwise as a WKT literal with the CRS IRI.
+TEST(GeoSparqlHelpers, WktCentroidAndEnvelopeInSourceCrs) {
+  using namespace ad_utility::triple_component;
+  using ad_utility::BoundingBox;
+  using ad_utility::Centroid;
+  using ad_utility::SourceCrsType;
+  using ad_utility::WithSourceCrs;
+  using ad_utility::WktCentroid;
+  using ad_utility::WktEnvelope;
+  using util::geo::CRSType;
+  auto wktLit = [](std::string_view wkt) {
+    auto lit = Literal::literalWithoutQuotes(wkt);
+    lit.addDatatype(Iri::fromIrirefWithoutBrackets(GEO_WKT_LITERAL));
+    return sparqlExpression::IdOrLiteralOrIri{LiteralOrIri{std::move(lit)}};
+  };
+  sparqlExpression::IdOrLiteralOrIri undef = ValueId::makeUndefined();
+  Centroid centroid{50, 60};
+  BoundingBox box{{1, 2}, {3, 4}};
+
+  // The centroid (latitude 50, longitude 60) in each supported CRS.
+  EXPECT_EQ(WktCentroid{}(WithSourceCrs<Centroid>{
+                centroid, SourceCrsType{CRSType::CRS84}}),
+            sparqlExpression::IdOrLiteralOrIri{
+                ValueId::makeFromGeoPoint(GeoPoint{50, 60})});
+  EXPECT_EQ(
+      WktCentroid{}(
+          WithSourceCrs<Centroid>{centroid, SourceCrsType{CRSType::WGS84}}),
+      wktLit("<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(50 60)"));
+  EXPECT_EQ(WktCentroid{}(WithSourceCrs<Centroid>{
+                centroid, SourceCrsType{CRSType::WEB_MERCATOR}}),
+            wktLit("<http://www.opengis.net/def/crs/EPSG/0/3857> "
+                   "POINT(6679169.447596 6446275.841017)"));
+  EXPECT_EQ(WktCentroid{}(std::nullopt), undef);
+
+  // The envelope (latitudes 1 to 3, longitudes 2 to 4) in CRS84 and WGS84.
+  EXPECT_EQ(WktEnvelope{}(
+                WithSourceCrs<BoundingBox>{box, SourceCrsType{CRSType::CRS84}}),
+            wktLit("POLYGON((2 1,4 1,4 3,2 3,2 1))"));
+  EXPECT_EQ(WktEnvelope{}(
+                WithSourceCrs<BoundingBox>{box, SourceCrsType{CRSType::WGS84}}),
+            wktLit("<http://www.opengis.net/def/crs/EPSG/0/4326> "
+                   "POLYGON((1 2,1 4,3 4,3 2,1 2))"));
+  EXPECT_EQ(WktEnvelope{}(std::nullopt), undef);
+}
+
 }  // namespace
