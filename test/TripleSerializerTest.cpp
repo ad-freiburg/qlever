@@ -356,7 +356,7 @@ IdTable tableWithLocalVocabId(LocalVocab& localVocab, Id& localVocabId) {
 // columns of another `IdTable` and applies the `mapping` to the `Id`s of the
 // local vocab. This is the path with a copy of the named result cache.
 TEST(TripleSerializer, columnsOfAnIdTableRoundTrip) {
-  LocalVocab localVocab;
+  LocalVocab localVocab = makeLocalVocab();
   Id localVocabId;
   const IdTable table = tableWithLocalVocabId(localVocab, localVocabId);
 
@@ -388,7 +388,7 @@ TEST(TripleSerializer, columnsOfAnIdTableRoundTrip) {
 // vocab `Id` without an entry in the `mapping` is an error.
 TEST(TripleSerializer, remapLocalVocab) {
   auto* qec = ad_utility::testing::getQec();
-  LocalVocab localVocab;
+  LocalVocab localVocab = makeLocalVocab();
   auto LV = [&localVocab, qec](std::string_view value) {
     return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
         LocalVocabEntry::literalWithoutQuotes(value,
