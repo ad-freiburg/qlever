@@ -72,7 +72,9 @@ class Service : public Operation {
   // Methods inherited from base class `Operation`.
   std::string getDescriptor() const override;
   size_t getResultWidth() const override;
-  std::vector<ColumnIndex> resultSortedOn() const override { return {}; }
+  qlm::vector<ColumnIndex> resultSortedOn() const override {
+    return qlm::vector<ColumnIndex>{allocator()};
+  }
   float getMultiplicity(size_t col) override;
 
  private:
@@ -126,7 +128,7 @@ class Service : public Operation {
   [[nodiscard]] bool isDeterministicImpl() const override;
 
   // The string returned by this function is used as cache key.
-  std::string getCacheKeyImpl() const override;
+  qlm::string getCacheKeyImpl() const override;
 
   // Push down a `VALUES` clause into the body of the SERVICE clause and return
   // it.
@@ -139,6 +141,12 @@ class Service : public Operation {
 
   // Compute the result using `getResultFunction_` and `siblingInfo_`.
   Result computeResult(bool requestLaziness) override;
+
+  // Read the result from the `response`, which is in QLever's binary format
+  // (see `engine/binaryExport/BinaryExport.h`). This is the counterpart of the
+  // JSON handling in `computeResultImpl`.
+  Result computeBinaryResult(bool requestLaziness,
+                             HttpOrHttpsResponse response);
 
   // Actually compute the result for the function above.
   Result computeResultImpl(bool requestLaziness);

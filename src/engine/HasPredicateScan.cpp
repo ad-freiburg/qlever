@@ -13,7 +13,7 @@
 #include "index/IndexImpl.h"
 #include "index/TripleComponentConversions.h"
 #include "util/ChunkedForLoop.h"
-#include "util/JoinAlgorithms/JoinColumnMapping.h"
+#include "util/joinAlgorithms/JoinColumnMapping.h"
 
 // Assert that the `type` is a valid value for the `ScanType` enum.
 static void checkType(HasPredicateScan::ScanType type) {
@@ -86,8 +86,8 @@ HasPredicateScan::HasPredicateScan(QueryExecutionContext* qec,
       object_{triple.o_} {}
 
 // ___________________________________________________________________________
-std::string HasPredicateScan::getCacheKeyImpl() const {
-  std::ostringstream os;
+qlm::string HasPredicateScan::getCacheKeyImpl() const {
+  qlm::ostringstream os{allocator()};
   checkType(type_);
   switch (type_) {
     case ScanType::FREE_S:
@@ -140,20 +140,20 @@ size_t HasPredicateScan::getResultWidth() const {
 }
 
 // ___________________________________________________________________________
-std::vector<ColumnIndex> HasPredicateScan::resultSortedOn() const {
+qlm::vector<ColumnIndex> HasPredicateScan::resultSortedOn() const {
   checkType(type_);
   switch (type_) {
     case ScanType::FREE_S:
       // is the lack of sorting here a problem?
-      return {};
+      return qlm::vector<ColumnIndex>{allocator()};
     case ScanType::FREE_O:
-      return {0};
+      return {{0}, allocator()};
     case ScanType::FULL_SCAN:
-      return {0};
+      return {{0}, allocator()};
     case ScanType::SUBQUERY_S:
-      return subtree().resultSortedOn();
+      break;
   }
-  return {};
+  return subtree().resultSortedOn();
 }
 
 // ___________________________________________________________________________
@@ -295,17 +295,17 @@ Result HasPredicateScan::computeResult([[maybe_unused]] bool requestLaziness) {
       runOnResult([this, &idTable, &getId, &patterns](auto hasPattern) {
         computeFreeS(&idTable, getId(object_), hasPattern, patterns);
       });
-      return {std::move(idTable), resultSortedOn(), LocalVocab{}};
+      return {std::move(idTable), resultSortedOn(), LocalVocab{allocator()}};
     case ScanType::FREE_O:
       computeFreeO(&idTable, subject_, patterns);
-      return {std::move(idTable), resultSortedOn(), LocalVocab{}};
+      return {std::move(idTable), resultSortedOn(), LocalVocab{allocator()}};
 
     case ScanType::FULL_SCAN:
       runOnResult([this, &idTable, &patterns](auto hasPattern) {
         computeFullScan(&idTable, hasPattern, patterns,
                         getIndex().getNumDistinctSubjectPredicatePairs());
       });
-      return {std::move(idTable), resultSortedOn(), LocalVocab{}};
+      return {std::move(idTable), resultSortedOn(), LocalVocab{allocator()}};
     case ScanType::SUBQUERY_S:
 
       auto width = static_cast<int>(idTable.numColumns());

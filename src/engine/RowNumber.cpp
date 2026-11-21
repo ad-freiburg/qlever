@@ -22,8 +22,15 @@
 // _____________________________________________________________________________
 RowNumber::RowNumber(QueryExecutionContext* qec,
                      std::shared_ptr<QueryExecutionTree> child,
+                     Variable rowNumberVariable, int64_t offset)
+    : RowNumber{qec, std::move(child), std::move(rowNumberVariable), offset,
+                qlm::vector<ColumnIndex>{qec->getAllocator()}} {}
+
+// _____________________________________________________________________________
+RowNumber::RowNumber(QueryExecutionContext* qec,
+                     std::shared_ptr<QueryExecutionTree> child,
                      Variable rowNumberVariable, int64_t offset,
-                     std::vector<ColumnIndex> sortedOn)
+                     qlm::vector<ColumnIndex> sortedOn)
     : Operation{qec},
       child_{std::move(child)},
       rowNumberVariable_{std::move(rowNumberVariable)},
@@ -60,11 +67,11 @@ qlm::vector<QueryExecutionTree*> RowNumber::getChildrenImpl() const {
 }
 
 // _____________________________________________________________________________
-std::string RowNumber::getCacheKeyImpl() const {
+qlm::string RowNumber::getCacheKeyImpl() const {
   // The `sortedOn_` columns are not part of the key, because they don't change
   // the result.
-  return absl::StrCat("ROW NUMBER (offset ", offset_, ") ",
-                      child_->getCacheKey());
+  return qlm::StrCat(allocator(), "ROW NUMBER (offset ", offset_, ") ",
+                     child_->getCacheKey());
 }
 
 // _____________________________________________________________________________
@@ -103,20 +110,22 @@ std::unique_ptr<Operation> RowNumber::cloneImpl() const {
 
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>> RowNumber::makeSortedTree(
-    const std::vector<ColumnIndex>& sortColumns) const {
+    ql::span<const ColumnIndex> sortColumns) const {
   // Any order that starts with the row number column is already satisfied
   // (the row numbers are unique and ascending, so there are no ties to be
   // broken by the remaining columns, regardless of the order of the child).
   AD_CONTRACT_CHECK(!isSortedBy(sortColumns));
-  if (sortColumns.at(0) != 0) {
+  if (sortColumns[0] != 0) {
     return std::nullopt;
   }
   return ad_utility::makeExecutionTree<RowNumber>(
-      getExecutionContext(), child_, rowNumberVariable_, offset_, sortColumns);
+      getExecutionContext(), child_, rowNumberVariable_, offset_,
+      qlm::vector<ColumnIndex>{sortColumns.begin(), sortColumns.end(),
+                               allocator()});
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> RowNumber::resultSortedOn() const { return sortedOn_; }
+qlm::vector<ColumnIndex> RowNumber::resultSortedOn() const { return sortedOn_; }
 
 // _____________________________________________________________________________
 VariableToColumnMap RowNumber::computeVariableToColumnMap() const {
@@ -138,13 +147,22 @@ Result RowNumber::computeResult(bool requestLaziness) {
   // an `IdTable` and move it to the front. The next row number persists between
   // the calls (for the blocks of a lazy result). Throw if a row number exceeds
   // the range of integer `Id`s (it would wrap around and break the sort order).
+  //
+  // NOTE: The next row number is unsigned, because it is incremented once more
+  // after the last row number, which may be `Id::maxInt` (the largest `int64_t`
+  // with the split layout, where the increment would overflow).
   std::vector<ColumnIndex> permutation(getResultWidth());
   permutation[0] = permutation.size() - 1;
   std::iota(permutation.begin() + 1, permutation.end(), 0);
   auto addRowNumbers = [permutation = std::move(permutation),
-                        nextRowNumber = offset_](IdTable& idTable) mutable {
-    if (static_cast<int64_t>(idTable.numRows()) >
-        Id::maxInt - nextRowNumber + 1) {
+                        nextRowNumber = static_cast<uint64_t>(offset_)](
+                           IdTable& idTable) mutable {
+    // The first condition only holds for an `<offset>` beyond the range of
+    // integer `Id`s (after a block the next row number is at most
+    // `maxInt + 1`).
+    static constexpr auto maxInt = static_cast<uint64_t>(Id::maxInt);
+    if (nextRowNumber > maxInt + 1 ||
+        idTable.numRows() > maxInt + 1 - nextRowNumber) {
       throw std::runtime_error(absl::StrCat(
           "The row numbers of a row number SERVICE exceed the maximum integer "
           "value ",
@@ -152,8 +170,9 @@ Result RowNumber::computeResult(bool requestLaziness) {
     }
     idTable.addEmptyColumn();
     ql::ranges::generate(
-        idTable.getColumn(idTable.numColumns() - 1),
-        [&nextRowNumber]() { return Id::makeFromInt(nextRowNumber++); });
+        idTable.getColumn(idTable.numColumns() - 1), [&nextRowNumber]() {
+          return Id::makeFromInt(static_cast<int64_t>(nextRowNumber++));
+        });
     idTable.setColumnSubset(permutation);
   };
 

@@ -43,10 +43,10 @@ struct SpatialQuery : MagicServiceQuery {
   // result table. If empty, only the join column - given by `right_` - will
   // be in the result together with the all left columns and (optionally) the
   // distance variable. If the `right_` variable is selected outside of the
-  // SERVICE statement (which is allowed for only maxDist spatial joins), than
-  // this vector is required to be empty - the user may not specify the payload
-  // configuration parameter. It will then be automatically set to
-  // `PayloadAllVariables` to ensure appropriate semantics.
+  // SERVICE statement (which is allowed for all but nearest neighbors
+  // searches), then this vector is required to be empty - the user may not
+  // specify the payload configuration parameter. It will then be automatically
+  // set to `PayloadAllVariables` to ensure appropriate semantics.
   PayloadVariables payloadVariables_;
 
   // The join algorithm. Mandatory for the `SERVICE spatialSearch:` syntax

@@ -14,7 +14,7 @@
 
 #include "util/AlignedAllocator.h"
 #include "util/GTestHelpers.h"
-#include "util/Serializer/ByteBufferSerializer.h"
+#include "util/serializer/ByteBufferSerializer.h"
 
 using ad_utility::AlignedAllocator;
 using ad_utility::serialization::AlignedByteBufferReadSerializer;

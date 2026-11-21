@@ -13,6 +13,8 @@
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 
+#include <absl/strings/str_cat.h>
+
 #include <string>
 #include <string_view>
 #include <vector>
@@ -20,6 +22,10 @@
 #include "global/Id.h"
 #include "index/vocabulary/EncodedIriManager.h"
 #include "rdfTypes/GeoPoint.h"
+#include "util/http/MediaTypes.h"
+#include "util/serializer/AllocationLimitedReadSerializer.h"
+#include "util/serializer/SerializeString.h"
+#include "util/serializer/SerializeVector.h"
 
 // The parts of QLever's binary export format (see `exportAsQLeverBinary` in
 // `BinaryExport.h`) that both the exporting and the importing side need.
@@ -33,7 +39,8 @@ static constexpr std::string_view magicBytes = "QLEVER.EXPORT";
 // The reader reads the first `Id` of each row and compares it to this marker
 // to decide whether a row or a batch of strings follows. This is subtle: it
 // only works because the marker is never the first `Id` of an actual row.
-static constexpr Id::T vocabMarker = Id::makeUndefined().getBits() + 0b10101010;
+static constexpr Id::T vocabMarker =
+    Id::fromBits(Datatype::Undefined, 0b10101010).getBits();
 static_assert(Id::fromBits(vocabMarker).getDatatype() == Datatype::Undefined);
 
 // The header of the format. Its serialization starts with the `magicBytes` and
@@ -55,6 +62,50 @@ struct Header {
 
   // Return the serialized header.
   std::string serialize() const;
+
+  // Read a header that was written by `serialize` from the `serializer`. Each
+  // of its strings, as well as each of its vectors of strings, may take up at
+  // most `maxNumBytes`, which protects against allocating huge amounts of
+  // memory for an invalid response.
+  template <typename Serializer>
+  static Header read(Serializer& serializer, size_t maxNumBytes) {
+    namespace s = ad_utility::serialization;
+    // The magic bytes are serialized as a string. Its size is checked first,
+    // such that no memory is allocated for the size of an invalid response.
+    std::string magic(magicBytes.size(), '\0');
+    if (s::read<size_t>(serializer) == magic.size()) {
+      serializer.serializeBytes(magic.data(), magic.size());
+    }
+    if (magic != magicBytes) {
+      throw std::runtime_error{
+          "The result is not in QLever's binary export format"};
+    }
+    auto version = s::read<uint16_t>(serializer);
+    if (version != ad_utility::binaryQleverExportVersion) {
+      throw std::runtime_error{
+          absl::StrCat("The result is in version ", version,
+                       " of QLever's binary export format, but only version ",
+                       ad_utility::binaryQleverExportVersion, " is supported")};
+    }
+    Header header;
+    header.geoPointEncoding_ = s::read<GeoPointEncodingEnum>(serializer);
+    if (header.geoPointEncoding_ != GeoPointEncodingEnum::ZOrder &&
+        header.geoPointEncoding_ != GeoPointEncodingEnum::LatMajor) {
+      throw std::runtime_error{
+          "The result in QLever's binary export format has an invalid "
+          "encoding of its geographic points"};
+    }
+    header.patterns_ = detail::patternsFromJson(
+        nlohmann::json::parse(
+            s::readWithAllocationLimit<std::string>(serializer, maxNumBytes)),
+        EncodedIriManager::NumBitsEncoding, EncodedIriManager::maxNumPrefixes_);
+    using Strings = std::vector<std::string>;
+    header.variableNames_ =
+        s::readWithAllocationLimit<Strings>(serializer, maxNumBytes);
+    header.unboundVariableNames_ =
+        s::readWithAllocationLimit<Strings>(serializer, maxNumBytes);
+    return header;
+  }
 };
 
 }  // namespace qlever::binary_export

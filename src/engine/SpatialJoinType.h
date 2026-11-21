@@ -19,10 +19,10 @@
 namespace detail {
 // The supported spatial join types (geometry predicates). When updating this
 // enum with a new two-argument boolean relation, also add a case in
-// `getGeoFunctionExpressionParameters` in `GeoExpression.cpp`. This does not
-// apply to `WITHIN_DIST` and `DE9IM`, which take an additional parameter
-// (the distance resp. the filter pattern) and are therefore not exposed as
-// `geof:sf...`-style two-argument relations.
+// `getGeoFunctionExpressionParameters` in `GeoRelationExpression.cpp`. This
+// does not apply to `WITHIN_DIST` and `DE9IM`, which take an additional
+// parameter (the distance resp. the filter pattern) and are therefore not
+// exposed as `geof:sf...`-style two-argument relations.
 enum class SpatialJoinTypeEnum {
   INTERSECTS,
   CONTAINS,
@@ -35,6 +35,7 @@ enum class SpatialJoinTypeEnum {
   WITHIN_DIST,
   DE9IM
 };
+QLEVER_ENUM_SIZE(SpatialJoinTypeEnum, 10);
 }  // namespace detail
 
 // Wrapper around `detail::SpatialJoinTypeEnum` that provides conversion to
@@ -50,7 +51,8 @@ class SpatialJoinType
  public:
   using Enum = detail::SpatialJoinTypeEnum;
 
-  static constexpr std::array<std::pair<Enum, std::string_view>, 10>
+  static constexpr std::array<std::pair<Enum, std::string_view>,
+                              qlever::enumSize<Enum>>
       descriptions_{{{Enum::INTERSECTS, "intersects"},
                      {Enum::CONTAINS, "contains"},
                      {Enum::COVERS, "covers"},

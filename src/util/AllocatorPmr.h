@@ -19,7 +19,7 @@
 #include "backports/memory_resource.h"
 #include "util/MaybeOwningPtr.h"
 #include "util/MemoryLimitTracker.h"
-#include "util/MemorySize/MemorySize.h"
+#include "util/memorySize/MemorySize.h"
 
 namespace ad_utility {
 // See `util/MaybeOwningPtr.h` for the purpose of this inline namespace.

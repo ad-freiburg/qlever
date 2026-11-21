@@ -28,6 +28,8 @@ add_library(sparqlExpressions
         CountStarExpression.cpp
         PrefilterExpressionIndex.cpp
         GeoExpression.cpp
+        GeoDistanceExpression.cpp
+        GeoRelationExpression.cpp
         GeometryInfoExpression.cpp
         BlankNodeExpression.cpp
         GroupConcatExpression.cpp)

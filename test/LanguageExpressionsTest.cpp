@@ -49,7 +49,7 @@ struct TestContext {
 
   QueryExecutionContext* qec = ad_utility::testing::getQec(turtleInput);
   VariableToColumnMap varToColMap;
-  LocalVocab localVocab;
+  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
   IdTable table{qec->getAllocator()};
   sparqlExpression::EvaluationContext context{
       *qec,

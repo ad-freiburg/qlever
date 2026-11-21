@@ -25,14 +25,14 @@ constexpr std::array trivialDatatypes{Undefined, Bool, Int,
                                       Double,    Date, GeoPoint};
 constexpr std::array nonTrivialDatatypes{
     VocabIndex,     LocalVocabIndex, SecondaryVocabIndex, TextRecordIndex,
-    WordVocabIndex, BlankNodeIndex,  EncodedVal};
+    WordVocabIndex, BlankNodeIndex,  EncodedVal,          TripleTermIndex};
 }  // namespace
 
 // Test that exactly the datatypes that encode their value directly are
 // trivial, and that both lists above cover all datatypes.
 TEST(DatatypeTest, isDatatypeTrivial) {
   EXPECT_EQ(trivialDatatypes.size() + nonTrivialDatatypes.size(),
-            static_cast<size_t>(MaxValue) + 1);
+            qlever::enumSize<Datatype>);
   for (const Datatype type : trivialDatatypes) {
     EXPECT_TRUE(isDatatypeTrivial(type));
   }
@@ -44,10 +44,10 @@ TEST(DatatypeTest, isDatatypeTrivial) {
 // Test that `isListOfAllDatatypesInOrder` accepts exactly the complete list of
 // datatypes in the order of their numeric values.
 TEST(DatatypeTest, isListOfAllDatatypesInOrder) {
-  constexpr auto allDatatypes =
-      std::to_array({Undefined, Bool, Int, Double, VocabIndex, LocalVocabIndex,
-                     SecondaryVocabIndex, TextRecordIndex, Date, GeoPoint,
-                     WordVocabIndex, BlankNodeIndex, EncodedVal});
+  constexpr auto allDatatypes = std::to_array(
+      {Undefined, Bool, Int, Double, VocabIndex, LocalVocabIndex,
+       SecondaryVocabIndex, TextRecordIndex, Date, GeoPoint, WordVocabIndex,
+       BlankNodeIndex, EncodedVal, TripleTermIndex});
   static_assert(isListOfAllDatatypesInOrder(allDatatypes));
   EXPECT_TRUE(isListOfAllDatatypesInOrder(allDatatypes));
 
@@ -65,22 +65,24 @@ TEST(DatatypeTest, isListOfAllDatatypesInOrder) {
 // Test the string of each datatype. Note that `EncodedVal` is printed as
 // `EncodedIri`.
 TEST(DatatypeTest, toString) {
-  constexpr std::array<std::pair<Datatype, std::string_view>, 13> expected{{
-      {Undefined, "Undefined"},
-      {Bool, "Bool"},
-      {Int, "Int"},
-      {Double, "Double"},
-      {VocabIndex, "VocabIndex"},
-      {LocalVocabIndex, "LocalVocabIndex"},
-      {SecondaryVocabIndex, "SecondaryVocabIndex"},
-      {TextRecordIndex, "TextRecordIndex"},
-      {Date, "Date"},
-      {GeoPoint, "GeoPoint"},
-      {WordVocabIndex, "WordVocabIndex"},
-      {BlankNodeIndex, "BlankNodeIndex"},
-      {EncodedVal, "EncodedIri"},
-  }};
-  EXPECT_EQ(expected.size(), static_cast<size_t>(MaxValue) + 1);
+  constexpr std::array<std::pair<Datatype, std::string_view>,
+                       qlever::enumSize<Datatype>>
+      expected{{
+          {Undefined, "Undefined"},
+          {Bool, "Bool"},
+          {Int, "Int"},
+          {Double, "Double"},
+          {VocabIndex, "VocabIndex"},
+          {LocalVocabIndex, "LocalVocabIndex"},
+          {SecondaryVocabIndex, "SecondaryVocabIndex"},
+          {TextRecordIndex, "TextRecordIndex"},
+          {Date, "Date"},
+          {GeoPoint, "GeoPoint"},
+          {WordVocabIndex, "WordVocabIndex"},
+          {BlankNodeIndex, "BlankNodeIndex"},
+          {EncodedVal, "EncodedIri"},
+          {TripleTermIndex, "TripleTermIndex"},
+      }};
   for (const auto& [type, name] : expected) {
     EXPECT_EQ(toString(type), name);
   }
@@ -88,5 +90,5 @@ TEST(DatatypeTest, toString) {
 
 // Test that `toString` throws for a value that is not a datatype.
 TEST(DatatypeTest, invalidDatatypeEnumValue) {
-  EXPECT_ANY_THROW(toString(static_cast<Datatype>(2345)));
+  EXPECT_ANY_THROW(toString(static_cast<Datatype>(qlever::enumSize<Datatype>)));
 }

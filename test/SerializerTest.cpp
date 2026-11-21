@@ -11,23 +11,23 @@
 
 #include "backports/span.h"
 #include "util/GTestHelpers.h"
-#include "util/MemorySize/MemorySize.h"
 #include "util/Random.h"
-#include "util/Serializer/AllocationLimitedReadSerializer.h"
-#include "util/Serializer/BufferedSerializer.h"
-#include "util/Serializer/ByteBufferSerializer.h"
-#include "util/Serializer/ChunkedReadSerializer.h"
-#include "util/Serializer/CompressedSerializer.h"
-#include "util/Serializer/FileSerializer.h"
-#include "util/Serializer/FromCallableSerializer.h"
-#include "util/Serializer/SerializeArrayOrTuple.h"
-#include "util/Serializer/SerializeHashMap.h"
-#include "util/Serializer/SerializeOptional.h"
-#include "util/Serializer/SerializePair.h"
-#include "util/Serializer/SerializeString.h"
-#include "util/Serializer/SerializeVariant.h"
-#include "util/Serializer/SerializeVector.h"
-#include "util/Serializer/Serializer.h"
+#include "util/memorySize/MemorySize.h"
+#include "util/serializer/AllocationLimitedReadSerializer.h"
+#include "util/serializer/BufferedSerializer.h"
+#include "util/serializer/ByteBufferSerializer.h"
+#include "util/serializer/ChunkedReadSerializer.h"
+#include "util/serializer/CompressedSerializer.h"
+#include "util/serializer/FileSerializer.h"
+#include "util/serializer/FromCallableSerializer.h"
+#include "util/serializer/SerializeArrayOrTuple.h"
+#include "util/serializer/SerializeHashMap.h"
+#include "util/serializer/SerializeOptional.h"
+#include "util/serializer/SerializePair.h"
+#include "util/serializer/SerializeString.h"
+#include "util/serializer/SerializeVariant.h"
+#include "util/serializer/SerializeVector.h"
+#include "util/serializer/Serializer.h"
 
 using namespace ad_utility;
 using namespace memory_literals;
@@ -429,8 +429,8 @@ TEST(Serializer, ManyTrivialDatatypes) {
 }
 
 TEST(Serializer, StringAndHashMap) {
-  auto testFunction = [](auto&& writer, auto makeReaderFromWriter) {
-    ad_utility::HashMap<std::string, int> m;
+  auto testFunction = [](auto&& writer, auto makeReaderFromWriter, auto m) {
+    using Map = decltype(m);
     m["hallo"] = 42;
     m["tschüss"] = 84;
 
@@ -441,11 +441,19 @@ TEST(Serializer, StringAndHashMap) {
     writer | m;
 
     auto reader = makeReaderFromWriter();
-    ad_utility::HashMap<std::string, int> n;
+    Map n;
     reader | n;
     ASSERT_EQ(m, n);
   };
-  testWithAllSerializers(testFunction);
+  // Test the flat and the node hash maps.
+  auto testWithMap = [&testFunction](auto map) {
+    testWithAllSerializers(
+        [&testFunction, &map](auto&& writer, auto makeReaderFromWriter) {
+          testFunction(AD_FWD(writer), std::move(makeReaderFromWriter), map);
+        });
+  };
+  testWithMap(ad_utility::HashMap<std::string, int>{});
+  testWithMap(ql::NodeHashMapTemplate<std::string, int>{});
 }
 
 TEST(Serializer, Vector) {
