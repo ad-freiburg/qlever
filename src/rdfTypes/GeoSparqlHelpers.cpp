@@ -50,6 +50,10 @@ namespace ad_utility {
 
 namespace detail {
 
+// The latitude in degrees at which `pb_util` clamps a coordinate when
+// projecting it to Web Mercator.
+static constexpr double webMercatorMaxLatitude = 85.05112878;
+
 static constexpr auto wktPointRegex = ctll::fixed_string(
     "^\\s*[Pp][Oo][Ii][Nn][Tt]\\s*\\(\\s*"
     "(-?[0-9]+|-?[0-9]+\\.[0-9]+)"
@@ -100,6 +104,21 @@ std::optional<std::string> transformAsWkt(
   }
   // Parsing projects the coordinates to `targetCrs`.
   auto parseResult = parseGeoPointOrWkt(wkt, targetCrs);
+  // Return `std::nullopt` if the geometry reaches beyond the latitude range of
+  // Web Mercator (`pb_util` clamps such a latitude to the limit of the range,
+  // which would silently move the geometry).
+  if (targetCrs == ::util::geo::CRSType::WEB_MERCATOR &&
+      parseResult.parsedWkt_.has_value()) {
+    static const double maxY =
+        latLngToWebMerc<CoordType>(webMercatorMaxLatitude, 0).getY();
+    auto boundingBox =
+        std::visit([](const auto& val) { return getBoundingBox(val); },
+                   parseResult.parsedWkt_.value());
+    if (boundingBox.getLowerLeft().getY() <= -maxY ||
+        boundingBox.getUpperRight().getY() >= maxY) {
+      return std::nullopt;
+    }
+  }
   // TODO<yarox-1> This can be shortened to
   // `utilGeomToWkt(parseResult.parsedWkt_, targetCrs)` once #3787 is merged.
   auto wktResult = utilGeomToWkt(parseResult.parsedWkt_);

@@ -79,7 +79,9 @@ std::optional<std::string> geometryNAsWkt(GeoPointOrWkt wkt, int64_t n);
 // Helper to avoid including `GeometryInfoHelpersImpl.h`. Project the geometry
 // given by `wkt` to `targetCrs` and return it as WKT, with the IRI of the
 // target CRS in front (none for the default CRS). Returns `std::nullopt` for
-// invalid WKT or an unsupported source or target CRS.
+// invalid WKT, for an unsupported source or target CRS, and for a geometry
+// that reaches beyond the latitude range of Web Mercator (about 85.05 degrees)
+// when that is the target CRS.
 std::optional<std::string> transformAsWkt(
     const GeoPointOrWkt& wkt, const ::util::geo::CRSType& targetCrs);
 
@@ -291,9 +293,6 @@ class WktTransform {
       return ValueId::makeUndefined();
     }
 
-    // TODO<yarox-1> The function should return UNDEF if a transformation is
-    // not possible. Currently `pb_util` clamps latitudes beyond the Web
-    // Mercator range (about 85.05 degrees) instead.
     auto resultWkt = detail::transformAsWkt(wkt.value(), crs);
 
     if (!resultWkt.has_value()) {

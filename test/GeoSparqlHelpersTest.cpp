@@ -275,6 +275,24 @@ TEST(GeoSparqlHelpers, WktTransform) {
                            util::geo::CRSType::WGS84),
             undef);
 
+  // Test that a geometry beyond the latitude range of Web Mercator (about
+  // 85.05 degrees) cannot be projected to Web Mercator, but to WGS84.
+  GeoPoint northPole{90, 0};
+  std::string polygonBeyondRange{
+      "\"POLYGON((0 80, 10 80, 10 -86, 0 80))\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>"};
+  EXPECT_EQ(WktTransform{}(GeoPointOrWkt{northPole},
+                           util::geo::CRSType::WEB_MERCATOR),
+            undef);
+  EXPECT_EQ(WktTransform{}(GeoPointOrWkt{polygonBeyondRange},
+                           util::geo::CRSType::WEB_MERCATOR),
+            undef);
+  EXPECT_EQ(WktTransform{}(GeoPointOrWkt{northPole}, util::geo::CRSType::WGS84),
+            anyWkt("<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(90 0)"));
+  EXPECT_NE(WktTransform{}(GeoPointOrWkt{GeoPoint{85, 0}},
+                           util::geo::CRSType::WEB_MERCATOR),
+            undef);
+
   // Test UNDEF from `wkt` without value.
   EXPECT_EQ(WktTransform{}(std::nullopt, util::geo::CRSType::WGS84), undef);
 }
