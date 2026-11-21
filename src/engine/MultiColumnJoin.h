@@ -8,6 +8,7 @@
 #include <array>
 #include <vector>
 
+#include "backports/span.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 #include "util/ContainersWithAllocator.h"
@@ -17,7 +18,7 @@ class MultiColumnJoin : public Operation {
   std::shared_ptr<QueryExecutionTree> _left;
   std::shared_ptr<QueryExecutionTree> _right;
 
-  std::vector<std::array<ColumnIndex, 2>> _joinColumns;
+  qlm::vector<std::array<ColumnIndex, 2>> _joinColumns{allocator()};
 
   std::vector<float> _multiplicities;
   size_t _sizeEstimate;
@@ -31,14 +32,14 @@ class MultiColumnJoin : public Operation {
                   bool allowSwappingChildrenOnlyForTesting = true);
 
  protected:
-  std::string getCacheKeyImpl() const override;
+  qlm::string getCacheKeyImpl() const override;
 
  public:
   std::string getDescriptor() const override;
 
   size_t getResultWidth() const override;
 
-  std::vector<ColumnIndex> resultSortedOn() const override;
+  qlm::vector<ColumnIndex> resultSortedOn() const override;
 
   bool knownEmptyResult() override {
     return _left->knownEmptyResult() || _right->knownEmptyResult();
@@ -69,13 +70,13 @@ class MultiColumnJoin : public Operation {
    **/
   void computeMultiColumnJoin(
       const IdTableView<0>& left, const IdTableView<0>& right,
-      const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
+      ql::span<const std::array<ColumnIndex, 2>> joinColumns,
       IdTable* resultMightBeUnsorted);
 
   std::optional<std::shared_ptr<QueryExecutionTree>> makeTreeWithBindColumn(
       const parsedQuery::Bind& bind) const override;
   std::unique_ptr<Operation> cloneWithNewChildren(
-      std::vector<std::shared_ptr<QueryExecutionTree>> children) const override;
+      qlm::vector<std::shared_ptr<QueryExecutionTree>> children) const override;
 
  private:
   [[nodiscard]] bool isDeterministicImpl() const override { return true; }

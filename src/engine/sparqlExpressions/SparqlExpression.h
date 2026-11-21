@@ -137,6 +137,10 @@ class SparqlExpression {
   // implementation returns `false`.
   virtual bool isConstantExpression() const;
 
+  // Return the value of this expression if it is a simple constant, else
+  // `std::nullopt`. Default implementation returns `std::nullopt`.
+  virtual std::optional<TripleComponent> getConstantValue() const;
+
   // Returns true iff this expression is a STR(...) expression.  Default
   // implementation returns `false`.
   virtual bool isStrExpression() const;

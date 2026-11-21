@@ -72,12 +72,10 @@ Row makeRow(int64_t value, size_t numColumns) {
 // The rows that are identified by `values`, with `numColumns` columns each.
 std::vector<Row> makeRows(size_t numColumns,
                           const std::vector<int64_t>& values) {
-  std::vector<Row> rows;
-  rows.reserve(values.size());
-  for (int64_t value : values) {
-    rows.push_back(makeRow(value, numColumns));
-  }
-  return rows;
+  return values | ql::views::transform([numColumns](int64_t value) {
+           return makeRow(value, numColumns);
+         }) |
+         ::ranges::to_vector;
 }
 
 // Create a block with `numColumns` columns that holds the rows which are

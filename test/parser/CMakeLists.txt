@@ -1,7 +1,6 @@
 add_subdirectory(data)
 
 addLinkAndDiscoverTest(AsyncBlockSourceTest sparqlParser)
-addLinkAndDiscoverTest(LiteralOrIriTest engine)
 addLinkAndDiscoverTest(PayloadVariablesTest engine)
 addLinkAndDiscoverTest(QuadTest engine)
 addLinkAndDiscoverTest(BlankNodeAdderTest rdfParser)

@@ -9,8 +9,8 @@
 #include "../util/IdTestHelpers.h"
 #include "global/SpecialIds.h"
 #include "index/PatternCreator.h"
-#include "util/Serializer/ByteBufferSerializer.h"
-#include "util/Serializer/Serializer.h"
+#include "util/serializer/ByteBufferSerializer.h"
+#include "util/serializer/Serializer.h"
 
 namespace {
 auto V = ad_utility::testing::VocabId;
