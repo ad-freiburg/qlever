@@ -62,6 +62,10 @@ class LibspatialjoinAlgorithm : public SpatialJoinAlgorithmBase {
   //
   // NOTE 2: For a proximity search, the bounding box of each geometry is
   // padded by half the distance (see `sj::GeometryStore::add`).
+  //
+  // NOTE 3: If additionally `requireContainment` is set, only geometries whose
+  // precomputed bounding box lies inside `prefilterBox` are parsed (see
+  // `prefilterGeoByBoundingBox`).
   struct ParseInput {
     const IdTableView<0>* idTable_;
     ColumnIndex geomsCol_;
@@ -85,7 +89,8 @@ class LibspatialjoinAlgorithm : public SpatialJoinAlgorithmBase {
   };
   ParseMetadata parse(ParseInput input, sj::GeometryStore& store,
                       const sj::PreparedGeomMetaCb& metaCb, size_t numThreads,
-                      std::optional<util::geo::I32Box> prefilterBox) const;
+                      std::optional<util::geo::I32Box> prefilterBox,
+                      bool requireContainment = false) const;
 
   // Prepare a libspatialjoin `SpatialJoinCfg`. The result doesn't have any of
   // its callbacks set yet. Before constructing the `sj::GeometryStore`, the
@@ -109,17 +114,25 @@ class LibspatialjoinAlgorithm : public SpatialJoinAlgorithmBase {
 
   // Check the bounding box (only if available from a `GeoVocabulary`) of a
   // given vocabulary entry against `prefilterLatLngBox`. Returns `true` if
-  // the geometry can be discarded just by the bounding box. If a
-  // `precomputedBoundingBox` is already available (for example from an
-  // `IdTable` with dedicated bounding-box columns), it is used instead of
-  // looking up the `GeoVocabulary`. Otherwise this should only be called if
+  // the geometry can be discarded just by the bounding box: by default, if
+  // the two boxes do not intersect; if `requireContainment` is set, already if
+  // the geometry's bounding box does not lie inside `prefilterLatLngBox`. The
+  // latter is correct for the join types that require the geometry to be
+  // inside a geometry of the other side (`CONTAINS`, `COVERS`, `WITHIN`,
+  // `EQUALS`), and it discards the large geometries whose bounding box merely
+  // overlaps the prefilter box (a country or ocean polygon of many megabytes
+  // that a `sfContains` query with a small polygon would otherwise parse in
+  // full). If a `precomputedBoundingBox` is already available (for example
+  // from an `IdTable` with dedicated bounding-box columns), it is used instead
+  // of looking up the `GeoVocabulary`. Otherwise this should only be called if
   // the index is known to be built on a `GeoVocabulary`. Used by
   // `ad_utility::detail::parallel_wkt_parser::WKTParser` (see
   // `SpatialJoinParser.cpp`), which only ever parses WKT for this algorithm.
   static bool prefilterGeoByBoundingBox(
       const std::optional<::util::geo::DBox>& prefilterLatLngBox,
       const Index& index, VocabIndex vocabIndex,
-      const std::optional<ad_utility::BoundingBox>& precomputedBoundingBox);
+      const std::optional<ad_utility::BoundingBox>& precomputedBoundingBox,
+      bool requireContainment = false);
 
  private:
   // Directory and filename prefix for the temporary files written by

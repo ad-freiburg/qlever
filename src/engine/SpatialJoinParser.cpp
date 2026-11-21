@@ -21,7 +21,7 @@ namespace ad_utility::detail::parallel_wkt_parser {
 WKTParser::WKTParser(sj::GeometryStore* store, sj::PreparedGeomMetaCb metaCb,
                      size_t numThreads, bool usePrefiltering,
                      const std::optional<::util::geo::DBox>& prefilterLatLngBox,
-                     const Index& index)
+                     bool requireContainment, const Index& index)
     : sj::WKTParserBase<SpatialJoinParseJob>(store, std::move(metaCb),
                                              numThreads),
       _numSkipped(numThreads),
@@ -29,6 +29,7 @@ WKTParser::WKTParser(sj::GeometryStore* store, sj::PreparedGeomMetaCb metaCb,
       _numParsed(numThreads),
       _usePrefiltering(usePrefiltering),
       _prefilterLatLngBox(prefilterLatLngBox),
+      _requireContainment(requireContainment),
       _index(index) {
   // If the vocabulary carries a geo cell grid, geometries can additionally be
   // prefiltered by the cell bits of their `ValueId`s alone (without reading
@@ -127,7 +128,7 @@ void WKTParser::processQueue(size_t t) {
           if (_usePrefiltering &&
               LibspatialjoinAlgorithm::prefilterGeoByBoundingBox(
                   _prefilterLatLngBox, _index, job.valueId.getVocabIndex(),
-                  job.boundingBox)) {
+                  job.boundingBox, _requireContainment)) {
             prefilterCounter++;
             continue;
           }

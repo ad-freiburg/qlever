@@ -48,10 +48,13 @@ inline bool operator==(const SpatialJoinParseJob& a,
 // `sj::SweepEventList` of one side of the spatial join).
 class WKTParser : public sj::WKTParserBase<SpatialJoinParseJob> {
  public:
+  // If `requireContainment` is set, the prefilter discards every geometry
+  // whose bounding box does not lie inside `prefilterLatLngBox` (see
+  // `LibspatialjoinAlgorithm::prefilterGeoByBoundingBox`).
   WKTParser(sj::GeometryStore* store, sj::PreparedGeomMetaCb metaCb,
             size_t numThreads, bool usePrefiltering,
             const std::optional<::util::geo::DBox>& prefilterLatLngBox,
-            const Index& index);
+            bool requireContainment, const Index& index);
 
   // Stop the worker threads if the parsing ends without `done()`, for example
   // because the query was cancelled.
@@ -108,6 +111,7 @@ class WKTParser : public sj::WKTParserBase<SpatialJoinParseJob> {
   // Configure prefiltering geometries by bounding box.
   bool _usePrefiltering;
   std::optional<::util::geo::DBox> _prefilterLatLngBox;
+  bool _requireContainment;
 
   // A reference to QLever's index is needed to access precomputed geometry
   // bounding boxes and to resolve `ValueId`s into WKT literals.
