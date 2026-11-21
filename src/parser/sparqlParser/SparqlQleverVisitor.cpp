@@ -868,15 +868,16 @@ ParsedQuery Visitor::visit(Parser::LoadContext* ctx) {
   parsedQuery_.registerVariablesVisibleInQueryBody(visibleVariables_);
   visibleVariables_.clear();
   using Quad = SparqlTripleSimpleWithGraph;
-  std::vector<Quad> toInsert{
-      Quad{Variable("?s"), Variable("?p"), Variable("?o"),
-           ctx->graphRef() ? Quad::Graph(visit(ctx->graphRef()))
-                           : Quad::Graph(std::monostate{})}};
+  qlm::vector<Quad> toInsert{
+      {Quad{Variable("?s"), Variable("?p"), Variable("?o"),
+            ctx->graphRef() ? Quad::Graph(visit(ctx->graphRef()))
+                            : Quad::Graph(std::monostate{})}},
+      allocator()};
   parsedQuery_._clause = parsedQuery::UpdateClause{
       allocator(),
-      GraphUpdate{
-          {toInsert, LocalVocab{ad_utility::makeUnlimitedAllocator<Id>()}},
-          {}}};
+      GraphUpdate{{std::move(toInsert),
+                   LocalVocab{ad_utility::makeUnlimitedAllocator<Id>()}},
+                  updateClause::UpdateTriples{allocator()}}};
   return parsedQuery_;
 }
 
@@ -964,9 +965,10 @@ ParsedQuery Visitor::makeClear(const GraphRefAll& graph) {
       std::move(graphPattern));
   parsedQuery_._clause = parsedQuery::UpdateClause{
       allocator(),
-      GraphUpdate{{},
-                  {{makeAllTripleTemplate(std::move(updatePattern))},
-                   LocalVocab{ad_utility::makeUnlimitedAllocator<Id>()}}}};
+      GraphUpdate{
+          updateClause::UpdateTriples{allocator()},
+          {{{makeAllTripleTemplate(std::move(updatePattern))}, allocator()},
+           LocalVocab{ad_utility::makeUnlimitedAllocator<Id>()}}}};
   parsedQuery_.datasetClauses_ = activeDatasetClauses_;
   return parsedQuery_;
 }
@@ -978,9 +980,10 @@ ParsedQuery Visitor::makeAdd(const GraphOrDefault& source,
       makeAllTripleGraphPattern(transformGraph(source)));
   parsedQuery_._clause = parsedQuery::UpdateClause{
       allocator(),
-      GraphUpdate{{{makeAllTripleTemplate(transformGraph(target))},
-                   LocalVocab{ad_utility::makeUnlimitedAllocator<Id>()}},
-                  {}}};
+      GraphUpdate{
+          {{{makeAllTripleTemplate(transformGraph(target))}, allocator()},
+           LocalVocab{ad_utility::makeUnlimitedAllocator<Id>()}},
+          updateClause::UpdateTriples{allocator()}}};
   parsedQuery_.datasetClauses_ = activeDatasetClauses_;
   return parsedQuery_;
 }
@@ -1056,7 +1059,9 @@ std::vector<ParsedQuery> Visitor::visit(Parser::CopyContext* ctx) {
 // ____________________________________________________________________________________
 GraphUpdate Visitor::visit(Parser::InsertDataContext* ctx) {
   BlankNodeAdder bn{blankNodeManager_};
-  return {visit(ctx->quadData()).toTriplesWithGraph(std::monostate{}, bn), {}};
+  return {visit(ctx->quadData())
+              .toTriplesWithGraph(std::monostate{}, bn, allocator()),
+          updateClause::UpdateTriples{allocator()}};
 }
 
 // ____________________________________________________________________________________
@@ -1064,7 +1069,8 @@ GraphUpdate Visitor::visit(Parser::DeleteDataContext* ctx) {
   BlankNodeAdder bn{blankNodeManager_};
   auto cleanup = setBlankNodeTreatmentForScope(TreatBlankNodesAs::Illegal);
   auto quads = visit(ctx->quadData());
-  return {{}, quads.toTriplesWithGraph(std::monostate{}, bn)};
+  return {updateClause::UpdateTriples{allocator()},
+          quads.toTriplesWithGraph(std::monostate{}, bn, allocator())};
 }
 
 // ____________________________________________________________________________________
@@ -1083,8 +1089,9 @@ ParsedQuery Visitor::visit(Parser::DeleteWhereContext* ctx) {
   visibleVariables_.clear();
   BlankNodeAdder bn{blankNodeManager_};
   parsedQuery_._clause = parsedQuery::UpdateClause{
-      allocator(),
-      GraphUpdate{{}, triples.toTriplesWithGraph(std::monostate{}, bn)}};
+      allocator(), GraphUpdate{updateClause::UpdateTriples{allocator()},
+                               triples.toTriplesWithGraph(std::monostate{}, bn,
+                                                          allocator())}};
   return parsedQuery_;
 }
 
@@ -1103,7 +1110,7 @@ ParsedQuery Visitor::visit(Parser::ModifyContext* ctx) {
       auto quads = this->visit(ctx);
       quads.forAllVariables(ensureVariableIsVisible);
       BlankNodeAdder bn{blankNodeManager_};
-      *target = quads.toTriplesWithGraph(defaultGraph, bn);
+      *target = quads.toTriplesWithGraph(defaultGraph, bn, allocator());
     }
   };
 
@@ -1142,7 +1149,7 @@ ParsedQuery Visitor::visit(Parser::ModifyContext* ctx) {
   parsedQuery_._rootGraphPattern = std::move(graphPattern);
   parsedQuery_.registerVariablesVisibleInQueryBody(visibleVariables_);
   visibleVariables_.clear();
-  auto op = GraphUpdate{};
+  auto op = GraphUpdate{allocator()};
 
   // If there was a `WITH` clause, then the specified graph is used for all
   // triples inside the INSERT/DELETE templates that are outside explicit `GRAPH

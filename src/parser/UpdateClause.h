@@ -23,7 +23,10 @@ struct GraphUpdate {
   Triples toInsert_;
   Triples toDelete_;
 
-  GraphUpdate() = default;
+  // Create a `GraphUpdate` that inserts and deletes nothing. The `allocator` is
+  // used for the triples.
+  explicit GraphUpdate(const qlever::Allocator<Id>& allocator)
+      : toInsert_{allocator}, toDelete_{allocator} {}
   GraphUpdate(Triples toInsert, Triples toDelete)
       : toInsert_{std::move(toInsert)}, toDelete_{std::move(toDelete)} {}
 };
@@ -34,7 +37,7 @@ struct UpdateClause : ClauseBase {
   updateClause::GraphUpdate op_;
 
   explicit UpdateClause(const qlever::Allocator<Id>& allocator)
-      : ClauseBase{allocator} {}
+      : ClauseBase{allocator}, op_{allocator} {}
   UpdateClause(const qlever::Allocator<Id>& allocator,
                updateClause::GraphUpdate op)
       : ClauseBase{allocator}, op_{std::move(op)} {}
