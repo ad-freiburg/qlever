@@ -30,10 +30,10 @@
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
 #include "index/Index.h"
-#include "parser/LiteralOrIri.h"
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/GeometryInfo.h"
+#include "rdfTypes/LiteralOrIri.h"
 #include "util/AllocatorTestHelpers.h"
 #include "util/IdTestHelpers.h"
 #include "util/LocalVocabEntryTestHelpers.h"
@@ -2156,30 +2156,67 @@ TEST(SparqlExpression, geoSparqlExpressions) {
 
   checkLat(v, vLat);
   checkLong(v, vLng);
-  checkCentroid(v, v);
+  checkCentroid(v, IdOrLocalVocabEntry{ValueId::makeFromGeoPoint(p)});
   checkIsGeoPoint(v, B(true));
   checkDist(D(0.0), v, v);
   checkLat(idOrLitOrStringVec({"NotAPoint", I(12)}), Ids{U, U});
   checkLong(idOrLitOrStringVec({D(4.2), "NotAPoint"}), Ids{U, U});
   checkIsGeoPoint(IdOrLocalVocabEntry{lit("NotAPoint")}, B(false));
   checkIsGeoPoint(U, U);
-  checkCentroid(IdOrLocalVocabEntry{lit("NotAPoint")}, U);
+  checkCentroid(IdOrLocalVocabEntry{lit("NotAPoint")}, IdOrLocalVocabEntry{U});
   checkDist(U, v, IdOrLocalVocabEntry{I(12)});
   checkDist(U, IdOrLocalVocabEntry{I(12)}, v);
   checkDist(U, v, IdOrLocalVocabEntry{lit("NotAPoint")});
   checkDist(U, IdOrLocalVocabEntry{lit("NotAPoint")}, v);
 
-  auto polygonCentroid = GP({3, 3});
+  // The centroid of a literal in CRS84 (with or without the IRI) is a
+  // `GeoPoint`, the centroid of a literal in another CRS is a WKT literal in
+  // that CRS.
+  checkCentroid(
+      IdOrLocalVocabEntry{lit(
+          "\"<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(26.8 24.3)\"",
+          "^^<http://www.opengis.net/ont/geosparql#wktLiteral>")},
+      geoLit("<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(26.8 24.3)"));
+
+  auto crs84CentroidId = ValueId::makeFromGeoPoint(GeoPoint{20, 50});
   checkCentroid(IdOrLocalVocabEntry{lit(
-                    "\"POLYGON((2 4, 4 4, 4 2, 2 2))\"",
+                    "\"POLYGON((40 10, 40 30, 60 30, 60 10))\"",
                     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>")},
-                polygonCentroid);
+                IdOrLocalVocabEntry{crs84CentroidId});
+
+  checkCentroid(IdOrLocalVocabEntry{lit(
+                    "\"<http://www.opengis.net/def/crs/OGC/1.3/CRS84> "
+                    "POLYGON((40 10, 40 30, 60 30, 60 10))\"",
+                    "^^<http://www.opengis.net/ont/geosparql#wktLiteral>")},
+                IdOrLocalVocabEntry{crs84CentroidId});
+
+  checkCentroid(
+      IdOrLocalVocabEntry{
+          lit("\"<http://www.opengis.net/def/crs/EPSG/0/4326> "
+              "POLYGON((10 40, 30 40, 30 60, 10 60))\"",
+              "^^<http://www.opengis.net/ont/geosparql#wktLiteral>")},
+      geoLit("<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(20 50)"));
+
+  // The centroid of a Web Mercator polygon is computed in Web Mercator (the
+  // center of this square), the projection of its CRS84 centroid would be
+  // `POINT(5000000 3924942.872771)`.
+  checkCentroid(
+      IdOrLocalVocabEntry{lit(
+          "\"<http://www.opengis.net/def/crs/EPSG/0/3857> "
+          "POLYGON((0 0, 10000000 0, 10000000 10000000, 0 10000000, 0 0))\"",
+          "^^<http://www.opengis.net/ont/geosparql#wktLiteral>")},
+      geoLit("<http://www.opengis.net/def/crs/EPSG/0/3857> POINT(5000000 "
+             "5000000)"));
 
   checkEnvelope(
       IdOrLocalVocabEntryVec{U, D(1.0), GP({4, 2}),
-                             geoLit("LINESTRING(2 4, 8 8)")},
+                             geoLit("LINESTRING(2 4, 8 8)"),
+                             geoLit("<http://www.opengis.net/def/crs/EPSG/0/"
+                                    "4326> LINESTRING(4 2, 8 8)")},
       IdOrLocalVocabEntryVec{U, U, geoLit("POLYGON((2 4,2 4,2 4,2 4,2 4))"),
-                             geoLit("POLYGON((2 4,8 4,8 8,2 8,2 4))")});
+                             geoLit("POLYGON((2 4,8 4,8 8,2 8,2 4))"),
+                             geoLit("<http://www.opengis.net/def/crs/EPSG/0/"
+                                    "4326> POLYGON((4 2,4 8,8 8,8 2,4 2))")});
   checkEnvelopeLL(IdOrLocalVocabEntryVec{U, D(1.0), GP({4, 2}),
                                          geoLit("LINESTRING(2 4, 8 8)")},
                   Ids{U, U, GP({4, 2}), GP({4, 2})});
@@ -2663,7 +2700,51 @@ TEST(SparqlExpression, ReplaceExpression) {
   checkReplace(idOrLitOrStringVec({R"("$1 \\2 A \\bc")", R"("$1 \\2 DE \\f")"}),
                std::tuple{idOrLitOrStringVec({"Abc", "DEf"}),
                           IdOrLocalVocabEntry{lit("([A-Z]+)")},
-                          IdOrLocalVocabEntry{lit(R"("\\$1 \\2 $1 \\")")}});
+                          IdOrLocalVocabEntry{lit(R"("\\$1 \\\\2 $1 \\\\")")}});
+
+  // The rules for the replacement string from the XPath standard. The literals
+  // are escaped, so `R"("\\\\")"` is a string that consists of two backslashes.
+  auto checkReplaceAbc = [&checkReplace](
+                             std::string_view pattern,
+                             std::string_view replacement,
+                             IdOrLocalVocabEntry expected,
+                             source_location l = AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    checkReplace(expected, std::tuple{IdOrLocalVocabEntry{lit("abc")},
+                                      IdOrLocalVocabEntry{lit(pattern)},
+                                      IdOrLocalVocabEntry{lit(replacement)}});
+  };
+  // `\$` is a literal dollar and `\\` a literal backslash.
+  checkReplaceAbc("b", R"("\\$")", lit("a$c"));
+  checkReplaceAbc("b", R"("\\\\")", lit(R"("a\\c")"));
+  checkReplaceAbc("(b)", R"("\\$$1")", lit("a$bc"));
+  checkReplaceAbc("(b)", R"("\\\\$1")", lit(R"("a\\bc")"));
+  checkReplaceAbc("(b)", R"("\\\\\\$$1")", lit(R"("a\\$bc")"));
+  // `$0` is the whole match, and a group that does not exist is empty.
+  checkReplaceAbc("b", "[$0]", lit("a[b]c"));
+  checkReplaceAbc("b", "[$2]", lit("a[]c"));
+  checkReplaceAbc("(a)(b)", "$3$2$1$9", lit("bac"));
+  // A reference takes as many digits as possible, as long as the number still
+  // names an existing group or is at most 9. The rest are literal digits.
+  checkReplaceAbc("(b)", "$10", lit("ab0c"));
+  checkReplaceAbc("(b)", "[$20]", lit("a[0]c"));
+  checkReplaceAbc("(b)", "[$01]", lit("a[b]c"));
+  checkReplaceAbc("b", "[$01]", lit("a[]c"));
+  checkReplaceAbc("b", "[$00]", lit("a[b]c"));
+  checkReplaceAbc("(a)(b)(c)()()()()()()()", "$11", lit("a1"));
+  // RE2 does not support references to group 10 or higher.
+  checkReplaceAbc("(a)(b)(c)()()()()()()()", "$10", U);
+  checkReplaceAbc("(a)(b)(c)()()()()()()()", "$010", U);
+  // A group that exists but did not participate in the match is empty.
+  checkReplaceAbc("(x)?b", "[$1]", lit("a[]c"));
+  checkReplaceAbc("(a)|(b)", "[$1|$2]", lit("[a|][|b]c"));
+  // An unescaped `$` that is not followed by a digit, or a `\` that is not
+  // followed by `\` or `$`, is an error.
+  checkReplaceAbc("b", "$", U);
+  checkReplaceAbc("b", "x$y", U);
+  checkReplaceAbc("b", R"("\\x")", U);
+  checkReplaceAbc("b", R"("x\\")", U);
+  checkReplaceAbc("b", R"("\\\\\\")", U);
 
   // Only simple literals should be replaced.
   checkReplace(idOrLitOrStringVec({U, U}),

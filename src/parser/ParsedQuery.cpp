@@ -19,6 +19,7 @@
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "global/RuntimeParameters.h"
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
+#include "util/ParseException.h"
 #include "util/TransparentFunctors.h"
 
 using std::string;

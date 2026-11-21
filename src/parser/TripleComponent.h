@@ -16,7 +16,7 @@
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "global/SpecialIds.h"
-#include "parser/LiteralOrIri.h"
+#include "rdfTypes/LiteralOrIri.h"
 #include "rdfTypes/RdfEscaping.h"
 #include "rdfTypes/Variable.h"
 #include "util/Date.h"

@@ -21,7 +21,7 @@
 #include "index/LocalVocabContext.h"
 #include "index/LocalVocabEntry.h"
 #include "index/TripleComponentConversions.h"
-#include "parser/LiteralOrIri.h"
+#include "rdfTypes/LiteralOrIri.h"
 #include "util/Exception.h"
 
 namespace ad_utility::testing {
