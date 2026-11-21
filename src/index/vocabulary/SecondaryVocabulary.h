@@ -23,8 +23,8 @@
 #include "util/CompactStringVector.h"
 #include "util/Exception.h"
 #include "util/OwnedOrViewedVector.h"
-#include "util/Serializer/SerializeVector.h"
-#include "util/Serializer/Serializer.h"
+#include "util/serializer/SerializeVector.h"
+#include "util/serializer/Serializer.h"
 
 // The secondary vocabulary of an index. It stores words that were added after
 // the main index was built and that are not part of the vocabulary of that

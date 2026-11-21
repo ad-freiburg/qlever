@@ -38,22 +38,6 @@ std::unique_ptr<PrefilterExpression> make(Args&&... args) {
   return std::make_unique<PrefilterT>(std::forward<Args>(args)...);
 }
 
-// Given a PermutedTriple retrieve the suitable Id w.r.t. a column (index).
-static Id getIdFromColumnIndex(
-    const CompressedBlockMetadata::PermutedTriple& triple, size_t columnIndex) {
-  switch (columnIndex) {
-    case 0:
-      return triple.col0Id_;
-    case 1:
-      return triple.col1Id_;
-    case 2:
-      return triple.col2Id_;
-    default:
-      // columnIndex out of bounds
-      AD_FAIL();
-  }
-}
-
 // Check for the following conditions.
 // (1) All `CompressedBlockMetadata` values in `input` must be unique.
 // (2) `input` must contain those `CompressedBlockMetadata` values in sorted
@@ -395,9 +379,8 @@ static std::string getLogicalOpStr(const LogicalOperator logOp) {
 ValueId AccessValueIdFromBlockMetadata::operator()(
     BlockMetadataSpan randomAccessContainer, uint64_t i) const {
   const CompressedBlockMetadata& block = randomAccessContainer[i / 2];
-  return i % 2 == 0
-             ? getIdFromColumnIndex(block.firstTriple_, evaluationColumn_)
-             : getIdFromColumnIndex(block.lastTriple_, evaluationColumn_);
+  return i % 2 == 0 ? block.firstTriple_.getId(evaluationColumn_)
+                    : block.lastTriple_.getId(evaluationColumn_);
 }
 
 // SECTION PREFILTER EXPRESSION (BASE CLASS)
@@ -493,7 +476,9 @@ BlockMetadataRanges PrefixRegexExpression::evaluateImpl(
     BlockMetadataSpan blockRange, bool getTotalComplement) const {
   static_assert(Datatype::LocalVocabIndex > Datatype::VocabIndex);
   static_assert(Vocab::PrefixRanges::Ranges{}.size() == 1);
-  LocalVocab localVocab{};
+  // The local vocab holds at most the one prefix word, so it needs no memory
+  // limit.
+  LocalVocab localVocab{ad_utility::makeUnlimitedAllocator<Id>()};
   auto prefixQuoted = absl::StrCat("\"", prefixLiteral_.getContent());
   auto [lowerVocabIndex, upperVocabIndex] =
       index.getVocab().prefixRanges(prefixQuoted).ranges().front();
@@ -553,8 +538,10 @@ RelationalExpression<Comparison>::logicalComplement() const {
   // (4) ?var > referenceValue -> ?var <= referenceValue
   // (5) ?var = referenceValue -> ?var != referenceValue
   // (6) ?var != referenceValue -> ?var = referenceValue
-  constexpr ConstexprMap<CompOp, CompOp, 6> complementMap(std::array<P, 6>{
-      P{LT, GE}, P{LE, GT}, P{GE, LT}, P{GT, LE}, P{EQ, NE}, P{NE, EQ}});
+  constexpr size_t numCompOps = qlever::enumSize<CompOp>;
+  constexpr ConstexprMap<CompOp, CompOp, numCompOps> complementMap(
+      std::array<P, numCompOps>{P{LT, GE}, P{LE, GT}, P{GE, LT}, P{GT, LE},
+                                P{EQ, NE}, P{NE, EQ}});
   return make<RelationalExpression<complementMap.at(Comparison)>>(
       rightSideReferenceValue_);
 }
@@ -566,8 +553,9 @@ BlockMetadataRanges RelationalExpression<Comparison>::evaluateImpl(
     BlockMetadataSpan blockRange, bool getTotalComplement) const {
   using namespace valueIdComparators;
   // If `rightSideReferenceValue_` contains a `LocalVocabEntry` value, we use
-  // the here created `LocalVocab` to retrieve a corresponding `ValueId`.
-  LocalVocab localVocab{};
+  // the here created `LocalVocab` to retrieve a corresponding `ValueId`. It
+  // holds at most this one word, so it needs no memory limit.
+  LocalVocab localVocab{ad_utility::makeUnlimitedAllocator<Id>()};
   auto referenceId =
       getValueIdFromIdOrLocalVocabEntry(rightSideReferenceValue_, localVocab);
   // Compute the ranges of the block boundary IDs (`idRange` holds the first
@@ -1087,9 +1075,10 @@ std::vector<PrefilterExprVariablePair> makePrefilterExpressionVec(
     // the given `CompOp comparison` template argument. E.g., this
     // procedure will transform the relational expression
     // `referenceValue > ?var` into `?var < referenceValue`.
-    constexpr ad_utility::ConstexprMap<CompOp, CompOp, 6> mirrorMap(
-        std::array<P, 6>{P{LT, GT}, P{LE, GE}, P{GE, LE}, P{GT, LT}, P{EQ, EQ},
-                         P{NE, NE}});
+    constexpr size_t numCompOps = qlever::enumSize<CompOp>;
+    constexpr ad_utility::ConstexprMap<CompOp, CompOp, numCompOps> mirrorMap(
+        std::array<P, numCompOps>{P{LT, GT}, P{LE, GE}, P{GE, LE}, P{GT, LT},
+                                  P{EQ, EQ}, P{NE, NE}});
     resVec.emplace_back(
         makePrefilterExpressionVecImpl<mirrorMap.at(comparison)>(
             referenceValue, prefilterDateByYear),

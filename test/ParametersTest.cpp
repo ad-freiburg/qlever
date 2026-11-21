@@ -10,8 +10,8 @@
 
 #include <gmock/gmock.h>
 
-#include "util/MemorySize/MemorySize.h"
 #include "util/Parameters.h"
+#include "util/memorySize/MemorySize.h"
 
 using namespace ad_utility;
 using namespace memory_literals;

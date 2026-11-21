@@ -132,7 +132,7 @@ TEST(DistinctGraphs, getResultSortedOn) {
 TEST(DistinctGraphs, isDistinctBy) {
   auto dg = makeDistinctGraphs();
 
-  EXPECT_TRUE(dg.isDistinctBy({0}));
+  EXPECT_TRUE(dg.isDistinctBy(std::vector<ColumnIndex>{0}));
   EXPECT_FALSE(dg.isDistinctBy({}));
 }
 

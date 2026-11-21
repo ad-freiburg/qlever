@@ -10,7 +10,7 @@
 
 #include "backports/type_traits.h"
 #include "util/Cache.h"
-#include "util/MemorySize/MemorySize.h"
+#include "util/memorySize/MemorySize.h"
 
 namespace ad_utility {
 // Multiple default `ValueSizeGetter` for usage in caches. For information, what
