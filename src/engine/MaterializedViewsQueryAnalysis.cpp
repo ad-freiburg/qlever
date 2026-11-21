@@ -98,7 +98,7 @@ void PatternMatcherLimits::subtract(PatternMatcherLimits used) {
 
 // _____________________________________________________________________________
 std::optional<std::vector<PatternEdge>> QueryPatternCache::buildPatternEdges(
-    const ViewPtr& view, const std::vector<SparqlTriple>& triples) {
+    const ViewPtr& view, ql::span<const SparqlTriple> triples) {
   const auto& viewCols = view->variableToColumnMap();
   std::vector<PatternEdge> edges;
   edges.reserve(triples.size());
@@ -305,7 +305,7 @@ bool QueryPatternCache::analyzeView(ViewPtr view,
     explainIgnore(std::get<RewriteIgnoreReason>(triplesForRewrite));
     return cacheKeyAdded;
   }
-  const auto& triples = std::get<std::vector<SparqlTriple>>(triplesForRewrite);
+  const auto& triples = std::get<qlm::vector<SparqlTriple>>(triplesForRewrite);
   bool patternFound = false;
 
   // A single triple has no join to eliminate, so a pattern needs at least two.
@@ -352,7 +352,7 @@ std::vector<parsedQuery::GraphPatternOperation> graphPatternInvariantFilter(
 }
 
 // _____________________________________________________________________________
-std::variant<RewriteIgnoreReason, std::vector<SparqlTriple>>
+std::variant<RewriteIgnoreReason, qlm::vector<SparqlTriple>>
 getTriplesForPatternRewrite(const ParsedQuery& parsed) {
   if (parsed.isAggregatingQuery()) {
     return "The view's query aggregates (GROUP BY, either explicit or "
