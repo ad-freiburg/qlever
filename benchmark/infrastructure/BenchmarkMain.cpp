@@ -22,9 +22,9 @@
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/filesystem.h"
 #include "util/Algorithm.h"
-#include "util/ConfigManager/ConfigManager.h"
 #include "util/Exception.h"
 #include "util/File.h"
+#include "util/configManager/ConfigManager.h"
 #include "util/json.h"
 
 // We are not in a global header file, so its fine.

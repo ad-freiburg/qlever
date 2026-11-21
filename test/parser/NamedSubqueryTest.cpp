@@ -249,11 +249,62 @@ TEST(NamedSubquery, invalidQueries) {
       parse("WITH %a AS { ?s ?p ?o }"
             "SELECT * WHERE { { SELECT * WHERE { INCLUDE %a } } }"),
       ::testing::HasSubstr("`SELECT *` is not allowed here"));
-  // No `INCLUDE` inside a `SERVICE`: the body of a `SERVICE` is evaluated by
-  // the remote endpoint, which does not know the named subquery.
+  // No `INCLUDE` inside a remote `SERVICE`: the body of such a `SERVICE` is
+  // evaluated by the remote endpoint, which does not know the named subquery.
+  // This also holds for an `INCLUDE` nested deeper inside the body.
   AD_EXPECT_THROW_WITH_MESSAGE(
       parse("WITH %a AS { ?s ?p ?o }"
             "SELECT * WHERE { SERVICE <http://example.org/sparql> {"
             " { SELECT ?s WHERE { INCLUDE %a } } } }"),
       ::testing::HasSubstr("not supported inside SERVICE"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      parse("WITH %a AS { ?s ?p ?o }"
+            "SELECT * WHERE { SERVICE <http://example.org/sparql> {"
+            " ?s ?p ?o OPTIONAL { { SELECT ?s WHERE { INCLUDE %a } } } } }"),
+      ::testing::HasSubstr("not supported inside SERVICE"));
+  // This also holds for an `INCLUDE` inside a magic `SERVICE` that is itself
+  // inside a remote `SERVICE`.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      parse("PREFIX rn: <https://qlever.cs.uni-freiburg.de/rowNumber/>"
+            "WITH %a AS { ?s ?p ?o }"
+            "SELECT * WHERE { SERVICE <http://example.org/sparql> {"
+            " SERVICE rn: { [] rn:bind ?n ."
+            " { SELECT ?s WHERE { INCLUDE %a } ORDER BY ?s } } } }"),
+      ::testing::HasSubstr("not supported inside SERVICE"));
+}
+
+// Test that an `INCLUDE` is allowed again after the body of a remote
+// `SERVICE`, also when that `SERVICE` is nested inside a magic `SERVICE`.
+TEST(NamedSubquery, includeAfterRemoteService) {
+  EXPECT_NO_THROW(
+      parse("WITH %a AS { ?s ?p ?o }"
+            "SELECT * WHERE { SERVICE <http://example.org/sparql> { ?x ?y ?z }"
+            " { SELECT ?s WHERE { INCLUDE %a } } }"));
+  EXPECT_NO_THROW(
+      parse("PREFIX rn: <https://qlever.cs.uni-freiburg.de/rowNumber/>"
+            "WITH %a AS { ?s ?p ?o }"
+            "SELECT * WHERE { SERVICE rn: { [] rn:bind ?n . { SELECT ?s WHERE {"
+            " SERVICE <http://example.org/sparql> { ?x ?y ?z } ?s ?p ?o }"
+            " ORDER BY ?s } }"
+            " { SELECT ?s (?o AS ?o2) WHERE { INCLUDE %a } } }"));
+}
+
+// Test that an `INCLUDE` is allowed inside a magic `SERVICE`, which QLever
+// evaluates itself (here, `LAG` via two row number services).
+TEST(NamedSubquery, includeInsideMagicService) {
+  expectEquivalent(
+      "PREFIX rn: <https://qlever.cs.uni-freiburg.de/rowNumber/>"
+      "WITH %sub AS { ?s <p> ?o }"
+      "SELECT * WHERE {"
+      " SERVICE rn: { [] rn:bind ?n ."
+      " { SELECT ?s ?o WHERE { INCLUDE %sub } ORDER BY ?s ?o } }"
+      " OPTIONAL { SERVICE rn: { [] rn:bind ?n ; rn:offset 1 ."
+      " { SELECT ?s (?o AS ?prev) WHERE { INCLUDE %sub } ORDER BY ?s ?o } } } "
+      "}",
+      "PREFIX rn: <https://qlever.cs.uni-freiburg.de/rowNumber/>"
+      "SELECT * WHERE {"
+      " SERVICE rn: { [] rn:bind ?n ."
+      " { SELECT ?s ?o WHERE { ?s <p> ?o } ORDER BY ?s ?o } }"
+      " OPTIONAL { SERVICE rn: { [] rn:bind ?n ; rn:offset 1 ."
+      " { SELECT ?s (?o AS ?prev) WHERE { ?s <p> ?o } ORDER BY ?s ?o } } } }");
 }

@@ -37,7 +37,7 @@ class RowNumber : public Operation {
   std::shared_ptr<QueryExecutionTree> child_;
   Variable rowNumberVariable_;
   int64_t offset_;
-  std::vector<ColumnIndex> sortedOn_;
+  qlm::vector<ColumnIndex> sortedOn_;
 
  public:
   // Construct with the given `sortedOn` columns, which must start with the row
@@ -45,12 +45,17 @@ class RowNumber : public Operation {
   // number column followed by the sort columns of the child.
   RowNumber(QueryExecutionContext* qec,
             std::shared_ptr<QueryExecutionTree> child,
-            Variable rowNumberVariable, int64_t offset = 0,
-            std::vector<ColumnIndex> sortedOn = {});
+            Variable rowNumberVariable, int64_t offset,
+            qlm::vector<ColumnIndex> sortedOn);
+
+  // Construct with an empty `sortedOn`, see above.
+  RowNumber(QueryExecutionContext* qec,
+            std::shared_ptr<QueryExecutionTree> child,
+            Variable rowNumberVariable, int64_t offset = 0);
 
   // Member functions inherited from `Operation` that have to be implemented by
   // each child class.
-  std::string getCacheKeyImpl() const override;
+  qlm::string getCacheKeyImpl() const override;
   std::string getDescriptor() const override;
   size_t getResultWidth() const override;
   size_t getCostEstimate() override;
@@ -65,13 +70,13 @@ class RowNumber : public Operation {
   // Return a copy of this operation that is sorted by `sortColumns` if they
   // start with the row number column, `std::nullopt` otherwise.
   std::optional<std::shared_ptr<QueryExecutionTree>> makeSortedTree(
-      const std::vector<ColumnIndex>& sortColumns) const override;
+      ql::span<const ColumnIndex> sortColumns) const override;
 
  private:
   qlm::vector<QueryExecutionTree*> getChildrenImpl() const override;
   [[nodiscard]] bool isDeterministicImpl() const override { return true; }
   std::unique_ptr<Operation> cloneImpl() const override;
-  [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override;
+  [[nodiscard]] qlm::vector<ColumnIndex> resultSortedOn() const override;
   Result computeResult(bool requestLaziness) override;
   VariableToColumnMap computeVariableToColumnMap() const override;
 };

@@ -122,6 +122,11 @@ TEST(VariableCounterTest, VariableCounts) {
   EXPECT_THAT(parseAndCount("SELECT * { ?x <p> ?y . { SELECT ?y { ?y <q> ?z } "
                             "GROUP BY ?y VALUES ?x { 1 } } }"),
               counts({{V{"?x"}, 2}, {V{"?y"}, 2}, {V{"?z"}, 1}}));
+  // The target of an alias in the `SELECT` clause of a subquery with a
+  // `GROUP BY` (which is not turned into a `BIND` of the subquery).
+  EXPECT_THAT(parseAndCount("SELECT * { ?x <p> ?y . { SELECT (COUNT(?z) AS ?c) "
+                            "{ ?y <q> ?z } GROUP BY ?y } }"),
+              counts({{V{"?x"}, 1}, {V{"?y"}, 2}, {V{"?z"}, 1}, {V{"?c"}, 1}}));
 
   // Describe.
   EXPECT_THAT(parseAndCount("DESCRIBE <x>"), counts({}));

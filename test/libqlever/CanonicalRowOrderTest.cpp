@@ -167,8 +167,12 @@ TEST(CanonicalRowOrder, idsThatCompareEqualButDifferBitwise) {
   auto iri = ad_utility::triple_component::Iri::fromIriref("<a>");
   LocalVocabEntry entry1 = localVocabEntry(iri, qec->getLocalVocabContext());
   LocalVocabEntry entry2 = localVocabEntry(iri, qec->getLocalVocabContext());
-  Id a1 = Id::makeFromLocalVocabIndex(&entry1);
-  Id a2 = Id::makeFromLocalVocabIndex(&entry2);
+  // Use two different local vocabs, such that the `Id`s of the equal entries
+  // differ.
+  auto getLocalVocabId1 = ad_utility::testing::makeGetLocalVocabId();
+  auto getLocalVocabId2 = ad_utility::testing::makeGetLocalVocabId();
+  Id a1 = getLocalVocabId1(entry1);
+  Id a2 = getLocalVocabId2(entry2);
   ASSERT_TRUE(a1.compareThreeWay(a2) == 0);
   ASSERT_NE(a1.getBits(), a2.getBits());
   Id bitsLess = a1.getBits() < a2.getBits() ? a1 : a2;

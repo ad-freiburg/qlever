@@ -118,6 +118,10 @@ SharedBlock ChunkWriter::processBlock(Block block) {
   AD_CORRECTNESS_CHECK(col0IdCurrentRelation_.has_value() ||
                        !inFirstRelation_ || result_.numRows_ == 0);
   const size_t numRows = block.numRows();
+  if (!result_.firstRow_.has_value()) {
+    result_.firstRow_ = block.front();
+  }
+  result_.lastRow_ = block.back();
   this->addInputBlock(std::make_shared<const Block>(std::move(block)),
                       context_.col0Column_, context_.permutedColIndices_);
   result_.numRows_ += numRows;

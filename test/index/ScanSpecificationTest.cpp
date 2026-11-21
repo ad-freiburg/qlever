@@ -108,7 +108,8 @@ TEST(ScanSpecification, ScanSpecificationAsTripleComponent) {
       TripleComponent::Iri::fromIriref("<thisIriIsNotContained>");
   LocalVocabEntry localVocabEntry = ad_utility::testing::localVocabEntry(
       notInVocab.getIri(), index.getLocalVocabContext());
-  auto localVocabId = Id::makeFromLocalVocabIndex(&localVocabEntry);
+  auto getLocalVocabId = ad_utility::testing::makeGetLocalVocabId();
+  auto localVocabId = getLocalVocabId(localVocabEntry);
   EXPECT_THAT(STc(notInVocab, xIri, xIri),
               matchScanSpec(S(localVocabId, x, x)));
   EXPECT_THAT(STc(xIri, notInVocab, xIri),
