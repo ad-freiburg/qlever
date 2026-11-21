@@ -16,6 +16,8 @@
 #include "parser/GraphPatternOperation.h"
 #include "parser/MagicServiceQuery.h"
 #include "rdfTypes/Variable.h"
+#include "util/AllocatorTestHelpers.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/GTestHelpers.h"
 #include "util/ParsedQueryTestHelpers.h"
 #include "util/RuntimeParametersTestHelpers.h"
@@ -27,12 +29,19 @@ using Var = Variable;
 constexpr auto iri = ad_utility::testing::iri;
 using ad_utility::testing::parseQuery;
 using queryPlannerTestHelpers::NamedTag;
+const auto alloc = [] { return ad_utility::testing::makeAllocator(); };
 }  // namespace
 using ::testing::HasSubstr;
 
 QueryPlanner makeQueryPlanner() {
   return QueryPlanner{ad_utility::testing::getQec(),
                       std::make_shared<ad_utility::CancellationHandle<>>()};
+}
+
+// Test that the `QueryPlanner` rejects a null `QueryExecutionContext`.
+TEST(QueryPlanner, constructorRequiresQueryExecutionContext) {
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+  EXPECT_ANY_THROW(QueryPlanner(nullptr, handle));
 }
 
 TEST(QueryPlanner, createTripleGraph) {
@@ -51,8 +60,8 @@ TEST(QueryPlanner, createTripleGraph) {
     QueryPlanner qp = makeQueryPlanner();
     auto tg = qp.createTripleGraph(
         &pq._rootGraphPattern._graphPatterns[0].getBasic());
-    TripleGraph expected =
-        TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>(
+    TripleGraph expected = TripleGraph(
+        std::vector<std::pair<Node, std::vector<size_t>>>(
             {std::make_pair<Node, vector<size_t>>(
                  QueryPlanner::TripleGraph::Node(
                      0, SparqlTriple(Var{"?x"},
@@ -70,7 +79,8 @@ TEST(QueryPlanner, createTripleGraph) {
                      2, SparqlTriple(Var{"?y"},
                                      iri("<http://rdf.myprefix.com/xxx/rel2>"),
                                      iri("<http://abc.de>"))),
-                 {0, 1})}));
+                 {0, 1})}),
+        alloc());
 
     ASSERT_TRUE(tg.isSimilar(expected));
   }
@@ -80,8 +90,8 @@ TEST(QueryPlanner, createTripleGraph) {
         parseQuery("SELECT ?x WHERE {?x ?p <X>. ?x ?p2 <Y>. <X> ?p <Y>}");
     QueryPlanner qp = makeQueryPlanner();
     auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
-    TripleGraph expected =
-        TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>(
+    TripleGraph expected = TripleGraph(
+        std::vector<std::pair<Node, std::vector<size_t>>>(
             {std::make_pair<Node, vector<size_t>>(
                  QueryPlanner::TripleGraph::Node(
                      0, SparqlTriple(Var{"?x"}, Var{"?p"}, iri("<X>"))),
@@ -93,7 +103,8 @@ TEST(QueryPlanner, createTripleGraph) {
              std::make_pair<Node, vector<size_t>>(
                  QueryPlanner::TripleGraph::Node(
                      2, SparqlTriple(iri("<X>"), Var{"?p"}, iri("<Y>"))),
-                 {0})}));
+                 {0})}),
+        alloc());
     ASSERT_TRUE(tg.isSimilar(expected));
   }
 
@@ -104,8 +115,8 @@ TEST(QueryPlanner, createTripleGraph) {
     QueryPlanner qp = makeQueryPlanner();
     auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
 
-    TripleGraph expected =
-        TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>({
+    TripleGraph expected = TripleGraph(
+        std::vector<std::pair<Node, std::vector<size_t>>>({
             std::make_pair<Node, vector<size_t>>(
                 QueryPlanner::TripleGraph::Node(
                     0, SparqlTriple(Var{"?x"}, iri("<is-a>"), iri("<Book>"))),
@@ -115,7 +126,8 @@ TEST(QueryPlanner, createTripleGraph) {
                     1, SparqlTriple(Var{"?x"}, iri("<Author>"),
                                     iri("<Anthony_Newman_(Author)>"))),
                 {0}),
-        }));
+        }),
+        alloc());
     ASSERT_TRUE(tg.isSimilar(expected));
   }
 }
@@ -135,12 +147,12 @@ TEST(QueryPlanner, testCpyCtorWithKeepNodes) {
         "2 {s: <X>, p: ?p, o: <Y>} : (0)",
         tg.asString());
     {
-      std::vector<size_t> keep;
+      qlm::vector<size_t> keep{alloc()};
       QueryPlanner::TripleGraph tgnew(tg, keep);
       ASSERT_EQ("", tgnew.asString());
     }
     {
-      std::vector<size_t> keep;
+      qlm::vector<size_t> keep{alloc()};
       keep.push_back(0);
       keep.push_back(1);
       keep.push_back(2);
@@ -155,14 +167,14 @@ TEST(QueryPlanner, testCpyCtorWithKeepNodes) {
       ASSERT_EQ(1u, tgnew._nodeMap.find(2)->second->_variables.size());
     }
     {
-      std::vector<size_t> keep;
+      qlm::vector<size_t> keep{alloc()};
       keep.push_back(0);
       QueryPlanner::TripleGraph tgnew(tg, keep);
       ASSERT_EQ("0 {s: ?x, p: ?p, o: <X>} : ()", tgnew.asString());
       ASSERT_EQ(2u, tgnew._nodeMap.find(0)->second->_variables.size());
     }
     {
-      std::vector<size_t> keep;
+      qlm::vector<size_t> keep{alloc()};
       keep.push_back(0);
       keep.push_back(1);
       QueryPlanner::TripleGraph tgnew(tg, keep);
@@ -216,6 +228,41 @@ TEST(QueryPlanner, testBFSLeaveOut) {
     out = tg.bfsLeaveOut(1, lo);
     ASSERT_EQ(2u, out.size());
   }
+}
+
+// Test the splitting of a `TripleGraph` at the text nodes of context
+// variables, with the filters distributed to the parts.
+TEST(QueryPlanner, splitAtContextVars) {
+  ParsedQuery pq = parseQuery(
+      "SELECT ?x WHERE {?x ?p <X>. ?x ?p2 <Y>. <X> ?p <Y> FILTER(?p2 = <Y>)}");
+  QueryPlanner qp = makeQueryPlanner();
+  auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
+  const auto& origFilters = pq._rootGraphPattern._filters;
+  qlm::vector<SparqlFilter> filters{origFilters.begin(), origFilters.end(),
+                                    alloc()};
+  ASSERT_EQ(filters.size(), 1u);
+  using TextNodes = ad_utility::HashMap<std::string, qlm::vector<size_t>>;
+
+  // Without context variables the graph is returned unchanged.
+  TextNodes none;
+  EXPECT_EQ(tg.splitAtContextVars(filters, none).size(), 1u);
+
+  // Leaving out node 2 keeps the rest connected, so there is only one split.
+  TextNodes outside;
+  outside.emplace("?c", qlm::vector<size_t>{{2}, alloc()});
+  auto result = tg.splitAtContextVars(filters, outside);
+  ASSERT_EQ(result.size(), 1u);
+  EXPECT_EQ(result.at(0).first._nodeStorage.size(), 2u);
+  EXPECT_EQ(result.at(0).second.size(), 1u);
+
+  // Leaving out node 0 disconnects nodes 1 and 2, so there are two splits.
+  TextNodes inside;
+  inside.emplace("?c", qlm::vector<size_t>{{0}, alloc()});
+  result = tg.splitAtContextVars(filters, inside);
+  ASSERT_EQ(result.size(), 2u);
+  EXPECT_EQ(result.at(0).first._nodeStorage.size(), 1u);
+  EXPECT_EQ(result.at(1).first._nodeStorage.size(), 1u);
+  EXPECT_EQ(result.at(0).second.size() + result.at(1).second.size(), 1u);
 }
 
 TEST(QueryPlanner, indexScanZeroVariables) {
@@ -708,6 +755,13 @@ TEST(QueryPlanner, testSimpleOptional) {
       h::OrderBy({{Variable{"?b"}, ::OrderBy::AscOrDesc::Asc}},
                  h::OptionalJoin(scan("?a", "<rel1>", "?b"),
                                  scan("?a", "<rel2>", "?c"))));
+  // The second OPTIONAL is connected to the result of the first one.
+  h::expect(
+      "SELECT * { ?a <rel1> ?b OPTIONAL { ?a <rel2> ?c } "
+      "OPTIONAL { ?a <rel3> ?d } }",
+      h::OptionalJoin(h::OptionalJoin(scan("?a", "<rel1>", "?b"),
+                                      scan("?a", "<rel2>", "?c")),
+                      scan("?a", "<rel3>", "?d")));
 }
 
 TEST(QueryPlanner, SimpleTripleOneVariable) {
@@ -2568,8 +2622,27 @@ TEST(QueryPlanner, CountAvailablePredicates) {
 // by the query planner.
 TEST(QueryPlanner, UnboundMinusIgnored) {
   h::expect("SELECT * WHERE {MINUS{?x <is-a> ?y}}", h::NeutralElement());
-  h::expect("SELECT * WHERE { ?a <is-a> ?b MINUS{?x <is-a> ?y}}",
-            h::IndexScanFromStrings("?a", "<is-a>", "?b"));
+  h::expect("SELECT * { ?a <is-a> ?b MINUS { ?x <is-a> ?y } }",
+            h::QetWithWarnings({"MINUS clause that shares no variables"},
+                               h::IndexScanFromStrings("?a", "<is-a>", "?b")));
+  // Regression tests for https://github.com/ad-freiburg/qlever/issues/3556:
+  // The variables of a MINUS are not part of its result, so they must not
+  // connect a later MINUS.
+  h::expect(
+      "SELECT * { ?a <is-a> ?b MINUS { ?x <is-a> ?y } MINUS { ?z <is-a> ?y } }",
+      h::IndexScanFromStrings("?a", "<is-a>", "?b"));
+  h::expect(
+      "SELECT * { ?a <is-a> ?b MINUS { ?a <is-a> ?y } MINUS { ?z <is-a> ?y } }",
+      h::Minus(h::IndexScanFromStrings("?a", "<is-a>", "?b"),
+               h::IndexScanFromStrings("?a", "<is-a>", "?y")));
+  // The same holds for a later OPTIONAL.
+  h::expect(
+      "SELECT * { ?a <is-a> ?b MINUS { ?a <is-a> ?c } "
+      "OPTIONAL { ?c <is-a> ?d } }",
+      h::CartesianProductJoin(
+          h::Minus(h::IndexScanFromStrings("?a", "<is-a>", "?b"),
+                   h::IndexScanFromStrings("?a", "<is-a>", "?c")),
+          h::NeutralOptional(h::IndexScanFromStrings("?c", "<is-a>", "?d"))));
 }
 
 // ___________________________________________________________________________
@@ -2577,6 +2650,20 @@ TEST(QueryPlanner, SimpleMinus) {
   h::expect("SELECT * WHERE { ?a <is-a> ?b MINUS{?a <is-a> ?b}}",
             h::Minus(h::IndexScanFromStrings("?a", "<is-a>", "?b"),
                      h::IndexScanFromStrings("?a", "<is-a>", "?b")));
+  // The second MINUS is connected to the result of the first one.
+  h::expect(
+      "SELECT * { ?a <is-a> ?b MINUS { ?a <is-a> ?c } MINUS { ?a <is-a> ?d } }",
+      h::Minus(h::Minus(h::IndexScanFromStrings("?a", "<is-a>", "?b"),
+                        h::IndexScanFromStrings("?a", "<is-a>", "?c")),
+               h::IndexScanFromStrings("?a", "<is-a>", "?d")));
+  // A MINUS is connected to the variables of a preceding OPTIONAL.
+  h::expect(
+      "SELECT * { ?a <is-a> ?b OPTIONAL { ?a <is-a> ?c } "
+      "MINUS { ?c <is-a> ?d } }",
+      h::Minus(h::Sort(h::OptionalJoin(
+                   h::IndexScanFromStrings("?a", "<is-a>", "?b"),
+                   h::IndexScanFromStrings("?a", "<is-a>", "?c"))),
+               h::IndexScanFromStrings("?c", "<is-a>", "?d")));
 }
 
 // ___________________________________________________________________________
@@ -2815,6 +2902,27 @@ TEST(QueryPlanner, GroupByRedundantParensAndVariables) {
   h::expect("SELECT ?x { ?x ?y ?z} GROUP BY (?x)", matcher);
   h::expect("SELECT ?x { ?x ?y ?z} GROUP BY ?x ?x", matcher);
   h::expect("SELECT ?x { ?x ?y ?z} GROUP BY ?x ?x (?x)", matcher);
+}
+
+// Test that a group with many `FILTER (NOT) EXISTS` clauses is planned
+// quickly. These filters used to be applied speculatively in every round of
+// the dynamic programming, which made planning time and memory exponential in
+// their number (about four times per clause).
+TEST(QueryPlanner, manyExistsFiltersPlanQuickly) {
+  std::string query = R"(
+  SELECT ?v WHERE {
+    ?v <p1> ?w1 . ?w1 <p2> ?w2 . ?w2 <p3> ?w3 .
+    FILTER NOT EXISTS { ?v <q0> ?x0 . FILTER (?x0 != ?w1) }
+    FILTER NOT EXISTS { ?v <q1> ?x1 . FILTER (?x1 != ?w1) }
+    FILTER NOT EXISTS { ?v <q2> ?x2 . FILTER (?x2 != ?w1) }
+    FILTER NOT EXISTS { ?v <q3> ?x3 . FILTER (?x3 != ?w1) }
+    FILTER NOT EXISTS { ?v <q4> ?x4 . FILTER (?x4 != ?w1) }
+    FILTER NOT EXISTS { ?v <q5> ?x5 . FILTER (?x5 != ?w1) }
+    FILTER NOT EXISTS { ?v <q6> ?x6 . FILTER (?x6 != ?w1) }
+    FILTER NOT EXISTS { ?v <q7> ?x7 . FILTER (?x7 != ?w1) }
+  })";
+  EXPECT_NO_THROW(
+      h::parseAndPlan(std::move(query), ad_utility::testing::getQec()));
 }
 
 // ____________________________________________________________________________
@@ -3077,6 +3185,63 @@ TEST(QueryPlanner, UnconnectedComponentsInGraphClause) {
                               h::IndexScanFromStrings("?s2", "?p2", "?o2")));
 }
 
+// Test that inside a `GRAPH ?g` clause the graph variable connects an OPTIONAL
+// to the preceding patterns that bind it, but a MINUS only if `?g` is in scope
+// on both sides.
+TEST(QueryPlanner, UnconnectedMinusAndOptionalInGraphClause) {
+  auto scan = [](std::string s, std::string p, std::string o) {
+    return h::IndexScanFromStrings(std::move(s), std::move(p), std::move(o), {},
+                                   NamedTag{}, {Variable{"?g"}}, {3});
+  };
+  // A MINUS that shares no variable with the preceding triple is ignored.
+  h::expect("SELECT * { GRAPH ?g { ?a <p> ?b MINUS { ?x <q> ?y } } }",
+            scan("?a", "<p>", "?b"));
+  h::expect("SELECT * { GRAPH ?g { ?a <p> ?b MINUS { ?a <q> ?y } } }",
+            h::Minus(h::Sort(scan("?a", "<p>", "?b")),
+                     h::Sort(scan("?a", "<q>", "?y"))));
+  // The implicit graph column of the index scans doesn't connect a MINUS, also
+  // not if the preceding pattern is a nested group (see
+  // https://github.com/ad-freiburg/qlever/issues/3678).
+  h::expect("SELECT * { GRAPH ?g { { ?a <p> ?b } MINUS { ?x <q> ?y } } }",
+            scan("?a", "<p>", "?b"));
+  // The graph variable only connects a MINUS if it is in scope on both sides.
+  auto anyTree = ::testing::A<const QueryExecutionTree&>();
+  auto isMinus = h::Minus(anyTree, anyTree);
+  h::expect("SELECT * { GRAPH ?g { ?g <p> ?b MINUS { ?x <q> ?y } } }",
+            ::testing::Not(isMinus));
+  h::expect("SELECT * { GRAPH ?g { { ?g <p> ?b } MINUS { ?x <q> ?y } } }",
+            ::testing::Not(isMinus));
+  h::expect("SELECT * { GRAPH ?g { ?a <p> ?b MINUS { ?g <q> ?y } } }",
+            scan("?a", "<p>", "?b"));
+  h::expect("SELECT * { GRAPH ?g { ?g <p> ?b MINUS { ?g <q> ?y } } }", isMinus);
+  h::expect(
+      "SELECT * { GRAPH ?g { VALUES ?g { <g1> } ?a <p> ?b "
+      "MINUS { ?x <q> ?y VALUES ?g { <g1> } } } }",
+      isMinus);
+  // The variables of a nested MINUS are not in scope.
+  h::expect(
+      "SELECT * { GRAPH ?g { ?g <p> ?b "
+      "MINUS { ?x <q> ?y MINUS { ?g <r> ?x } } } }",
+      ::testing::Not(isMinus));
+  // The graph variable connects an OPTIONAL, no matter whether the preceding
+  // pattern is a triple or a nested group.
+  auto optionalJoin = h::OptionalJoin(h::Sort(scan("?a", "<p>", "?b")),
+                                      h::Sort(scan("?x", "<q>", "?y")));
+  h::expect("SELECT * { GRAPH ?g { ?a <p> ?b OPTIONAL { ?x <q> ?y } } }",
+            optionalJoin);
+  h::expect("SELECT * { GRAPH ?g { { ?a <p> ?b } OPTIONAL { ?x <q> ?y } } }",
+            optionalJoin);
+  // Also when the graph variable is used explicitly.
+  h::expect("SELECT * { GRAPH ?g { ?g <p> ?b OPTIONAL { ?g <q> ?y } } }",
+            h::OptionalJoin(::testing::A<const QueryExecutionTree&>(),
+                            ::testing::A<const QueryExecutionTree&>()));
+  // But only if the preceding pattern binds the graph variable.
+  h::expect(
+      "SELECT * { GRAPH ?g { VALUES ?v { 1 } OPTIONAL { ?x <q> ?y } } }",
+      h::CartesianProductJoin(h::ValuesClause("VALUES (?v) { (1) }"),
+                              h::NeutralOptional(scan("?x", "<q>", "?y"))));
+}
+
 // _____________________________________________________________________________
 TEST(QueryPlanner, testDistributiveJoinInUnion) {
   auto* qec = ad_utility::testing::getQec();
@@ -3282,6 +3447,59 @@ TEST(QueryPlanner, distributiveJoinInUnionIsNotAppliedIfUnionHasLimit) {
                   LimitOffsetClause{1},
                   h::Union(h::IndexScanFromStrings("?s", "<label>", "?o"),
                            h::IndexScanFromStrings("?s", "<is-a>", "?o")))));
+}
+
+// Test that a join that is pushed into the children of a `UNION` at the root
+// of a subquery does not join on the variables that the subquery hides.
+// Regression test for https://github.com/ad-freiburg/qlever/issues/3688.
+TEST(QueryPlanner, distributiveJoinInUnionKeepsHiddenVariablesHidden) {
+  // With `strip-columns` disabled, the `UNION` (the root of the subquery) only
+  // hides `?z`, which is still visible in its children. The join that is pushed
+  // into the children must not join on this `?z`.
+  auto cleanupDistributive =
+      setRuntimeParameterForTest<&RuntimeParameters::enableDistributiveUnion_>(
+          true);
+  auto cleanupStrip =
+      setRuntimeParameterForTest<&RuntimeParameters::stripColumns_>(false);
+  auto qec = ad_utility::testing::getQec("<a> <b> <c> . <a> <b> <d> .");
+
+  // Plan `SELECT * { { SELECT ?x ?q { <left> UNION <right> } } ?x ?q ?z }` and
+  // check that every candidate plan yields `expectedSize` rows.
+  auto test = [&qec](std::string_view left, std::string_view right,
+                     size_t expectedSize,
+                     ad_utility::source_location sourceLocation =
+                         AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(sourceLocation);
+    QueryPlanner qp{qec, std::make_shared<ad_utility::CancellationHandle<>>()};
+    auto query = parseQuery(absl::StrCat("SELECT * { { SELECT ?x ?q { ", left,
+                                         " UNION ", right, " } } ?x ?q ?z }"));
+    auto plans = qp.createExecutionTrees(query);
+
+    // Make sure that the plan with the join pushed into the `UNION` is among
+    // the candidates, so that this test actually tests something.
+    EXPECT_TRUE(ql::ranges::any_of(plans, [](const auto& plan) {
+      return std::dynamic_pointer_cast<Union>(plan._qet->getRootOperation()) !=
+             nullptr;
+    }));
+    for (const auto& plan : plans) {
+      qec->clearCacheUnpinnedOnly();
+      EXPECT_THAT(*plan._qet, h::hasVariables({"?x", "?q", "?z"}));
+      EXPECT_EQ(plan._qet->getResult()->idTableView().size(), expectedSize);
+    }
+  };
+
+  // The hidden `?z` only appears in the left or the right branch. The subquery
+  // yields `(<a>, <b>)` twice and the empty solution once, each of which is
+  // compatible with both triples.
+  test("{ ?x ?q ?z }", "{ }", 6);
+  test("{ }", "{ ?x ?q ?z }", 6);
+  // The hidden `?z` appears in both branches. The subquery yields `(<a>, <b>)`
+  // four times, each of which is compatible with both triples.
+  test("{ ?x ?q ?z }", "{ ?x ?q ?z }", 8);
+  // Same, but `?z` is bound to different columns in the two branches. The right
+  // branch yields `(<c>, <b>)` and `(<d>, <b>)`, which are compatible with
+  // neither triple.
+  test("{ ?x ?q ?z }", "{ ?z ?q ?x }", 4);
 }
 
 // _____________________________________________________________________________

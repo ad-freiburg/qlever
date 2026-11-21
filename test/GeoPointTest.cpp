@@ -287,6 +287,50 @@ TEST(GeoPoint, latMajorEncoding) {
   }
 }
 
+// Test that `convertEncoding` converts the bit representation of a point
+// between the two encodings without loss.
+TEST(GeoPoint, convertEncoding) {
+  using T = GeoPoint::T;
+  using E = GeoPointEncodingEnum;
+
+  // Two small coordinates, whose bit representations differ between the two
+  // encodings.
+  constexpr T lat = 0b101;
+  constexpr T lng = 0b11;
+  constexpr T zOrder = GeoPoint::combineCoordinates(lat, lng, E::ZOrder);
+  constexpr T latMajor = GeoPoint::combineCoordinates(lat, lng, E::LatMajor);
+  static_assert(zOrder != latMajor);
+
+  // Converting between the encodings gives the representation of the target.
+  static_assert(GeoPoint::convertEncoding(zOrder, E::ZOrder, E::LatMajor) ==
+                latMajor);
+  static_assert(GeoPoint::convertEncoding(latMajor, E::LatMajor, E::ZOrder) ==
+                zOrder);
+
+  // Converting to the same encoding leaves the bits unchanged.
+  static_assert(GeoPoint::convertEncoding(zOrder, E::ZOrder, E::ZOrder) ==
+                zOrder);
+  static_assert(GeoPoint::convertEncoding(latMajor, E::LatMajor, E::LatMajor) ==
+                latMajor);
+
+  // The conversion is lossless in both directions, also for the extreme
+  // coordinates.
+  for (auto [latitude, longitude] : std::vector<std::pair<double, double>>{
+           {48.0, 7.8}, {-90.0, -180.0}, {90.0, 180.0}, {0.0, 0.0}}) {
+    T latQuantized = GeoPoint::quantizeCoordinate(latitude, 90);
+    T lngQuantized = GeoPoint::quantizeCoordinate(longitude, 180);
+    for (auto from : {E::ZOrder, E::LatMajor}) {
+      for (auto to : {E::ZOrder, E::LatMajor}) {
+        T bits = GeoPoint::combineCoordinates(latQuantized, lngQuantized, from);
+        T converted = GeoPoint::convertEncoding(bits, from, to);
+        EXPECT_EQ(converted,
+                  GeoPoint::combineCoordinates(latQuantized, lngQuantized, to));
+        EXPECT_EQ(GeoPoint::convertEncoding(converted, to, from), bits);
+      }
+    }
+  }
+}
+
 // Test the names of the two encodings in the configuration of an index and in
 // the option of `qlever-index`.
 TEST(GeoPoint, encodingNames) {

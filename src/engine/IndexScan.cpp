@@ -374,9 +374,9 @@ Result::LazyResult IndexScan::chunkedIndexScan() const {
 
 // _____________________________________________________________________________
 IdTable IndexScan::materializedIndexScan() const {
-  IdTable idTable = permutation().scan(scanSpecAndBlocks_, additionalColumns(),
-                                       cancellationHandle_,
-                                       locatedTriplesState(), getLimitOffset());
+  IdTable idTable = permutation().scan(
+      scanSpecAndBlocks_, additionalColumns(), cancellationHandle(),
+      locatedTriplesState(), executor(), getLimitOffset());
   AD_LOG_DEBUG << "IndexScan result computation done.\n";
   checkCancellation();
   idTable = makeApplyColumnSubset()(std::move(idTable));
@@ -460,8 +460,8 @@ std::pair<bool, size_t> IndexScan::computeSizeEstimate() const {
 // _____________________________________________________________________________
 size_t IndexScan::getExactSize() const {
   AD_CORRECTNESS_CHECK(_executionContext);
-  return permutation().getResultSizeOfScan(scanSpecAndBlocks_,
-                                           locatedTriplesState());
+  return permutation().getResultSizeOfScan(
+      scanSpecAndBlocks_, locatedTriplesState(), cancellationHandle());
 }
 
 // _____________________________________________________________________________
@@ -619,7 +619,8 @@ CompressedRelationReader::IdTableGeneratorInputRange IndexScan::getLazyScan(
       getLimitOffset().isUnconstrained() ? std::move(blocks) : std::nullopt;
   auto lazyScanAllCols = permutation().lazyScan(
       scanSpecAndBlocks_, filteredBlocks, additionalColumns(),
-      cancellationHandle_, locatedTriplesState(), getLimitOffset());
+      cancellationHandle(), locatedTriplesState(), executor(),
+      getLimitOffset());
 
   return CompressedRelationReader::IdTableGeneratorInputRange{
       ad_utility::CachingTransformInputRange{
@@ -1062,6 +1063,13 @@ std::pair<Result::LazyResult, Result::LazyResult> IndexScan::prefilterTables(
 }
 
 // _____________________________________________________________________________
+std::shared_ptr<IndexScan> IndexScan::getIfSupportsPrefilteredJoin(
+    const QueryExecutionTree& tree) {
+  auto scan = std::dynamic_pointer_cast<IndexScan>(tree.getRootOperation());
+  return scan && scan->numVariables() > 0 ? scan : nullptr;
+}
+
+// _____________________________________________________________________________
 std::unique_ptr<Operation> IndexScan::cloneImpl() const {
   return std::make_unique<IndexScan>(
       _executionContext, permutation_, locatedTriplesSharedState_, subject_,
@@ -1100,15 +1108,26 @@ IndexScan::makeTreeWithStrippedColumns(
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 IndexScan::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
-  // Currently only materialized views can provide precomputed `BIND`s.
+  // Currently only materialized views can provide precomputed `BIND`s, and
+  // only if query rewriting using materialized views is allowed.
   auto view = permutation().materializedView();
-  if (!view) {
+  if (!view || _executionContext->disableMaterializedViewRewriting()) {
     return std::nullopt;
   }
 
-  // All variables of the `BIND` expression must be read by this scan and be
-  // visible, that is, neither hidden by a subquery nor stripped away.
-  if (!areVariablesVisible(bind._expression.containedVariables())) {
+  // Check if all variables required for the `BIND` expression are covered by
+  // this `IndexScan`.
+  //
+  // NOTE: `scanColumns` also contains columns that are hidden (e.g. by a
+  // subquery). This is fine, because
+  // `QueryExecutionTree::makeTreeWithBindColumn` already refuses a `BIND` whose
+  // expression uses a hidden variable, and it also hides the hidden variables
+  // again in the new tree that we construct from scratch below.
+  const auto& scanColumns = computePermutationColumnIndices();
+  bool allVarsCovered = ql::ranges::all_of(
+      bind._expression.containedVariables(),
+      [&scanColumns](const auto* v) { return scanColumns.contains(*v); });
+  if (!allVarsCovered) {
     return std::nullopt;
   }
 
@@ -1126,11 +1145,9 @@ IndexScan::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   }
 
   // Check the `BIND` cache of the underlying `MaterializedView` for the `BIND`
-  // expression's cache key (computed on all columns of this scan, hidden ones
-  // included).
-  const auto& visibleVars = computePermutationColumnIndices();
+  // expression's cache key.
   auto targetCol =
-      view->lookupBindTargetColumn(bind._expression.getCacheKey(visibleVars));
+      view->lookupBindTargetColumn(bind._expression.getCacheKey(scanColumns));
   if (!targetCol.has_value()) {
     return std::nullopt;
   }
@@ -1188,16 +1205,12 @@ IndexScan::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
     newVariables.value().insert(bind._target);
   }
 
-  // The new scan is built from scratch, so the variables hidden by this scan
-  // (if it is the root of a subquery) must be hidden again.
-  auto newTree = ad_utility::makeExecutionTree<IndexScan>(
+  return ad_utility::makeExecutionTree<IndexScan>(
       _executionContext, permutation_, locatedTriplesSharedState_, subject_,
       newPredicate, newObject, std::move(newAdditionalColumns),
       std::move(newAdditionalVariables), graphsToFilter_, scanSpecAndBlocks_,
       scanSpecAndBlocksIsPrefiltered_, VarsToKeep{std::move(newVariables)},
       sizeEstimateIsExact_, sizeEstimate_);
-  keepHiddenVariablesHidden(*newTree->getRootOperation(), bind._target);
-  return newTree;
 }
 
 // _____________________________________________________________________________

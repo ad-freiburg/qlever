@@ -9,9 +9,13 @@
 
 #include <gtest/gtest.h>
 
+#include <iterator>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 #include "IdColumnTestHelpers.h"
+#include "backports/algorithm.h"
 #include "engine/idTable/splitLayout/IdColumnVector.h"
 #include "engine/idTable/splitLayout/IdRef.h"
 #include "util/MemorySize/MemorySize.h"
@@ -136,4 +140,143 @@ TEST(IdColumnVectorTest, insertRollsBackOnDatatypesAllocationFailure) {
       vec.insert(vec.asView().begin(), toInsert.begin(), toInsert.end()),
       ad_utility::detail::AllocationExceedsLimitException);
   EXPECT_TRUE(vec.empty());
+}
+
+// Test that `operator[]` and `at` return the restricted reference, like the
+// column views: Writing is possible via an rvalue or via an explicitly
+// requested `IdRef`, but not via a variable that was created by `auto`.
+TEST(IdColumnVectorTest, restrictedElementAccess) {
+  auto ids = sampleIds();
+  IdColumnVector vec{ids.begin(), ids.end(), testAllocator()};
+  const auto& constVec = vec;
+  static_assert(std::is_same_v<decltype(vec[0]), IdRef::Base>);
+  static_assert(std::is_same_v<decltype(vec.at(0)), IdRef::Base>);
+  static_assert(std::is_same_v<decltype(constVec[0]), ConstIdRef::Base>);
+  static_assert(std::is_same_v<decltype(constVec.at(0)), ConstIdRef::Base>);
+  static_assert(std::is_assignable_v<decltype(vec[0]), Id>);
+  static_assert(!std::is_assignable_v<decltype(vec[0])&, Id>);
+  static_assert(!std::is_assignable_v<decltype(vec.at(0))&, Id>);
+
+  // Assigning to the temporary writes to the vector.
+  const Id first = Id::makeFromInt(42);
+  vec[1] = first;
+  EXPECT_EQ(vec[1], first);
+  vec.at(2) = first;
+  EXPECT_EQ(constVec[2], first);
+
+  // A variable has to request the writable reference explicitly.
+  IdRef ref = vec[3];
+  const Id second = Id::makeFromInt(43);
+  ref = second;
+  EXPECT_EQ(vec[3], second);
+
+  // `auto` copies the (read-only) reference, which still reads the vector.
+  auto autoRef = vec[3];
+  vec[3] = first;
+  EXPECT_EQ(autoRef, first);
+}
+
+// The following tests are the generic version of `restrictedElementAccess`.
+// Generic code does not name `IdRef`, but takes the types from the iterator and
+// the range of a column:
+// - `IteratorReference` is `std::iterator_traits<It>::reference`. It is the
+//   reference that a variable can request for writing: `IdRef` for a split
+//   column, `Id&` for a column of plain `Id`s.
+// - `ql::ranges::range_reference_t` is what dereferencing yields. For a split
+//   column this is the restricted reference, which only allows writing via a
+//   temporary.
+namespace {
+template <typename Column>
+using IteratorReference =
+    typename std::iterator_traits<ql::ranges::iterator_t<Column>>::reference;
+
+// Whether the three generic types of a `Column` are the given ones.
+template <typename Column, typename Reference, typename Restricted>
+inline constexpr bool hasReferenceTypes =
+    std::is_same_v<IteratorReference<Column>, Reference> &&
+    std::is_same_v<ql::ranges::range_reference_t<Column>, Restricted> &&
+    std::is_same_v<ql::ranges::range_value_t<Column>, Id>;
+
+// Write to the first element of a writable `column` and read it again. It uses
+// the generic types only, so it works for every column, whatever its reference
+// is.
+template <typename Column>
+void expectGenericWriteAndRead(Column& column) {
+  using Reference = IteratorReference<Column>;
+  using Value = ql::ranges::range_value_t<Column>;
+  const Value first = Id::makeFromInt(11);
+  const Value second = Id::makeFromInt(12);
+
+  // Request the writable reference explicitly, like `IdRef ref = vec[3]`.
+  Reference ref = *ql::ranges::begin(column);
+  ref = first;
+  EXPECT_EQ(*ql::ranges::begin(column), first);
+  // Write to the temporary that dereferencing yields.
+  *ql::ranges::begin(column) = second;
+  EXPECT_EQ(ref, second);
+  // The reference converts to the plain value.
+  Value copy = ref;
+  EXPECT_EQ(copy, second);
+}
+
+// Read the first element of a `column` that is `expected`, via the generic
+// types. A const column only has read-only references.
+template <typename Column>
+void expectGenericRead(const Column& column, const Id expected) {
+  using Reference = IteratorReference<const Column>;
+  static_assert(!std::is_assignable_v<Reference&, Id>);
+  Reference ref = *ql::ranges::begin(column);
+  EXPECT_EQ(ref, expected);
+  ql::ranges::range_value_t<const Column> value = ref;
+  EXPECT_EQ(value, expected);
+}
+}  // namespace
+
+// Test that the generic types of a column resolve to the proxies of the split
+// layout for the vector and its views, and to true references for a column of
+// plain `Id`s.
+TEST(IdColumnVectorTest, genericReferenceTypes) {
+  using Vec = IdColumnVector<TestAllocator>;
+  static_assert(hasReferenceTypes<Vec, IdRef, IdRef::Base>);
+  static_assert(hasReferenceTypes<IdColumnRef, IdRef, IdRef::Base>);
+  static_assert(hasReferenceTypes<const Vec, ConstIdRef, ConstIdRef::Base>);
+  static_assert(
+      hasReferenceTypes<ConstIdColumnRef, ConstIdRef, ConstIdRef::Base>);
+
+  // A column of plain `Id`s.
+  static_assert(hasReferenceTypes<std::vector<Id>, Id&, Id&>);
+  static_assert(hasReferenceTypes<const std::vector<Id>, const Id&, const Id&>);
+}
+
+// Test that generic code can write via the reference from the iterator traits,
+// for the split columns and for plain `Id`s (a variable of the restricted
+// reference cannot be assigned to).
+TEST(IdColumnVectorTest, genericWritableReference) {
+  using Vec = IdColumnVector<TestAllocator>;
+  using Restricted = ql::ranges::range_reference_t<Vec>;
+  static_assert(std::is_assignable_v<Restricted, Id>);
+  static_assert(!std::is_assignable_v<Restricted&, Id>);
+  static_assert(std::is_assignable_v<IteratorReference<Vec>&, Id>);
+
+  auto ids = sampleIds();
+  Vec vec{ids.begin(), ids.end(), testAllocator()};
+  expectGenericWriteAndRead(vec);
+  auto view = vec.asView();
+  expectGenericWriteAndRead(view);
+  expectGenericWriteAndRead(ids);
+}
+
+// Test that a const column and a const view only have read-only references,
+// which convert to the plain `Id`.
+TEST(IdColumnVectorTest, genericConstReference) {
+  using Vec = IdColumnVector<TestAllocator>;
+  static_assert(
+      !std::is_assignable_v<ql::ranges::range_reference_t<const Vec>, Id>);
+
+  const Id value = Id::makeFromInt(42);
+  const std::vector<Id> ids{value};
+  Vec vec{ids.begin(), ids.end(), testAllocator()};
+  expectGenericRead(std::as_const(vec), value);
+  expectGenericRead(vec.asConstView(), value);
+  expectGenericRead(ids, value);
 }

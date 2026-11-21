@@ -66,8 +66,9 @@ struct BlockRange {
 // contain elements in the range of the `boundary`. This only looks at the
 // (I/O-free) metadata of the blocks, so a returned block may still turn out to
 // contain no matching element at all.
-CPP_template(typename Input,
-             typename Comparator)(requires InputConcept<Input>) BlockRange
+CPP_template(typename Input, typename Comparator)(
+    requires InputConcept<Input>)
+BlockRange
     blockRangeForRun(const Input& input, const Comparator& comparator,
                      const ChunkBoundary<typename Input::Element>& boundary,
                      size_t runIdx) {
@@ -129,20 +130,20 @@ std::vector<ChunkBoundary<Element>> chunkBoundariesFromSplitPoints(
 }
 
 // The common part of the overloads of `computeChunkBoundaries` below: run the
-// steps from `MergeHelpersImpl.h`, where `makeTargets` turns the total number
-// of elements into the target quantiles.
-CPP_template(typename Input, typename Comparator,
-             typename MakeTargets)(requires InputConcept<Input>)
-    std::vector<ChunkBoundary<typename Input::Element>> chunkBoundariesImpl(
-        const Input& input, const Comparator& comparator,
-        const MakeTargets& makeTargets) {
+// steps from `MergeHelpersImpl.h`, where `makeTargets` turns the total weight
+// of the input into the target quantiles.
+CPP_template(typename Input, typename Comparator, typename MakeTargets)(
+    requires InputConcept<Input>)
+std::vector<ChunkBoundary<typename Input::Element>> chunkBoundariesImpl(
+    const Input& input, const Comparator& comparator,
+    const MakeTargets& makeTargets) {
   using Element = typename Input::Element;
   auto elementsAndWeights =
       sortAndAccumulateWeights(collectElementsAndWeights(input), comparator);
   if (elementsAndWeights.empty()) {
     return singleChunk<Element>();
   }
-  // The accumulated weight of the last entry is the total number of elements.
+  // The accumulated weight of the last entry is the total weight of the input.
   auto targets = makeTargets(elementsAndWeights.back().second);
   return chunkBoundariesFromSplitPoints(
       pickChunkSplitPoints(elementsAndWeights, targets));
@@ -152,9 +153,10 @@ CPP_template(typename Input, typename Comparator,
 
 // Compute the chunk boundaries by a weighted quantile over the block metadata
 // only (no I/O at all): every block contributes its last element, weighted by
-// its number of elements. Return the boundaries of at most `numChunks` chunks,
-// see `ChunkBoundary`. The result is never empty, and the chunks partition the
-// whole range of elements.
+// its number of elements, or by its `blockWeight` if the input has one (see
+// `blockWeight` in `MergeHelpersImpl.h`). Return the boundaries of at most
+// `numChunks` chunks, see `ChunkBoundary`. The result is never empty, and the
+// chunks partition the whole range of elements.
 //
 // NOTE: The result may well describe fewer than `numChunks` chunks, because all
 // equal elements have to end up in the same chunk. If all the elements of the
@@ -168,9 +170,10 @@ CPP_template(typename Input, typename Comparator,
 // not required) guarantee that the comparator considers all elements of such a
 // chunk equivalent. This only pays off for the parallel merge, so it is
 // deferred until then.
-CPP_template(typename Input, typename Comparator)(requires InputConcept<Input>)
-    std::vector<ChunkBoundary<typename Input::Element>> computeChunkBoundaries(
-        const Input& input, const Comparator& comparator, size_t numChunks) {
+CPP_template(typename Input, typename Comparator)(
+    requires InputConcept<Input>)
+std::vector<ChunkBoundary<typename Input::Element>> computeChunkBoundaries(
+    const Input& input, const Comparator& comparator, size_t numChunks) {
   using Element = typename Input::Element;
   // A single chunk needs no boundaries at all, and in that case even the scan
   // of the block metadata can be skipped.
@@ -190,7 +193,8 @@ CPP_template(typename Input, typename Comparator)(requires InputConcept<Input>)
 // first chunk gets the size `firstChunkSize`, and each following chunk doubles
 // the size of its predecessor until that size reaches the size of a uniform
 // chunk (the size that `numChunks` implies for the given input). All the
-// remaining chunks get that uniform size.
+// remaining chunks get that uniform size. All the sizes are measured in the
+// unit of the `blockWeight` of the input, see the overload above.
 //
 // The ramp-up therefore never *reduces* the number of chunks and hence never
 // costs parallelism: if even the first chunk is not smaller than a uniform
@@ -199,10 +203,11 @@ CPP_template(typename Input, typename Comparator)(requires InputConcept<Input>)
 // the ramp-up is over after a small fraction of the input.
 //
 // NOTE: A `firstChunkSize` of `0` is exactly the overload above.
-CPP_template(typename Input, typename Comparator)(requires InputConcept<Input>)
-    std::vector<ChunkBoundary<typename Input::Element>> computeChunkBoundaries(
-        const Input& input, const Comparator& comparator, size_t numChunks,
-        size_t firstChunkSize) {
+CPP_template(typename Input, typename Comparator)(
+    requires InputConcept<Input>)
+std::vector<ChunkBoundary<typename Input::Element>> computeChunkBoundaries(
+    const Input& input, const Comparator& comparator, size_t numChunks,
+    size_t firstChunkSize) {
   using Element = typename Input::Element;
   if (firstChunkSize == 0) {
     return computeChunkBoundaries(input, comparator, numChunks);

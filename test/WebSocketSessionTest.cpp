@@ -125,6 +125,9 @@ net::awaitable<WebSocketTestContainer> createTestContainer(
 
 // _____________________________________________________________________________
 
+// The tests below need server-side TCP sockets, which Emscripten doesn't have.
+#ifndef __EMSCRIPTEN__
+
 // Hack to allow ASSERT_*() macros to work with ASYNC_TEST
 #define return co_return
 
@@ -449,3 +452,5 @@ ASYNC_TEST(WebSocketSession,
   };
   co_await runTest(c.strand_, c.serverLogic(), controllerActions());
 }
+
+#endif  // __EMSCRIPTEN__

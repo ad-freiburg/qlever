@@ -18,10 +18,9 @@
 // constructible.
 namespace ad_utility::serialization {
 AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
-    (ad_utility::similarToInstantiation<T, ad_utility::CopyableAtomic>)
-        CPP_and CPP_NOT(std::is_trivially_copyable_v<std::decay_t<T>>)
-            CPP_and std::is_default_constructible_v<
-                typename std::decay_t<T>::value_type>) {
+    (ad_utility::similarToInstantiation<T, ad_utility::CopyableAtomic>) &&
+    CPP_NOT(std::is_trivially_copyable_v<std::decay_t<T>>) &&
+    std::is_default_constructible_v<typename std::decay_t<T>::value_type>) {
   using V = typename std::decay_t<T>::value_type;
   if constexpr (ReadSerializer<S>) {
     V target;

@@ -276,6 +276,18 @@ int main(int argc, char** argv) {
   add("add-has-word-triples", po::bool_switch(&config.addHasWordTriples_),
       "Add `ql:has-word` triples for each word in each literal. This enables "
       "keyword search in literals via `?literal ql:has-word \"word\"`.");
+  auto hasWordNormalizationDescription = absl::StrCat(
+      "The normalization of the words of the `ql:has-word` triples. Literals "
+      "are always split at non-alphanumeric characters and the words are "
+      "lowercased; with `lowercase-no-accents`, all combining marks are also "
+      "removed (e.g. \"Café\" becomes \"cafe\"). The latter is meant for "
+      "text in the Latin, Greek or Cyrillic script; in other scripts it also "
+      "removes marks that are not accents (e.g. the vowel signs of Thai). One "
+      "of ",
+      ad_utility::HasWordNormalization::getListOfSupportedValues(),
+      ", the default is `lowercase`.");
+  add("has-word-normalization", po::value(&config.hasWordNormalization_),
+      hasWordNormalizationDescription.c_str());
   auto msg = absl::StrCat(
       "The vocabulary implementation for strings in qlever, can be any of ",
       ad_utility::VocabularyType::getListOfValuesForIndexBuilding());
@@ -400,6 +412,12 @@ int main(int argc, char** argv) {
                             ad_utility::ResourceMonitor::Mode::Truncate,
                             std::chrono::seconds{resourceUsageIntervalS});
     }
+    // When no `--kg-input-file` is given, the KG data is read from stdin (as
+    // documented in `--help`), except when only a text index is added to an
+    // existing index (`--add-text-index`), which needs no KG input.
+    if (inputFile.empty() && !config.onlyAddTextIndex_) {
+      inputFile.emplace_back("-");
+    }
     config.inputFiles_ = getFileSpecifications(filetype, inputFile,
                                                defaultGraphs, parseParallel);
     config.writeMaterializedViews_ =
@@ -408,12 +426,18 @@ int main(int argc, char** argv) {
       config.indexRowsPerBlock_ = indexRowsPerBlock.value();
     }
     config.validate();
-    // For index building, let each permutation writer use all threads of the
-    // global thread pool (whose size is only set to `config.numThreads_` inside
-    // `Qlever::buildIndex`). The default is optimized for `rebuild-index`,
-    // where six permutations are written simultaneously.
-    setRuntimeParameter<&RuntimeParameters::permutationWriterNumThreads_>(
-        config.numThreads_);
+    // For index building, let each permutation writer keep two blocks in flight
+    // per thread of the global thread pool (whose size is only set to
+    // `config.numThreads_` inside `Qlever::buildIndex`), such that the writer
+    // can make progress while all the threads are compressing blocks. The
+    // default is optimized for `rebuild-index`, where six permutations are
+    // written simultaneously.
+    //
+    // NOTE: `config.validate()` guarantees that `config.numThreads_` is at
+    // least 1.
+    setRuntimeParameter<
+        &RuntimeParameters::permutationWriterNumBlocksInFlight_>(
+        2 * config.numThreads_);
     qlever::Qlever::buildIndex(config);
   } catch (std::exception& e) {
     AD_LOG_ERROR << "Creating the index for QLever failed with the following "

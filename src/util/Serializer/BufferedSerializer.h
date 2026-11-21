@@ -40,9 +40,9 @@ using UninitializedBuffer = std::vector<char, default_init_allocator<char>>;
 // chunks.
 struct PassthroughBlockProcessor {
   CPP_template(typename UnderlyingSerializer)(
-      requires WriteSerializer<UnderlyingSerializer>) void
-  operator()(ql::span<const char> block,
-             UnderlyingSerializer& underlyingSerializer) const {
+      requires WriteSerializer<UnderlyingSerializer>)
+  void operator()(ql::span<const char> block,
+                  UnderlyingSerializer& underlyingSerializer) const {
     underlyingSerializer.serializeBytes(block.data(), block.size());
   }
 };
@@ -58,9 +58,8 @@ struct PassthroughBlockProcessor {
 // default, the block is written as-is (see `PassthroughBlockProcessor`).
 CPP_template(typename UnderlyingSerializer,
              typename BlockProcessor = PassthroughBlockProcessor)(
-    requires WriteSerializer<
-        UnderlyingSerializer>) class BufferedWriteSerializer
-    : public ad_utility::NoCopy {
+    requires WriteSerializer<UnderlyingSerializer>)
+class BufferedWriteSerializer : public ad_utility::NoCopy {
  public:
   using SerializerType = WriteSerializerTag;
 

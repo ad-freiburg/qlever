@@ -16,6 +16,7 @@
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/LocalVocabEntryTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
 #include "./LazyJoinTestHelpers.h"
 #include "engine/IndexScan.h"
@@ -24,6 +25,8 @@
 #include "index/IndexImpl.h"
 #include "index/TripleComponentConversions.h"
 #include "parser/ParsedQuery.h"
+
+static constexpr auto executor = &ad_utility::testing::singleThreadExecutor;
 
 using namespace ad_utility::testing;
 using namespace std::chrono_literals;
@@ -118,7 +121,7 @@ void testLazyScanForJoinOfTwoScans(
     config.rowsPerBlock = rowsPerBlock;
     auto qec = getQec(std::move(config));
     IndexScan s1{qec, Permutation::PSO, tripleLeft};
-    s1.applyLimitOffset(limit);
+    s1.applyLimitOffset(limit, false);
     IndexScan s2{qec, Permutation::PSO, tripleRight};
     auto implForSwitch = [](IndexScan& l, IndexScan& r, const auto& expectedL,
                             const auto& expectedR,
@@ -595,7 +598,7 @@ TEST(IndexScan, getResultSizeOfScanFromRelationMetadata) {
   auto sizeEstimate = [&](const std::string& predicate) {
     qec = std::make_unique<QueryExecutionContext>(
         index, &cache, makeAllocator(ad_utility::MemorySize::megabytes(100)),
-        SortPerformanceEstimator{}, &namedCache, materializedViewsManager);
+        &namedCache, materializedViewsManager, executor());
     SparqlTripleSimple scanTriple{Variable{"?x"},
                                   TripleComponent::Iri::fromIriref(predicate),
                                   Variable{"?y"}};
@@ -654,7 +657,7 @@ TEST(IndexScan, getResultSizeOfScanWithDeltaTriples) {
   auto makeScan = [&]() {
     qec = std::make_unique<QueryExecutionContext>(
         index, &cache, makeAllocator(ad_utility::MemorySize::megabytes(100)),
-        SortPerformanceEstimator{}, &namedCache, materializedViewsManager);
+        &namedCache, materializedViewsManager, executor());
 
     SparqlTripleSimple scanTriple{V{"?x"}, V("?y"), V{"?z"}};
     return IndexScan{qec.get(), Permutation::Enum::PSO, scanTriple};
@@ -767,7 +770,7 @@ TEST(IndexScan, unlikelyToFitInCacheCalculatesSizeCorrectly) {
     auto locationTrace = generateLocationTrace(l);
 
     EXPECT_TRUE(scan.unlikelyToFitInCache(MemorySize::bytes(0)));
-    size_t byteCount = numRows * numCols * sizeof(Id);
+    size_t byteCount = numRows * numCols * BYTES_PER_ID_COLUMN_ENTRY;
     EXPECT_TRUE(scan.unlikelyToFitInCache(MemorySize::bytes(byteCount - 1)));
     EXPECT_FALSE(scan.unlikelyToFitInCache(MemorySize::bytes(byteCount)));
   };
@@ -1236,7 +1239,7 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesWithLimitYieldsEachRowOnce) {
   // Rows 3-5 of the six `<p>` rows, join side with two matching values from
   // different blocks and a value (`<xb>`) that matches no block.
   IndexScan scan = makeScan();
-  scan.applyLimitOffset(LimitOffsetClause{._limit = 3, ._offset = 2});
+  scan.applyLimitOffset(LimitOffsetClause{._limit = 3, ._offset = 2}, false);
 
   auto makeJoinSide = [this]() {
     using P = Result::IdTableVocabPair;
@@ -1393,9 +1396,9 @@ TEST_P(IndexScanWithLazyJoin,
   LocalVocab extraVocab;
   const auto& localVocabContext = qec_->getLocalVocabContext();
   auto indexE = extraVocab.getIndexAndAddIfNotContained(
-      LocalVocabEntry{iri("<e>"), localVocabContext});
+      localVocabEntry(iri("<e>"), localVocabContext));
   auto indexG = extraVocab.getIndexAndAddIfNotContained(
-      LocalVocabEntry{iri("<g>"), localVocabContext});
+      localVocabEntry(iri("<g>"), localVocabContext));
 
   using P = Result::IdTableVocabPair;
   std::array pairs{
@@ -2025,7 +2028,7 @@ TEST(IndexScanTest, StripColumnsWithPrefiltering) {
   // Create prefilter condition: ?x < <s2>
   auto prefilterPairs = [&qec]() {
     return makePrefilterVec(
-        pr(lt(LocalVocabEntry::fromIriref("<s2>", qec->getLocalVocabContext())),
+        pr(lt(iriLocalVocabEntry("<s2>", qec->getLocalVocabContext())),
            Var{"?x"}));
   };
 

@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "../engine/ValuesForTesting.h"
+#include "IndexTestHelpers.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "util/Algorithm.h"
@@ -61,10 +62,11 @@ void compareIdTableWithExpectedContent(
 
 // ____________________________________________________________________________
 void sortIdTableByJoinColumnInPlace(IdTableAndJoinColumn& table) {
-  ad_utility::callFixedSizeVi(
-      table.idTable.numColumns(), [&table](auto numCols) {
-        IdTableUtils::sort<numCols>(&table.idTable, table.joinColumn);
-      });
+  SortConfig sortConfig{ad_utility::testing::singleThreadExecutor()};
+  ad_utility::callFixedSizeVi(table.idTable.numColumns(), [&table, &sortConfig](
+                                                              auto numCols) {
+    IdTableUtils::sort<numCols>(&table.idTable, table.joinColumn, sortConfig);
+  });
 }
 
 // ____________________________________________________________________________

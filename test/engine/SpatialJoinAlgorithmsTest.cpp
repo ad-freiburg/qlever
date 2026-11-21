@@ -19,6 +19,8 @@
 #include "../util/IndexTestHelpers.h"
 #include "../util/RuntimeParametersTestHelpers.h"
 #include "./SpatialJoinTestHelpers.h"
+#include "absl/strings/str_format.h"
+#include "absl/strings/str_join.h"
 #include "backports/filesystem.h"
 #include "engine/IndexScan.h"
 #include "engine/QueryExecutionTree.h"
@@ -147,21 +149,12 @@ class SpatialJoinParamTest
     EXPECT_THAT(vec, ::testing::UnorderedElementsAreArray(expectedOutput));
 
     if (isWrongPointInputTest &&
-        getAlgorithm() == SpatialJoinAlgorithm::BOUNDING_BOX) {
-      auto warnings = spatialJoin->collectWarnings();
-      bool containsWrongPointWarning = false;
-      std::string warningMessage =
-          "The input to a spatial join contained at least one element, "
-          "that is not a Point, Linestring, Polygon, MultiPoint, "
-          "MultiLinestring or MultiPolygon geometry and is thus skipped. Note "
-          "that QLever currently only accepts those geometries for "
-          "the spatial joins";
-      for (const auto& warning : warnings) {
-        if (warning == warningMessage) {
-          containsWrongPointWarning = true;
-        }
-      }
-      ASSERT_TRUE(containsWrongPointWarning);
+        (getAlgorithm() == SpatialJoinAlgorithm::BOUNDING_BOX ||
+         getAlgorithm() == SpatialJoinAlgorithm::BASELINE)) {
+      EXPECT_THAT(spatialJoin->collectWarnings(),
+                  ::testing::Contains(::testing::HasSubstr(
+                      "skipped rows with invalid or unsupported geometry "
+                      "literals")));
     }
   }
 
@@ -832,6 +825,18 @@ class SpatialJoinParamTest
           mergeToRow(Mun, TF, expectedDistUniMun),
           mergeToRow(Eye, Eif, expectedDistEyeEif),
           mergeToRow(Eif, Eye, expectedDistEyeEif)}}}},
+      // A limit far above `INT_MAX` behaves like no limit (the `s2` algorithm
+      // clamps it instead of truncating it to zero). Within 4000 m every point
+      // has at most two neighbors, so the rows are those for a limit of two.
+      {size_t{1} << 32,
+       {{4000,
+         {mergeToRow(TF, TF, expectedDistSelf),
+          mergeToRow(Mun, Mun, expectedDistSelf),
+          mergeToRow(Eye, Eye, expectedDistSelf),
+          mergeToRow(Lib, Lib, expectedDistSelf),
+          mergeToRow(Eif, Eif, expectedDistSelf),
+          mergeToRow(TF, Mun, expectedDistUniMun),
+          mergeToRow(Mun, TF, expectedDistUniMun)}}}},
       {3,
        {{500000,
          {mergeToRow(TF, TF, expectedDistSelf),
@@ -1018,7 +1023,8 @@ INSTANTIATE_TEST_SUITE_P(
                           NearestNeighborsConfig{2, 400000},
                           NearestNeighborsConfig{2, 4000},
                           NearestNeighborsConfig{2, 40},
-                          NearestNeighborsConfig{3, 500000}),
+                          NearestNeighborsConfig{3, 500000},
+                          NearestNeighborsConfig{size_t{1} << 32, 4000}),
         ::testing::Bool(), ::testing::Bool()));
 
 }  // namespace computeResultTest
@@ -1871,6 +1877,241 @@ TEST(SpatialJoin, LibspatialJoinDe9imFilter) {
   // for an area with itself), so this filter matches nothing.
   auto noMatchRes = runWithFilter("0FFFFFFF2");
   EXPECT_EQ(noMatchRes.idTableView().numRows(), 0);
+}
+
+// Test that all algorithms report the distances in the configured unit, and
+// that the unit is part of the cache key.
+TEST(SpatialJoin, DistanceUnit) {
+  std::string kg;
+  addPoint(kg, "1", "\"Uni Freiburg TF\"",
+           makePointLiteral("7.83505", "48.01267"));
+  addPoint(kg, "2", "\"Freiburg Minster\"",
+           makePointLiteral("7.85298", "47.99557"));
+  auto qec = buildQec(kg);
+  Variable distVar{"?dist"};
+  using enum UnitOfMeasurement;
+
+  // Compute a spatial join with a maximum distance of 5 km using the given
+  // algorithm and distance unit. Return the sorted distances of all result
+  // rows and the cache key.
+  auto run = [&](SpatialJoinAlgorithm algorithm,
+                 std::optional<UnitOfMeasurement> unit) {
+    SpatialJoinTask task = MaxDistanceConfig{5000};
+    if (algorithm == SpatialJoinAlgorithm::LIBSPATIALJOIN) {
+      task = LibSpatialJoinConfig{SpatialJoinType::WITHIN_DIST, 5000,
+                                  std::nullopt};
+    }
+    SpatialJoinConfiguration config{
+        task,    Variable{"?geo1"},       Variable{"?geo2"},
+        distVar, PayloadVariables::all(), algorithm};
+    config.distanceUnit_ = unit;
+    auto spatialJoinTree = ad_utility::makeExecutionTree<SpatialJoin>(
+        qec, std::move(config),
+        buildIndexScan(qec, {"?obj1", std::string{"<asWKT>"}, "?geo1"}),
+        buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?geo2"}));
+    auto result = spatialJoinTree->getResult();
+    auto col = spatialJoinTree->getVariableColumn(distVar);
+    std::vector<double> dists;
+    for (const auto& row : result->idTableView()) {
+      dists.push_back(row[col].getDouble());
+    }
+    ql::ranges::sort(dists);
+    return std::pair{dists, spatialJoinTree->getCacheKey()};
+  };
+
+  for (auto algorithm :
+       {SpatialJoinAlgorithm::LIBSPATIALJOIN, SpatialJoinAlgorithm::BASELINE,
+        SpatialJoinAlgorithm::S2_GEOMETRY,
+        SpatialJoinAlgorithm::BOUNDING_BOX}) {
+    auto trace =
+        generateLocationTrace(AD_CURRENT_SOURCE_LOC(), algorithm.toString());
+    auto [meters, cacheKeyMeters] = run(algorithm, METERS);
+    auto [kilometers, cacheKeyKilometers] = run(algorithm, KILOMETERS);
+    auto [miles, cacheKeyMiles] = run(algorithm, MILES);
+
+    // Both points with themselves, and the two points with each other in both
+    // directions (about 2.3 km apart).
+    ASSERT_EQ(meters.size(), 4);
+    ASSERT_EQ(kilometers.size(), 4);
+    ASSERT_EQ(miles.size(), 4);
+    EXPECT_NEAR(kilometers.back(), 2.3, 0.1);
+    // The unit conversion may introduce small rounding errors.
+    auto expectNear = [](double actual, double expected) {
+      EXPECT_NEAR(actual, expected, 1e-9 * expected);
+    };
+    for (size_t i = 0; i < meters.size(); ++i) {
+      expectNear(meters[i], kilometers[i] * 1000);
+      expectNear(miles[i],
+                 ad_utility::detail::kilometerToUnit(kilometers[i], MILES));
+    }
+
+    // The unit is part of the cache key.
+    EXPECT_EQ((ad_utility::HashSet<std::string>{
+                  cacheKeyMeters, cacheKeyKilometers, cacheKeyMiles}
+                   .size()),
+              3);
+
+    // A distance variable requires a unit.
+    EXPECT_ANY_THROW(run(algorithm, std::nullopt));
+  }
+}
+
+// Compute a `libspatialjoin` `within-dist` join with the given `maxDist`
+// between the geometries of `kg` with the predicate `leftPredicate` and those
+// with the predicate `rightPredicate`. Return the distance (in meters) for each
+// pair of different subjects in the result, keyed by "<a> <b>" with `a < b`.
+std::map<std::string, double> computeLibspatialjoinDistances(
+    std::string kg, double maxDist, std::string leftPredicate = "<asWKT>",
+    std::string rightPredicate = "<asWKT>") {
+  // Like `buildQec`, but with a parser buffer large enough for the geometries
+  // with 500 points of the test for ad-freiburg/spatialjoin#36.
+  ad_utility::testing::TestIndexConfig idxConfig{std::move(kg)};
+  idxConfig.rowsPerBlock = 2'000'000;
+  idxConfig.parserBufferSize = 100_kB;
+  auto qec = ad_utility::testing::getQec(std::move(idxConfig));
+  Variable distVar{"?dist"};
+  SpatialJoinConfiguration config{
+      LibSpatialJoinConfig{SpatialJoinType::WITHIN_DIST, maxDist, std::nullopt},
+      Variable{"?obj1"},
+      Variable{"?obj2"},
+      distVar,
+      PayloadVariables::all(),
+      SpatialJoinAlgorithm::LIBSPATIALJOIN};
+  config.distanceUnit_ = UnitOfMeasurement::METERS;
+  auto spatialJoinTree = ad_utility::makeExecutionTree<SpatialJoin>(
+      qec, std::move(config),
+      buildIndexScan(qec, {"?s1", std::move(leftPredicate), "?obj1"}),
+      buildIndexScan(qec, {"?s2", std::move(rightPredicate), "?obj2"}));
+  auto result = spatialJoinTree->getResult();
+  auto toString = [&](Id id) {
+    return ql::exportIds::idToStringAndType(qec->getIndex(), id, {})
+        .value()
+        .first;
+  };
+  auto col1 = spatialJoinTree->getVariableColumn(Variable{"?s1"});
+  auto col2 = spatialJoinTree->getVariableColumn(Variable{"?s2"});
+  auto colDist = spatialJoinTree->getVariableColumn(distVar);
+  std::map<std::string, double> dists;
+  for (const auto& row : result->idTableView()) {
+    auto a = toString(row[col1]);
+    auto b = toString(row[col2]);
+    if (a != b) {
+      dists[a < b ? absl::StrCat(a, " ", b) : absl::StrCat(b, " ", a)] =
+          row[colDist].getDouble();
+    }
+  }
+  return dists;
+}
+
+// Return the coordinates of a zigzag line with `numPoints` points that starts
+// at (`x`, `y`) and goes east in steps of 0.00005 degrees. Lines with at least
+// 500 points that occur several times in a join are deduplicated by
+// `libspatialjoin` (only one of them is processed, the results are copied to
+// the others), which the test for ad-freiburg/spatialjoin#36 needs.
+std::string zigzagLineCoordinates(double x, double y, size_t numPoints) {
+  std::vector<std::string> points;
+  for (size_t i = 0; i < numPoints; ++i) {
+    points.push_back(
+        absl::StrFormat("%.5f %.5f", x + i * 0.00005, y + 0.0001 * (i % 2)));
+  }
+  return absl::StrJoin(points, ",");
+}
+
+// Test that the distance reported by a `libspatialjoin` `within-dist` join to
+// a line with only two points does not depend on the maximum distance of the
+// join (regression test for ad-freiburg/spatialjoin#34).
+TEST(SpatialJoin, LibspatialJoinDistanceToLineWithTwoPoints) {
+  using ::testing::DoubleNear;
+  using ::testing::IsEmpty;
+  using ::testing::Pair;
+  using ::testing::UnorderedElementsAre;
+
+  // A park (`osmway:363652135`), a river segment with only two points
+  // (`osmway:99301673`) and a point.
+  std::string kg = absl::StrCat(
+      "<park> <asWKT> ",
+      makeAreaLiteral(
+          "6.3305417 49.8352638,6.3305759 49.8351064,6.3306248 "
+          "49.8349473,6.3306194 49.834736,6.3307182 49.8347638,6.3310016 "
+          "49.8347692,6.3309713 49.8350595,6.3309811 49.8352149,6.3311407 "
+          "49.8353851,6.3314076 49.8355507,6.3314859 49.8357485,6.3311146 "
+          "49.8356751,6.3308972 49.8356149,6.3308273 49.8355311,6.3308582 "
+          "49.8352786,6.3306543 49.835244,6.3306409 49.8352863,6.3306022 "
+          "49.8352776,6.3305417 49.8352638"),
+      " .\n<river> <asWKT> ",
+      makeLineLiteral("6.329887 49.8359132,6.3298461 49.8362461"),
+      " .\n<point> <asWKT> ", makePointLiteral("6.32982", "49.8368"), " .\n");
+  auto run = [&](double maxDist) {
+    return computeLibspatialjoinDistances(kg, maxDist);
+  };
+
+  // `libspatialjoin` approximates the distances with a precision of about half
+  // a meter.
+  auto pointRiver = Pair("<point> <river>", DoubleNear(61.7, 0.5));
+  auto parkRiver = Pair("<park> <river>", DoubleNear(79.6, 0.5));
+  auto parkPoint = Pair("<park> <point>", DoubleNear(153, 0.5));
+  EXPECT_THAT(run(50), IsEmpty());
+  EXPECT_THAT(run(79), UnorderedElementsAre(pointRiver));
+  EXPECT_THAT(run(100), UnorderedElementsAre(pointRiver, parkRiver));
+  EXPECT_THAT(run(150), UnorderedElementsAre(pointRiver, parkRiver));
+  EXPECT_THAT(run(1000),
+              UnorderedElementsAre(pointRiver, parkRiver, parkPoint));
+}
+
+// Test that the distance reported by a `libspatialjoin` `within-dist` join to
+// an axis-aligned rectangle does not depend on the maximum distance of the join
+// (regression test for ad-freiburg/spatialjoin#35).
+TEST(SpatialJoin, LibspatialJoinDistanceToRectangle) {
+  using ::testing::DoubleNear;
+  using ::testing::IsEmpty;
+  using ::testing::Pair;
+  using ::testing::UnorderedElementsAre;
+
+  // An axis-aligned rectangle and a point about 1 km north of it.
+  std::string kg = absl::StrCat(
+      "<box> <asWKT> ",
+      makeAreaLiteral("6.1 49.6,6.101 49.6,6.101 49.601,6.1 49.601,6.1 49.6"),
+      " .\n<point> <asWKT> ", makePointLiteral("6.1005", "49.61"), " .\n");
+  auto run = [&](double maxDist) {
+    return computeLibspatialjoinDistances(kg, maxDist);
+  };
+
+  // The pair is found with the same distance for each maximum distance above
+  // it.
+  auto boxPoint = Pair("<box> <point>", DoubleNear(1001.9, 0.5));
+  EXPECT_THAT(run(500), IsEmpty());
+  EXPECT_THAT(run(2000), UnorderedElementsAre(boxPoint));
+  EXPECT_THAT(run(5000), UnorderedElementsAre(boxPoint));
+}
+
+// Test that the distance reported by a `libspatialjoin` `within-dist` join to
+// a line identical to a member of a multi-geometry in the same join is the
+// distance of the line itself and not the minimum distance of the
+// multi-geometry (regression test for ad-freiburg/spatialjoin#36).
+TEST(SpatialJoin, LibspatialJoinDistanceToDuplicateOfMultiGeometryMember) {
+  using ::testing::DoubleNear;
+  using ::testing::Pair;
+  using ::testing::UnorderedElementsAre;
+
+  // A small triangle on the left side. On the right side a multi-line with a
+  // member about 33 m north of the triangle and a member about 757 m north of
+  // it, and a single line identical to the second member. The deduplication
+  // keeps the geometry processed first (here the member of `<multi>`, the
+  // right side is processed in the order of the subjects) and copies its
+  // results to the identical geometries processed later.
+  auto member1 = zigzagLineCoordinates(6.05, 49.6, 500);
+  auto member2 = zigzagLineCoordinates(6.05, 49.6065, 500);
+  std::string kg = absl::StrCat(
+      "<poly> <asWKTLeft> ",
+      makeAreaLiteral(
+          "6.0599 49.5996,6.0601 49.5996,6.06 49.5997,6.0599 49.5996"),
+      " .\n<multi> <asWKTRight> \"MULTILINESTRING((", member1, "),(", member2,
+      "))\"^^<", GEO_WKT_LITERAL, "> .\n<single> <asWKTRight> ",
+      makeLineLiteral(member2), " .\n");
+  EXPECT_THAT(
+      computeLibspatialjoinDistances(kg, 1000, "<asWKTLeft>", "<asWKTRight>"),
+      UnorderedElementsAre(Pair("<multi> <poly>", DoubleNear(33.4, 0.5)),
+                           Pair("<poly> <single>", DoubleNear(757.0, 0.5))));
 }
 
 // _____________________________________________________________________________

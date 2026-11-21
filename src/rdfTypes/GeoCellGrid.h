@@ -113,10 +113,10 @@ class GeoCellGrid {
   CellIndex sentinelCell() const;
 
   // The number of bits remaining for the position of a word inside the geo
-  // vocabulary: the data bits of a `ValueId` minus one marker bit of the
-  // `SplitVocabulary` minus the cell bits.
+  // vocabulary: the bits of a vocabulary index (`ValueId::numVocabIndexBits`)
+  // minus one marker bit of the `SplitVocabulary` minus the cell bits.
   uint64_t numPositionBits() const {
-    return ValueId::numDataBits - 1 - numCellBits();
+    return ValueId::numVocabIndexBits - 1 - numCellBits();
   }
 
   // The maximum number of words the geo vocabulary can hold with this grid.
@@ -179,8 +179,8 @@ class GeoCellGrid {
   // `SplitGeoVocabulary` directly, because that class lives in the vocabulary
   // layer above this one. In the unit tests, there are checks that the two
   // are consistent.
-  static constexpr uint64_t geoVocabMarkerBit = uint64_t{1}
-                                                << (ValueId::numDataBits - 1);
+  static constexpr uint64_t geoVocabMarkerBit =
+      uint64_t{1} << (ValueId::numVocabIndexBits - 1);
   static constexpr bool isGeoVocabIndex(uint64_t vocabIndexBits) {
     return (vocabIndexBits & geoVocabMarkerBit) != 0;
   }

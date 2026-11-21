@@ -64,9 +64,9 @@ class GeoPoint {
  public:
   using T = uint64_t;
 
-  CPP_template(typename H,
-               typename G)(requires ql::concepts::same_as<G, GeoPoint>) friend H
-      AbslHashValue(H h, const G& g) {
+  CPP_template(typename H, typename G)(
+      requires ql::concepts::same_as<G, GeoPoint>)
+  friend H AbslHashValue(H h, const G& g) {
     return H::combine(std::move(h), g.lat_, g.lng_);
   }
 
@@ -140,6 +140,13 @@ class GeoPoint {
   static GeoPointEncodingEnum encoding() { return encoding_.load(); }
   static void setEncoding(GeoPointEncodingEnum encoding) {
     encoding_.store(encoding);
+  }
+
+  // Convert the bit representation of a point from encoding `from` to `to`.
+  static constexpr T convertEncoding(T bits, GeoPointEncodingEnum from,
+                                     GeoPointEncodingEnum to) {
+    auto [lat, lng] = splitCoordinates(bits, from);
+    return combineCoordinates(lat, lng, to);
   }
 
   // Construct GeoPoint and ensure valid coordinate values

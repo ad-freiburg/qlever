@@ -567,8 +567,11 @@ TEST(ExportQueryExecutionTrees, UnusedVariable) {
 
 // ____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, Floats) {
+  // The large double is `-42019234865.781e12` with the lowest 4 bits of the
+  // mantissa cleared, so the legacy `Id` (which drops these bits) and the split
+  // `Id` (which keeps them) export it identically.
   std::string kg =
-      "<s> <p> 42.2 . <s> <p> -42019234865.781e12 ."
+      "<s> <p> 42.2 . <s> <p> -42019234865780982022144e0 ."
       " <s> <p> 100.0 . <s> <p> 960000.06 ."
       " <s> <p> 123456.00000001 . <s> <p> 1e-10 ."
       " <s> <p> 4.012934858173560e-12 ."
@@ -1470,6 +1473,15 @@ TEST(ExportQueryExecutionTrees, TextRecordWithQuotes) {
                          "</literal></binding>\n  </result>", xmlTrailer));
 }
 
+// Test that a SELECT query can be exported in QLever's binary format.
+TEST(ExportQueryExecutionTrees, BinaryQLeverExport) {
+  // The format itself is tested in `engine/BinaryExportTest.cpp`.
+  auto result = runQueryStreamableResult(
+      "<s> <p> <o> .", "SELECT ?o WHERE { <s> <p> ?o }",
+      ad_utility::MediaType::binaryQleverExport);
+  EXPECT_THAT(result, HasSubstr("QLEVER.EXPORT"));
+}
+
 // ____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, MultipleVariables) {
   std::string kg = "<s> <p> <o>";
@@ -1654,6 +1666,58 @@ TEST(ExportQueryExecutionTrees, TrailingValuesOfSubquery) {
   EXPECT_EQ(tsv("SELECT * { { SELECT ?s (COUNT(*) + ?v AS ?x) { ?s <p> ?o } "
                 "GROUP BY ?s VALUES ?v { 10 } } } ORDER BY ?s"),
             "?s\t?x\n<a>\t11\n<b>\t11\n");
+}
+
+// Test that `HAVING` and `ORDER BY` expressions with `GROUP BY` also work for
+// queries without a `SELECT` clause (`CONSTRUCT` and `ASK`), where the internal
+// aliases that compute them are stored in the `ParsedQuery`.
+TEST(ExportQueryExecutionTrees, HavingAndOrderByExpressionsWithoutSelect) {
+  // Two triples with subject `<a>` and one with subject `<b>`.
+  std::string kg = "<a> <p> <c> . <a> <p> <f> . <b> <p> <z> .";
+  auto turtle = [&kg](const std::string& query) {
+    return runQueryStreamableResult(kg, query, ad_utility::MediaType::turtle);
+  };
+
+  // `HAVING` and `ORDER BY` expressions in a `CONSTRUCT` query.
+  EXPECT_EQ(turtle("CONSTRUCT { ?s <r> ?s } { ?s <p> ?o } GROUP BY ?s "
+                   "HAVING (COUNT(*) > 1)"),
+            "<a> <r> <a> .\n");
+  EXPECT_EQ(turtle("CONSTRUCT { ?s <r> ?s } { ?s <p> ?o } GROUP BY ?s "
+                   "ORDER BY COUNT(*)"),
+            "<b> <r> <b> .\n<a> <r> <a> .\n");
+  EXPECT_EQ(turtle("CONSTRUCT { ?s <r> ?s } { ?s <p> ?o } GROUP BY ?s "
+                   "ORDER BY DESC(STR(?s))"),
+            "<b> <r> <b> .\n<a> <r> <a> .\n");
+
+  // An `ORDER BY` expression that uses a variable of the trailing `VALUES` is
+  // computed after the join.
+  EXPECT_EQ(turtle("CONSTRUCT { ?s <r> ?n } { ?s <p> ?o } GROUP BY ?s "
+                   "ORDER BY LCASE(?n) VALUES (?s ?n) { (<a> \"B\") "
+                   "(<b> \"a\") }"),
+            "<b> <r> \"a\" .\n<a> <r> \"B\" .\n");
+
+  // The pattern trick also reads the aliases (none, or the count of the
+  // `ORDER BY` expression).
+  EXPECT_EQ(turtle("CONSTRUCT { ?p <r> ?p } { ?s ?p ?o } GROUP BY ?p"),
+            "<p> <r> <p> .\n");
+  EXPECT_EQ(runQueryStreamableResult(
+                kg + " <a> <q> <c> .",
+                "CONSTRUCT { ?p <r> ?p } { ?s ?p ?o } GROUP BY ?p "
+                "ORDER BY DESC(COUNT(DISTINCT ?s))",
+                ad_utility::MediaType::turtle),
+            "<p> <r> <p> .\n<q> <r> <q> .\n");
+
+  // `HAVING` and `ORDER BY` expressions in an `ASK` query.
+  auto ask = [&kg](const std::string& query) {
+    return nlohmann::json::parse(
+               runQueryStreamableResult(kg, query,
+                                        ad_utility::MediaType::sparqlJson))
+        .at("boolean")
+        .get<bool>();
+  };
+  EXPECT_TRUE(ask("ASK { ?s <p> ?o } GROUP BY ?s HAVING (COUNT(*) > 1)"));
+  EXPECT_FALSE(ask("ASK { ?s <p> ?o } GROUP BY ?s HAVING (COUNT(*) > 2)"));
+  EXPECT_TRUE(ask("ASK { ?s <p> ?o } GROUP BY ?s ORDER BY STR(?s)"));
 }
 
 // ____________________________________________________________________________
@@ -2058,11 +2122,13 @@ TEST(ExportQueryExecutionTrees, verifyQleverJsonContainsValidMetadata) {
   EXPECT_EQ(json["resultsize"], 4);
   auto& timingInformation = json["time"];
   EXPECT_GE(toChrono(timingInformation["total"].get<std::string_view>()), 1ms);
-  // Ensure result is not returned in microseconds and subsequently interpreted
-  // in milliseconds
+#ifndef _QLEVER_NO_TIMING_TESTS
+  // Ensure that the result is not returned in microseconds and subsequently
+  // interpreted in milliseconds.
   EXPECT_LT(
       toChrono(timingInformation["computeResult"].get<std::string_view>()),
       100ms);
+#endif
   EXPECT_GE(
       toChrono(timingInformation["total"].get<std::string_view>()),
       toChrono(timingInformation["computeResult"].get<std::string_view>()));

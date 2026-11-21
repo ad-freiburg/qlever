@@ -19,7 +19,8 @@
 
 #include "backports/concepts.h"
 #include "engine/CallFixedSize.h"
-#include "engine/sparqlExpressions/NaryExpressionImpl.h"
+#include "engine/sparqlExpressions/ExpressionResultHelpers.h"
+#include "engine/sparqlExpressions/NumericExpressionWrappers.h"
 #include "engine/sparqlExpressions/NumericOperandClassification.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "util/ChunkedForLoop.h"
@@ -28,33 +29,57 @@
 
 namespace sparqlExpression::detail::homogeneousNumeric {
 
-// Helpers for evaluating numeric expressions directly on primitive C++ numeric
-// types after operand classification (see `NumericOperandClassification.h`).
+// Helpers for evaluating numeric and date-aware expressions directly on C++
+// numeric types or `DateYearOrDuration` after operand classification (see
+// `NumericOperandClassification.h`). `Date` dispatch is enabled only for
+// getters that accept dates, keeping numeric-only expressions free of date
+// instantiations.
 //
-// The generic numeric value getters return variants and therefore require
+// The generic numeric/date value getters return variants and therefore require
 // variant dispatch for every result row. These helpers avoid that overhead for
 // homogeneous inputs and provide a speculative fast path for mixed inputs.
+// `DateYearOrDuration` retains all date/time and duration distinctions; the
+// original typed operation continues to determine arithmetic semantics.
 
 // Map supported numeric datatypes to their primitive C++ types.
 inline constexpr auto numericTypeMap = std::tuple{
     std::pair{NumericType::Int, ad_utility::use_type_identity::ti<int64_t>},
     std::pair{NumericType::Double, ad_utility::use_type_identity::ti<double>}};
 
-// Extract the primitive numeric value from a `ValueId` whose datatype was
-// already established by homogeneous classification.
+// Map `NumericType` values to the C++ types used for typed evaluation.
+// Include `DateYearOrDuration` only when `IncludeDates` is true. Keeping a
+// two-type map for numeric-only expressions avoids instantiating date
+// combinations they cannot evaluate.
+template <bool IncludeDates>
+inline constexpr auto numericTypeMapFor = [] {
+  if constexpr (IncludeDates) {
+    return std::tuple_cat(
+        numericTypeMap,
+        std::make_tuple(
+            std::pair{NumericType::Date,
+                      ad_utility::use_type_identity::ti<DateYearOrDuration>}));
+  } else {
+    return numericTypeMap;
+  }
+}();
+
+// Extract a numeric or date value from a `ValueId` whose datatype was
+// already established by classification or a per-row datatype check.
 template <typename Primitive>
 Primitive getPrimitiveNumericValue(ValueId value) {
   if constexpr (ql::concepts::same_as<Primitive, int64_t>) {
     return value.getInt();
   } else if constexpr (ql::concepts::same_as<Primitive, double>) {
     return value.getDouble();
+  } else if constexpr (ql::concepts::same_as<Primitive, DateYearOrDuration>) {
+    return value.getDate();
   } else {
     static_assert(ad_utility::alwaysFalse<Primitive>,
-                  "Unsupported homogeneous numeric type");
+                  "Unsupported homogeneous expression type");
   }
 }
 
-// Return an indexed getter that extracts already-classified primitive numeric
+// Return an indexed getter that extracts already-classified numeric or date
 // values from either a vector-like operand or a constant.
 template <typename Primitive, typename Operand>
 auto makeHomogeneousNumericGetter(const Operand& operand) {
@@ -76,7 +101,7 @@ auto makeHomogeneousNumericGetter(const Operand& operand) {
 }
 
 // Select the function used for evaluation on primitive numeric types.
-// By default, use the original function directly for primitive numeric inputs.
+// By default, use the original function directly for typed numeric/date inputs.
 template <typename Function>
 struct RawNumericFunction {
   using type = Function;
@@ -89,45 +114,47 @@ struct RawNumericFunction<MakeNumericExpression<Function, NanOrInfToUndef>> {
   using type = NumericIdWrapper<Function, NanOrInfToUndef>;
 };
 
-// The function type used by the homogeneous numeric evaluation loop.
+// The function type used by the homogeneous numeric/date evaluation loop.
 template <typename Function>
 using RawNumericFunctionT = typename RawNumericFunction<Function>::type;
 
-// Map a supported numeric type to the corresponding compile-time index used
-// for dispatching to the primitive C++ numeric type. The `type` must be one of
-// the types in `numericTypeMap` above, in particular it must not be `Other`,
-// which has no primitive C++ type. Callers therefore have to classify
-// all operands first and only dispatch if none of them is `Other`, see
-// `evaluateBinaryOperationOnVectorOrConstant`.
-template <size_t I = 0>
+// Return the index of type in `numericTypeMapFor<IncludeDates>`. The caller
+// must first classify operands and exclude `Other`. `Date` is valid only if
+// `IncludeDates` is true. The recursive lookup selects the corresponding C++
+// type at compile time when `dispatchNumericTypes` invokes its callback.
+template <bool IncludeDates = false, size_t I = 0>
 inline int numericTypeToIndex(NumericType type) {
-  if constexpr (I == std::tuple_size_v<decltype(numericTypeMap)>) {
+  if constexpr (I ==
+                std::tuple_size_v<decltype(numericTypeMapFor<IncludeDates>)>) {
     AD_FAIL();
   } else {
-    if (std::get<I>(numericTypeMap).first == type) {
+    if (std::get<I>(numericTypeMapFor<IncludeDates>).first == type) {
       return static_cast<int>(I);
     }
-    return numericTypeToIndex<I + 1>(type);
+    return numericTypeToIndex<IncludeDates, I + 1>(type);
   }
 }
 
-// Dispatch runtime numeric types to compile-time primitive numeric types and
-// invoke the supplied function with those types.
-template <size_t N, typename Function>
+// Dispatch supported runtime types to C++ numeric types and, when
+// `IncludeDates` is true, `DateYearOrDuration`. Invoke the function with type
+// tags.
+template <bool IncludeDates = false, size_t N, typename Function>
 decltype(auto) dispatchNumericTypes(const std::array<NumericType, N>& types,
                                     Function&& function) {
   std::array<int, N> indices;
 
   ql::ranges::transform(types, indices.begin(), [](NumericType type) {
-    return numericTypeToIndex(type);
+    return numericTypeToIndex<IncludeDates>(type);
   });
 
-  constexpr int maxIndex = std::tuple_size_v<decltype(numericTypeMap)> - 1;
+  constexpr int maxIndex =
+      std::tuple_size_v<decltype(numericTypeMapFor<IncludeDates>)> - 1;
 
   return ad_utility::callFixedSizeVi<maxIndex>(
       indices, [function = AD_FWD(function)](auto... typeIndices) {
-        return function(
-            std::get<decltype(typeIndices)::value>(numericTypeMap).second...);
+        return function(std::get<decltype(typeIndices)::value>(
+                            numericTypeMapFor<IncludeDates>)
+                            .second...);
       });
 }
 
@@ -142,7 +169,7 @@ void checkNumericOperandSize(const Operand& operand,
   }
 }
 
-// Apply the size check to all operands of a homogeneous numeric operation.
+// Apply the size check to all operands of a homogeneous typed operation.
 template <typename... Operands>
 void checkNumericOperandSizes(const std::tuple<Operands...>& operands,
                               EvaluationContext* context) {
@@ -153,12 +180,12 @@ void checkNumericOperandSizes(const std::tuple<Operands...>& operands,
       operands);
 }
 
-// Evaluate a homogeneous numeric operation when at least one operand is
+// Evaluate a homogeneous numeric/date operation when at least one operand is
 // non-constant. For the currently supported operand representations, this
 // means that at least one operand is vector-like.
 template <typename Function, typename... NumericTypes, typename... Operands>
 ExpressionResult evaluateHomogeneousNumericOperation(
-    std::tuple<Operands...> operands, EvaluationContext* context) {
+    const std::tuple<Operands...>& operands, EvaluationContext* context) {
   static_assert(sizeof...(NumericTypes) == sizeof...(Operands));
   static_assert((... || isVectorResult<std::decay_t<Operands>>),
                 "At least one operand must be vector-like");
@@ -169,7 +196,7 @@ ExpressionResult evaluateHomogeneousNumericOperation(
   using FastFunction = RawNumericFunctionT<Function>;
   FastFunction function;
 
-  // Create one primitive numeric getter for every operand.
+  // Create one typed numeric/date getter for every operand.
   auto getters = std::apply(
       [](const auto&... operand) {
         return std::tuple{
@@ -198,23 +225,19 @@ ExpressionResult evaluateHomogeneousNumericOperation(
 // return the same value for every index.
 template <typename Operand>
 ValueId getIdAt(const Operand& operand, size_t index) {
-  using OperandType = std::decay_t<Operand>;
-
   static_assert(supportsNumericFastPathOperand<Operand>(),
                 "Unsupported operand representation for numeric fast path");
-
-  if constexpr (isVectorResult<OperandType>) {
-    return operand[index];
-  } else {
-    return operand;
-  }
+  return getValueAt(operand, index);
 }
 
 // The fallback path for the speculative evaluation below when a pair of
 // operands does not match the majority types. Integer and double combinations
 // are dispatched explicitly because this was measurably faster than always
-// using the generic fallback. Other datatypes use the regular value getters to
-// preserve the generic expression semantics.
+// using the generic fallback. Functions with `undefForNonNumeric` return
+// `UNDEF` directly for datatypes rejected by their getters (see
+// `hasNonNumericOperand`). Date-aware functions also dispatch date/date rows
+// directly; other rows (in particular booleans) retain the regular value
+// getters.
 template <typename Function, typename LeftValueGetter,
           typename RightValueGetter>
 AD_NO_INLINE Id evaluateSpeculativeNumericSlowPath(
@@ -240,23 +263,38 @@ AD_NO_INLINE Id evaluateSpeculativeNumericSlowPath(
     return fastFunction(leftValue.getDouble(), rightValue.getDouble());
   }
 
+  if constexpr (supportsDateOperands<
+                    std::tuple<LeftValueGetter, RightValueGetter>>) {
+    if (leftType == Date && rightType == Date) {
+      return fastFunction(leftValue.getDate(), rightValue.getDate());
+    }
+  }
+
+  if (hasNonNumericOperand<Function,
+                           std::tuple<LeftValueGetter, RightValueGetter>>(
+          leftValue, rightValue)) {
+    return Id::makeUndefined();
+  }
+
   return genericFunction(LeftValueGetter{}(leftValue, context),
                          RightValueGetter{}(rightValue, context));
 }
 
-// Return the `ValueId` datatype corresponding to a primitive numeric C++ type.
+// Return the `ValueId` datatype corresponding to a supported C++ value type.
 template <typename Primitive>
 constexpr Datatype datatypeForNumericType() {
   if constexpr (ql::concepts::same_as<Primitive, int64_t>) {
     return Datatype::Int;
-  } else {
-    static_assert(ql::concepts::same_as<Primitive, double>,
-                  "Unsupported primitive numeric type");
+  } else if constexpr (ql::concepts::same_as<Primitive, double>) {
     return Datatype::Double;
+  } else {
+    static_assert(ql::concepts::same_as<Primitive, DateYearOrDuration>,
+                  "Unsupported typed expression value");
+    return Datatype::Date;
   }
 }
 
-// Evaluate a numeric binary operation using one expected numeric datatype for
+// Evaluate a numeric/date binary operation using one expected datatype for
 // each operand. Rows that match both expected datatypes stay on the small hot
 // path. All other rows are handled by the out-of-line slow path.
 template <typename Function, typename LeftValueGetter,
@@ -296,6 +334,87 @@ ExpressionResult evaluateSpeculativeNumericOperation(
                   leftValue, rightValue, context, fastFunction,
                   genericFunction);
         }
+      },
+      [context]() { context->cancellationHandle_->throwIfCancelled(); });
+
+  return result;
+}
+
+// Evaluate a row of a numeric/date N-ary expression using the speculative
+// majority-type fast path. If all operand datatypes match the expected
+// types, evaluate using typed numeric/date values. Otherwise, fall back to
+// the generic value getters for this row, unless an operand datatype rejected
+// by its getter can directly yield `UNDEF`.
+template <typename Function, typename ValueGetters, typename... NumericTypes,
+          typename... Operands>
+Id evaluateSpeculativeNaryRow(
+    size_t i, const std::tuple<Operands...>& operands,
+    const std::array<Datatype, sizeof...(NumericTypes)>& expectedTypes,
+    EvaluationContext* context) {
+  using FastFunction = RawNumericFunctionT<Function>;
+  FastFunction fastFunction;
+  Function genericFunction;
+
+  const auto values = std::apply(
+      [i](const auto&... operand) {
+        return std::array{getIdAt(operand, i)...};
+      },
+      operands);
+
+  const bool allMatch =
+      [&values, &expectedTypes]<size_t... I>(std::index_sequence<I...>) {
+        return ((values[I].getDatatype() == expectedTypes[I]) && ...);
+      }(std::index_sequence_for<Operands...>{});
+
+  if (allMatch) {
+    return std::apply(
+        [&fastFunction](const auto&... value) {
+          // Expand the numeric types and corresponding values in lockstep.
+          return fastFunction(getPrimitiveNumericValue<NumericTypes>(value)...);
+        },
+        values);
+  }
+
+  if (std::apply(
+          [](const auto&... value) {
+            return hasNonNumericOperand<Function, ValueGetters>(value...);
+          },
+          values)) {
+    return Id::makeUndefined();
+  }
+
+  return [&genericFunction, &values,
+          context]<size_t... I>(std::index_sequence<I...>) {
+    return genericFunction(
+        std::tuple_element_t<I, ValueGetters>{}(values[I], context)...);
+  }(std::index_sequence_for<Operands...>{});
+}
+
+// Evaluate a numeric/date N-ary operation speculatively using the majority
+// datatype of every operand. Rows whose datatypes all match the expected
+// majority types use the typed fast path. Rows with at least one
+// mismatch fall back to the regular value getters and generic function.
+template <typename Function, typename ValueGetters, typename... NumericTypes,
+          typename... Operands>
+ExpressionResult evaluateSpeculativeNaryNumericOperation(
+    const std::tuple<Operands...>& operands, EvaluationContext* context) {
+  static_assert(sizeof...(NumericTypes) == sizeof...(Operands));
+  static_assert(sizeof...(NumericTypes) == std::tuple_size_v<ValueGetters>);
+
+  checkNumericOperandSizes(operands, context);
+
+  constexpr std::array<Datatype, sizeof...(NumericTypes)> expectedTypes{
+      datatypeForNumericType<NumericTypes>()...};
+
+  VectorWithMemoryLimit<Id> result{context->_allocator};
+  result.resize(context->size());
+
+  ad_utility::chunkedForLoop<1000>(
+      0, context->size(),
+      [&result, &operands, &expectedTypes, context](size_t i) {
+        result[i] =
+            evaluateSpeculativeNaryRow<Function, ValueGetters, NumericTypes...>(
+                i, operands, expectedTypes, context);
       },
       [context]() { context->cancellationHandle_->throwIfCancelled(); });
 

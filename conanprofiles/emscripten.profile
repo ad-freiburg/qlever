@@ -8,8 +8,8 @@ compiler.libcxx=libc++
 # Keep this in sync with the `EMSDK_VERSION` in
 # `.github/workflows/native-build-with-conan-and-emscripten.yml`. The Conan
 # Center emsdk recipe is completely outdated, unlikely to be updated, so
-# emsdk is installed directly (CI uses `mymindstorm/setup-emsdk`).
-compiler.version=6.0.5
+# emsdk is installed directly (CI uses `emscripten-core/setup-emsdk`).
+compiler.version=6.0.12
 os=Emscripten
 compiler.threads=posix
 

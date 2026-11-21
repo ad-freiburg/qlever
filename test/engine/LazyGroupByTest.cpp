@@ -60,8 +60,7 @@ class LazyGroupByTest : public ::testing::Test {
         idTable.asStaticView<0>(),
         ua,
         localVocab_,
-        std::make_shared<ad_utility::CancellationHandle<>>(),
-        std::chrono::steady_clock::time_point::max()};
+        std::make_shared<ad_utility::CancellationHandle<>>()};
 
     evaluationContext._groupedVariables = ad_utility::HashSet<Variable>{yVar_};
     evaluationContext._previousResultsFromSameGroup.resize(2);

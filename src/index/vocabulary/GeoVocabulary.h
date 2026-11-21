@@ -22,12 +22,16 @@
 #include <vector>
 
 #include "backports/algorithm.h"
+#include "index/vocabulary/CompressedVocabulary.h"
+#include "index/vocabulary/VocabularyInMemory.h"
+#include "index/vocabulary/VocabularyInternalExternal.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "rdfTypes/GeoCellGrid.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "util/ExceptionHandling.h"
 #include "util/File.h"
 #include "util/Serializer/Serializer.h"
+#include "util/TypeTraits.h"
 #include "util/Views.h"
 
 // A `GeoVocabulary` holds Well-Known Text (WKT) literals. In contrast to the
@@ -55,6 +59,14 @@ class GeoVocabulary {
   using GeometryInfo = ad_utility::GeometryInfo;
   using GeoCellGrid = ad_utility::GeoCellGrid;
 
+  // The index of a word is computed from its position in the underlying
+  // vocabulary (see `indexFromPosition`), so the positions must be contiguous.
+  // Add a vocabulary type here only if that holds for it (it does not for the
+  // vocabularies with "holes", see `VocabularyInMemoryBinSearch`).
+  static_assert(
+      ad_utility::SameAsAny<UnderlyingVocabulary, VocabularyInMemory,
+                            CompressedVocabulary<VocabularyInternalExternal>>);
+
   // The underlying vocabulary, which stores the WKT literals as strings.
   UnderlyingVocabulary literals_;
 
@@ -68,12 +80,18 @@ class GeoVocabulary {
   // See `endIndex`, computed once when the vocabulary is opened.
   uint64_t endIndex_ = 0;
 
+  // The `GeometryInfo` version of the opened `geoInfoFile_`, see
+  // `GEOMETRY_INFO_VERSION` for the versions that can be read.
+  uint64_t geoInfoVersion_ = ad_utility::GEOMETRY_INFO_VERSION;
+
   // TODO<ullingerc> Possibly add in-memory cache of bounding boxes here
 
   // Filename suffix for geometry information file
   static constexpr std::string_view geoInfoSuffix = ".geoinfo";
 
-  // Offset per index inside the geometry information file
+  // Offset per index inside the geometry information file of the current
+  // version. When reading a file of an older version, the offset is
+  // `geometryInfoSize(geoInfoVersion_)`.
   static constexpr size_t geoInfoOffset = sizeof(GeometryInfo);
 
   // Serialized version of `GeometryInfo`

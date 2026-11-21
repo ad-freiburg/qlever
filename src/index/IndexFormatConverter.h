@@ -12,9 +12,11 @@
 
 #include <string>
 
+#include "backports/asio.h"
 #include "global/Id.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/IndexFormatVersion.h"
+#include "util/Executor.h"
 
 // The conversion of an index from the previous on-disk format to the current
 // one, see `convertIndexToCurrentFormat` below. This is what the standalone
@@ -92,8 +94,11 @@ Id convertId(Id id);
 // persisted updates (see `UPDATE_TRIPLES_SUFFIX`; those have to be materialized
 // into the index or deleted before the conversion), or if any of the files at
 // `newBasename` already exist.
+//
+// The permutations are read and written on the `executor`.
 void convertIndexToCurrentFormat(const std::string& oldBasename,
-                                 const std::string& newBasename);
+                                 const std::string& newBasename,
+                                 qlever::Executor executor);
 
 // The directory (inside the directory of the index) in which
 // `upgradeIndexInPlace` below stages the upgraded index, and the directory to
@@ -127,7 +132,10 @@ inline constexpr std::string_view retiredDirPrefix = "index-in-old-format.";
 // If the upgrade fails in step 1 or 2, the original index is untouched and
 // the staging directory is left behind for inspection; it can simply be
 // deleted (a later retry stages into a fresh directory).
-void upgradeIndexInPlace(const std::string& basename);
+//
+// The permutations are read and written on the `executor`.
+void upgradeIndexInPlace(const std::string& basename,
+                         qlever::Executor executor);
 
 }  // namespace qlever::indexFormatConverter
 

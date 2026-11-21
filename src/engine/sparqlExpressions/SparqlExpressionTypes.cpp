@@ -20,28 +20,40 @@ EvaluationContext::EvaluationContext(
     const QueryExecutionContext& qec,
     const VariableToColumnMap& variableToColumnMap, IdTableView<0> inputTable,
     const ad_utility::AllocatorWithLimit<Id>& allocator, LocalVocab& localVocab,
-    ad_utility::SharedCancellationHandle cancellationHandle, TimePoint deadline)
+    ad_utility::SharedCancellationHandle cancellationHandle)
     : _qec{qec},
       _variableToColumnMap{variableToColumnMap},
       _inputTable{std::move(inputTable)},
+      _columnsByWhichResultIsSorted{allocator},
       _allocator{allocator},
       _localVocab{localVocab},
       cancellationHandle_{std::move(cancellationHandle)},
-      deadline_{deadline} {
+      orderByComparator_{qec.getLocalVocabContext()} {
   AD_CONTRACT_CHECK(cancellationHandle_);
 }
 
 // _____________________________________________________________________________
-bool EvaluationContext::isResultSortedBy(const Variable& variable) {
-  if (_columnsByWhichResultIsSorted.empty()) {
-    return false;
+std::optional<ql::span<const Id>> EvaluationContext::getSortedColumnOrNullopt(
+    const Variable& variable) const {
+  auto columnIndex = getColumnIndexForVariable(variable);
+  if (!columnIndex.has_value() || _columnsByWhichResultIsSorted.empty() ||
+      _columnsByWhichResultIsSorted[0] != columnIndex.value()) {
+    return std::nullopt;
   }
-  if (!_variableToColumnMap.contains(variable)) {
-    return false;
-  }
+  return _inputTable.getColumn(columnIndex.value())
+      .subspan(_beginIndex, size());
+}
 
-  return getColumnIndexForVariable(variable) ==
-         _columnsByWhichResultIsSorted[0];
+// _____________________________________________________________________________
+std::optional<ql::span<const Id>>
+EvaluationContext::getSortedAlwaysDefinedColumnOrNullopt(
+    const Variable& variable) const {
+  auto column = getSortedColumnOrNullopt(variable);
+  // UNDEF sorts first.
+  if (column.has_value() && !column->empty() && column->front().isUndefined()) {
+    return std::nullopt;
+  }
+  return column;
 }
 
 // _____________________________________________________________________________

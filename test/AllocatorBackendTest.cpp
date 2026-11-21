@@ -17,6 +17,7 @@
 
 #include <cstddef>
 #include <new>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 
@@ -140,6 +141,44 @@ TYPED_TEST(AllocatorBackendTest, ClearOnAllocationHook) {
                ad_utility::detail::AllocationExceedsLimitException);
   EXPECT_TRUE(called);
   alloc.deallocate(p1, 1);
+}
+
+// Test that the memory limit can be changed after construction: increasing
+// always succeeds, decreasing only as long as the difference is currently
+// free, and a rejected decrease changes nothing.
+TYPED_TEST(AllocatorBackendTest, ChangeMemoryLimit) {
+  static_assert(sizeof(int) == 4);
+  auto alloc = TypeParam::makeLimited(20_B);
+
+  int* p = alloc.allocate(3);  // 12 bytes consumed
+  EXPECT_EQ(alloc.amountMemoryLeft(), 8_B);
+
+  // Increase the limit to 40 bytes.
+  alloc.increaseMemoryLimit(20_B);
+  EXPECT_EQ(alloc.amountMemoryLeft(), 28_B);
+
+  // Decreasing the limit to 16 bytes works, because only 12 bytes are
+  // allocated.
+  alloc.decreaseMemoryLimit(24_B);
+  EXPECT_EQ(alloc.amountMemoryLeft(), 4_B);
+
+  // Decreasing it to 8 bytes does not.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      alloc.decreaseMemoryLimit(8_B),
+      ::testing::HasSubstr("Cannot reduce the memory limit by 8 B, because "
+                           "only 4 B are currently unused"));
+  EXPECT_EQ(alloc.amountMemoryLeft(), 4_B);
+
+  alloc.deallocate(p, 3);
+  EXPECT_EQ(alloc.amountMemoryLeft(), 16_B);
+}
+
+// Test that increasing the memory limit beyond the maximal `MemorySize` throws
+// and changes nothing.
+TYPED_TEST(AllocatorBackendTest, IncreaseMemoryLimitOverflow) {
+  auto alloc = TypeParam::makeLimited(ad_utility::MemorySize::max());
+  EXPECT_THROW(alloc.increaseMemoryLimit(1_B), std::overflow_error);
+  EXPECT_EQ(alloc.amountMemoryLeft(), ad_utility::MemorySize::max());
 }
 
 // .as<char>() yields an allocator sharing the same budget: consuming bytes

@@ -32,6 +32,7 @@
 #include "parser/data/LimitOffsetClause.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/CancellationHandle.h"
+#include "util/Executor.h"
 #include "util/File.h"
 #include "util/Generator.h"
 #include "util/HashSet.h"
@@ -71,15 +72,6 @@ class CompressedRelationReader {
   using ColumnIndicesRef = ql::span<const ColumnIndex>;
   using ColumnIndices = std::vector<ColumnIndex>;
   using CancellationHandle = ad_utility::SharedCancellationHandle;
-
-  // Optional override for the number of blocks that a `lazyScan` reads and
-  // decompresses ahead of its consumer. When set, it takes precedence over
-  // the `lazy-index-scan-num-blocks-in-flight` runtime parameter. This is used
-  // by the runtime index rebuild, which scans the old permutations through a
-  // dedicated reader (see `Permutation::lazyScanWithUnlimitedReader`), to
-  // throttle its read/decompress parallelism without affecting query scans
-  // (which use the permutation's shared reader, where this stays `nullopt`).
-  std::optional<size_t> lazyScanNumBlocksInFlightOverride_ = std::nullopt;
 
   // This struct stores a reference to the (optional) graphs by which a result
   // is filtered, the column in which the graph ID will reside in a result,
@@ -219,7 +211,11 @@ class CompressedRelationReader {
     // actually yield.
     size_t numElementsRead_ = 0;
     size_t numElementsYielded_ = 0;
-    std::chrono::milliseconds blockingTime_ = std::chrono::milliseconds::zero();
+    // The time that the consumer waited for the blocks. It is stored in
+    // microseconds (the precision of `ad_utility::Timer`), because when the
+    // metadata of many short scans is added up (see `aggregate`), rounding each
+    // of them to milliseconds would lose most of the time.
+    std::chrono::microseconds blockingTime_ = std::chrono::microseconds::zero();
 
     // Update this metadata, given the metadata from `blockAndMetadata`.
     // Currently updates: `numBlocksPostprocessed_`, `numBlocksWithUpdate_`,
@@ -309,6 +305,9 @@ class CompressedRelationReader {
    * exactly one column.
    * @param cancellationHandle An `CancellationException` will be thrown if the
    * cancellationHandle runs out during the execution of this function.
+   * @param executor The blocks are read and decompressed on this executor (see
+   * `lazyScan` below). This function must not be called from one of its
+   * threads.
    *
    * The arguments `metadata`, `blocks`, and `file` must all be obtained from
    * the same `CompressedRelationWriter` (see `CompressedRelationWriter.h`).
@@ -317,6 +316,7 @@ class CompressedRelationReader {
                ColumnIndicesRef additionalColumns,
                const CancellationHandle& cancellationHandle,
                const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+               qlever::Executor executor,
                const LimitOffsetClause& limitOffset = {}) const;
 
   // Similar to `scan` (directly above), but the result of the scan is lazily
@@ -332,7 +332,7 @@ class CompressedRelationReader {
       std::vector<CompressedBlockMetadata> relevantBlockMetadata,
       ColumnIndices additionalColumns, CancellationHandle cancellationHandle,
       const LocatedTriplesPerBlock& locatedTriplesPerBlock,
-      ql::any_io_executor executor,
+      qlever::Executor executor,
       const LimitOffsetClause& limitOffset = {}) const;
 
   // Retrieve all triples in the given block, ignoring updates. This is used in
@@ -343,10 +343,13 @@ class CompressedRelationReader {
 
   // Get the exact size of the result of the scan, taking the given located
   // triples into account. This requires locating the triples exactly in each
-  // of the relevant blocks.
+  // of the relevant blocks, which reads the first and the last block of the
+  // scan and all the blocks that contain located triples. The
+  // `cancellationHandle` is checked before each of these reads.
   size_t getResultSizeOfScan(
       const ScanSpecAndBlocks& scanSpecAndBlocks,
-      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+      const CancellationHandle& cancellationHandle) const;
 
   // Get a lower and an upper bound for the size of the result of the scan. For
   // this call, it is enough that each located triple knows the block to which
@@ -357,11 +360,12 @@ class CompressedRelationReader {
 
  private:
   // Common implementation of `getResultSizeOfScan` and `getSizeEstimateForScan`
-  // above.
+  // above. The `cancellationHandle` is only checked if `exactSize` is true.
   template <bool exactSize>
   std::pair<size_t, size_t> getResultSizeImpl(
       const ScanSpecAndBlocks& scanSpecAndBlocks,
-      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+      const CancellationHandle& cancellationHandle) const;
 
  public:
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
@@ -389,15 +393,20 @@ class CompressedRelationReader {
   // over the blocks that actually had to be read, with `numBlocksAll_` set to
   // the total number of blocks of the scan.
   //
-  // NOTE: This reader and `locatedTriplesPerBlock` have to be kept alive until
-  // the returned generator has been fully consumed.
+  // The blocks that have to be read are read and decompressed on the
+  // `executor` (see `lazyScan`), so the returned generator must not be
+  // consumed from one of its threads.
+  //
+  // NOTE: This reader, `locatedTriplesPerBlock`, and the `executor` have to be
+  // kept alive until the returned generator has been fully consumed.
   //
   // The helper classes for the implementation live in `DistinctCol0Ids.h`.
   cppcoro::generator<IdTable, LazyScanMetadata> getDistinctCol0Ids(
       ScanSpecAndBlocks scanSpecAndBlocks, bool addGraphColumn,
       std::optional<std::vector<Id>> idFilter,
       CancellationHandle cancellationHandle,
-      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+      qlever::Executor executor) const;
 #endif
 
   // Return true iff the values of the first `numColumns` columns of all the

@@ -17,14 +17,17 @@
 
 #include "AllocatorTestHelpers.h"
 #include "GTestHelpers.h"
+#include "backports/asio.h"
 #include "backports/three_way_comparison.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/GeoPointEncoding.h"
+#include "index/HasWordNormalization.h"
 #include "index/Index.h"
 #include "index/vocabulary/EncodedIriManager.h"
 #include "index/vocabulary/EncodedIriPattern.h"
+#include "util/Executor.h"
 #include "util/MemorySize/MemorySize.h"
 
 // Several useful functions to quickly set up an `Index` and a
@@ -48,6 +51,20 @@ namespace ad_utility::testing {
         previousValue;
   }};
 }
+
+// Return the executor of a single, lazily-initialized thread pool with a single
+// thread, which is shared across all tests. It is meant for the tests that only
+// need an executor to perform their work on, in particular for the
+// `QueryExecutionContext`s of `getQec` (see below).
+qlever::Executor singleThreadExecutor();
+
+// Return the executor of a single, lazily-initialized thread pool with several
+// threads, which is shared across all tests. It is meant for the tests of
+// components whose work runs concurrently on the executor (for example the
+// reading ahead of the `CompressedRelationReader` and the parallel writing of
+// the `CompressedRelationWriter`), such that this concurrency is actually
+// exercised, in particular under the thread sanitizer.
+qlever::Executor multiThreadExecutor();
 
 // Return a pointer to a single, lazily-initialized `EncodedIriManager`
 // instance shared across all tests.
@@ -108,6 +125,9 @@ struct TestIndexConfig {
   // If true, add `ql:has-word` triples for each word in each literal during
   // index building.
   bool addHasWordTriples = false;
+  // The normalization of the words of the `ql:has-word` triples.
+  ad_utility::HasWordNormalization hasWordNormalization =
+      ad_utility::HasWordNormalization::Lowercase;
   // The words of the secondary vocabulary of the index (see
   // `index/vocabulary/SecondaryVocabulary.h`). They have to be sorted and
   // pairwise distinct (see `SecondaryVocabulary::appendSegment`), and must not

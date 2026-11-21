@@ -118,13 +118,13 @@ CPP_concept CanStrCat = CPP_requires_ref(is_str_catable_, S);
 // * A type that can be passed to `absl::StrCat` (e.g. `string`, `string_views`,
 // builtin numeric types) [first overload]
 // * A callbable that takes no arguments and returns a string [second overload]
-CPP_template(typename S)(requires CanStrCat<S>) std::string
-    getMessageImpl(S&& s) {
+CPP_template(typename S)(requires CanStrCat<S>)
+std::string getMessageImpl(S&& s) {
   return absl::StrCat(AD_FWD(s));
 }
 CPP_template(typename T)(
     requires ad_utility::InvocableWithConvertibleReturnType<T, std::string>)
-    std::string getMessageImpl(T&& f) {
+std::string getMessageImpl(T&& f) {
   return std::invoke(f);
 }
 
@@ -192,9 +192,38 @@ constexpr void adCorrectnessCheckImpl(
   AD_CHECK_IMPL(condition, message, location, additionalMessages...);
 }
 }  // namespace ad_utility::detail
-#define AD_CORRECTNESS_CHECK(condition, ...)                 \
-  ad_utility::detail::adCorrectnessCheckImpl(                \
-      static_cast<bool>(condition), AD_STRINGIFY(condition), \
+
+// Evaluate the condition of an `AD_CORRECTNESS_CHECK`. By default, this is a
+// plain conversion to `bool`. In the coverage build (CMake option
+// `COVERAGE_FRIENDLY_CHECKS`, which defines `QLEVER_COVERAGE_FRIENDLY_CHECKS`),
+// the condition is instead evaluated inside a lambda that is excluded from the
+// coverage instrumentation. Otherwise, short-circuit operators (`&&`, `||`)
+// inside the condition would produce branch regions at each call site, which
+// can never be fully covered because the condition never fails (see above).
+//
+// NOTE 1: The lambda is not used unconditionally for three reasons. In C++17,
+// structured bindings cannot be captured by a lambda, so some conditions would
+// not compile in the C++17 build. A lambda with a capture-default is only
+// allowed in block scope, so the macro could not be used in a default member
+// initializer or at namespace scope. And in debug builds, the additional lambda
+// call is an inconvenient indirection (e.g. when stepping through the code in
+// a debugger). This is the single place where this reasoning is documented.
+//
+// NOTE 2: Clang's source-based coverage (which the coverage build uses) honors
+// the attribute completely, GCC's `gcov` only partially.
+#ifdef QLEVER_COVERAGE_FRIENDLY_CHECKS
+#define AD_CORRECTNESS_CHECK_CONDITION(condition)         \
+  [&]() __attribute__((no_profile_instrument_function)) { \
+    return static_cast<bool>(condition);                  \
+  }                                                       \
+  ()
+#else
+#define AD_CORRECTNESS_CHECK_CONDITION(condition) static_cast<bool>(condition)
+#endif
+
+#define AD_CORRECTNESS_CHECK(condition, ...)                              \
+  ad_utility::detail::adCorrectnessCheckImpl(                             \
+      AD_CORRECTNESS_CHECK_CONDITION(condition), AD_STRINGIFY(condition), \
       AD_CURRENT_SOURCE_LOC() __VA_OPT__(, ) __VA_ARGS__)
 
 // This check is similar to `AD_CORRECTNESS_CHECK` (see above), but the check is

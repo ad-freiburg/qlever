@@ -6,8 +6,9 @@ on:
   pull_request:
     branches: [ master ]
     # Also run when a label is applied, so that applying the `run-ci` or
-    # `run-full-ci` label triggers the checks, see `README.md`.
-    types: [ opened, synchronize, reopened, labeled ]
+    # `run-full-ci` label triggers the checks. There is no need for `opened`,
+    # see `README.md`.
+    types: [ synchronize, reopened, labeled ]
   merge_group:
 
 concurrency:
@@ -61,7 +62,7 @@ jobs:
         run: clang++ --version
 
       - name: Cache for conan
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         env:
           cache-name: cache-conan-modules-macos-15
         with:
@@ -77,8 +78,7 @@ jobs:
 
       - name: Configure CMake
         # For std::ranges::join_view we need the -fexperimental-library flag on libc++17.
-        # We currently cannot use the parallel algorithms, as the parallel sort requires a GNU-extension, and we build with `libc++`.
-        run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DCMAKE_TOOLCHAIN_FILE="$(pwd)/build/conan_toolchain.cmake" -DUSE_PARALLEL=false -DRUN_EXPENSIVE_TESTS=false -DENABLE_EXPENSIVE_CHECKS=true -DADDITIONAL_COMPILER_FLAGS="-fexperimental-library" -D_NO_TIMING_TESTS=ON -DCMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE=PRE_TEST
+        run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DCMAKE_TOOLCHAIN_FILE="$(pwd)/build/conan_toolchain.cmake" -DRUN_EXPENSIVE_TESTS=false -DENABLE_EXPENSIVE_CHECKS=true -DADDITIONAL_COMPILER_FLAGS="-fexperimental-library" -D_NO_TIMING_TESTS=ON -DCMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE=PRE_TEST
 
       - name: Build
         # Build your program with the given configuration

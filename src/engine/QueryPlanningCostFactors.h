@@ -9,12 +9,10 @@
 
 #include "util/HashMap.h"
 
-// Simple container for cost factors.
-// Comes with default values, that can be set and read from a file
+// Simple container for cost factors with fixed default values.
 class QueryPlanningCostFactors {
  public:
   QueryPlanningCostFactors();
-  void readFromFile(const std::string& fileName);
   double getCostFactor(const std::string& key) const;
 
  private:

@@ -34,13 +34,18 @@
 #include "index/IndexFormatVersion.h"
 #include "index/IndexImpl.h"
 #include "index/Permutation.h"
+#include "index/SortConfig.h"
 #include "index/vocabulary/VocabularyType.h"
 #include "rdfTypes/GeoCellGrid.h"
 #include "util/FilesystemHelpers.h"
 #include "util/HashSet.h"
 #include "util/IndexTestHelpers.h"
+#include "util/LocalVocabEntryTestHelpers.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/UnicodeSupport.h"
+
+// Multi-threaded, to exercise the concurrency of the tested code.
+static constexpr auto executor = &ad_utility::testing::multiThreadExecutor;
 
 using namespace ad_utility::testing;
 using namespace std::string_literals;
@@ -88,7 +93,7 @@ auto makeTestScanWidthOne = [](const IndexImpl& index,
                 .toScanSpecification(index),
             locatedTriplesSnapshot),
         additionalColumns, std::make_shared<ad_utility::CancellationHandle<>>(),
-        locatedTriplesSnapshot);
+        locatedTriplesSnapshot, executor());
     ASSERT_EQ(result.numColumns(), 1 + additionalColumns.size());
     ASSERT_EQ(result, makeIdTableFromVector(expected));
   };
@@ -113,7 +118,7 @@ auto makeTestScanWidthTwo = [](const IndexImpl& index,
             locatedTriplesSnapshot),
         Permutation::ColumnIndicesRef{},
         std::make_shared<ad_utility::CancellationHandle<>>(),
-        locatedTriplesSnapshot);
+        locatedTriplesSnapshot, executor());
     ASSERT_EQ(wol, makeIdTableFromVector(expected));
   };
 };
@@ -542,11 +547,33 @@ TEST(IndexTest, emptyTextIndex) {
     auto* qec = ad_utility::testing::getQec(std::move(config));
     // Building an empty text index must succeed, and scanning it for any word
     // must yield no postings.
-    IdTable result =
-        qec->getIndex().getWordPostingsForTerm("*", qec->getAllocator());
+    IdTable result = qec->getIndex().getWordPostingsForTerm(
+        "*", qec->getAllocator(), qec->sortConfig());
     EXPECT_EQ(result.size(), 0);
   }
 }
+
+namespace {
+// Add the `additionalKeys` to the configuration of the index with the given
+// `base`, load the index, and return the geo cell grid of its vocabulary.
+std::optional<ad_utility::GeoCellGrid> loadGeoCellGridWithConfiguration(
+    const std::string& base, const nlohmann::json& additionalKeys) {
+  auto configFilename = absl::StrCat(base, CONFIGURATION_FILE);
+  nlohmann::json configuration;
+  {
+    std::ifstream in{configFilename};
+    in >> configuration;
+  }
+  configuration.update(additionalKeys);
+  {
+    auto out = ad_utility::makeOfstream(configFilename);
+    out << configuration;
+  }
+  Index index{ad_utility::makeUnlimitedAllocator<Id>()};
+  index.createFromOnDiskIndex(base, false);
+  return index.getVocab().getGeoCellGrid();
+}
+}  // namespace
 
 // Test that the geo cell grid (see `GeoVocabulary`) is read from the index
 // configuration when an index is loaded, with `flat` as the default scheme.
@@ -561,21 +588,8 @@ TEST(IndexTest, geoCellGridFromConfiguration) {
   const auto& base = qec->getIndex().getOnDiskBase();
   EXPECT_FALSE(qec->getIndex().getVocab().getGeoCellGrid().has_value());
 
-  auto configFilename = absl::StrCat(base, CONFIGURATION_FILE);
-  auto loadWithConfiguration = [&](const nlohmann::json& additionalKeys) {
-    nlohmann::json configuration;
-    {
-      std::ifstream in{configFilename};
-      in >> configuration;
-    }
-    configuration.update(additionalKeys);
-    {
-      auto out = ad_utility::makeOfstream(configFilename);
-      out << configuration;
-    }
-    Index index{ad_utility::makeUnlimitedAllocator<Id>()};
-    index.createFromOnDiskIndex(base, false);
-    return index.getVocab().getGeoCellGrid();
+  auto loadWithConfiguration = [&base](const nlohmann::json& additionalKeys) {
+    return loadGeoCellGridWithConfiguration(base, additionalKeys);
   };
   EXPECT_EQ(loadWithConfiguration({{"geo-cell-grid-level", 2}}),
             std::optional{ad_utility::GeoCellGrid{2}});
@@ -587,6 +601,18 @@ TEST(IndexTest, geoCellGridFromConfiguration) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       loadWithConfiguration({{"geo-cell-grid-level", 300}}),
       ::testing::HasSubstr("Invalid value 300"));
+}
+
+// Test that a configuration with a geo cell grid is rejected when the
+// vocabulary type has no `GeoVocabulary` that could hold the grid.
+TEST(IndexTest, geoCellGridFromConfigurationRequiresGeoSplitVocabulary) {
+  ad_utility::testing::TestIndexConfig config{"<a> <p> <b> ."};
+  config.vocabularyType = ad_utility::VocabularyType::OnDiskCompressed;
+  auto* qec = ad_utility::testing::getQec(config);
+  const auto& base = qec->getIndex().getOnDiskBase();
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      loadGeoCellGridWithConfiguration(base, {{"geo-cell-grid-level", 2}}),
+      ::testing::HasSubstr("requires the vocabulary type"));
 }
 
 // _____________________________________________________________________________
@@ -664,14 +690,46 @@ TEST(IndexTest, textIndexFromLiteralsWithSplitVocabulary) {
       std::pair{createWordsFileLineAsString("dummy", false, 1, 1),
                 createDocsFileLineAsString(1, "dummy")};
   auto* qec = ad_utility::testing::getQec(std::move(config));
-  IdTable helloResult =
-      qec->getIndex().getWordPostingsForTerm("hello", qec->getAllocator());
+  IdTable helloResult = qec->getIndex().getWordPostingsForTerm(
+      "hello", qec->getAllocator(), qec->sortConfig());
   ASSERT_EQ(helloResult.size(), 1u);
 
-  IdTable polygonResult =
-      qec->getIndex().getWordPostingsForTerm("polygon", qec->getAllocator());
+  IdTable polygonResult = qec->getIndex().getWordPostingsForTerm(
+      "polygon", qec->getAllocator(), qec->sortConfig());
   ASSERT_EQ(polygonResult.size(), 1u);
   EXPECT_GT(polygonResult.at(0, 2).getDouble(), 0.0);
+}
+
+// Test that the text index scans check the cancellation handle of the
+// `SortConfig` that they are given, before the first block is read.
+TEST(IndexTest, textIndexScansAreCancellable) {
+  ad_utility::testing::TestIndexConfig config{"<a> <b> \"hello world\" ."};
+  config.createTextIndex = true;
+  config.contentsOfWordsFileAndDocsfile =
+      std::pair{createWordsFileLineAsString("dummy", false, 1, 1),
+                createDocsFileLineAsString(1, "dummy")};
+  auto* qec = ad_utility::testing::getQec(std::move(config));
+  const auto& index = qec->getIndex();
+  const auto& allocator = qec->getAllocator();
+
+  // With a cancelled handle, both kinds of scans throw.
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+  handle->cancel(ad_utility::CancellationState::MANUAL);
+  SortConfig sortConfig{qec->sortConfig().executor_, 1, handle};
+  EXPECT_THROW(index.getWordPostingsForTerm("hello", allocator, sortConfig),
+               ad_utility::CancellationException);
+  EXPECT_THROW(index.getEntityMentionsForWord("hello", allocator, sortConfig),
+               ad_utility::CancellationException);
+
+  // With the `SortConfig` of the query, whose handle is not cancelled, the
+  // scans succeed.
+  EXPECT_EQ(index.getWordPostingsForTerm("hello", allocator, qec->sortConfig())
+                .size(),
+            1u);
+  EXPECT_EQ(
+      index.getEntityMentionsForWord("hello", allocator, qec->sortConfig())
+          .size(),
+      1u);
 }
 
 // The text of a docsfile line is stored verbatim, so exporting a text record
@@ -692,8 +750,7 @@ TEST(IndexTest, textRecordExportDoesNotUnescapeTheExcerpt) {
 
   auto exported = ql::exportIds::getLiteralOrIriFromTextRecordIndex(index, id);
   ASSERT_TRUE(exported.has_value());
-  EXPECT_EQ(asStringViewUnsafe(exported.value().getLiteral().getContent()),
-            docText);
+  EXPECT_EQ(exported.value().getLiteral().getContent(), docText);
 }
 
 // Returns true iff `arg` (the first argument of `EXPECT_THAT` below) holds a
@@ -744,6 +801,51 @@ TEST(IndexTest, processTriple) {
     EXPECT_EQ(Id::makeFromDouble(42.0),
               result.triple_[2].tripleComponent_.getId());
   }
+}
+
+// Test the words of the `ql:has-word` triples with the different
+// normalizations.
+TEST(IndexTest, processTripleHasWordNormalization) {
+  // A literal with "café" composed, decomposed, uppercased and in plural, and
+  // a function that returns its words with the given normalization.
+  auto getWords = [](ad_utility::HasWordNormalization normalization) {
+    IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
+    index.addHasWordTriples() = true;
+    index.setHasWordNormalization(normalization);
+    TurtleTriple turtleTriple{
+        iri("<subject>"), iri("<predicate>"),
+        lit("\"Café cafe, CAFE\xcc\x81! cafe\xcc\x81s\"")};
+    return index.processTriple(std::move(turtleTriple)).wordFrequencies_;
+  };
+  using ::testing::Pair;
+  using ::testing::UnorderedElementsAre;
+
+  // With `Lowercase`, the composed "é" is kept, and the combining mark of the
+  // decomposed "é" splits the words (it is not alphanumeric).
+  EXPECT_THAT(
+      getWords(ad_utility::HasWordNormalization::Lowercase),
+      UnorderedElementsAre(Pair("café", 1), Pair("cafe", 3), Pair("s", 1)));
+
+  // With `LowercaseNoAccents`, all accents are removed before the
+  // tokenization.
+  EXPECT_THAT(getWords(ad_utility::HasWordNormalization::LowercaseNoAccents),
+              UnorderedElementsAre(Pair("cafe", 3), Pair("cafes", 1)));
+}
+
+// Test the names of the normalizations in the option of `qlever-index`.
+TEST(IndexTest, hasWordNormalizationNames) {
+  using ad_utility::HasWordNormalization;
+
+  // Both names are parsed to their normalization.
+  EXPECT_EQ(HasWordNormalization::fromString("lowercase"),
+            HasWordNormalization::Lowercase);
+  EXPECT_EQ(HasWordNormalization::fromString("lowercase-no-accents"),
+            HasWordNormalization::LowercaseNoAccents);
+
+  // An unknown name throws.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      HasWordNormalization::fromString("uppercase"),
+      ::testing::HasSubstr("is not a valid has-word normalization"));
 }
 
 // _____________________________________________________________________________
@@ -940,7 +1042,6 @@ TEST(IndexTest, destructorLogsUnloading) {
 }
 
 TEST(IndexTest, updateInputFileSpecificationsAndLog) {
-  ENFORCE_LOG_LEVEL_OR_SKIP(INFO);
   using enum qlever::Filetype;
   std::vector<qlever::InputFileSpecification> singleFileSpec = {
       {"singleFile.ttl", Turtle, std::nullopt}};
@@ -949,41 +1050,39 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
       {"secondFile.ttl", Turtle, std::nullopt}};
   using namespace ::testing;
 
-  // Wrap a matcher for a substring that comes from an `AD_LOG_INFO` line so
-  // that the assertion is only active when the compile-time log level is at
-  // least `INFO`. At `LOGLEVEL=WARN` the INFO output is suppressed, but the
-  // test still runs to cover the WARN-level `"deprecated"` assertions; the
-  // wrapper degrades to `testing::_` (match anything) in that case.
-  auto onlyAtInfoOrAbove = [](auto matcher) {
-    if constexpr (ad_utility::compileTimeLogLevel <
-                  ad_utility::LogLevel::Enum::INFO) {
-      return testing::_;
-    } else {
-      return matcher;
-    }
-  };
+  // Call `updateInputFileSpecificationsAndLog` and return its log output.
+  auto updateAndGetLog =
+      [](std::vector<qlever::InputFileSpecification>& spec,
+         std::optional<bool> parallelParsingSpecifiedViaJson) {
+        auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+        IndexImpl::updateInputFileSpecificationsAndLog(
+            spec, parallelParsingSpecifiedViaJson);
+        return logStream.str();
+      };
+  // The input streams are logged at `INFO`, the deprecation at `WARN`.
+  auto logsSingleFile =
+      ifLogLevelIsCompiledIn<LogLevel::Enum::INFO>(HasSubstr("singleFile.ttl"));
+  auto logsTwoFiles = ifLogLevelIsCompiledIn<LogLevel::Enum::INFO>(
+      HasSubstr("from 2 input streams"));
+  auto warnsDeprecated =
+      ifLogLevelIsCompiledIn<LogLevel::Enum::WARN>(HasSubstr("deprecated"));
+  auto doesNotWarn = Not(HasSubstr("deprecated"));
+
   // Parallel parsing not specified anywhere. For a single input stream, we then
   // default to `true` for reasons of backwards compatibility, but this is
   // deprecated. For multiple input streams, we default to `false` and this is
   // normal behavior.
   {
     singleFileSpec.at(0).parseInParallelSetExplicitly_ = false;
-    testing::internal::CaptureStdout();
-    IndexImpl::updateInputFileSpecificationsAndLog(singleFileSpec,
-                                                   std::nullopt);
-    EXPECT_THAT(testing::internal::GetCapturedStdout(),
-                AllOf(onlyAtInfoOrAbove(HasSubstr("singleFile.ttl")),
-                      HasSubstr("deprecated")));
+    EXPECT_THAT(updateAndGetLog(singleFileSpec, std::nullopt),
+                AllOf(logsSingleFile, warnsDeprecated));
     EXPECT_TRUE(singleFileSpec.at(0).parseInParallel_);
   }
   {
     twoFilesSpec.at(0).parseInParallelSetExplicitly_ = false;
     twoFilesSpec.at(1).parseInParallelSetExplicitly_ = false;
-    testing::internal::CaptureStdout();
-    IndexImpl::updateInputFileSpecificationsAndLog(twoFilesSpec, std::nullopt);
-    EXPECT_THAT(testing::internal::GetCapturedStdout(),
-                AllOf(onlyAtInfoOrAbove(HasSubstr("from 2 input streams")),
-                      Not(HasSubstr("deprecated"))));
+    EXPECT_THAT(updateAndGetLog(twoFilesSpec, std::nullopt),
+                AllOf(logsTwoFiles, doesNotWarn));
     EXPECT_FALSE(twoFilesSpec.at(0).parseInParallel_);
     EXPECT_FALSE(twoFilesSpec.at(1).parseInParallel_);
   }
@@ -993,12 +1092,8 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
   for (auto parallelParsing : {true, false}) {
     singleFileSpec.at(0).parseInParallel_ = parallelParsing;
     singleFileSpec.at(0).parseInParallelSetExplicitly_ = true;
-    testing::internal::CaptureStdout();
-    IndexImpl::updateInputFileSpecificationsAndLog(singleFileSpec,
-                                                   std::nullopt);
-    EXPECT_THAT(testing::internal::GetCapturedStdout(),
-                AllOf(onlyAtInfoOrAbove(HasSubstr("singleFile.ttl")),
-                      Not(HasSubstr("deprecated"))));
+    EXPECT_THAT(updateAndGetLog(singleFileSpec, std::nullopt),
+                AllOf(logsSingleFile, doesNotWarn));
     EXPECT_EQ(singleFileSpec.at(0).parseInParallel_, parallelParsing);
   }
   {
@@ -1006,11 +1101,8 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
     twoFilesSpec.at(1).parseInParallel_ = false;
     twoFilesSpec.at(0).parseInParallelSetExplicitly_ = true;
     twoFilesSpec.at(1).parseInParallelSetExplicitly_ = true;
-    testing::internal::CaptureStdout();
-    IndexImpl::updateInputFileSpecificationsAndLog(twoFilesSpec, std::nullopt);
-    EXPECT_THAT(testing::internal::GetCapturedStdout(),
-                AllOf(onlyAtInfoOrAbove(HasSubstr("from 2 input streams")),
-                      Not(HasSubstr("deprecated"))));
+    EXPECT_THAT(updateAndGetLog(twoFilesSpec, std::nullopt),
+                AllOf(logsTwoFiles, doesNotWarn));
     EXPECT_TRUE(twoFilesSpec.at(0).parseInParallel_);
     EXPECT_FALSE(twoFilesSpec.at(1).parseInParallel_);
   }
@@ -1020,11 +1112,8 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
   // stream and forbidden for multiple input streams.
   {
     singleFileSpec.at(0).parseInParallelSetExplicitly_ = false;
-    testing::internal::CaptureStdout();
-    IndexImpl::updateInputFileSpecificationsAndLog(singleFileSpec, true);
-    EXPECT_THAT(testing::internal::GetCapturedStdout(),
-                AllOf(onlyAtInfoOrAbove(HasSubstr("singleFile.ttl")),
-                      HasSubstr("deprecated")));
+    EXPECT_THAT(updateAndGetLog(singleFileSpec, true),
+                AllOf(logsSingleFile, warnsDeprecated));
     EXPECT_TRUE(singleFileSpec.at(0).parseInParallel_);
   }
   {
@@ -1034,6 +1123,69 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
         IndexImpl::updateInputFileSpecificationsAndLog(twoFilesSpec, true),
         AllOf(Not(HasSubstr("from 2 input streams")), HasSubstr("forbidden")));
   }
+}
+
+// Test that `parallel-parsing` in the settings file is respected when building
+// an index from a single input file that does not specify parallel parsing.
+TEST(IndexTest, parallelParsingFromSettingsFile) {
+  std::string basename = gtestCurrentTestName();
+  std::string settingsFilename = basename + ".settings.json";
+  absl::Cleanup cleanup = [&basename, &settingsFilename] {
+    for (const auto& filename : getAllIndexFilenames(basename)) {
+      ad_utility::deleteFile(filename, false);
+    }
+    ad_utility::deleteFile(settingsFilename);
+  };
+  // An input file with a multiline literal, which the parallel parser does not
+  // support.
+  ad_utility::makeOfstream(basename + ".ttl")
+      << "<s> <p> \"\"\"multiline\nliteral\"\"\" .\n";
+
+  // Build the index with `parallel-parsing` set to the given value in the
+  // settings file.
+  auto buildIndex = [&](bool parallelParsing) {
+    ad_utility::makeOfstream(settingsFilename)
+        << nlohmann::json{{"parallel-parsing", parallelParsing}};
+    Index index = makeIndexWithTestSettings();
+    index.setOnDiskBase(basename);
+    index.setSettingsFile(settingsFilename);
+    index.createFromFiles(
+        {qlever::InputFileSpecification{
+            basename + ".ttl", qlever::Filetype::Turtle, std::nullopt}},
+        1);
+  };
+
+  // With `false` the sequential parser is used and the build succeeds, with
+  // `true` the parallel parser rejects the multiline literal.
+  EXPECT_NO_THROW(buildIndex(false));
+  AD_EXPECT_THROW_WITH_MESSAGE(buildIndex(true),
+                               ::testing::HasSubstr("multiline string"));
+}
+
+// Test that an index can be built from a type-erased range of input files.
+TEST(IndexTest, createFromFilesTypeErased) {
+  std::string basename = gtestCurrentTestName();
+  absl::Cleanup cleanup = [&basename] {
+    for (const auto& filename : getAllIndexFilenames(basename)) {
+      ad_utility::deleteFile(filename, false);
+    }
+  };
+  // Build an index from an input file with two triples.
+  ad_utility::makeOfstream(basename + ".ttl") << "<s> <p> <o1>, <o2> .\n";
+  {
+    Index index = makeIndexWithTestSettings();
+    index.setOnDiskBase(basename);
+    index.getImpl().createFromFiles(
+        ad_utility::InputRangeTypeErased{
+            std::vector<qlever::InputFileSpecification>{
+                {basename + ".ttl", qlever::Filetype::Turtle, std::nullopt}}},
+        1);
+  }
+
+  // The index can be loaded and contains both triples.
+  Index index = makeIndexWithTestSettings();
+  index.createFromOnDiskIndex(basename, false);
+  EXPECT_EQ(index.numTriples().normal, 2u);
 }
 
 TEST(IndexTest, getBlankNodeManager) {
@@ -1072,7 +1224,8 @@ TEST(IndexImpl, recomputeStatistics) {
   auto& indexImpl = index.getImpl();
   // No-op, should return the same stats.
   auto result = indexImpl.recomputeStatistics(
-      index.deltaTriplesManager().getCurrentLocatedTriplesSharedState());
+      index.deltaTriplesManager().getCurrentLocatedTriplesSharedState(),
+      executor());
   EXPECT_EQ(result, indexImpl.configurationJson_);
 
   // Now, modify the index by adding triples.
@@ -1081,8 +1234,8 @@ TEST(IndexImpl, recomputeStatistics) {
                                             &indexImpl](
                                                DeltaTriples& deltaTriples) {
     LocalVocabEntry zzz =
-        LocalVocabEntry::fromIriref("<zzz>", indexImpl.getLocalVocabContext());
-    LocalVocabEntry literal = LocalVocabEntry::fromStringRepresentation(
+        iriLocalVocabEntry("<zzz>", indexImpl.getLocalVocabContext());
+    LocalVocabEntry literal = localVocabEntryFromStringRepresentation(
         "\"test\"@en", indexImpl.getLocalVocabContext());
     Id zzzId = Id::makeFromLocalVocabIndex(&zzz);
     Id literalId = Id::makeFromLocalVocabIndex(&literal);
@@ -1109,7 +1262,8 @@ TEST(IndexImpl, recomputeStatistics) {
     }
 
     auto newStats = indexImpl.recomputeStatistics(
-        index.deltaTriplesManager().getCurrentLocatedTriplesSharedState());
+        index.deltaTriplesManager().getCurrentLocatedTriplesSharedState(),
+        executor());
     EXPECT_NE(newStats, indexImpl.configurationJson_);
     EXPECT_EQ(newStats["num-triples"], NNAI(6, 7));
     EXPECT_EQ(newStats["num-predicates"], NNAI(2, 4));
@@ -1155,7 +1309,7 @@ TEST(IndexImpl, createPermutation) {
       4,
       ad_utility::InputRangeTypeErased{std::array<IdTableStatic<0>, 2>{
           tables.at(0).clone(), tables.at(1).clone()}},
-      permutation, false);
+      permutation, false, executor());
   index.finalizePermutation(meta, permutation, false);
 
   EXPECT_EQ(uniquePredicates, 3);
@@ -1163,11 +1317,11 @@ TEST(IndexImpl, createPermutation) {
   EXPECT_TRUE(ql::filesystem::exists(onDiskBase + ".index.pso.meta"));
 
   // Writing the same permutation with the writer-thread throttle disabled
-  // (0 means "fall back to `permutation-writer-num-threads`") must give the
-  // same result. Together with the default of 1 used by the calls above and
-  // below, this exercises the translation of the runtime parameter to the
-  // writer-thread override on both of its branches. Use a separate base name,
-  // so that the permutation that was already finalized above stays intact.
+  // (0 means "no limit") must give the same result. Together with the default
+  // of 1 used by the calls above and below, this exercises the translation of
+  // the runtime parameter to a concurrency-limited executor on both of its
+  // branches. Use a separate base name, so that the permutation that was
+  // already finalized above stays intact.
   {
     auto cleanupParameter = setRuntimeParameterForTest<
         &RuntimeParameters::rebuildPermutationWriterNumThreads_>(0);
@@ -1177,7 +1331,7 @@ TEST(IndexImpl, createPermutation) {
             4,
             ad_utility::InputRangeTypeErased{std::array<IdTableStatic<0>, 2>{
                 tables.at(0).clone(), tables.at(1).clone()}},
-            permutation, false);
+            permutation, false, executor());
     index.setOnDiskBase(onDiskBase);
     EXPECT_EQ(uniquePredicatesUnthrottled, uniquePredicates);
   }
@@ -1185,7 +1339,7 @@ TEST(IndexImpl, createPermutation) {
   auto [uniqueInternalPredicates, internalMeta] =
       index.createPermutationWithoutMetadata(
           4, ad_utility::InputRangeTypeErased{std::move(tables)}, permutation,
-          true);
+          true, executor());
   index.finalizePermutation(internalMeta, permutation, true);
 
   EXPECT_EQ(uniqueInternalPredicates, 3);
@@ -1208,7 +1362,7 @@ TEST(IndexImpl, createPermutation) {
         actualPermutation.getScanSpecAndBlocks(scanSpec, *state), std::nullopt,
         std::vector<ColumnIndex>{ADDITIONAL_COLUMN_GRAPH_ID},
         std::make_shared<ad_utility::SharedCancellationHandle::element_type>(),
-        *state);
+        *state, executor());
     auto begin = scan.begin();
     ASSERT_NE(begin, scan.end());
     EXPECT_EQ(*begin, makeIdTableFromVector({{1, 1, 1, 0},
@@ -1369,9 +1523,10 @@ TEST(IndexImpl, applyConfigurationGitHash) {
     IndexImpl indexImpl{ad_utility::makeUnlimitedAllocator<Id>()};
     auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
     ASSERT_NO_THROW(indexImpl.applyConfiguration(minimalValidConfiguration()));
-    EXPECT_THAT(logStream.str(),
-                ::testing::HasSubstr(
-                    "The git hash used to build this index was \"f00ba4\""));
+    EXPECT_THAT(
+        logStream.str(),
+        ifLogLevelIsCompiledIn<LogLevel::Enum::INFO>(::testing::HasSubstr(
+            "The git hash used to build this index was \"f00ba4\"")));
     EXPECT_EQ(indexImpl.getGitShortHash(), "f00ba4");
   }
 
@@ -1387,10 +1542,12 @@ TEST(IndexImpl, applyConfigurationGitHash) {
         indexImpl.applyConfiguration(configuration),
         ::testing::HasSubstr("The required key \"git-hash\" was not found in "
                              "the `meta-data.json`"));
-    EXPECT_THAT(logStream.str(),
-                ::testing::HasSubstr("The index was built before git commit "
-                                     "hashes were stored in the index meta "
-                                     "data"));
+    EXPECT_THAT(
+        logStream.str(),
+        ifLogLevelIsCompiledIn<LogLevel::Enum::INFO>(
+            ::testing::HasSubstr("The index was built before git commit "
+                                 "hashes were stored in the index meta "
+                                 "data")));
   }
 }
 
@@ -1555,8 +1712,10 @@ TEST(IndexImpl, geoPointEncodingOfBuiltAndLoadedIndex) {
     ad_utility::makeIfstream(basename + CONFIGURATION_FILE) >> configuration;
     return configuration;
   };
-  auto warning =
-      ::testing::HasSubstr("which is deprecated and will not be supported");
+  auto noWarning = ::testing::Not(
+      ::testing::HasSubstr("which is deprecated and will not be supported"));
+  auto warning = ifLogLevelIsCompiledIn<LogLevel::Enum::WARN>(
+      ::testing::HasSubstr("which is deprecated and will not be supported"));
 
   // Load the index with the given `basename` (without its permutations if
   // `loadPermutations` is false, with its persisted updates if
@@ -1587,15 +1746,14 @@ TEST(IndexImpl, geoPointEncodingOfBuiltAndLoadedIndex) {
                    .front()
                    .firstTriple_.col0Id_;
     ASSERT_EQ(point.getDatatype(), Datatype::GeoPoint);
-    EXPECT_EQ(point.getBits() &
-                  ad_utility::bitMaskForLowerBits(GeoPoint::numDataBits),
+    EXPECT_EQ(point.getPayloadBits(),
               GeoPoint::combineCoordinates(
                   GeoPoint::quantizeCoordinate(48.0, 90),
                   GeoPoint::quantizeCoordinate(7.8, 180), encoding));
     if (encoding == GeoPointEncoding::LatMajor) {
       EXPECT_THAT(load(basename), warning);
     } else {
-      EXPECT_THAT(load(basename), ::testing::Not(warning));
+      EXPECT_THAT(load(basename), noWarning);
     }
   }
 
@@ -1643,7 +1801,7 @@ TEST(IndexImpl, geoPointEncodingOfBuiltAndLoadedIndex) {
     if (hasPoint) {
       EXPECT_THAT(log, warning);
     } else {
-      EXPECT_THAT(log, ::testing::Not(warning));
+      EXPECT_THAT(log, noWarning);
     }
   }
 
@@ -1682,8 +1840,10 @@ TEST(IndexImpl, applyConfigurationDeprecatedIgnoreCaseKey) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       indexImpl.applyConfiguration(configuration),
       ::testing::HasSubstr("Deprecated key \"ignore-case\" in index build"));
-  EXPECT_THAT(logStream.str(),
-              ::testing::HasSubstr(std::string{ERROR_IGNORE_CASE_UNSUPPORTED}));
+  EXPECT_THAT(
+      logStream.str(),
+      ifLogLevelIsCompiledIn<LogLevel::Enum::ERROR>(
+          ::testing::HasSubstr(std::string{ERROR_IGNORE_CASE_UNSUPPORTED})));
 }
 
 // _____________________________________________________________________________
@@ -1698,10 +1858,45 @@ TEST(IndexImpl, applyConfigurationMissingLocaleKey) {
       indexImpl.applyConfiguration(configuration),
       ::testing::HasSubstr(
           "Missing required key \"locale\" in index build's metadata"));
-  EXPECT_THAT(logStream.str(),
-              ::testing::HasSubstr(
-                  "Key \"locale\" is missing in the metadata. This is probably "
-                  "an old index build that is no longer supported"));
+  EXPECT_THAT(
+      logStream.str(),
+      ifLogLevelIsCompiledIn<LogLevel::Enum::ERROR>(::testing::HasSubstr(
+          "Key \"locale\" is missing in the metadata. This is probably "
+          "an old index build that is no longer supported")));
+}
+
+// Test that the normalization of the words of the `ql:has-word` triples is
+// recorded in the configuration of a built index and applied when an index is
+// loaded, with `Lowercase` for an index that was built before the key existed.
+TEST(IndexImpl, hasWordNormalizationOfBuiltAndLoadedIndex) {
+  using ad_utility::HasWordNormalization;
+  const std::string key{ad_utility::HAS_WORD_NORMALIZATION_KEY};
+
+  // An index built with either normalization records it in its configuration.
+  for (auto normalization : {HasWordNormalization::Lowercase,
+                             HasWordNormalization::LowercaseNoAccents}) {
+    TestIndexConfig config{"<a> <b> \"Café\" ."};
+    config.addHasWordTriples = true;
+    config.hasWordNormalization = normalization;
+    auto index =
+        makeTestIndex(absl::StrCat("hasWordNormalization.", normalization),
+                      std::move(config));
+    EXPECT_EQ(index.getImpl().configurationJson()[key],
+              std::string{normalization.toString()});
+  }
+
+  // Loading a configuration applies the recorded normalization, and a
+  // configuration without the key (an older index) gives `Lowercase`.
+  auto configuration = minimalValidConfiguration();
+  configuration[key] = "lowercase-no-accents";
+  IndexImpl indexImpl{ad_utility::makeUnlimitedAllocator<Id>()};
+  auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+  indexImpl.applyConfiguration(configuration);
+  EXPECT_EQ(indexImpl.hasWordNormalization_,
+            HasWordNormalization::LowercaseNoAccents);
+  configuration.erase(key);
+  indexImpl.applyConfiguration(configuration);
+  EXPECT_EQ(indexImpl.hasWordNormalization_, HasWordNormalization::Lowercase);
 }
 
 // _____________________________________________________________________________

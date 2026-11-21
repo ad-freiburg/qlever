@@ -79,6 +79,7 @@ SparqlExpression::Ptr makeEnvelopeLowerLeftExpression(
 SparqlExpression::Ptr makeEnvelopeUpperRightExpression(
     SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeGeometryTypeExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeCrsTypeExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeNumGeometriesExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeLengthExpression(SparqlExpression::Ptr child1,
                                            SparqlExpression::Ptr child2);
@@ -87,6 +88,7 @@ SparqlExpression::Ptr makeGeometryNExpression(SparqlExpression::Ptr child1,
                                               SparqlExpression::Ptr child2);
 SparqlExpression::Ptr makeSimplifyGeometryExpression(
     SparqlExpression::Ptr child1, SparqlExpression::Ptr child2);
+SparqlExpression::Ptr makeAsGeoJsonExpression(SparqlExpression::Ptr child);
 
 template <ad_utility::BoundingCoordinate RequestedCoordinate>
 SparqlExpression::Ptr makeBoundingCoordinateExpression(
@@ -203,11 +205,10 @@ struct VariadicExpressionFactory {
 // `make...` functions for n-ary expressions that have a compile-time known
 // number of children. This makes the testing easier, as we then can use the
 // same test helpers for all expressions.
-CPP_template(auto function)(
-    requires std::is_invocable_r_v<
-        SparqlExpression::Ptr, decltype(function),
-        std::vector<
-            SparqlExpression::Ptr> >) constexpr auto variadicExpressionFactory =
+CPP_template(auto function)(requires std::is_invocable_r_v<
+                                  SparqlExpression::Ptr, decltype(function),
+                                  std::vector<SparqlExpression::Ptr> >)
+constexpr auto variadicExpressionFactory =
     detail::VariadicExpressionFactory<function>{};
 
 SparqlExpression::Ptr makeCoalesceExpression(

@@ -20,9 +20,9 @@ namespace ad_utility::serialization {
 // Allow trivial serialization for `std::array` if the `value_type` is already
 // `TriviallySerializable`.
 CPP_template(typename T, typename U)(
-    requires ad_utility::SimilarToArray<T> CPP_and
-        TriviallySerializable<typename T::value_type>) std::true_type
-    allowTrivialSerialization(T, U);
+    requires ad_utility::SimilarToArray<T> &&
+    TriviallySerializable<typename T::value_type>)
+std::true_type allowTrivialSerialization(T, U);
 
 // A helper function to figure out whether all types contained in a tuple are
 // trivially seraizliable.
@@ -48,7 +48,7 @@ CPP_concept ArrayOrTuple = ad_utility::isArray<std::decay_t<T>> ||
 
 // Serialization function for `std::array` and `std::tuple`.
 AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
-    detail::ArrayOrTuple<T> CPP_and CPP_NOT(TriviallySerializable<T>)) {
+    detail::ArrayOrTuple<T>&& CPP_NOT(TriviallySerializable<T>)) {
   using Arr = std::decay_t<T>;
   // Tuples are not technically not trivially copyable, but for the purpose of
   // serialization we still can safely `memcpy`. Note that for `std::array` the

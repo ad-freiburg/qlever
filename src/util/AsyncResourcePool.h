@@ -208,8 +208,8 @@ class AsyncResourcePool {
   // Construct a pool of `numResources` resources, each of which is a copy of
   // the `prototype`.
   CPP_template_2(typename T = ResourceType)(
-      requires(!std::is_void_v<T>)
-          CPP_and_2 ql::concepts::copy_constructible<StoredTypeOf<T>>)
+      requires(!std::is_void_v<T>) &&
+      ql::concepts::copy_constructible<StoredTypeOf<T>>)
   AsyncResourcePool(net::any_io_executor executor, size_t numResources,
                     const StoredTypeOf<T>& prototype)
       : AsyncResourcePool{std::move(executor),
@@ -221,6 +221,10 @@ class AsyncResourcePool {
   const net::any_io_executor& defaultHandlerExecutor() const noexcept {
     return impl_->executor_;
   }
+
+  // Two pools are equal if they share the same resources (see the NOTE in the
+  // class comment above).
+  bool operator==(const AsyncResourcePool&) const = default;
 
   // Take out a resource, suspending until one is free. The completion signature
   // is `void(boost::system::error_code, Handle)`. On success the `error_code`

@@ -19,12 +19,11 @@
 #include <numeric>
 
 #include "global/RuntimeParameters.h"
-#include "index/CompressedRelationWriter.h"
 #include "index/DistinctCol0Ids.h"
 #include "index/LocatedTriples.h"
+#include "index/compressedRelationWriter/CompressedRelationWriter.h"
 #include "util/Algorithm.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
-#include "util/GlobalExecutor.h"
 #include "util/HashSet.h"
 #include "util/Iterators.h"
 #include "util/Timer.h"
@@ -176,7 +175,7 @@ CompressedRelationReader::lazyScan(
     std::vector<CompressedBlockMetadata> relevantBlockMetadata,
     ColumnIndices additionalColumns, CancellationHandle cancellationHandle,
     const LocatedTriplesPerBlock& locatedTriplesPerBlock,
-    ql::any_io_executor executor, const LimitOffsetClause& limitOffset) const {
+    qlever::Executor executor, const LimitOffsetClause& limitOffset) const {
   AD_CONTRACT_CHECK(cancellationHandle);
 
   if (relevantBlockMetadata.empty()) {
@@ -214,9 +213,8 @@ CompressedRelationReader::lazyScan(
   // The block that the consumer is currently processing still counts as in
   // flight for the `AsyncTransformView`, so one more block is needed to read
   // and decompress `numBlocksAhead` blocks while the consumer is busy.
-  size_t numBlocksAhead = lazyScanNumBlocksInFlightOverride_.value_or(
-      getRuntimeParameter<
-          &RuntimeParameters::lazyIndexScanNumBlocksInFlight_>());
+  size_t numBlocksAhead = getRuntimeParameter<
+      &RuntimeParameters::lazyIndexScanNumBlocksInFlight_>();
   size_t numBlocksInFlight = numBlocksAhead + 1;
   using BlocksView = ad_utility::AsyncTransformView<
       decltype(ad_utility::integerRange(numBlocks)), decltype(readBlock)>;
@@ -244,7 +242,7 @@ CompressedRelationReader::lazyScan(
         blockingTimer_.cont();
         auto blockAndStats = blocks_->get();
         blockingTimer_.stop();
-        details().blockingTime_ = blockingTimer_.msecs();
+        details().blockingTime_ = blockingTimer_.value();
         cancellationHandle_->throwIfCancelled();
         if (!blockAndStats.has_value()) {
           AD_CORRECTNESS_CHECK(numBlocks_ ==
@@ -292,7 +290,7 @@ IdTable CompressedRelationReader::scan(
     ColumnIndicesRef additionalColumns,
     const CancellationHandle& cancellationHandle,
     const LocatedTriplesPerBlock& locatedTriplesPerBlock,
-    const LimitOffsetClause& limitOffset) const {
+    qlever::Executor executor, const LimitOffsetClause& limitOffset) const {
   const auto& scanSpec = scanSpecAndBlocks.scanSpec_;
   auto columnIndices = prepareColumnIndices(scanSpec, additionalColumns);
   IdTable result(columnIndices.size(), allocator_);
@@ -311,8 +309,8 @@ IdTable CompressedRelationReader::scan(
            scanSpec,
            convertBlockMetadataRangesToVector(scanSpecAndBlocks.blockMetadata_),
            {additionalColumns.begin(), additionalColumns.end()},
-           cancellationHandle, locatedTriplesPerBlock,
-           ad_utility::globalExecutor(), limitOffset)) {
+           cancellationHandle, locatedTriplesPerBlock, std::move(executor),
+           limitOffset)) {
     result.insertAtEnd(block);
   }
   cancellationHandle->throwIfCancelled();
@@ -423,7 +421,8 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
 template <bool exactSize>
 std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
     const ScanSpecAndBlocks& scanSpecAndBlocks,
-    const LocatedTriplesPerBlock& locatedTriplesPerBlock) const {
+    const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+    const CancellationHandle& cancellationHandle) const {
   const auto& blocks = scanSpecAndBlocks.getBlockMetadataView();
   auto beginBlock = ql::ranges::begin(blocks);
   auto endBlock = ql::ranges::end(blocks);
@@ -442,6 +441,7 @@ std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
 
   auto readSizeOfPossiblyIncompleteBlock = [&](const auto& block) {
     if (exactSize) {
+      cancellationHandle->throwIfCancelled();
       numResults +=
           readPossiblyIncompleteBlock(scanSpec, config, block, std::nullopt,
                                       locatedTriplesPerBlock)
@@ -489,6 +489,7 @@ std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
         } else {
           // TODO<joka921> We could cache the exact size as soon as we
           // have merged the block once since the last update.
+          cancellationHandle->throwIfCancelled();
           auto b = readAndDecompressBlock(block, config);
           numResults += b.has_value() ? b.value().block_.numRows() : 0u;
         }
@@ -500,15 +501,21 @@ std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
 std::pair<size_t, size_t> CompressedRelationReader::getSizeEstimateForScan(
     const ScanSpecAndBlocks& scanSpecAndBlocks,
     const LocatedTriplesPerBlock& locatedTriplesPerBlock) const {
-  return getResultSizeImpl<false>(scanSpecAndBlocks, locatedTriplesPerBlock);
+  // Without `exactSize`, no blocks are read, so there is nothing to cancel and
+  // a handle that is never cancelled suffices.
+  static const CancellationHandle neverCancelled =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  return getResultSizeImpl<false>(scanSpecAndBlocks, locatedTriplesPerBlock,
+                                  neverCancelled);
 }
 
 // ____________________________________________________________________________
 size_t CompressedRelationReader::getResultSizeOfScan(
     const ScanSpecAndBlocks& scanSpecAndBlocks,
-    const LocatedTriplesPerBlock& locatedTriplesPerBlock) const {
-  auto [lower, upper] =
-      getResultSizeImpl<true>(scanSpecAndBlocks, locatedTriplesPerBlock);
+    const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+    const CancellationHandle& cancellationHandle) const {
+  auto [lower, upper] = getResultSizeImpl<true>(
+      scanSpecAndBlocks, locatedTriplesPerBlock, cancellationHandle);
   AD_CORRECTNESS_CHECK(lower == upper);
   return lower;
 }
@@ -520,7 +527,8 @@ CompressedRelationReader::getDistinctCol0Ids(
     ScanSpecAndBlocks scanSpecAndBlocks, bool addGraphColumn,
     std::optional<std::vector<Id>> idFilter,
     CancellationHandle cancellationHandle,
-    const LocatedTriplesPerBlock& locatedTriplesPerBlock) const {
+    const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+    qlever::Executor executor) const {
   using namespace distinctCol0Ids;
   AD_CONTRACT_CHECK(cancellationHandle != nullptr);
   AD_CONTRACT_CHECK(scanSpecAndBlocks.scanSpec_.firstFreeColIndex() == 0,
@@ -539,8 +547,8 @@ CompressedRelationReader::getDistinctCol0Ids(
   auto scanConfig = getScanConfig(scanSpecAndBlocks.scanSpec_,
                                   additionalColumns, locatedTriplesPerBlock);
   auto [blocksToRead, fromMetadata] =
-      BlockSelector{scanConfig.graphFilter_, addGraphColumn, idFilter,
-                    locatedTriplesPerBlock, allocator_}
+      BlockSelector{scanConfig.graphFilter_, addGraphColumn,     idFilter,
+                    locatedTriplesPerBlock,  cancellationHandle, allocator_}
           .select(scanSpecAndBlocks);
 
   // Let the inner scan write its statistics (most importantly the number of
@@ -550,7 +558,7 @@ CompressedRelationReader::getDistinctCol0Ids(
   details.numBlocksAll_ = scanSpecAndBlocks.sizeBlockMetadata_;
   auto scan = lazyScan(scanSpecAndBlocks.scanSpec_, std::move(blocksToRead),
                        std::move(additionalColumns), cancellationHandle,
-                       locatedTriplesPerBlock, ad_utility::globalExecutor());
+                       locatedTriplesPerBlock, std::move(executor));
   scan.setDetailsPointer(&details);
 
   // The IDs are computed by merging two ascending sources: the IDs that are
@@ -796,8 +804,9 @@ void CompressedRelationReader::decompressColumn(
   auto numBytesActuallyRead = ZstdWrapper::decompressToBuffer(
       compressedBlock.data(), compressedBlock.size(), iterator,
       numRowsToRead * sizeof(*iterator));
-  static_assert(sizeof(Id) == sizeof(*iterator));
-  AD_CORRECTNESS_CHECK(numRowsToRead * sizeof(Id) == numBytesActuallyRead);
+  static_assert(BYTES_PER_ID_COLUMN_ENTRY == sizeof(*iterator));
+  AD_CORRECTNESS_CHECK(numRowsToRead * BYTES_PER_ID_COLUMN_ENTRY ==
+                       numBytesActuallyRead);
 }
 
 // ____________________________________________________________________________

@@ -26,7 +26,10 @@
 #include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/Literal.h"
 #include "util/GTestHelpers.h"
+#include "util/LocalVocabEntryTestHelpers.h"
 #include "util/TypeTraits.h"
+
+using ad_utility::testing::localVocabEntryFromStringRepresentation;
 
 namespace valueGetterTestHelpers {
 
@@ -48,8 +51,7 @@ struct TestContextWithGivenTTl {
       table.asStaticView<0>(),
       qec->getAllocator(),
       localVocab,
-      std::make_shared<ad_utility::CancellationHandle<>>(),
-      sparqlExpression::EvaluationContext::TimePoint::max()};
+      std::make_shared<ad_utility::CancellationHandle<>>()};
   std::function<Id(const std::string&)> getId =
       ad_utility::testing::makeGetId(qec->getIndex());
 
@@ -136,8 +138,8 @@ inline void checkLiteralContentAndDatatypeFromLiteralOrIri(
     if (isIri) {
       return LiteralOrIri::iriref(std::string(content));
     } else {
-      return LiteralOrIri{Literal::literalWithNormalizedContent(
-          asNormalizedStringViewUnsafe(content), descriptor)};
+      return LiteralOrIri{
+          Literal::literalWithNormalizedContent(content, descriptor)};
     }
   };
   LiteralOrIri literalOrIri =
@@ -224,8 +226,8 @@ struct AllDatatypesTestContext : TestContextWithGivenTTl {
   // place.
   Id localVocabId(const std::string& word) {
     return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
-        LocalVocabEntry::fromStringRepresentation(
-            word, qec->getLocalVocabContext())));
+        localVocabEntryFromStringRepresentation(word,
+                                                qec->getLocalVocabContext())));
   }
 
  private:
@@ -368,6 +370,8 @@ class ValueGetterTester {
       " \"noType\" ,"
       " \"LINESTRING(2 2, 4 4)\""
       "^^<http://www.opengis.net/ont/geosparql#wktLiteral>,\n"
+      "\"<http://www.opengis.net/def/crs/EPSG/0/4326> LINESTRING(2 3, 4 5)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>,\n"
       " \"POLYGON((2 4, 4 4, 4 2, 2 2))\""
       "^^<http://www.opengis.net/ont/geosparql#wktLiteral>.\n";
 
@@ -383,7 +387,7 @@ class ValueGetterTester {
     TestContextWithGivenTTl testContext{""};
     LocalVocab localVocab;
     auto idx = localVocab.getIndexAndAddIfNotContained(
-        LocalVocabEntry::fromStringRepresentation(
+        localVocabEntryFromStringRepresentation(
             std::move(literal), testContext.qec->getLocalVocabContext()));
     checkImpl(testContext, ValueId::makeFromLocalVocabIndex(idx), expected);
   }

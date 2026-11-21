@@ -29,8 +29,8 @@ namespace ad_utility {
 // NOTE: In contrast to `ql::views::iota`, the `first` and the `end` must have
 // exactly the same type. `iota` silently accepts mixed types (e.g. `int` and
 // `size_t`), which can lead to surprising results or to infinite ranges.
-CPP_template(typename T)(requires std::is_integral_v<T>) auto chunkedIotaView(
-    T first, T end, T blockSize) {
+CPP_template(typename T)(requires std::is_integral_v<T>)
+auto chunkedIotaView(T first, T end, T blockSize) {
   AD_CONTRACT_CHECK(first <= end);
   AD_CONTRACT_CHECK(blockSize > 0);
   namespace rv = ::ranges::views;

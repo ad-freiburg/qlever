@@ -14,6 +14,7 @@
 #include "util/AllocatorTestHelpers.h"
 #include "util/IdTestHelpers.h"
 #include "util/IndexTestHelpers.h"
+#include "util/LocalVocabEntryTestHelpers.h"
 #include "util/MemorySize/MemorySize.h"
 
 namespace {
@@ -196,7 +197,8 @@ TEST_F(ConstructDeduplicatorTest, localVocabTermInIndexVocabUsesVocabIndex) {
   LocalVocab vocab;
   const Id localId =
       Id::makeFromLocalVocabIndex(vocab.getIndexAndAddIfNotContained(
-          LocalVocabEntry::fromIriref("<s>", qec_->getLocalVocabContext())));
+          ad_utility::testing::iriLocalVocabEntry(
+              "<s>", qec_->getLocalVocabContext())));
   ASSERT_EQ(localId.getDatatype(), Datatype::LocalVocabIndex);
 
   const IdTable table = makeIdTable(localId);
