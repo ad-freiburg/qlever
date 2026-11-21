@@ -151,8 +151,9 @@ class GraphStoreProtocol {
       AD_CORRECTNESS_CHECK(
           std::holds_alternative<ad_utility::triple_component::Iri>(
               effectiveGraph));
-      res.responseMiddleware_ = makePostNewGraphMiddleware(
-          std::get<ad_utility::triple_component::Iri>(effectiveGraph));
+      res.responseMiddleware_ =
+          std::make_shared<const ResponseMiddleware>(makePostNewGraphMiddleware(
+              std::get<ad_utility::triple_component::Iri>(effectiveGraph)));
     }
     // Graph store protocol POST requests might have a very large body. Limit
     // the length used for the string representation.
@@ -230,7 +231,7 @@ class GraphStoreProtocol {
     // - 200 Ok or 204 No Content if an existing graph is modified
     // When the drop (first operation) deletes triples then the graph has
     // existed before in our model of implicit graph existence.
-    drop.responseMiddleware_ = ResponseMiddleware(
+    drop.responseMiddleware_ = std::make_shared<const ResponseMiddleware>(
         [](ResponseMiddleware::ResponseT response,
            const std::vector<UpdateMetadata>& updateMetadata) {
           AD_CORRECTNESS_CHECK(updateMetadata.size() == 2);

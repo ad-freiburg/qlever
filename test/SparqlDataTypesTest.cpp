@@ -11,6 +11,7 @@
 #include <gmock/gmock.h>
 
 #include "./util/AllocatorTestHelpers.h"
+#include "./util/LocalVocabTestHelpers.h"
 #include "engine/ConstructBatchEvaluator.h"
 #include "engine/ConstructTemplatePreprocessor.h"
 #include "engine/ConstructTripleInstantiator.h"
@@ -18,6 +19,9 @@
 #include "engine/Result.h"
 #include "index/Index.h"
 #include "rdfTypes/Iri.h"
+#include "util/ContainersWithAllocator.h"
+
+using ad_utility::testing::makeLocalVocab;
 
 using namespace std::string_literals;
 using ::testing::Optional;
@@ -32,7 +36,9 @@ auto iriV = Iri::fromIrirefValidated;
 struct ContextWrapper {
   Index _index{ad_utility::makeUnlimitedAllocator<Id>()};
   Result _resultTable{
-      IdTable{ad_utility::testing::makeAllocator()}, {}, LocalVocab{}};
+      IdTable{ad_utility::testing::makeAllocator()},
+      qlm::vector<ColumnIndex>{ad_utility::testing::makeAllocator()},
+      makeLocalVocab()};
   // TODO<joka921> `VariableToColumnMap`
   VariableToColumnMap _hashMap;
 
@@ -48,7 +54,9 @@ struct ContextWrapper {
 
   void setIdTable(IdTable&& table) {
     _resultTable =
-        Result{std::move(table), {}, _resultTable.getSharedLocalVocab()};
+        Result{std::move(table),
+               qlm::vector<ColumnIndex>{ad_utility::testing::makeAllocator()},
+               _resultTable.getSharedLocalVocab()};
   }
 };
 
@@ -69,7 +77,7 @@ std::optional<std::string> evaluate(
   auto rowIdx = exportCtx._rowOffset + exportCtx.resultTableRowIndex_;
 
   // Backs the `dedupId_` of any constant term; must outlive `preprocessed`.
-  LocalVocab localVocabForConstants;
+  LocalVocab localVocabForConstants = makeLocalVocab();
   auto preprocessed = ConstructTemplatePreprocessor::preprocessTerm(
       term, position, exportCtx._variableColumns, exportCtx._qecIndex,
       localVocabForConstants);

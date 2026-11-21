@@ -22,8 +22,8 @@ class NeutralElementOperation : public Operation {
 
   // The individual implementation of `getCacheKey` (see above) that has to be
   // customized by every child class.
-  [[nodiscard]] std::string getCacheKeyImpl() const override {
-    return "Neutral Element";
+  [[nodiscard]] qlm::string getCacheKeyImpl() const override {
+    return qlm::string{"Neutral Element", allocator()};
   }
 
  public:
@@ -45,8 +45,8 @@ class NeutralElementOperation : public Operation {
   }
 
  protected:
-  [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override {
-    return {};
+  [[nodiscard]] qlm::vector<ColumnIndex> resultSortedOn() const override {
+    return qlm::vector<ColumnIndex>{allocator()};
   }
 
  private:
@@ -56,7 +56,7 @@ class NeutralElementOperation : public Operation {
     IdTable idTable{getExecutionContext()->getAllocator()};
     idTable.setNumColumns(0);
     idTable.resize(1);
-    return {std::move(idTable), resultSortedOn(), LocalVocab{}};
+    return {std::move(idTable), resultSortedOn(), LocalVocab{allocator()}};
   }
 
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap()

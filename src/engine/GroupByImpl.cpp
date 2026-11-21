@@ -88,8 +88,8 @@ class LazyGroupByRange
         groupByCols_(std::move(groupByCols)),
         singleIdTable_(singleIdTable),
         inWidth_(subTreeResultWidth),
-        resultTable_(parent->getResultWidth(),
-                     parent->getExecutionContext()->getAllocator()) {
+        resultTable_(parent->getResultWidth(), parent->allocator()),
+        currentLocalVocab_(parent->allocator()) {
     AD_CONTRACT_CHECK(inWidth_ == IN_WIDTH || IN_WIDTH == 0);
     AD_CONTRACT_CHECK(parent_ != nullptr);
   }
@@ -321,20 +321,21 @@ GroupByImpl::GroupByImpl(QueryExecutionContext* qec, bool isImplicitGroupBy,
   // used in any of the aggregate aliases. Note that a `COUNT(DISTINCT *)`
   // implicitly uses all the visible columns without mentioning any variable
   // explicitly, so in that case no column may be stripped.
-  if (getRuntimeParameter<&RuntimeParameters::stripColumns_>() &&
-      !ql::ranges::any_of(
-          _aliases,
-          &sparqlExpression::SparqlExpressionPimpl::readsAllVisibleColumns,
-          &Alias::_expression)) {
-    std::set<Variable> usedVariables{_groupByVariables.begin(),
-                                     _groupByVariables.end()};
-    for (const auto& alias : _aliases) {
-      for (const auto* var : alias._expression.containedVariables()) {
-        usedVariables.insert(*var);
-      }
+  if (getRuntimeParameter<&RuntimeParameters::stripColumns_>()) {
+    using AddVarsResult =
+        columnStrippingHelpers::VarsRequiredFromSubtree::AddVarsResult;
+    std::set<Variable> groupByVariables{_groupByVariables.begin(),
+                                        _groupByVariables.end()};
+    columnStrippingHelpers::VarsRequiredFromSubtree usedVariables(
+        &groupByVariables);
+    bool allVarsNeeded =
+        ql::ranges::any_of(_aliases, [&usedVariables](const auto& alias) {
+          return usedVariables.addVarsFromExpression(alias._expression) ==
+                 AddVarsResult::NeedAllVarsFromSubtree;
+        });
+    if (!allVarsNeeded) {
+      subtree = usedVariables.stripSubtree(std::move(subtree));
     }
-    subtree = QueryExecutionTree::makeTreeWithStrippedColumns(
-        std::move(subtree), usedVariables);
   }
 
   // Sort `groupByVariables` to ensure that the cache key is order invariant.
@@ -359,7 +360,7 @@ GroupByImpl::GroupByImpl(QueryExecutionContext* qec, bool isImplicitGroupBy,
 }
 
 // _____________________________________________________________________________
-std::string GroupByImpl::getCacheKeyImpl() const {
+qlm::string GroupByImpl::getCacheKeyImpl() const {
   const auto& varMap = getInternallyVisibleVariableColumns();
   auto varMapInput = _subtree->getVariableColumns();
 
@@ -377,7 +378,7 @@ std::string GroupByImpl::getCacheKeyImpl() const {
     }
   }
 
-  std::ostringstream os;
+  qlm::ostringstream os{allocator()};
   os << (isImplicitGroupBy_ ? "IMPLICIT_GROUP_BY " : "GROUP_BY ");
   for (const auto& var : _groupByVariables) {
     os << varMap.at(var).columnIndex_ << ", ";
@@ -409,14 +410,12 @@ size_t GroupByImpl::getResultWidth() const {
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> GroupByImpl::resultSortedOn() const {
+qlm::vector<ColumnIndex> GroupByImpl::resultSortedOn() const {
   auto varCols = getInternallyVisibleVariableColumns();
-  vector<ColumnIndex> sortedOn;
-  sortedOn.reserve(_groupByVariables.size());
-  for (const auto& var : _groupByVariables) {
-    sortedOn.push_back(varCols[var].columnIndex_);
-  }
-  return sortedOn;
+  return _groupByVariables | ql::views::transform([&varCols](const auto& var) {
+           return varCols[var].columnIndex_;
+         }) |
+         ::ranges::to<qlm::vector>(allocator());
 }
 
 // _____________________________________________________________________________
@@ -482,6 +481,8 @@ float GroupByImpl::getMultiplicity([[maybe_unused]] size_t col) {
 std::optional<std::shared_ptr<QueryExecutionTree>>
 GroupByImpl::makeTreeWithStrippedColumns(
     const std::set<Variable>& requestedVariables) const {
+  using AddVarsResult =
+      columnStrippingHelpers::VarsRequiredFromSubtree::AddVarsResult;
   // Keep the aliases whose target is requested, and the aliases whose target
   // is read by a kept alias. The subtree must provide the requested variables,
   // the variables read by the kept aliases, and the variables that the
@@ -498,13 +499,12 @@ GroupByImpl::makeTreeWithStrippedColumns(
     }
     // A `COUNT(DISTINCT *)` reads all columns of the subtree, so nothing may
     // be stripped below it (the caller then adds a `StripColumns` on top).
-    if (alias._expression.readsAllVisibleColumns()) {
+    auto addVarsResult =
+        varsRequiredFromSubtree.addVarsFromExpression(alias._expression);
+    if (addVarsResult == AddVarsResult::NeedAllVarsFromSubtree) {
       return std::nullopt;
     }
     keptAliases.push_back(alias);
-    for (const Variable* aliasVar : alias._expression.containedVariables()) {
-      varsRequiredFromSubtree.add(*aliasVar);
-    }
   }
   ql::ranges::reverse(keptAliases);
   for (const Variable& groupByVar : _groupByVariables) {
@@ -514,8 +514,7 @@ GroupByImpl::makeTreeWithStrippedColumns(
   // Strip the subtree and build the new `GroupByImpl` with the private
   // constructor, which keeps `isImplicitGroupBy_` (like `cloneImpl`, because
   // `_groupByVariables` is already reduced to the variables of the subtree).
-  auto subtree = QueryExecutionTree::makeTreeWithStrippedColumns(
-      _subtree, varsRequiredFromSubtree.get());
+  auto subtree = varsRequiredFromSubtree.stripSubtree(_subtree);
   auto impl = std::unique_ptr<GroupByImpl>(
       new GroupByImpl{_executionContext, isImplicitGroupBy_, _groupByVariables,
                       std::move(keptAliases), std::move(subtree)});
@@ -673,7 +672,8 @@ Result GroupByImpl::computeResult(bool requestLaziness) {
     // Note: The optimized group bys currently all include index scans and thus
     // can never produce local vocab entries. If this should ever change, then
     // we also have to take care of the local vocab here.
-    return {std::move(idTable).value(), resultSortedOn(), LocalVocab{}};
+    return {std::move(idTable).value(), resultSortedOn(),
+            LocalVocab{allocator()}};
   }
 
   std::vector<Aggregate> aggregates;
@@ -1954,7 +1954,7 @@ Result GroupByImpl::computeGroupByForHashMapOptimization(
     SubResults subresults, const std::vector<size_t>& columnIndices) const {
   AD_CORRECTNESS_CHECK(columnIndices.size() == NUM_GROUP_COLUMNS ||
                        NUM_GROUP_COLUMNS == 0);
-  LocalVocab localVocab;
+  LocalVocab localVocab{allocator()};
 
   // Initialize the data for the aggregates of the GROUP BY operation.
   HashMapAggregationData<NUM_GROUP_COLUMNS> aggregationData(

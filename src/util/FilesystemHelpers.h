@@ -46,10 +46,12 @@ bool doesDirectoryContainFileWithBasename(const std::string& path);
 // (observed on macOS), leaving leftover files behind. Non-regular entries (e.g.
 // subdirectories) are never passed to `shouldDelete` and never deleted. If
 // `directory` does not exist or is not a directory, nothing is deleted and `0`
-// is returned.
+// is returned. If `warnOnFailure` is `false`, a file that cannot be deleted is
+// skipped silently (see `ad_utility::deleteFile`).
 size_t deleteFilesInDirectory(
     const ql::filesystem::path& directory,
-    absl::FunctionRef<bool(const ql::filesystem::path&)> shouldDelete);
+    absl::FunctionRef<bool(const ql::filesystem::path&)> shouldDelete,
+    bool warnOnFailure = true);
 
 // Return the paths of the directories directly contained in `directory` whose
 // name starts with `prefix`, in unspecified order. This is used to enumerate

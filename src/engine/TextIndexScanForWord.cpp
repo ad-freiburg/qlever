@@ -50,7 +50,7 @@ Result TextIndexScanForWord::computeResult(
   // Add details to the runtimeInfo. This is has no effect on the result.
   runtimeInfo().addDetail("word: ", config_.word_);
 
-  return {std::move(idTable), resultSortedOn(), LocalVocab{}};
+  return {std::move(idTable), resultSortedOn(), LocalVocab{allocator()}};
 }
 
 // _____________________________________________________________________________
@@ -102,8 +102,8 @@ uint64_t TextIndexScanForWord::getSizeEstimateBeforeLimit() {
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> TextIndexScanForWord::resultSortedOn() const {
-  return {ColumnIndex(0)};
+qlm::vector<ColumnIndex> TextIndexScanForWord::resultSortedOn() const {
+  return {{ColumnIndex(0)}, allocator()};
 }
 
 // _____________________________________________________________________________
@@ -113,8 +113,8 @@ std::string TextIndexScanForWord::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-std::string TextIndexScanForWord::getCacheKeyImpl() const {
-  std::ostringstream os;
+qlm::string TextIndexScanForWord::getCacheKeyImpl() const {
+  qlm::ostringstream os{allocator()};
   os << "WORD INDEX SCAN: " << " with word: \"" << config_.word_
      << "\", has variable: " << config_.scoreVar_.has_value();
   return std::move(os).str();

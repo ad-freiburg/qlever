@@ -20,8 +20,8 @@
 #include "util/File.h"
 #include "util/GTestHelpers.h"
 #include "util/MmapVectorLegacyFormat.h"
-#include "util/Serializer/ByteBufferSerializer.h"
-#include "util/Serializer/FileSerializer.h"
+#include "util/serializer/ByteBufferSerializer.h"
+#include "util/serializer/FileSerializer.h"
 
 namespace {
 auto V = ad_utility::testing::VocabId;

@@ -1,6 +1,6 @@
 add_library(testUtil IdTableHelpers.cpp ValidatorHelpers.cpp RandomTestHelpers.cpp BenchmarkMeasurementContainerHelpers.cpp IndexTestHelpers.cpp)
 # TODO<c++20> Once there is more support for it, we should be able to do this cheaper with modules.
-qlever_target_link_libraries(testUtil engine global gmock_main)
+qlever_target_link_libraries(testUtil engine global GTest::gtest GTest::gmock)
 
 # The precompiled headers of `testUtil` are reused by all the unit tests that
 # link against `testUtil` (see `linkTest` in `test/CMakeLists.txt`).
@@ -17,3 +17,8 @@ if (USE_PRECOMPILED_HEADERS)
     # the (unused) `testUtil_EXPORTS`, which CMake defines for shared libraries.
     set_target_properties(testUtil PROPERTIES DEFINE_SYMBOL "")
 endif ()
+
+# The `main` function of the unit tests that link against `testUtil` (see
+# `QleverTestMain.cpp` and `linkTest`).
+add_library(qleverTestMain QleverTestMain.cpp RuntimeParametersResetCheck.cpp)
+qlever_target_link_libraries(qleverTestMain global GTest::gtest GTest::gmock)

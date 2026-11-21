@@ -10,8 +10,8 @@
 #include "engine/Result.h"
 #include "index/CompressedRelationReader.h"
 #include "util/Iterators.h"
-#include "util/JoinAlgorithms/JoinAlgorithms.h"
-#include "util/JoinAlgorithms/JoinColumnMapping.h"
+#include "util/joinAlgorithms/JoinAlgorithms.h"
+#include "util/joinAlgorithms/JoinColumnMapping.h"
 
 namespace qlever::joinWithIndexScanHelpers {
 

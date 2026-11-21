@@ -109,7 +109,7 @@ class LocalVocabContext {
   //
   // NOTE: `LocalVocabEntry` itself does not need this. It is required when a
   // complete `LocalVocab` is deserialized (see `deserializeLocalVocab` in
-  // `util/Serializer/TripleSerializer.h`), which has only this interface at
+  // `util/serializer/TripleSerializer.h`), which has only this interface at
   // hand, so that the blank node manager would otherwise have to be threaded
   // through the same call chains a second time.
   virtual ad_utility::BlankNodeManager* getBlankNodeManager() const = 0;
