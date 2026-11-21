@@ -12,22 +12,27 @@
 #include "engine/binaryExport/BinaryExport.h"
 
 #include <cstring>
+#include <type_traits>
 #include <utility>
 
 #include "backports/algorithm.h"
+#include "backports/concepts.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/Result.h"
 #include "engine/binaryExport/BinaryFormat.h"
 #include "util/Algorithm.h"
 #include "util/Generator.h"
-#include "util/Serializer/FromCallableSerializer.h"
-#include "util/Serializer/SerializeString.h"
-#include "util/Serializer/SerializeVector.h"
+#include "util/serializer/FromCallableSerializer.h"
+#include "util/serializer/SerializeString.h"
+#include "util/serializer/SerializeVector.h"
 
 using CancellationHandle = ad_utility::SharedCancellationHandle;
 namespace {
-// Return a `std::string_view` wrapping the passed value.
-std::string_view raw(const std::integral auto& value) {
+// Return a `std::string_view` wrapping the passed value. It is not restricted
+// to integral types, because it is also used for `Id::T`, which is a struct in
+// the split layout.
+CPP_template(typename T)(requires std::is_trivially_copyable_v<T>)
+std::string_view raw(const T& value) {
   return std::string_view{reinterpret_cast<const char*>(&value), sizeof(value)};
 }
 }  // namespace

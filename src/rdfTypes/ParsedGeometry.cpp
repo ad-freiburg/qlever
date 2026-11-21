@@ -9,33 +9,32 @@
 
 #include "rdfTypes/ParsedGeometry.h"
 
-#include <absl/strings/str_cat.h>
 #include <spatialjoin/WKTParse.h>
 
 #include <limits>
 
 #include "util/Exception.h"
-#include "util/Serializer/ByteBufferSerializer.h"
-#include "util/Serializer/SerializeString.h"
-#include "util/Serializer/SerializeVector.h"
+#include "util/serializer/ByteBufferSerializer.h"
+#include "util/serializer/SerializeString.h"
+#include "util/serializer/SerializeVector.h"
 
 namespace ad_utility {
 
 namespace {
 
-// `parseLine` of the parser base class of `libspatialjoin` is protected. This
-// minimal subclass makes it callable without starting the parser threads of
-// the base class (which its derived classes start in their constructors).
-struct SingleLineParser : public sj::WKTParserBase<sj::ParseJob> {
-  explicit SingleLineParser(sj::Sweeper* sweeper)
-      : sj::WKTParserBase<sj::ParseJob>(sweeper, 1) {}
+// `parseWKTGeometry` of the parser base class of `libspatialjoin` is protected.
+// This minimal subclass makes it callable without starting the parser threads
+// of the base class (which its derived classes start in their constructors).
+struct SingleGeometryParser : public sj::WKTParserBase<sj::ParseJob> {
+  explicit SingleGeometryParser(sj::GeometryStore* store)
+      : sj::WKTParserBase<sj::ParseJob>(store, sj::PreparedGeomMetaCb{}, 1) {}
   void processQueue(size_t) override {}
-  using sj::WKTParserBase<sj::ParseJob>::parseLine;
+  using sj::WKTParserBase<sj::ParseJob>::parseWKTGeometry;
 };
 
 // The bytes with which `libspatialjoin` serializes the id `id` of a geometry
-// into the geometry cache (see `sj::GeometryCache::writeTo`): its length as
-// two bytes, followed by the id.
+// in front of the geometry (see `sj::TypedGeometryStore::writeTo`): its length
+// as two bytes, followed by the id.
 std::string serializedId(std::string_view id) {
   AD_CORRECTNESS_CHECK(id.size() <= std::numeric_limits<uint16_t>::max());
   uint16_t length = static_cast<uint16_t>(id.size());
@@ -44,30 +43,38 @@ std::string serializedId(std::string_view id) {
   return result;
 }
 
+// The list of `batch` for the geometries of the given `type` (see
+// `sj::WriteBatch`), for the types that a parsed geometry can have.
+std::vector<sj::WriteCand>& candidatesOfType(sj::WriteBatch& batch,
+                                             sj::GeomType type) {
+  switch (type) {
+    case sj::POINT:
+      return batch.points;
+    case sj::LINE:
+      return batch.lines;
+    case sj::SIMPLE_POLYGON:
+      return batch.simpleAreas;
+    case sj::POLYGON:
+      return batch.areas;
+    default:
+      AD_FAIL();
+  }
+}
+
 }  // namespace
 
 // ____________________________________________________________________________
-sj::SweeperCfg ParsedGeometry::sweeperConfig() {
-  sj::SweeperCfg cfg;
+sj::SpatialJoinCfg ParsedGeometry::spatialJoinConfig() {
+  sj::SpatialJoinCfg cfg;
   cfg.numThreads = 1;
-  cfg.numCacheThreads = 1;
-  cfg.geomCacheMaxSize = 0;
-  cfg.geomCacheMaxNumElements = 0;
+  cfg.numCacheBuckets = 1;
   cfg.useBoxIds = true;
-  cfg.useArea = true;
-  cfg.useOBB = false;
   cfg.useDiagBox = true;
-  cfg.useFastSweepSkip = true;
   cfg.noGeometryChecks = false;
   cfg.euclideanDist = false;
   cfg.haversineApprox = false;
   cfg.computeDE9IM = false;
   cfg.de9imFilter = ::util::geo::FANY;
-  // Never let `libspatialjoin` fall back to a self-join when it considers one
-  // side to be empty; QLever's callbacks rely on the first geometry of each
-  // result pair coming from the left side and the second one from the right
-  // side (see #3068).
-  cfg.forceTwoSided = true;
   // This has to be set to a value < 0 to disable the `WITHIN_DIST`
   // calculation in `libspatialjoin`.
   cfg.withinDist = -1;
@@ -81,45 +88,45 @@ sj::SweeperCfg ParsedGeometry::sweeperConfig() {
 
 // ____________________________________________________________________________
 std::optional<ParsedGeometry> ParsedGeometry::fromWktLiteral(
-    std::string_view wktLiteral, sj::Sweeper& sweeper) {
-  // Parse the literal with the placeholder id (`parseLine` composes the id
-  // from the line number given to it and the side, see `sj::Sweeper::add`).
-  // It needs a null-terminated string.
-  static constexpr size_t placeholderLine = 99'999'999;
-  static_assert(placeholderId == "A99999999");
+    std::string_view wktLiteral, sj::GeometryStore& store) {
+  // Parse the literal with the placeholder id, in the strict mode that the
+  // spatial join uses at query time. The parser needs a null-terminated
+  // string.
   std::string wkt{wktLiteral};
   sj::WriteBatch batch;
-  SingleLineParser parser{&sweeper};
-  parser.parseLine(wkt.data(), wkt.size(), placeholderLine, 0, batch, false,
-                   false);
+  SingleGeometryParser parser{&store};
+  parser.parseWKTGeometry(wkt.c_str(), std::string{placeholderId}, 0, batch,
+                          true);
 
-  // The parts in the order in which `addToBatch` puts them back into a batch.
-  // Nothing is folded (the placeholder id is long enough) or a reference.
-  AD_CORRECTNESS_CHECK(batch.foldedPoints.empty() &&
-                       batch.foldedSimpleLines.empty() &&
-                       batch.foldedBoxAreas.empty() && batch.refs.empty());
-  // A line with two points (a "simple line") is not stored, because whether
-  // `sj::Sweeper::add` treats it as one depends on the query (not for a
-  // `WITHIN_DIST` join, where its implicit second point would be padded). It
-  // is then parsed at query time as before.
-  if (!batch.simpleLines.empty()) {
+  // A literal with several geometries yields one multi geometry with the
+  // geometries as members, any other literal a single geometry.
+  ParsedGeometry result;
+  result.isMulti_ = !batch.multiGeoms.empty();
+  AD_CORRECTNESS_CHECK(batch.multiGeoms.size() <= 1);
+  const sj::WriteBatch& geometries =
+      result.isMulti_ ? batch.multiGeoms[0].members : batch;
+  AD_CORRECTNESS_CHECK(!result.isMulti_ || batch.size() == geometries.size());
+
+  // Nothing is folded, because the placeholder id is long enough. A line with
+  // two points (a "simple line") is not stored, it is parsed at query time as
+  // before.
+  AD_CORRECTNESS_CHECK(
+      geometries.foldedPoints.empty() && geometries.foldedSimpleLines.empty() &&
+      geometries.foldedBoxAreas.empty() && geometries.multiGeoms.empty());
+  if (!geometries.simpleLines.empty()) {
     return std::nullopt;
   }
-  ParsedGeometry result;
+
+  // The parts in the order in which `addToBatch` puts them back into a batch,
+  // each without the placeholder id in front of the serialized geometry.
   auto placeholder = serializedId(placeholderId);
-  for (const auto* cands :
-       {&batch.points, &batch.lines, &batch.simpleAreas, &batch.areas}) {
+  for (const auto* cands : {&geometries.points, &geometries.lines,
+                            &geometries.simpleAreas, &geometries.areas}) {
     for (const auto& cand : *cands) {
-      // Find the placeholder id inside the serialized geometry. A second
-      // occurrence (in the coordinates, in theory) would make the position
-      // ambiguous, then the geometry is parsed at query time as before.
-      size_t idPosition = cand.raw.find(placeholder);
-      if (idPosition == std::string::npos ||
-          cand.raw.find(placeholder, idPosition + 1) != std::string::npos) {
-        return std::nullopt;
-      }
+      AD_CORRECTNESS_CHECK(cand.raw.starts_with(placeholder));
       result.parts_.push_back(
-          {cand.boxvalIn, cand.boxvalOut, cand.subid, idPosition, cand.raw});
+          {cand.meta.bbox, cand.meta.box45, cand.meta.numAnchors, cand.type,
+           cand.rightPoint, cand.subid, cand.raw.substr(placeholder.size())});
     }
   }
   if (result.parts_.empty()) {
@@ -129,53 +136,33 @@ std::optional<ParsedGeometry> ParsedGeometry::fromWktLiteral(
 }
 
 // ____________________________________________________________________________
-::util::geo::I32Box ParsedGeometry::addToBatch(const sj::Sweeper& sweeper,
-                                               size_t row, bool side,
+::util::geo::I32Box ParsedGeometry::addToBatch(const sj::GeometryStore& store,
+                                               size_t row,
                                                sj::WriteBatch& batch) const {
-  // The id of the geometry, composed like in `sj::Sweeper::add`.
-  std::string id = absl::StrCat(side ? "B" : "A", row);
-  auto placeholder = serializedId(placeholderId);
-  auto actual = serializedId(id);
+  // The id of the geometry, as the parser of the spatial join composes it.
+  std::string id = std::to_string(row);
+  auto idPrefix = serializedId(id);
 
+  // The members of a multi geometry are collected in a batch of their own.
+  sj::WriteBatch members;
+  sj::WriteBatch& target = isMulti_ ? members : batch;
   ::util::geo::I32Box boundingBox;
   for (const auto& part : parts_) {
-    sj::WriteCand cand{part.raw_, id, part.boxvalIn_, part.boxvalOut_,
-                       part.subid_};
-    cand.raw.replace(part.idPosition_, placeholder.size(), actual);
-    auto& in = cand.boxvalIn;
-    auto& out = cand.boxvalOut;
-    in.side = side;
-    out.side = side;
-
-    // Pad the bounding box and the diagonal bounding box for a `WITHIN_DIST`
-    // join (a no-op otherwise), like `sj::Sweeper::add` does for a geometry
-    // parsed at query time. The stored events hold the unpadded boxes.
-    ::util::geo::I32Box rawBox{{in.val, in.loY}, {out.val, in.upY}};
-    auto box = sweeper.getPaddedBoundingBox(rawBox);
-    auto box45 = sweeper.getPaddedBoundingBox(in.b45, rawBox);
-    in.loY = out.loY = box.getLowerLeft().getY();
-    in.upY = out.upY = box.getUpperRight().getY();
-    in.val = box.getLowerLeft().getX();
-    out.val = box.getUpperRight().getX();
-    in.b45 = out.b45 = box45;
-    boundingBox = ::util::geo::extendBox(box, boundingBox);
-
-    // The list of the batch for the geometry type (see the `WriteBatch`).
-    auto& cands = [&batch, type = in.type]() -> std::vector<sj::WriteCand>& {
-      switch (type) {
-        case sj::POINT:
-          return batch.points;
-        case sj::LINE:
-          return batch.lines;
-        case sj::SIMPLE_POLYGON:
-          return batch.simpleAreas;
-        case sj::POLYGON:
-          return batch.areas;
-        default:
-          AD_FAIL();
-      }
-    }();
-    cands.push_back(std::move(cand));
+    sj::WriteCand cand;
+    cand.raw = idPrefix + part.rawWithoutId_;
+    cand.gid = id;
+    cand.subid = part.subid_;
+    cand.meta.bbox = part.boundingBox_;
+    cand.meta.box45 = part.diagonalBoundingBox_;
+    cand.meta.numAnchors = part.numAnchors_;
+    cand.type = part.type_;
+    cand.rightPoint = part.rightPoint_;
+    boundingBox = ::util::geo::extendBox(
+        store.getPaddedBoundingBox(part.boundingBox_), boundingBox);
+    candidatesOfType(target, part.type_).push_back(std::move(cand));
+  }
+  if (isMulti_) {
+    store.addMulti(std::move(members), boundingBox, id, batch);
   }
   return boundingBox;
 }
@@ -183,6 +170,7 @@ std::optional<ParsedGeometry> ParsedGeometry::fromWktLiteral(
 // ____________________________________________________________________________
 std::string ParsedGeometry::toBytes() const {
   ad_utility::serialization::ByteBufferWriteSerializer writer;
+  writer | isMulti_;
   writer | parts_;
   const auto& data = writer.data();
   return std::string(data.begin(), data.end());
@@ -193,6 +181,7 @@ ParsedGeometry ParsedGeometry::fromBytes(std::string_view bytes) {
   ad_utility::serialization::ByteBufferReadSerializer reader{
       std::vector<char>(bytes.begin(), bytes.end())};
   ParsedGeometry result;
+  reader | result.isMulti_;
   reader | result.parts_;
   return result;
 }

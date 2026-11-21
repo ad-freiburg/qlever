@@ -31,15 +31,15 @@
 #include "rdfTypes/GeometryInfo.h"
 #include "util/ExceptionHandling.h"
 #include "util/File.h"
-#include "util/Serializer/Serializer.h"
 #include "util/TypeTraits.h"
 #include "util/Views.h"
+#include "util/serializer/Serializer.h"
 
 namespace ad_utility {
 class ParsedGeometry;
 }
 namespace sj {
-class Sweeper;
+class GeometryStore;
 }
 
 // A `GeoVocabulary` holds Well-Known Text (WKT) literals. In contrast to the
@@ -294,21 +294,21 @@ class GeoVocabulary {
 
   // The writer of the file of the parsed geometries (see `ParsedGeometry`),
   // shared by the `WordWriter` and the `BlockWriter`: for a valid WKT literal
-  // of at least `minLength` bytes (0 = none), `store` parses it with a sweeper
-  // of `libspatialjoin`, appends the parsed geometry to the file (its number of
-  // bytes, then the bytes) and sets its offset in the `GeometryInfo` of the
-  // literal. Both writers compute the `GeometryInfo`s on the global thread
-  // pool, so `store` is thread-safe: the sweeper and the file are used under a
-  // mutex. The order of the parsed geometries in the file is therefore not
-  // deterministic, which does not matter, because each `GeometryInfo` stores
-  // its own offset.
+  // of at least `minLength` bytes (0 = none), `store` parses it with a geometry
+  // store of `libspatialjoin`, appends the parsed geometry to the file (its
+  // number of bytes, then the bytes) and sets its offset in the `GeometryInfo`
+  // of the literal. Both writers compute the `GeometryInfo`s on the global
+  // thread pool, so `store` is thread-safe: the store and the file are used
+  // under a mutex. The order of the parsed geometries in the file is therefore
+  // not deterministic, which does not matter, because each `GeometryInfo`
+  // stores its own offset.
   class ParsedGeometriesWriter {
    private:
     ad_utility::File file_;
     size_t minLength_;
     uint64_t fileSize_ = 0;
     // Only if `minLength_` is not 0.
-    std::unique_ptr<sj::Sweeper> sweeper_;
+    std::unique_ptr<sj::GeometryStore> store_;
     std::mutex mutex_;
     // The literals of at least the minimum length that got a parsed geometry,
     // and those that did not (because they are invalid, or because
@@ -318,10 +318,10 @@ class GeoVocabulary {
 
    public:
     // Create the file (`filename` plus `parsedGeometriesSuffix`) and write its
-    // header. The sweeper writes its temporary files next to `filename`.
+    // header.
     ParsedGeometriesWriter(const std::string& filename, size_t minLength);
 
-    // Defined in the `.cpp` file, where `sj::Sweeper` is complete.
+    // Defined in the `.cpp` file, where `sj::GeometryStore` is complete.
     ~ParsedGeometriesWriter();
 
     // See above. `info` is the `GeometryInfo` of the `word`, `std::nullopt` if

@@ -29,7 +29,8 @@ class GeoPointEncoding
  public:
   using Enum = GeoPointEncodingEnum;
 
-  static constexpr std::array<std::pair<Enum, std::string_view>, 2>
+  static constexpr std::array<std::pair<Enum, std::string_view>,
+                              qlever::enumSize<Enum>>
       descriptions_{{{Enum::ZOrder, "z-order"}, {Enum::LatMajor, "lat-major"}}};
 
   static const GeoPointEncoding ZOrder;

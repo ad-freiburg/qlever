@@ -15,8 +15,8 @@
 #include "./util/GTestHelpers.h"
 #include "backports/filesystem.h"
 #include "util/ExternalOverflowStorage.h"
-#include "util/Serializer/SerializeString.h"
-#include "util/Serializer/Serializer.h"
+#include "util/serializer/SerializeString.h"
+#include "util/serializer/Serializer.h"
 
 using ad_utility::ExternalOverflowStorage;
 

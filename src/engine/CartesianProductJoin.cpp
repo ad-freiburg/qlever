@@ -10,6 +10,8 @@
 
 #include "engine/CartesianProductJoin.h"
 
+#include <iterator>
+
 #include "engine/CallFixedSize.h"
 #include "util/Views.h"
 
@@ -55,20 +57,20 @@ CartesianProductJoin::CartesianProductJoin(
 
 // ____________________________________________________________________________
 qlm::vector<QueryExecutionTree*> CartesianProductJoin::getChildrenImpl() const {
-  qlm::vector<QueryExecutionTree*> result{allocator()};
-  ql::ranges::copy(
-      children_ | ql::views::transform([](auto& ptr) { return ptr.get(); }),
-      std::back_inserter(result));
-  return result;
+  return children_ | ql::views::transform([](auto& ptr) { return ptr.get(); }) |
+         ::ranges::to<qlm::vector>(allocator());
 }
 
 // ____________________________________________________________________________
-std::string CartesianProductJoin::getCacheKeyImpl() const {
-  return "CARTESIAN PRODUCT JOIN " +
-         ad_utility::lazyStrJoin(
-             ql::views::transform(
-                 childView(), [](auto& child) { return child.getCacheKey(); }),
-             " ");
+qlm::string CartesianProductJoin::getCacheKeyImpl() const {
+  qlm::ostringstream os{allocator()};
+  os << "CARTESIAN PRODUCT JOIN ";
+  ad_utility::lazyStrJoin(
+      &os,
+      ql::views::transform(childView(),
+                           [](auto& child) { return child.getCacheKey(); }),
+      " ");
+  return std::move(os).str();
 }
 
 // ____________________________________________________________________________
@@ -147,11 +149,11 @@ void CartesianProductJoin::writeResultColumn(IdColumnRef targetColumn,
 Result CartesianProductJoin::computeResult(bool requestLaziness) {
   if (knownEmptyResult()) {
     return {IdTable{getResultWidth(), getExecutionContext()->getAllocator()},
-            resultSortedOn(), LocalVocab{}};
+            resultSortedOn(), LocalVocab{allocator()}};
   }
   auto [subResults, lazyResult] = calculateSubResults(requestLaziness);
 
-  LocalVocab staticMergedVocab{};
+  LocalVocab staticMergedVocab{allocator()};
   staticMergedVocab.mergeWith(
       subResults |
       ql::views::transform([](const auto& result) -> const LocalVocab& {
@@ -438,7 +440,7 @@ Result::LazyResult CartesianProductJoin::createLazyConsumer(
 // _____________________________________________________________________________
 std::vector<std::vector<ColumnIndex>>
 CartesianProductJoin::perChildDistinctIndices(
-    const std::vector<ColumnIndex>& distinctIndices) const {
+    ql::span<const ColumnIndex> distinctIndices) const {
   std::vector<std::vector<ColumnIndex>> result;
   result.reserve(children_.size());
   size_t offset = 0;
@@ -458,7 +460,7 @@ CartesianProductJoin::perChildDistinctIndices(
 
 // _____________________________________________________________________________
 bool CartesianProductJoin::isDistinctByImpl(
-    const std::vector<ColumnIndex>& distinctIndices) const {
+    ql::span<const ColumnIndex> distinctIndices) const {
   return ql::ranges::all_of(
       ::ranges::views::zip(children_, perChildDistinctIndices(distinctIndices)),
       [](const auto& childAndIndices) {
@@ -470,7 +472,7 @@ bool CartesianProductJoin::isDistinctByImpl(
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 CartesianProductJoin::makeDistinctTree(
-    const std::vector<ColumnIndex>& distinctIndices) const {
+    ql::span<const ColumnIndex> distinctIndices) const {
   // Applying `DISTINCT` on `distinctIndices` to the Cartesian product is
   // equivalent to first making each child distinct on the subset of
   // `distinctIndices` that falls into its columns, and then forming the
@@ -480,7 +482,7 @@ CartesianProductJoin::makeDistinctTree(
   // product, reducing the sizes of the children before the product (which can
   // be huge) is formed.
   //
-  // Note: A child without any `distinctIndices` column is made distinct on the
+  // NOTE: A child without any `distinctIndices` column is made distinct on the
   // empty set of columns, which reduces it to (at most) a single row. This is
   // correct, because such a child does not contribute to `distinctIndices` and
   // only multiplies the number of rows in the Cartesian product.
@@ -491,7 +493,7 @@ CartesianProductJoin::makeDistinctTree(
         const auto& [child, childIndices] = childAndIndices;
         return QueryExecutionTree::createDistinctTree(child, childIndices);
       }) |
-      ::ranges::to<Children>();
+      ::ranges::to<qlm::vector>(allocator());
   return ad_utility::makeExecutionTree<CartesianProductJoin>(
       _executionContext, std::move(newChildren));
 }
@@ -499,7 +501,7 @@ CartesianProductJoin::makeDistinctTree(
 // _____________________________________________________________________________
 std::unique_ptr<Operation> CartesianProductJoin::cloneImpl() const {
   AD_CONTRACT_CHECK(!forbiddenToRecompute_, recomputeMessage);
-  Children copy;
+  Children copy{allocator()};
   copy.reserve(children_.size());
   for (const auto& operation : children_) {
     copy.push_back(operation->clone());

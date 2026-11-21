@@ -129,6 +129,16 @@ class LiteralExpression : public SparqlExpression {
   }
 
   // ___________________________________________________________________________
+  std::optional<TripleComponent> getConstantValue() const override {
+    if constexpr (ad_utility::SameAsAny<T, ValueId, TripleComponent::Literal,
+                                        TripleComponent::Iri>) {
+      return TripleComponent{_value};
+    } else {
+      return std::nullopt;
+    }
+  }
+
+  // ___________________________________________________________________________
   bool isResultAlwaysDefined(
       const VariableToColumnMap& varColMap) const override {
     if constexpr (std::is_same_v<T, ::Variable>) {

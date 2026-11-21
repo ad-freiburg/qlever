@@ -24,7 +24,7 @@ class NeutralOptional : public Operation {
                   std::shared_ptr<QueryExecutionTree> tree);
 
  private:
-  std::string getCacheKeyImpl() const override;
+  qlm::string getCacheKeyImpl() const override;
   uint64_t getSizeEstimateBeforeLimit() override;
   [[nodiscard]] bool isDeterministicImpl() const override { return true; }
   std::unique_ptr<Operation> cloneImpl() const override;
@@ -49,7 +49,7 @@ class NeutralOptional : public Operation {
                             bool childrenAreExclusivelyOwned) override;
 
  protected:
-  std::vector<ColumnIndex> resultSortedOn() const override;
+  qlm::vector<ColumnIndex> resultSortedOn() const override;
 };
 
 #endif  // QLEVER_SRC_ENGINE_NEUTRALOPTIONAL_H

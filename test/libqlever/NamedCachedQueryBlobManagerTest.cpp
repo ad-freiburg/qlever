@@ -35,11 +35,11 @@
 #include "libqlever/NamedCacheSecondaryVocabRewriter.h"
 #include "libqlever/NamedCachedQueryBlobManager.h"
 #include "libqlever/Qlever.h"
-#include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/Exception.h"
 #include "util/File.h"
-#include "util/Serializer/ByteBufferSerializer.h"
+#include "util/compressionUsingZstd/ZstdWrapper.h"
 #include "util/json.h"
+#include "util/serializer/ByteBufferSerializer.h"
 
 using namespace qlever;
 using namespace testing;
@@ -258,11 +258,7 @@ std::vector<std::vector<Id>> columnsOfPinnedResult(const Qlever& qlever,
                                                    const std::string& name) {
   auto view = ExplicitIdTableOperation::viewOf(
       qlever.namedResultCache().get(name)->result_);
-  std::vector<std::vector<Id>> columns;
-  for (const auto& column : view.getColumns()) {
-    columns.emplace_back(column.begin(), column.end());
-  }
-  return columns;
+  return ::ranges::to<std::vector<std::vector<Id>>>(view.getColumns());
 }
 
 // Return the result (as TSV) of the query that selects the `variables` (for
@@ -1936,7 +1932,8 @@ TEST(NamedCachedQueryBlobManager, blobEntriesAreInCanonicalOrder) {
     auto trace = generateLocationTrace(loc);
     auto entry = qlever.namedResultCache().get(name);
     ASSERT_NE(entry, nullptr) << name;
-    EXPECT_EQ(entry->resultSortedOn_, sortedOn) << name;
+    EXPECT_THAT(entry->resultSortedOn_, ::testing::ElementsAreArray(sortedOn))
+        << name;
     EXPECT_TRUE(canonicalRowOrder::isInCanonicalOrder(
         ExplicitIdTableOperation::viewOf(entry->result_),
         entry->resultSortedOn_))

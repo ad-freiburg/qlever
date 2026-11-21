@@ -48,7 +48,7 @@ class Load final : public Operation {
   }
 
  public:
-  std::string getCacheKeyImpl() const override;
+  qlm::string getCacheKeyImpl() const override;
 
   std::string getDescriptor() const override;
 
@@ -76,7 +76,7 @@ class Load final : public Operation {
   std::unique_ptr<Operation> cloneImpl() const override;
 
  protected:
-  std::vector<ColumnIndex> resultSortedOn() const override;
+  qlm::vector<ColumnIndex> resultSortedOn() const override;
 
  private:
   // Error handling around `computeResultImpl`.

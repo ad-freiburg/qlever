@@ -15,6 +15,7 @@
 #include <utility>
 #include <vector>
 
+#include "backports/algorithm.h"
 #include "backports/span.h"
 #include "util/CopyOnWritePtr.h"
 #include "util/Exception.h"
@@ -119,12 +120,10 @@ class CopyOnWriteChunkedVector {
   // metadata). There is no single span over all elements, and copying them into
   // one vector would cost what the chunking saves.
   std::vector<ql::span<const T>> chunkSpans() const {
-    std::vector<ql::span<const T>> result;
-    result.reserve(chunks_.size());
-    for (const auto& chunk : chunks_) {
-      result.emplace_back(chunk->data(), chunk->size());
-    }
-    return result;
+    return chunks_ | ql::views::transform([](const auto& chunk) {
+             return ql::span<const T>(chunk->data(), chunk->size());
+           }) |
+           ::ranges::to_vector;
   }
 };
 
