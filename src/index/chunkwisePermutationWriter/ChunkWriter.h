@@ -25,8 +25,8 @@
 #include "index/compressedRelationWriter/RelationBlockCutter.h"
 #include "index/compressedRelationWriter/SmallRelationsBlockBuilder.h"
 #include "util/InputRangeUtils.h"
-#include "util/MemorySize/MemorySize.h"
 #include "util/NoCopyNoMove.h"
+#include "util/memorySize/MemorySize.h"
 
 namespace chunkwisePermutationWriter {
 // The blocks of sorted triples that the writer consumes, and a block that is
@@ -163,6 +163,12 @@ struct ChunkResult {
   size_t numMiddleRelations_ = 0;
   // The number of rows of the chunk (after the removal of duplicates).
   size_t numRows_ = 0;
+  // The first and the last row of the chunk (after the removal of
+  // duplicates). Absent iff the chunk has no rows. They are used to check that
+  // equal rows are never split across chunks, see
+  // `BoundaryConsolidator::addChunkResult`.
+  std::optional<IdTable::row_type> firstRow_;
+  std::optional<IdTable::row_type> lastRow_;
 };
 
 // The state that all the `ChunkWriter`s of a single merge share. All of it is

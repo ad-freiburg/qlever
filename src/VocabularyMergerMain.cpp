@@ -24,14 +24,17 @@
 #include "index/vocabulary/PolymorphicVocabulary.h"
 #include "index/vocabulary/StringSortComparator.h"
 #include "util/GlobalExecutor.h"
-#include "util/MemorySize/MemorySize.h"
+#include "util/KernelBugWorkaround.h"
 #include "util/ProgramOptionsHelpers.h"
 #include "util/Timer.h"
+#include "util/memorySize/MemorySize.h"
 
 namespace po = boost::program_options;
 
 // ____________________________________________________________________________
 int main(int argc, char** argv) {
+  // Avoid a bug of some Linux kernels on arm64, see `KernelBugWorkaround.h`.
+  ad_utility::kernelBugWorkaround::applyIfNeeded();
   std::string basename;
   std::string outputBasename;
   size_t numPartialVocabularies = 0;

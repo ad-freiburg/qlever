@@ -20,6 +20,7 @@
 
 #include "backports/keywords.h"
 #include "backports/three_way_comparison.h"
+#include "util/EnumSize.h"
 #include "util/Exception.h"
 #include "util/Random.h"
 // Use the raw nlohmann header rather than `util/json.h` to avoid pulling in
@@ -32,10 +33,12 @@ namespace ad_utility {
 // conversion, JSON serialization, and related utilities.
 //
 // Derived classes must provide:
-// - `static constexpr std::array<std::pair<Enum, std::string_view>, numValues>
-// descriptions_`;
+// - `static constexpr std::array<std::pair<Enum, std::string_view>,
+//   qlever::enumSize<Enum>> descriptions_`;
 //   Note: `descriptions[i][0] == Enum{i}` must always hold. this is technically
 //   redundant, but improves the safety, as we can detect invalid usages.
+//   The size of the enum has to be stated via `QLEVER_ENUM_SIZE` (see
+//   `util/EnumSize.h`), such that a missing description is detected.
 // - `static constexpr std::string_view typeName()` (for error messages)
 // - `using EnumWithStrings::EnumWithStrings;` (to inherit constructors)
 // - using enum Enum (not required, but makes conversion easier).
@@ -73,6 +76,9 @@ class EnumWithStrings : public EnumWithStringsBaseTag {
     static_assert(ql::concepts::same_as<ql::ranges::range_value_t<D>,
                                         std::pair<Enum, std::string_view>>);
     static_assert(checkIndices());
+    static_assert(Derived::descriptions_.size() == qlever::enumSize<Enum>,
+                  "`descriptions_` must contain exactly one entry for each "
+                  "value of the enum");
   }
 
   // Constructors.

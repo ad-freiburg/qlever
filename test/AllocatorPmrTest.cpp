@@ -19,7 +19,7 @@
 #include "backports/memory_resource.h"
 #include "util/AllocatorPmr.h"
 #include "util/GTestHelpers.h"
-#include "util/MemorySize/MemorySize.h"
+#include "util/memorySize/MemorySize.h"
 
 using ad_utility::makePmrAllocatorFromResource;
 using ad_utility::makePmrAllocatorWithLimit;

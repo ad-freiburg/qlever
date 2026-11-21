@@ -52,6 +52,7 @@ enum class GeoCellGridSchemeEnum : uint8_t {
   Hierarchical = 2,
   Hierarchical3Shifts = 3,
 };
+QLEVER_ENUM_SIZE(GeoCellGridSchemeEnum, 4);
 }  // namespace detail
 
 // Wrapper around `detail::GeoCellGridSchemeEnum` that provides conversion to
@@ -62,7 +63,8 @@ class GeoCellGridScheme
  public:
   using Enum = detail::GeoCellGridSchemeEnum;
 
-  static constexpr std::array<std::pair<Enum, std::string_view>, 4>
+  static constexpr std::array<std::pair<Enum, std::string_view>,
+                              qlever::enumSize<Enum>>
       descriptions_{{{Enum::Flat, "flat"},
                      {Enum::Flat4Shifts, "flat-4-shifts"},
                      {Enum::Hierarchical, "hierarchical"},
