@@ -851,7 +851,8 @@ TEST(SparqlExpression, sharedDateDispatchBypassesVariants) {
   context._endIndex = 2;
   const Id date = Dat(DateYearOrDuration::parseXsdDate, "2020-01-01");
   V<Id> dates{{date, date}, alloc};
-  ConstIdColumnRef column{dates.data(), dates.size()};
+  IdColumn dateColumn{date, date};
+  ConstIdColumnRef column{dateColumn};
   auto result =
       hn::evaluateHomogeneousNumericOperation<TypedOnly, DateYearOrDuration,
                                               DateYearOrDuration>(
