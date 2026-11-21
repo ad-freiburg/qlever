@@ -205,10 +205,11 @@ class RegexExpression : public RegexExpressionBase {
 
   // If we know a guaranteed prefix, assume that only 10^-k entries remain,
   // where k is the length of that prefix, and cap to reasonable maximal values
-  // to prevent numerical stability problems. Note that unlike for
-  // `PrefixMatchExpression`, each input row has to be looked at, so the cost
-  // always includes the full input size (even if the input is sorted by the
-  // variable).
+  // to prevent numerical stability problems.
+  //
+  // NOTE: Unlike for `PrefixMatchExpression`, each input row has to be looked
+  // at, so the cost always includes the full input size (even if the input is
+  // sorted by the variable).
   Estimates getEstimatesForFilterExpression(
       uint64_t inputSize,
       const std::optional<Variable>& firstSortedVariable) const override {
