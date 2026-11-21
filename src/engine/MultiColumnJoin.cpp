@@ -32,8 +32,8 @@ MultiColumnJoin::MultiColumnJoin(QueryExecutionContext* qec,
 }
 
 // _____________________________________________________________________________
-string MultiColumnJoin::getCacheKeyImpl() const {
-  std::ostringstream os;
+qlm::string MultiColumnJoin::getCacheKeyImpl() const {
+  qlm::ostringstream os{allocator()};
   os << "MULTI_COLUMN_JOIN\n" << _left->getCacheKey() << " ";
   os << "join-columns: [";
   for (size_t i = 0; i < _joinColumns.size(); i++) {

@@ -71,8 +71,8 @@ OptionalJoin::OptionalJoin(QueryExecutionContext* qec,
 }
 
 // _____________________________________________________________________________
-string OptionalJoin::getCacheKeyImpl() const {
-  std::ostringstream os;
+qlm::string OptionalJoin::getCacheKeyImpl() const {
+  qlm::ostringstream os{allocator()};
   os << "OPTIONAL_JOIN\n";
   if (!keepJoinColumns_) {
     os << "Dropping join-columns\n";
