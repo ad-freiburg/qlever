@@ -20,6 +20,7 @@
 #include "parser/GraphPatternOperation.h"
 #include "util/Algorithm.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
+#include "util/ParseException.h"
 #include "util/TransparentFunctors.h"
 #include "util/Views.h"
 
@@ -314,7 +315,8 @@ std::shared_ptr<const Result> Operation::getResult(
   }
   auto& cache = _executionContext->getQueryTreeCache();
   const QueryCacheKey cacheKey = {
-      getCacheKey(), _executionContext->locatedTriplesState().index_};
+      std::string{getCacheKey()},
+      _executionContext->locatedTriplesState().index_};
   const bool pinFinalResultButNotSubtrees =
       _executionContext->_pinResult && isRoot;
   const bool pinResult =
@@ -465,7 +467,7 @@ void Operation::storeToNamedResultCache(const Result& result) {
                               getExternallyVisibleVariableColumns(),
                               result.sortedBy(),
                               result.localVocab().clone(),
-                              getCacheKey(),
+                              std::string{getCacheKey()},
                               geoIndex()};
   _executionContext->namedResultCache().store(
       name, std::move(valueForNamedResultCache));
@@ -682,8 +684,9 @@ void Operation::createRuntimeInfoFromEstimates(
     _runtimeInfo->addDetail("warnings", *warnings);
   }
 
+  // TODO<RobinTF> Avoid the copy of the cache key, see `QueryCacheKey`.
   auto cachedResult = _executionContext->getQueryTreeCache().getIfContained(
-      {getCacheKey(), locatedTriplesState().index_});
+      {std::string{getCacheKey()}, locatedTriplesState().index_});
   if (cachedResult.has_value()) {
     const auto& [resultPointer, cacheStatus] = cachedResult.value();
     _runtimeInfo->cacheStatus_ = cacheStatus;
@@ -775,18 +778,18 @@ void Operation::signalQueryUpdate(
 }
 
 // _____________________________________________________________________________
-std::string Operation::getCacheKey() const {
+qlm::string Operation::getCacheKey() const {
   if (_executionContext->disableCaching()) {
     // Cache key computation is costly, so we can save it when caching is
     // disabled.
-    return "";
+    return qlm::string{allocator()};
   }
   auto result = getCacheKeyImpl();
   if (limitOffset_._limit.has_value()) {
-    absl::StrAppend(&result, " LIMIT ", limitOffset_._limit.value());
+    qlm::StrAppend(&result, " LIMIT ", limitOffset_._limit.value());
   }
   if (limitOffset_._offset != 0) {
-    absl::StrAppend(&result, " OFFSET ", limitOffset_._offset);
+    qlm::StrAppend(&result, " OFFSET ", limitOffset_._offset);
   }
   return result;
 }

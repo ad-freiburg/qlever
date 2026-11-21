@@ -59,7 +59,7 @@ class SpatialJoin : public Operation {
   qlm::vector<QueryExecutionTree*> getChildrenImpl() const override;
 
  public:
-  std::string getCacheKeyImpl() const override;
+  qlm::string getCacheKeyImpl() const override;
   std::string getDescriptor() const override;
   size_t getResultWidth() const override;
   size_t getCostEstimate() override;

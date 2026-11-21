@@ -831,7 +831,7 @@ TEST(CompressedRelationReader, getBlocksForJoinWithColumn) {
                        {{V(42), V(3), V(0), g}, {V(42), V(6), V(9), g}}});
 
   auto test = [&metadataAndBlocks](
-                  const std::vector<Id>& joinColumn,
+                  const IdColumn& joinColumn,
                   const std::vector<CompressedBlockMetadata>& expectedBlocks,
                   size_t numHandledBlocksExpected,
                   source_location l = AD_CURRENT_SOURCE_LOC()) {
@@ -869,10 +869,11 @@ TEST(CompressedRelationReader, getBlocksForJoinWithColumn) {
   // skips the entries smaller than the next block then has many entries to
   // search, and the result must be the same as for the short columns above.
   auto longColumn = [](const std::vector<int64_t>& excluded) {
-    std::vector<Id> column;
+    IdColumn column;
     for (int64_t i = 0; i < 100; ++i) {
       if (!ad_utility::contains(excluded, i)) {
-        column.insert(column.end(), {V(i), V(i)});
+        column.push_back(V(i));
+        column.push_back(V(i));
       }
     }
     return column;
@@ -2748,9 +2749,7 @@ TEST(CompressedRelationWriter, distinctCol1CountAcrossBlockBoundaries) {
 // _____________________________________________________________________________
 TEST(CountDistinctIds, countAndBoundaryIds) {
   using compressedRelationHelpers::countDistinctIds;
-  auto count = [](const std::vector<Id>& ids) {
-    return countDistinctIds(ql::span<const Id>{ids});
-  };
+  auto count = [](const IdColumn& ids) { return countDistinctIds(ids); };
 
   {
     auto result = count({V(1)});
@@ -2776,9 +2775,7 @@ TEST(CountDistinctIds, countAndBoundaryIds) {
 // _____________________________________________________________________________
 TEST(DistinctIdCounter, blocksAndReset) {
   compressedRelationHelpers::DistinctIdCounter counter;
-  auto addBlock = [&counter](const std::vector<Id>& ids) {
-    counter.addBlock(ql::span<const Id>{ids});
-  };
+  auto addBlock = [&counter](const IdColumn& ids) { counter.addBlock(ids); };
   // A fresh counter has counted nothing.
   EXPECT_EQ(counter.getAndReset(), 0);
 

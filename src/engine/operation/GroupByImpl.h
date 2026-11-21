@@ -73,7 +73,7 @@ class GroupByImpl : public Operation {
               std::shared_ptr<QueryExecutionTree> subtree);
 
  public:
-  virtual string getCacheKeyImpl() const override;
+  virtual qlm::string getCacheKeyImpl() const override;
 
  public:
   virtual string getDescriptor() const override;

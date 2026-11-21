@@ -1918,7 +1918,7 @@ TEST(SpatialJoin, DistanceUnit) {
       dists.push_back(row[col].getDouble());
     }
     ql::ranges::sort(dists);
-    return std::pair{dists, spatialJoinTree->getCacheKey()};
+    return std::pair{dists, std::string{spatialJoinTree->getCacheKey()}};
   };
 
   for (auto algorithm :

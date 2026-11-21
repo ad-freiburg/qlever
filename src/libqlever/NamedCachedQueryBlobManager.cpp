@@ -29,7 +29,7 @@
 #include "libqlever/NamedCacheSecondaryVocabRewriter.h"
 #include "libqlever/Qlever.h"
 #include "util/Log.h"
-#include "util/Random.h"
+#include "util/UuidGenerator.h"
 #include "util/compressionUsingZstd/ZstdWrapper.h"
 #include "util/json.h"
 

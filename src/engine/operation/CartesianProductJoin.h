@@ -58,7 +58,7 @@ class CartesianProductJoin : public Operation {
 
   // The individual implementation of `getCacheKey` (see above) that has to be
   // customized by every child class.
-  std::string getCacheKeyImpl() const override;
+  qlm::string getCacheKeyImpl() const override;
 
  public:
   // Gets a very short (one line without line ending) descriptor string for

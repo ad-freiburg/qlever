@@ -39,8 +39,8 @@ OrderBy::OrderBy(QueryExecutionContext* qec,
 }
 
 // _____________________________________________________________________________
-std::string OrderBy::getCacheKeyImpl() const {
-  std::ostringstream os;
+qlm::string OrderBy::getCacheKeyImpl() const {
+  qlm::ostringstream os{allocator()};
   os << "ORDER BY on columns:";
 
   // TODO<joka921> This produces exactly the same format as SORT operations

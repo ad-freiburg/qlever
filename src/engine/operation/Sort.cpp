@@ -19,7 +19,7 @@
 #include "index/ExternalSortFunctors.h"
 #include "index/IdTableUtils.h"
 #include "util/Algorithm.h"
-#include "util/Random.h"
+#include "util/UuidGenerator.h"
 
 // Type alias for the external sorter.
 //
@@ -42,8 +42,8 @@ Sort::Sort(QueryExecutionContext* qec,
       explicitSort_{explicitSort} {}
 
 // _____________________________________________________________________________
-std::string Sort::getCacheKeyImpl() const {
-  std::ostringstream os;
+qlm::string Sort::getCacheKeyImpl() const {
+  qlm::ostringstream os{allocator()};
   os << "SORT(internal) on columns:";
 
   for (const auto& sortCol : sortColumnIndices_) {

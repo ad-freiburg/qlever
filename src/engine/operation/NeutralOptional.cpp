@@ -17,8 +17,8 @@ qlm::vector<QueryExecutionTree*> NeutralOptional::getChildrenImpl() const {
 }
 
 // _____________________________________________________________________________
-std::string NeutralOptional::getCacheKeyImpl() const {
-  return absl::StrCat("NeutralOptional#", tree_->getCacheKey());
+qlm::string NeutralOptional::getCacheKeyImpl() const {
+  return qlm::StrCat(allocator(), "NeutralOptional#", tree_->getCacheKey());
 }
 
 // _____________________________________________________________________________

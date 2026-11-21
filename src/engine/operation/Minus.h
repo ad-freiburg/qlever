@@ -29,7 +29,7 @@ class Minus : public Operation {
         std::shared_ptr<QueryExecutionTree> right);
 
  protected:
-  std::string getCacheKeyImpl() const override;
+  qlm::string getCacheKeyImpl() const override;
 
  public:
   std::string getDescriptor() const override;

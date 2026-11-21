@@ -187,8 +187,8 @@ std::string TextLimit::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-std::string TextLimit::getCacheKeyImpl() const {
-  std::ostringstream os;
+qlm::string TextLimit::getCacheKeyImpl() const {
+  qlm::ostringstream os{allocator()};
   os << "TEXT LIMIT: " << " with n: " << limit_
      << ", with child: " << child_->getCacheKey()
      << " and ColumnIndices: " << textRecordColumn_ << ", {";

@@ -25,6 +25,7 @@
 #include "util/ContainersWithAllocator.h"
 #include "util/CopyableSynchronization.h"
 #include "util/Exception.h"
+#include "util/StringWithAllocator.h"
 #include "util/Synchronized.h"
 #include "util/TypeTraits.h"
 
@@ -215,7 +216,7 @@ class Operation : public std::enable_shared_from_this<Operation> {
   // Get a unique, not ambiguous string representation for a subtree.
   // This should act like an ID for each subtree.
   // Calls  `getCacheKeyImpl` and adds the information about the `LIMIT` clause.
-  virtual std::string getCacheKey() const final;
+  virtual qlm::string getCacheKey() const final;
 
   // Return true iff this operation and all of its children are guaranteed to
   // produce the same result on every invocation, OR are explicitly configured
@@ -271,7 +272,7 @@ class Operation : public std::enable_shared_from_this<Operation> {
 
   // The individual implementation of `getCacheKey` (see above) that has to
   // be customized by every child class.
-  virtual std::string getCacheKeyImpl() const = 0;
+  virtual qlm::string getCacheKeyImpl() const = 0;
 
  public:
   // Gets a very short (one line without line ending) descriptor string for

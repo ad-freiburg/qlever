@@ -129,8 +129,8 @@ ql::span<const ColumnIndex> Union::comparatorOrder() const {
   return {targetOrder_.begin(), end == targetOrder_.end() ? end : end + 1};
 }
 
-std::string Union::getCacheKeyImpl() const {
-  std::ostringstream os;
+qlm::string Union::getCacheKeyImpl() const {
+  qlm::ostringstream os{allocator()};
   os << "{\n";
   os << _subtrees[0]->getCacheKey() << "\n";
   os << "} UNION {\n";
