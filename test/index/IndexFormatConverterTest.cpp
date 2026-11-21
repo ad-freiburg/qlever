@@ -15,6 +15,7 @@
 
 #include "../util/GTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/LocalVocabTestHelpers.h"
 #include "backports/algorithm.h"
 #include "backports/filesystem.h"
 #include "engine/MaterializedViews.h"
@@ -207,8 +208,8 @@ TEST(IndexFormatConverter, convertIdPreservesTheOrder) {
       convertedIds.push_back(convertId(oldFormatId(datatypeBits, value)));
     }
   }
-  EXPECT_TRUE(ql::ranges::is_sorted(convertedIds));
-  EXPECT_TRUE(ql::ranges::adjacent_find(convertedIds) == convertedIds.end());
+  EXPECT_TRUE(ql::ranges::adjacent_find(convertedIds, std::greater_equal<>{}) ==
+              convertedIds.end());
 }
 
 // _____________________________________________________________________________
@@ -262,7 +263,7 @@ TEST_F(IndexFormatConverterTest, convertedIndexHasTheSameContent) {
             absl::StrCat("_:bn", id.getBlankNodeIndex().get()));
         continue;
       }
-      LocalVocab emptyLocalVocab{};
+      LocalVocab emptyLocalVocab = ad_utility::testing::makeLocalVocab();
       auto word =
           ql::exportIds::idToLiteralOrIri(index.getImpl(), id, emptyLocalVocab);
       components.push_back(word.has_value()

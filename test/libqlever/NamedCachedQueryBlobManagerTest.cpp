@@ -35,11 +35,11 @@
 #include "libqlever/NamedCacheSecondaryVocabRewriter.h"
 #include "libqlever/NamedCachedQueryBlobManager.h"
 #include "libqlever/Qlever.h"
-#include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/Exception.h"
 #include "util/File.h"
-#include "util/Serializer/ByteBufferSerializer.h"
+#include "util/compressionUsingZstd/ZstdWrapper.h"
 #include "util/json.h"
+#include "util/serializer/ByteBufferSerializer.h"
 
 using namespace qlever;
 using namespace testing;
@@ -258,11 +258,7 @@ std::vector<std::vector<Id>> columnsOfPinnedResult(const Qlever& qlever,
                                                    const std::string& name) {
   auto view = ExplicitIdTableOperation::viewOf(
       qlever.namedResultCache().get(name)->result_);
-  std::vector<std::vector<Id>> columns;
-  for (const auto& column : view.getColumns()) {
-    columns.emplace_back(column.begin(), column.end());
-  }
-  return columns;
+  return ::ranges::to<std::vector<std::vector<Id>>>(view.getColumns());
 }
 
 // Return the result (as TSV) of the query that selects the `variables` (for
@@ -626,17 +622,12 @@ TEST(NamedCachedQueryBlobManager, combinedBlob) {
   EXPECT_EQ(res, "?s\t?o\n<combinedBlobSubject>\t\"combined blob literal\"\n");
 
   // Permutations are not part of the blob, so a query that needs them (i.e.
-  // any query with actual triples) is unsupported on a blob-only instance and
-  // throws.
-  //
-  // NOTE: The exception thrown in this case (no index loaded, but the query
-  // requires one) is currently an internal `AD_CORRECTNESS_CHECK` (an
-  // `ad_utility::Exception`) rather than a user-facing error message. We accept
-  // this for now, as turning it into a graceful error would require changes to
-  // a lot of code paths.
-  EXPECT_THROW(target.query("SELECT ?s WHERE { ?s <combinedBlobPredicate> ?o }",
-                            ad_utility::MediaType::tsv),
-               ad_utility::Exception);
+  // any query with actual triples) fails with a readable error.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      target.query("SELECT ?s WHERE { ?s <combinedBlobPredicate> ?o }",
+                   ad_utility::MediaType::tsv),
+      HasSubstr("This query requires the permutation PSO, which was not "
+                "loaded"));
 
   // Loading a second blob on the same instance must throw.
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -1941,7 +1932,8 @@ TEST(NamedCachedQueryBlobManager, blobEntriesAreInCanonicalOrder) {
     auto trace = generateLocationTrace(loc);
     auto entry = qlever.namedResultCache().get(name);
     ASSERT_NE(entry, nullptr) << name;
-    EXPECT_EQ(entry->resultSortedOn_, sortedOn) << name;
+    EXPECT_THAT(entry->resultSortedOn_, ::testing::ElementsAreArray(sortedOn))
+        << name;
     EXPECT_TRUE(canonicalRowOrder::isInCanonicalOrder(
         ExplicitIdTableOperation::viewOf(entry->result_),
         entry->resultSortedOn_))

@@ -1,0 +1,718 @@
+// Copyright 2023 - 2026 The QLever Authors, in particular:
+//
+// 2023        Benedikt Maria Beckermann <benedikt.beckermann@dagstuhl.de>
+// 2023 - 2026 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+// 2026        Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
+
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
+
+#include "../util/GTestHelpers.h"
+#include "../util/IndexTestHelpers.h"
+#include "index/IndexImpl.h"
+#include "rdfTypes/Iri.h"
+#include "rdfTypes/Literal.h"
+#include "rdfTypes/LiteralOrIri.h"
+#include "util/HashSet.h"
+#include "util/ParsedUri.h"
+
+namespace {
+
+using namespace ad_utility::triple_component;
+constexpr std::string_view myDatatype =
+    "http://www.w3.org/2001/XMLSchema#myDatatype";
+const std::string myDatatypeWithBrackets = absl::StrCat("<", myDatatype, ">");
+
+// _____________________________________________________________________________
+TEST(IriTest, IriCreation) {
+  Iri iri = Iri::fromIriref("<http://www.wikidata.org/entity/Q3138>");
+
+  EXPECT_EQ("http://www.wikidata.org/entity/Q3138", iri.getContent());
+}
+
+// _____________________________________________________________________________
+TEST(IriTest, fromIrirefOwnedString) {
+  // Whether or not the input has to be unescaped, the overload for owned
+  // strings yields the same result as the one for `std::string_view`.
+  for (std::string_view input : {"<http://www.wikidata.org/entity/Q3138>",
+                                 R"(<http://example.org/\u0061>)"}) {
+    EXPECT_EQ(Iri::fromIriref(std::string{input}), Iri::fromIriref(input));
+  }
+  // If the input is an owned string with nothing to unescape, it is moved into
+  // the `Iri` instead of being copied. Note that the string is long enough to
+  // be stored on the heap, so moving it preserves the address of its data.
+  std::string input = "<http://www.wikidata.org/entity/Q3138>";
+  const char* data = input.data();
+  std::string representation =
+      Iri::fromIriref(std::move(input)).toStringRepresentation();
+  EXPECT_EQ(representation.data(), data);
+  // An lvalue `std::string` is not moved from, but takes the `std::string_view`
+  // overload.
+  std::string lvalue = "<http://www.wikidata.org/entity/Q3139>";
+  std::string copied = Iri::fromIriref(lvalue).toStringRepresentation();
+  EXPECT_EQ(copied, lvalue);
+  EXPECT_NE(copied.data(), lvalue.data());
+}
+
+// _____________________________________________________________________________
+TEST(IriTest, fromLangtag) {
+  EXPECT_EQ(Iri::fromLangtag("en").toStringRepresentation(),
+            "<http://qlever.cs.uni-freiburg.de/builtin-functions/@en>");
+  EXPECT_NE(Iri::fromLangtag("en"), Iri::fromLangtag("de"));
+}
+
+// _____________________________________________________________________________
+TEST(IriTest, fromIrirefValidated) {
+  // Valid IRI references are accepted and behave like `fromIriref`.
+  EXPECT_EQ(Iri::fromIrirefValidated("<http://www.wikidata.org/entity/Q3138>"),
+            Iri::fromIriref("<http://www.wikidata.org/entity/Q3138>"));
+  // The empty body `<>` is a valid `IRIREF`.
+  EXPECT_NO_THROW(Iri::fromIrirefValidated("<>"));
+  EXPECT_NO_THROW(Iri::fromIrirefValidated("<urn:foo>"));
+
+  // Invalid inputs throw with a descriptive message.
+  auto expectInvalid = [](std::string_view input) {
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        Iri::fromIrirefValidated(input),
+        ::testing::HasSubstr("not a valid IRI reference"));
+  };
+  // Missing brackets.
+  expectInvalid("http://example.org");
+  expectInvalid("<http://example.org");
+  expectInvalid("http://example.org>");
+  // Forbidden characters inside the brackets.
+  expectInvalid("<http://example.org/a b>");   // space
+  expectInvalid("<http://example.org/a\"b>");  // double quote
+  expectInvalid("<http://example.org/a{b}>");  // braces
+  expectInvalid("<http://example.org/a\\b>");  // backslash
+  expectInvalid("<http://example.org/a^b>");   // caret
+  expectInvalid("<http://example.org/a`b>");   // backtick
+  // The internal `@lang@`-prefixed format is deliberately rejected.
+  expectInvalid("@en@<http://example.org>");
+}
+
+// _____________________________________________________________________________
+TEST(IriTest, emptyIri) {
+  EXPECT_TRUE(Iri{}.empty());
+  EXPECT_FALSE(Iri::fromIriref("<http://www.wikidata.org>").empty());
+}
+
+// _____________________________________________________________________________
+TEST(IriTest, fromIrirefConsiderBase) {
+  // Helper lambda that calls `Iri::fromIrirefConsiderBase` with the base
+  // IRI and returns the results as a string (including the angle brackets).
+  qlever::util::ParsedUri baseUri{"http://example.com/uniprot"};
+  Iri baseForAbsoluteIris;
+  auto fromIrirefConsiderBase =
+      [&baseUri](std::string_view iriStringWithBrackets) {
+        return Iri::fromIrirefConsiderBase(iriStringWithBrackets, baseUri)
+            .toStringRepresentation();
+      };
+
+  EXPECT_EQ(fromIrirefConsiderBase("<http://purl.uniprot.org/uniprot/>"),
+            "<http://purl.uniprot.org/uniprot/>");
+  EXPECT_EQ(fromIrirefConsiderBase("<UPI001AF4585D>"),
+            "<http://example.com/UPI001AF4585D>");
+  EXPECT_EQ(fromIrirefConsiderBase("</prosite/PS51927>"),
+            "<http://example.com/prosite/PS51927>");
+  EXPECT_EQ(fromIrirefConsiderBase("<http://purl.uniprot.org/uniprot/>"),
+            "<http://purl.uniprot.org/uniprot/>");
+  EXPECT_EQ(fromIrirefConsiderBase("</a>"), "<http://example.com/a>");
+  EXPECT_EQ(fromIrirefConsiderBase("<a>"), "<http://example.com/a>");
+  EXPECT_EQ(fromIrirefConsiderBase("<>"), "<http://example.com/uniprot>");
+
+  // Numeric escapes are part of the lexical form of an IRI reference, so they
+  // are resolved before the IRI is resolved against the base IRI. Note that
+  // `\u0061` is `a`, so the results below are the same as for the unescaped
+  // inputs above.
+  EXPECT_EQ(fromIrirefConsiderBase(R"(<\u0061>)"), "<http://example.com/a>");
+  EXPECT_EQ(fromIrirefConsiderBase(R"(</\u0061>)"), "<http://example.com/a>");
+  EXPECT_EQ(fromIrirefConsiderBase(R"(<http://example.org/\u0061>)"),
+            "<http://example.org/a>");
+}
+
+// _____________________________________________________________________________
+TEST(IriTest, resolveAgainstBase) {
+  qlever::util::ParsedUri baseUri{"http://example.com/uniprot"};
+  auto resolve = [&baseUri](const Iri& iri) {
+    return iri.resolveAgainstBase(baseUri).toStringRepresentation();
+  };
+  auto resolveIriref = [&baseUri](std::string_view iriref) {
+    return Iri::fromIrirefConsiderBase(iriref, baseUri)
+        .toStringRepresentation();
+  };
+
+  // For IRIs without escape sequences the result is the same as for
+  // `fromIrirefConsiderBase`.
+  EXPECT_EQ(resolve(Iri::fromIriref("<a>")), "<http://example.com/a>");
+  EXPECT_EQ(resolve(Iri::fromIriref("</a>")), "<http://example.com/a>");
+  EXPECT_EQ(resolve(Iri::fromIriref("<http://example.org/a>")),
+            "<http://example.org/a>");
+  EXPECT_EQ(resolve(Iri::fromIriref("<>")), "<http://example.com/uniprot>");
+
+  // The input is already in the internal representation, so a backslash in it
+  // is an ordinary character and not the start of an escape sequence. Such an
+  // IRI can be built at runtime by the SPARQL `IRI()` function, which does not
+  // unescape its argument.
+  //
+  // A backslash is not a valid character in a URI (RFC 3986), so such an IRI
+  // cannot be resolved against a base IRI at all and is rejected. The point of
+  // `resolveAgainstBase` is that it is rejected rather than silently rewritten:
+  // `fromIrirefConsiderBase` reads the same bytes as the escape sequence
+  // `\u0062` and turns `a\u0062c` into `abc`.
+  auto looksLikeAnEscape = Iri::fromIrirefWithoutBrackets(R"(a\u0062c)");
+  EXPECT_EQ(looksLikeAnEscape.toStringRepresentation(), R"(<a\u0062c>)");
+  EXPECT_ANY_THROW(resolve(looksLikeAnEscape));
+  EXPECT_EQ(resolveIriref(looksLikeAnEscape.toStringRepresentation()),
+            "<http://example.com/abc>");
+
+  // A percent-encoded backslash is a valid URI character and is preserved.
+  EXPECT_EQ(resolve(Iri::fromIrirefWithoutBrackets(R"(a%5Cb)")),
+            "<http://example.com/a%5Cb>");
+}
+
+// _____________________________________________________________________________
+TEST(IriTest, fromLangtagAndIriref) {
+  // The language tag is prepended in QLever's internal `@langtag@<iri>` format.
+  EXPECT_EQ(Iri::fromLangtagAndIriref(
+                "en", "<http://www.w3.org/2000/01/rdf-schema#label>")
+                .toStringRepresentation(),
+            "@en@<http://www.w3.org/2000/01/rdf-schema#label>");
+
+  // The IRI is unescaped exactly as in `fromIriref`, the language tag is taken
+  // verbatim.
+  EXPECT_EQ(Iri::fromLangtagAndIriref("en", R"(<http://example.org/\u0061>)")
+                .toStringRepresentation(),
+            "@en@<http://example.org/a>");
+  EXPECT_EQ(Iri::fromLangtagAndIriref("en", "<http://example.org/a>"),
+            Iri::fromLangtagAndIriref("en", R"(<http://example.org/\u0061>)"));
+
+  // The result is not a valid IRI reference, so it must not be fed back into
+  // `fromIriref`.
+  EXPECT_ANY_THROW(
+      Iri::fromIriref(Iri::fromLangtagAndIriref("en", "<http://example.org/a>")
+                          .toStringRepresentation()));
+}
+
+// _____________________________________________________________________________
+TEST(IriTest, withLanguageTag) {
+  auto label = Iri::fromIriref("<http://www.w3.org/2000/01/rdf-schema#label>");
+  EXPECT_EQ(label.withLanguageTag("en").toStringRepresentation(),
+            "@en@<http://www.w3.org/2000/01/rdf-schema#label>");
+  EXPECT_EQ(label.withLanguageTag("en"),
+            Iri::fromLangtagAndIriref(
+                "en", "<http://www.w3.org/2000/01/rdf-schema#label>"));
+
+  // The `Iri` is already in the internal representation, so a backslash in it
+  // is an ordinary character. In contrast to `fromLangtagAndIriref`, it is not
+  // read as an escape sequence a second time.
+  auto looksLikeAnEscape =
+      Iri::fromIrirefWithoutBrackets(R"(http://x/a\u0062c)");
+  EXPECT_EQ(looksLikeAnEscape.withLanguageTag("en").toStringRepresentation(),
+            R"(@en@<http://x/a\u0062c>)");
+  EXPECT_EQ(Iri::fromLangtagAndIriref(
+                "en", looksLikeAnEscape.toStringRepresentation())
+                .toStringRepresentation(),
+            "@en@<http://x/abc>");
+}
+
+// _____________________________________________________________________________
+TEST(LiteralTest, LiteralTest) {
+  Literal literal = Literal::literalWithoutQuotes("Hello World");
+
+  EXPECT_FALSE(literal.hasLanguageTag());
+  EXPECT_FALSE(literal.hasDatatype());
+  EXPECT_EQ("Hello World", literal.getContent());
+  EXPECT_THROW(literal.getLanguageTag(), ad_utility::Exception);
+  EXPECT_THROW(literal.getDatatype(), ad_utility::Exception);
+
+  literal.addLanguageTag("en");
+  EXPECT_EQ("en", literal.getLanguageTag());
+  EXPECT_EQ("Hello World", literal.getContent());
+  EXPECT_ANY_THROW(literal.addLanguageTag("en"));
+
+  Iri datatype = Iri::fromIriref("<someIri>");
+  EXPECT_ANY_THROW(literal.addDatatype(datatype));
+  literal.removeDatatypeOrLanguageTag();
+  EXPECT_EQ("Hello World", literal.getContent());
+  EXPECT_FALSE(literal.hasLanguageTag());
+  EXPECT_NO_THROW(literal.addDatatype(datatype));
+  EXPECT_EQ(literal.getDatatype(), "someIri");
+  EXPECT_ANY_THROW(literal.addLanguageTag("en"));
+  EXPECT_ANY_THROW(literal.addDatatype(datatype));
+}
+
+// _____________________________________________________________________________
+TEST(LiteralTest, XsdStringDatatypeIsNormalizedAway) {
+  Literal literal1 = Literal::literalWithoutQuotes(
+      "Hello World",
+      Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"));
+  Literal literal2 = Literal::fromStringRepresentation(
+      "\"Hello World\"^^<http://www.w3.org/2001/XMLSchema#string>");
+
+  for (const Literal& literal : {literal1, literal2}) {
+    EXPECT_FALSE(literal.hasLanguageTag());
+    EXPECT_FALSE(literal.hasDatatype());
+    EXPECT_EQ("Hello World", literal.getContent());
+    EXPECT_THROW(literal.getLanguageTag(), ad_utility::Exception);
+    EXPECT_THROW(literal.getDatatype(), ad_utility::Exception);
+  }
+}
+
+// _____________________________________________________________________________
+TEST(LiteralTest, LiteralTestWithDatatype) {
+  Literal literal = Literal::literalWithoutQuotes(
+      "Hello World", Iri::fromIriref(myDatatypeWithBrackets));
+
+  EXPECT_FALSE(literal.hasLanguageTag());
+  EXPECT_TRUE(literal.hasDatatype());
+  EXPECT_EQ("Hello World", literal.getContent());
+  EXPECT_THROW(literal.getLanguageTag(), ad_utility::Exception);
+  EXPECT_EQ(myDatatype, literal.getDatatype());
+}
+
+// _____________________________________________________________________________
+TEST(LiteralTest, LiteralTestWithLanguagetag) {
+  Literal literal = Literal::literalWithoutQuotes("Hallo Welt", "@de");
+
+  EXPECT_TRUE(literal.hasLanguageTag());
+  EXPECT_FALSE(literal.hasDatatype());
+  EXPECT_EQ("Hallo Welt", literal.getContent());
+  EXPECT_EQ("de", literal.getLanguageTag());
+  EXPECT_THROW(literal.getDatatype(), ad_utility::Exception);
+}
+
+// _____________________________________________________________________________
+TEST(LiteralOrIri, LiteralOrIriWithIri) {
+  LiteralOrIri iri =
+      LiteralOrIri::iriref("<http://www.wikidata.org/entity/Q3138>");
+
+  EXPECT_TRUE(iri.isIri());
+  EXPECT_EQ("http://www.wikidata.org/entity/Q3138", iri.getIriContent());
+  EXPECT_FALSE(iri.isLiteral());
+  EXPECT_THROW(iri.hasLanguageTag(), ad_utility::Exception);
+  EXPECT_THROW(iri.hasDatatype(), ad_utility::Exception);
+  EXPECT_THROW(iri.getLiteralContent(), ad_utility::Exception);
+  EXPECT_THROW(iri.getLanguageTag(), ad_utility::Exception);
+  EXPECT_THROW(iri.getDatatype(), ad_utility::Exception);
+}
+
+// _____________________________________________________________________________
+TEST(LiteralOrIri, LiteralOrIriWithPrefixedIri) {
+  LiteralOrIri iri = LiteralOrIri::prefixedIri(
+      Iri::fromIriref("<http://www.wikidata.org/entity/>"), "Q3138");
+
+  EXPECT_TRUE(iri.isIri());
+  EXPECT_EQ("http://www.wikidata.org/entity/Q3138", iri.getIriContent());
+  EXPECT_FALSE(iri.isLiteral());
+  EXPECT_THROW(iri.hasLanguageTag(), ad_utility::Exception);
+  EXPECT_THROW(iri.hasDatatype(), ad_utility::Exception);
+  EXPECT_THROW(iri.getLiteralContent(), ad_utility::Exception);
+  EXPECT_THROW(iri.getLanguageTag(), ad_utility::Exception);
+  EXPECT_THROW(iri.getDatatype(), ad_utility::Exception);
+}
+
+// _____________________________________________________________________________
+TEST(LiteralOrIri, LiteralOrIriWithLiteral) {
+  LiteralOrIri literal = LiteralOrIri::literalWithoutQuotes("Hello World");
+
+  EXPECT_FALSE(literal.isIri());
+  EXPECT_THROW(literal.getIriContent(), ad_utility::Exception);
+  EXPECT_TRUE(literal.isLiteral());
+  EXPECT_FALSE(literal.hasLanguageTag());
+  EXPECT_FALSE(literal.hasDatatype());
+  EXPECT_EQ("Hello World", literal.getLiteralContent());
+  EXPECT_THROW(literal.getLanguageTag(), ad_utility::Exception);
+  EXPECT_THROW(literal.getDatatype(), ad_utility::Exception);
+}
+
+// _____________________________________________________________________________
+TEST(LiteralOrIri, LiteralOrIriWithLiteralWithQuotes) {
+  LiteralOrIri literal = LiteralOrIri::literalWithQuotes("\"Hello World\"");
+
+  EXPECT_FALSE(literal.isIri());
+  EXPECT_THROW(literal.getIriContent(), ad_utility::Exception);
+  EXPECT_TRUE(literal.isLiteral());
+  EXPECT_FALSE(literal.hasLanguageTag());
+  EXPECT_FALSE(literal.hasDatatype());
+  EXPECT_EQ("Hello World", literal.getLiteralContent());
+  EXPECT_THROW(literal.getLanguageTag(), ad_utility::Exception);
+  EXPECT_THROW(literal.getDatatype(), ad_utility::Exception);
+}
+
+// _____________________________________________________________________________
+TEST(LiteralOrIri, LiteralOrIriWithLiteralAndDatatype) {
+  LiteralOrIri literal = LiteralOrIri::literalWithoutQuotes(
+      "Hello World", Iri::fromIriref(myDatatypeWithBrackets));
+
+  EXPECT_FALSE(literal.isIri());
+  EXPECT_THROW(literal.getIriContent(), ad_utility::Exception);
+  EXPECT_TRUE(literal.isLiteral());
+  EXPECT_FALSE(literal.hasLanguageTag());
+  EXPECT_TRUE(literal.hasDatatype());
+  EXPECT_EQ("Hello World", literal.getLiteralContent());
+  EXPECT_THROW(literal.getLanguageTag(), ad_utility::Exception);
+  EXPECT_EQ(myDatatype, literal.getDatatype());
+}
+
+// _____________________________________________________________________________
+TEST(LiteralOrIri, LiteralOrIriWithLiteralWithQuotesAndDatatype) {
+  LiteralOrIri literal = LiteralOrIri::literalWithQuotes(
+      "\"Hello World\"", Iri::fromIriref(myDatatypeWithBrackets));
+
+  EXPECT_FALSE(literal.isIri());
+  EXPECT_THROW(literal.getIriContent(), ad_utility::Exception);
+  EXPECT_TRUE(literal.isLiteral());
+  EXPECT_FALSE(literal.hasLanguageTag());
+  EXPECT_TRUE(literal.hasDatatype());
+  EXPECT_EQ("Hello World", literal.getLiteralContent());
+  EXPECT_THROW(literal.getLanguageTag(), ad_utility::Exception);
+  EXPECT_EQ(myDatatype, literal.getDatatype());
+}
+
+// _____________________________________________________________________________
+TEST(LiteralOrIri, LiteralOrIriWithLiteralAndLanguageTag) {
+  LiteralOrIri literal =
+      LiteralOrIri::literalWithoutQuotes("Hej världen", "@se");
+
+  EXPECT_FALSE(literal.isIri());
+  EXPECT_THROW(literal.getIriContent(), ad_utility::Exception);
+  EXPECT_TRUE(literal.isLiteral());
+  EXPECT_TRUE(literal.hasLanguageTag());
+  EXPECT_FALSE(literal.hasDatatype());
+  EXPECT_EQ("Hej världen", literal.getLiteralContent());
+  EXPECT_EQ("se", literal.getLanguageTag());
+  EXPECT_THROW(literal.getDatatype(), ad_utility::Exception);
+}
+
+// _____________________________________________________________________________
+TEST(LiteralOrIri, LiteralOrIriWithLiteralWithQuotesAndLanguageTag) {
+  LiteralOrIri literal =
+      LiteralOrIri::literalWithQuotes("'''Hej världen'''", "@se");
+
+  EXPECT_FALSE(literal.isIri());
+  EXPECT_THROW(literal.getIriContent(), ad_utility::Exception);
+  EXPECT_TRUE(literal.isLiteral());
+  EXPECT_TRUE(literal.hasLanguageTag());
+  EXPECT_FALSE(literal.hasDatatype());
+  EXPECT_EQ("Hej världen", literal.getLiteralContent());
+  EXPECT_EQ("se", literal.getLanguageTag());
+  EXPECT_THROW(literal.getDatatype(), ad_utility::Exception);
+}
+
+// _____________________________________________________________________________
+TEST(LiteralOrIri, GetContent) {
+  LiteralOrIri iri = LiteralOrIri::iriref("<https://example.org/books/book1>");
+  LiteralOrIri literalWithLanguageTag =
+      LiteralOrIri::literalWithoutQuotes("Hello World", "@de");
+  LiteralOrIri literalWithDatatype = LiteralOrIri::literalWithoutQuotes(
+      "ABC", Iri::fromIriref("<https://example.org>"));
+
+  EXPECT_EQ("https://example.org/books/book1", iri.getContent());
+  EXPECT_EQ("Hello World", literalWithLanguageTag.getContent());
+  EXPECT_EQ("ABC", literalWithDatatype.getContent());
+}
+
+// _____________________________________________________________________________
+TEST(LiteralOrIri, EnsureLiteralsAreEncoded) {
+  LiteralOrIri literal1 =
+      LiteralOrIri::literalWithQuotes(R"("This is to be \"\\ encoded")");
+  EXPECT_EQ(R"(This is to be "\ encoded)", literal1.getContent());
+
+  LiteralOrIri literal2 =
+      LiteralOrIri::literalWithoutQuotes(R"(This is to be \"\\ encoded)");
+  EXPECT_EQ(R"(This is to be "\ encoded)", literal2.getContent());
+}
+
+// _____________________________________________________________________________
+TEST(LiteralOrIri, Printing) {
+  LiteralOrIri literal1 = LiteralOrIri::literalWithoutQuotes("hallo");
+  std::stringstream str;
+  PrintTo(literal1, &str);
+  EXPECT_EQ(str.str(), "\"hallo\"");
+}
+
+// _____________________________________________________________________________
+TEST(LiteralOrIri, Hashing) {
+  auto lit = LiteralOrIri::literalWithoutQuotes("bimbamm");
+  auto iri = LiteralOrIri::iriref("<bimbamm>");
+  ad_utility::HashSet<LiteralOrIri> set{lit, iri};
+  EXPECT_THAT(set, ::testing::UnorderedElementsAre(lit, iri));
+}
+
+// _____________________________________________________________________________
+TEST(LiteralTest, isPlain) {
+  LiteralOrIri literal = LiteralOrIri::literalWithoutQuotes("Hello World!");
+  EXPECT_TRUE(literal.getLiteral().isPlain());
+  literal = LiteralOrIri::literalWithoutQuotes(
+      "Hello World!", Iri::fromIriref(myDatatypeWithBrackets));
+  EXPECT_FALSE(literal.getLiteral().isPlain());
+  literal = LiteralOrIri::literalWithoutQuotes("Hello World!", "@en");
+  EXPECT_FALSE(literal.getLiteral().isPlain());
+}
+
+// _____________________________________________________________________________
+TEST(LiteralTest, isPlainWithXsdString) {
+  auto literal = LiteralOrIri::literalWithoutQuotes(
+      "Hello World!",
+      Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"));
+  EXPECT_TRUE(literal.getLiteral().isPlain());
+}
+
+// _____________________________________________________________________________
+TEST(LiteralTest, SetSubstr) {
+  LiteralOrIri literal = LiteralOrIri::literalWithoutQuotes(
+      "Hello World!", Iri::fromIriref(myDatatypeWithBrackets));
+  literal.getLiteral().setSubstr(0, 5);
+  EXPECT_EQ("Hello", literal.getContent());
+  EXPECT_EQ(myDatatype, literal.getDatatype());
+
+  literal = LiteralOrIri::literalWithoutQuotes(
+      "Hello World!", Iri::fromIriref(myDatatypeWithBrackets));
+  literal.getLiteral().setSubstr(6, 5);
+  EXPECT_EQ("World", literal.getContent());
+  EXPECT_EQ(myDatatype, literal.getDatatype());
+
+  // Substring works at the byte level (not the UTF-8 character level).
+  literal = LiteralOrIri::literalWithoutQuotes("Äpfel");
+  literal.getLiteral().setSubstr(0, 2);
+  EXPECT_EQ("Ä", literal.getContent());
+
+  // Test with invalid values.
+  literal = LiteralOrIri::literalWithoutQuotes(
+      "Hello World!", Iri::fromIriref(myDatatypeWithBrackets));
+  EXPECT_THROW(literal.getLiteral().setSubstr(12, 1), ad_utility::Exception);
+  EXPECT_THROW(literal.getLiteral().setSubstr(6, 7), ad_utility::Exception);
+}
+
+// _____________________________________________________________________________
+TEST(LiteralOrIriTest, GetIri) {
+  LiteralOrIri iri = LiteralOrIri::iriref("<https://example.org/books/book1>");
+  EXPECT_EQ("https://example.org/books/book1", iri.getIriContent());
+
+  LiteralOrIri literal = LiteralOrIri::literalWithoutQuotes("Hello World!");
+  EXPECT_THROW(literal.getIri(), ad_utility::Exception);
+}
+
+// _____________________________________________________________________________
+TEST(LiteralTest, removeDatatypeOrLanguageTag) {
+  LiteralOrIri literal = LiteralOrIri::literalWithoutQuotes(
+      "Hello World!", Iri::fromIriref(myDatatypeWithBrackets));
+  literal.getLiteral().removeDatatypeOrLanguageTag();
+  EXPECT_EQ("Hello World!", literal.getContent());
+  EXPECT_FALSE(literal.hasDatatype());
+  EXPECT_THROW(literal.getDatatype(), ad_utility::Exception);
+
+  literal = LiteralOrIri::literalWithoutQuotes("Hello World!", "@en");
+  literal.getLiteral().removeDatatypeOrLanguageTag();
+  EXPECT_EQ("Hello World!", literal.getContent());
+  EXPECT_FALSE(literal.hasLanguageTag());
+  EXPECT_THROW(literal.getLanguageTag(), ad_utility::Exception);
+
+  literal = LiteralOrIri::literalWithoutQuotes("Hello World!");
+  literal.getLiteral().removeDatatypeOrLanguageTag();
+  EXPECT_EQ("Hello World!", literal.getContent());
+}
+
+// _____________________________________________________________________________
+TEST(LiteralTest, replaceContent) {
+  LiteralOrIri literal = LiteralOrIri::literalWithoutQuotes(
+      "Hello!", Iri::fromIriref(myDatatypeWithBrackets));
+  literal.getLiteral().replaceContent("Thüss!");
+  EXPECT_EQ("Thüss!", literal.getContent());
+  EXPECT_EQ(myDatatype, literal.getDatatype());
+  literal.getLiteral().replaceContent("Hi!");
+  EXPECT_EQ("Hi!", literal.getContent());
+  EXPECT_EQ(myDatatype, literal.getDatatype());
+  literal.getLiteral().replaceContent("Hello World!");
+  EXPECT_EQ("Hello World!", literal.getContent());
+  EXPECT_EQ(myDatatype, literal.getDatatype());
+  literal = LiteralOrIri::literalWithoutQuotes("Hello!");
+  literal.getLiteral().replaceContent("Hi!");
+  EXPECT_EQ("Hi!", literal.getContent());
+  literal.getLiteral().replaceContent("Hello World!");
+  EXPECT_EQ("Hello World!", literal.getContent());
+}
+
+// _____________________________________________________________________________
+TEST(LiteralTest, concat) {
+  LiteralOrIri literal = LiteralOrIri::literalWithoutQuotes("Hello ");
+  LiteralOrIri literalOther = LiteralOrIri::literalWithoutQuotes("World!");
+  literal.getLiteral().concat(literalOther.getLiteral());
+  EXPECT_EQ("Hello World!", literal.getContent());
+  EXPECT_FALSE(literal.hasLanguageTag());
+  EXPECT_FALSE(literal.hasDatatype());
+  literal = LiteralOrIri::literalWithoutQuotes(
+      "Hello ", Iri::fromIriref(myDatatypeWithBrackets));
+  literalOther = LiteralOrIri::literalWithoutQuotes(
+      "World!", Iri::fromIriref(myDatatypeWithBrackets));
+  literal.getLiteral().concat(literalOther.getLiteral());
+  EXPECT_EQ("Hello World!", literal.getContent());
+  EXPECT_FALSE(literal.hasLanguageTag());
+  EXPECT_TRUE(literal.hasDatatype());
+  EXPECT_EQ(myDatatype, literal.getDatatype());
+  literal = LiteralOrIri::literalWithoutQuotes("Hello World!", "@en");
+  literalOther = LiteralOrIri::literalWithoutQuotes("Bye!", "@en");
+  literal.getLiteral().concat(literalOther.getLiteral());
+  EXPECT_EQ("Hello World!Bye!", literal.getContent());
+  EXPECT_TRUE(literal.hasLanguageTag());
+  EXPECT_FALSE(literal.hasDatatype());
+  EXPECT_EQ("en", literal.getLanguageTag());
+  literal = LiteralOrIri::literalWithoutQuotes(
+      "Hello ", Iri::fromIriref(myDatatypeWithBrackets));
+  literalOther = LiteralOrIri::literalWithoutQuotes("World!");
+  literal.getLiteral().concat(literalOther.getLiteral());
+  EXPECT_EQ("Hello World!", literal.getContent());
+  EXPECT_FALSE(literal.hasLanguageTag());
+  EXPECT_FALSE(literal.hasDatatype());
+  literal = LiteralOrIri::literalWithoutQuotes("Hello World!", "@en");
+  literalOther = LiteralOrIri::literalWithoutQuotes("Bye!");
+  literal.getLiteral().concat(literalOther.getLiteral());
+  EXPECT_EQ("Hello World!Bye!", literal.getContent());
+  EXPECT_FALSE(literal.hasLanguageTag());
+  EXPECT_FALSE(literal.hasDatatype());
+  literal = LiteralOrIri::literalWithoutQuotes("Hello World!", "@en");
+  literalOther = LiteralOrIri::literalWithoutQuotes("Thüss!", "@de");
+  literal.getLiteral().concat(literalOther.getLiteral());
+  EXPECT_EQ("Hello World!Thüss!", literal.getContent());
+  EXPECT_FALSE(literal.hasLanguageTag());
+  EXPECT_FALSE(literal.hasDatatype());
+}
+
+// _____________________________________________________________________________
+TEST(LiteralTest, spaceshipOperatorLangtagLiteral) {
+  LiteralOrIri l1 = LiteralOrIri::fromStringRepresentation(
+      "\"Comparative evaluation of the protective effect of sodium "
+      "valproate, phenazepam and ionol in stress-induced liver damage in "
+      "rats\"@nl");
+  LiteralOrIri l2 = LiteralOrIri::fromStringRepresentation(
+      "\"Comparative evaluation of the protective effect of sodium "
+      "valproate, phenazepam and ionol in stress-induced liver damage in "
+      "rats\"@en");
+  EXPECT_THAT(l1, testing::Not(testing::Eq(l2)));
+}
+
+// _____________________________________________________________________________
+TEST(LiteralOrIri, toStringRepresentation) {
+  {
+    auto iri = LiteralOrIri::iriref("<bladibladibludiblu>");
+    std::string expected = "<bladibladibludiblu>";
+
+    auto res = iri.toStringRepresentation();
+    EXPECT_EQ(res, expected);
+    // The previous call did not move;
+    EXPECT_EQ(iri.toStringRepresentation(), expected);
+
+    res = std::move(iri).toStringRepresentation();
+    EXPECT_EQ(res, expected);
+    EXPECT_TRUE(iri.toStringRepresentation().empty());
+  }
+  // Similar tests, but for a literal:
+  {
+    auto lit = LiteralOrIri::literalWithoutQuotes("bladibladibludiblu");
+    std::string expected = "\"bladibladibludiblu\"";
+
+    auto res = lit.toStringRepresentation();
+    EXPECT_EQ(res, expected);
+    // The previous call did not move;
+    EXPECT_EQ(lit.toStringRepresentation(), expected);
+
+    res = std::move(lit).toStringRepresentation();
+    EXPECT_EQ(res, expected);
+    EXPECT_TRUE(lit.toStringRepresentation().empty());
+  }
+}
+
+// _____________________________________________________________________________
+TEST(NonOwningTest, IriView) {
+  std::string s = "<http://example.org/foo>";
+  IriView v = IriView::fromStringRepresentation(s);
+  static_assert(
+      std::is_same_v<decltype(v.toStringRepresentation()), std::string_view>);
+  EXPECT_EQ(v.toStringRepresentation(), s);
+  EXPECT_THAT("http://example.org/foo", v.getContent());
+  // Test that the `IriView` actually references the `s` the was passed in.
+  EXPECT_EQ(v.toStringRepresentation(), s);
+  EXPECT_EQ(v.toStringRepresentation().data(), s.data());
+
+  EXPECT_FALSE(v.empty());
+  EXPECT_TRUE(IriView{}.empty());
+  ad_utility::HashSet<IriView> set{v};
+  EXPECT_THAT(set, ::testing::UnorderedElementsAre(v));
+}
+
+// _____________________________________________________________________________
+TEST(NonOwningTest, LiteralView) {
+  std::string s = "\"Hello\"@en";
+  LiteralView v = LiteralView::fromStringRepresentation(s);
+  static_assert(
+      std::is_same_v<decltype(v.toStringRepresentation()), std::string_view>);
+  EXPECT_EQ(v.toStringRepresentation(), s);
+  EXPECT_EQ(v.toStringRepresentation().data(), s.data());
+  EXPECT_TRUE(v.hasLanguageTag());
+  EXPECT_FALSE(v.hasDatatype());
+  EXPECT_THAT("Hello", v.getContent());
+  EXPECT_THAT("en", v.getLanguageTag());
+  EXPECT_THROW(v.getDatatype(), ad_utility::Exception);
+  v.removeDatatypeOrLanguageTag();
+  EXPECT_FALSE(v.hasLanguageTag());
+  EXPECT_EQ(v.toStringRepresentation(), "\"Hello\"");
+  // We have only stripped a suffix, so the begin pointer stays the same.
+  EXPECT_EQ(v.toStringRepresentation().data(), s.data());
+  EXPECT_TRUE(LiteralView::fromStringRepresentation("\"plain\"").isPlain());
+}
+
+// _____________________________________________________________________________
+TEST(NonOwningTest, LiteralOrIriView) {
+  std::string iriStr = "<http://example.org/>";
+  LiteralOrIriView iv = LiteralOrIriView::fromStringRepresentation(iriStr);
+  static_assert(
+      std::is_same_v<decltype(iv.toStringRepresentation()), std::string_view>);
+  EXPECT_TRUE(iv.isIri());
+  EXPECT_FALSE(iv.isLiteral());
+  EXPECT_THAT("http://example.org/", iv.getIriContent());
+  EXPECT_EQ(iv.toStringRepresentation(), iriStr);
+  EXPECT_EQ(iv.toStringRepresentation().data(), iriStr.data());
+
+  std::string litStr = "\"42\"^^<http://www.w3.org/2001/XMLSchema#integer>";
+  LiteralOrIriView lv = LiteralOrIriView::fromStringRepresentation(litStr);
+  EXPECT_EQ(lv.toStringRepresentation(), litStr);
+  EXPECT_EQ(lv.toStringRepresentation().data(), litStr.data());
+  EXPECT_FALSE(lv.isIri());
+  EXPECT_TRUE(lv.isLiteral());
+  EXPECT_FALSE(lv.hasLanguageTag());
+  EXPECT_TRUE(lv.hasDatatype());
+  EXPECT_THAT("42", lv.getLiteralContent());
+  EXPECT_THAT("http://www.w3.org/2001/XMLSchema#integer", lv.getDatatype());
+
+  ad_utility::HashSet<LiteralOrIriView> set{iv, lv};
+  EXPECT_THAT(set, ::testing::UnorderedElementsAre(iv, lv));
+}
+
+// Test that `toOwned` yields an equal `LiteralOrIri` with its own copy of the
+// characters, for a view as well as for an owning object.
+TEST(LiteralOrIri, toOwned) {
+  auto literal = LiteralOrIri{Literal::literalWithoutQuotes(
+      "x", Iri::fromStringRepresentation("<http://example.org/dt>"))};
+  auto iri = LiteralOrIri::iriref("<http://example.org/>");
+  for (const auto& word : {literal, iri}) {
+    // A copy of the string representation at a different address.
+    std::string storage{word.toStringRepresentation()};
+    auto view = LiteralOrIriView::fromStringRepresentation(storage);
+    LiteralOrIri owned = view.toOwned();
+    EXPECT_EQ(owned, word);
+    EXPECT_NE(owned.toStringRepresentation().data(), storage.data());
+    // Converting an owning object directly yields a copy.
+    EXPECT_EQ(word.toOwned(), word);
+  }
+}
+
+using LitTypes =
+    ::testing::Types<LiteralOrIri, LiteralOrIriView, Literal, LiteralView>;
+
+}  // namespace

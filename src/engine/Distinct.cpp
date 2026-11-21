@@ -22,8 +22,10 @@ size_t Distinct::getResultWidth() const { return subtree_->getResultWidth(); }
 // _____________________________________________________________________________
 Distinct::Distinct(QueryExecutionContext* qec,
                    std::shared_ptr<QueryExecutionTree> subtree,
-                   const std::vector<ColumnIndex>& keepIndices)
-    : Operation{qec}, subtree_{std::move(subtree)}, keepIndices_{keepIndices} {
+                   ql::span<const ColumnIndex> keepIndices)
+    : Operation{qec},
+      subtree_{std::move(subtree)},
+      keepIndices_{keepIndices.begin(), keepIndices.end(), allocator()} {
   AD_CORRECTNESS_CHECK(subtree_);
   subtree_ = QueryExecutionTree::createSortedTreeAnyPermutation(
       std::move(subtree_), keepIndices_);
@@ -31,7 +33,7 @@ Distinct::Distinct(QueryExecutionContext* qec,
 
 // _____________________________________________________________________________
 bool Distinct::isDistinctByImpl(
-    const std::vector<ColumnIndex>& distinctIndices) const {
+    ql::span<const ColumnIndex> distinctIndices) const {
   // The result is distinct wrt `distinctIndices` iff `keepIndices_` is a subset
   // of `distinctIndices` (a superset of the deduplicated columns cannot
   // reintroduce duplicates).
@@ -41,9 +43,9 @@ bool Distinct::isDistinctByImpl(
 }
 
 // _____________________________________________________________________________
-string Distinct::getCacheKeyImpl() const {
-  return absl::StrCat("DISTINCT (", subtree_->getCacheKey(), ") (",
-                      absl::StrJoin(keepIndices_, ","), ")");
+qlm::string Distinct::getCacheKeyImpl() const {
+  return qlm::StrCat(allocator(), "DISTINCT (", subtree_->getCacheKey(), ") (",
+                     qlm::StrJoin(allocator(), keepIndices_, ","), ")");
 }
 
 // _____________________________________________________________________________
@@ -74,7 +76,8 @@ Result::LazyResult Distinct::lazyDistinct(Result::LazyResult input,
     return Result::LazyResult{lazySingleValueRange(
         [getDistinctResult,
          aggregateTable = IdTable{subtree_->getResultWidth(), allocator()},
-         aggregateVocab = LocalVocab{}, input = std::move(input)]() mutable {
+         aggregateVocab = LocalVocab{allocator()},
+         input = std::move(input)]() mutable {
           for (auto& [idTable, localVocab] : input) {
             IdTable result = getDistinctResult(std::move(idTable));
             if (!result.empty()) {

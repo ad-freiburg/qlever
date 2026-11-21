@@ -24,9 +24,9 @@
 #include "index/vocabulary/VocabularyInMemoryBinSearch.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
 #include "index/vocabulary/VocabularyType.h"
-#include "util/Serializer/Serializer.h"
 #include "util/TypeTraits.h"
 #include "util/json.h"
+#include "util/serializer/Serializer.h"
 
 // A vocabulary that can at runtime choose between different vocabulary
 // implementations. The only restriction is, that a vocabulary can only be read

@@ -35,19 +35,21 @@
 #include "parser/ParsedQuery.h"
 #include "parser/SparqlParser.h"
 #include "util/AsioHelpers.h"
-#include "util/ConcurrencyLimitedExecutor.h"
 #include "util/Exception.h"
-#include "util/MemorySize/MemorySize.h"
+#include "util/FairShareExecutor.h"
 #include "util/ParseException.h"
 #include "util/ParseableDuration.h"
 #include "util/QueryEventLog.h"
 #include "util/ResourceMonitor.h"
 #include "util/TimeTracer.h"
+#include "util/TransparentFunctors.h"
 #include "util/TypeTraits.h"
 #include "util/http/HttpServer.h"
 #include "util/http/HttpUtils.h"
+#include "util/http/ResponseMiddleware.h"
 #include "util/http/UrlParser.h"
 #include "util/http/websocket/MessageSender.h"
+#include "util/memorySize/MemorySize.h"
 
 using namespace std::string_literals;
 using namespace ad_utility::url_parser::sparqlOperation;
@@ -86,6 +88,18 @@ Server::Server(
   } else {
     AD_LOG_INFO << "Access token for restricted API calls is \"" << accessToken_
                 << "\"" << std::endl;
+  }
+}
+
+// _____________________________________________________________________________
+void Server::throwIfLoadedFromBlob(std::string_view operation) const {
+  if (qlever().isLoadedFromBlob()) {
+    throw HttpError(
+        boost::beast::http::status::bad_request,
+        absl::StrCat(operation,
+                     " is not supported, because the index of this server was "
+                     "loaded from a blob (`--read-from-blob-file`) and has no "
+                     "permutations and no files on disk"));
   }
 }
 
@@ -280,9 +294,9 @@ class QueryAlreadyInUseError : public std::runtime_error {
 namespace {
 // Return an executor for a single query, which runs at most
 // `max-num-threads-per-query` tasks on the `executor` at the same time.
-qlever::Executor makeQueryExecutor(qlever::Executor executor) {
-  return ad_utility::makeConcurrencyLimitedExecutor(
-      std::move(executor),
+qlever::Executor makeQueryExecutor(const qlever::Executor& executor) {
+  return ad_utility::makeFairShareClientExecutor(
+      executor, ad_utility::FairShareClass::Foreground,
       getRuntimeParameter<&RuntimeParameters::maxNumThreadsPerQuery_>());
 }
 }  // namespace
@@ -427,6 +441,7 @@ Awaitable<DeltaTriplesCount> Server::processClearDeltaTriples() {
 // _____________________________________________________________________________
 Awaitable<nlohmann::json> Server::processVacuumDeltaTriples(
     std::optional<std::string_view> userTimeout, bool accessTokenOk) {
+  throwIfLoadedFromBlob("Vacuuming the delta triples");
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
   TimeLimit timeLimit =
       verifyUserSubmittedQueryTimeout(userTimeout, accessTokenOk);
@@ -442,6 +457,7 @@ Awaitable<nlohmann::json> Server::processVacuumDeltaTriples(
 Awaitable<nlohmann::json> Server::processWriteMaterializedView(
     const ParamValueMap& parameters, const SparqlOperation& operation,
     const ad_utility::Timer& requestTimer) {
+  throwIfLoadedFromBlob("Writing a materialized view");
   auto name =
       qlever::http_api_helpers::getViewNameParameter(parameters, "Writing");
   AD_CONTRACT_CHECK(name != "", "The name for the view may not be empty");
@@ -478,6 +494,7 @@ Awaitable<nlohmann::json> Server::processWriteMaterializedView(
 // _____________________________________________________________________________
 nlohmann::json Server::processLoadMaterializedView(
     const ParamValueMap& parameters, const SharedIndexAndView& indexAndViews) {
+  throwIfLoadedFromBlob("Loading a materialized view");
   auto name =
       qlever::http_api_helpers::getViewNameParameter(parameters, "Loading");
 
@@ -491,6 +508,7 @@ nlohmann::json Server::processLoadMaterializedView(
 // _____________________________________________________________________________
 nlohmann::json Server::processDeleteMaterializedView(
     const ParamValueMap& parameters) const {
+  throwIfLoadedFromBlob("Deleting a materialized view");
   auto name =
       qlever::http_api_helpers::getViewNameParameter(parameters, "Deleting");
 
@@ -672,7 +690,12 @@ Server::ResponseT Server::processMetrics(bool accessTokenOk,
 std::optional<nlohmann::json> Server::processSetRuntimeParameters(
     const ParamValueMap& parameters, bool accessTokenOk) const {
   bool parameterChanged = false;
-  for (const auto& key : globalRuntimeParameters.rlock()->getKeys()) {
+  // NOTE: The keys have to be stored in a variable before the loop. Since
+  // C++23, the lifetime of all temporaries in the range initializer of a
+  // range-based `for` loop is extended until the end of the loop, so the read
+  // lock would otherwise be held while the `wlock()` below waits for it.
+  auto keys = globalRuntimeParameters.rlock()->getKeys();
+  for (const auto& key : keys) {
     if (auto value = serverProcessHelpers::checkAndLogParameterSetting(
             parameters, key, accessTokenOk, "setting runtime parameters")) {
       globalRuntimeParameters.wlock()->setFromString(key, value.value());
@@ -872,11 +895,13 @@ Awaitable<void> Server::processSparqlOperation(
       throw;
     }
   };
-  auto visitQuery = [&index, &visitOperation](Query query) -> Awaitable<void> {
+  auto visitQuery = [this, &index,
+                     &visitOperation](Query query) -> Awaitable<void> {
     // We need to copy the query string because `visitOperation` below also
     // needs it.
-    auto parsedQuery = SparqlParser::parseQuery(
-        &index.encodedIriManager(), query.query_, query.datasetClauses_);
+    auto parsedQuery =
+        SparqlParser::parseQuery(&index.encodedIriManager(), allocator(),
+                                 query.query_, query.datasetClauses_);
     if (parsedQuery.hasUpdateClause()) {
       throw std::runtime_error(absl::StrCat(
           "SPARQL QUERY was requested via the HTTP request, but the "
@@ -886,7 +911,7 @@ Awaitable<void> Server::processSparqlOperation(
     return visitOperation({std::move(parsedQuery)}, "SPARQL query",
                           std::move(query.query_));
   };
-  auto visitUpdate = [&index, &visitOperation, &requireValidAccessToken](
+  auto visitUpdate = [this, &index, &visitOperation, &requireValidAccessToken](
                          Update update) -> Awaitable<void> {
     requireValidAccessToken("SPARQL Update");
     // We need to copy the update string because `visitOperation` below also
@@ -894,8 +919,8 @@ Awaitable<void> Server::processSparqlOperation(
     auto tracer = std::make_shared<ad_utility::timer::TimeTracer>("update");
     tracer->beginTrace("parsing");
     auto parsedUpdates = SparqlParser::parseUpdate(
-        index.getBlankNodeManager(), &index.encodedIriManager(), update.update_,
-        update.datasetClauses_);
+        index.getBlankNodeManager(), &index.encodedIriManager(), allocator(),
+        update.update_, update.datasetClauses_);
     tracer->endTrace("parsing");
     if (!ql::ranges::all_of(parsedUpdates, &ParsedQuery::hasUpdateClause)) {
       throw std::runtime_error(absl::StrCat(
@@ -907,13 +932,13 @@ Awaitable<void> Server::processSparqlOperation(
                           std::move(update.update_), tracer);
   };
   auto visitGraphStore =
-      [&request, &visitOperation, &requireValidAccessToken,
+      [this, &request, &visitOperation, &requireValidAccessToken,
        &index](GraphStoreOperation operation) -> Awaitable<void> {
     auto tracer = std::make_shared<ad_utility::timer::TimeTracer>("update");
     tracer->beginTrace("parsing");
     std::vector<ParsedQuery> parsedOperations =
-        GraphStoreProtocol::transformGraphStoreProtocol(std::move(operation),
-                                                        request, index);
+        GraphStoreProtocol::transformGraphStoreProtocol(
+            std::move(operation), request, index, allocator());
     tracer->endTrace("parsing");
 
     if (ql::ranges::any_of(parsedOperations, &ParsedQuery::hasUpdateClause)) {
@@ -1138,10 +1163,8 @@ Awaitable<void> Server::sendStreamableResponse(
 
   auto response = ad_utility::httpUtils::createOkResponse(
       std::move(responseGenerator), request, mediaType);
-  if (plannedQuery.parsedQuery().responseMiddleware_.has_value()) {
-    response =
-        plannedQuery.parsedQuery().responseMiddleware_.value().applyQuery(
-            std::move(response));
+  if (const auto& middleware = plannedQuery.parsedQuery().responseMiddleware_) {
+    response = middleware->applyQuery(std::move(response));
   }
   try {
     // The result of the query is computed lazily while the response is being
@@ -1377,6 +1400,7 @@ Awaitable<void> Server::processUpdate(
     ad_utility::SharedCancellationHandle cancellationHandle,
     const RequestT& request, SendT&& send,
     std::optional<PlannedQuery>& plannedUpdate) {
+  throwIfLoadedFromBlob("An update");
   outerTracer->beginTrace("waitingForUpdateThread");
   ad_utility::metrics::ActiveCounterGuard updateGuard{
       *metrics_->runningSparqlOperations_, "update"};
@@ -1384,11 +1408,8 @@ Awaitable<void> Server::processUpdate(
       updates, [](const ParsedQuery& p) { return p.hasUpdateClause(); }));
 
   auto responseMiddlewares =
-      ad_utility::RvalueView(
-          updates | ql::views::transform(&ParsedQuery::responseMiddleware_) |
-          ql::views::filter(ad_utility::hasValue) |
-          ql::views::transform(ad_utility::value)) |
-      ::ranges::to<std::vector>();
+      updates | ql::views::transform(&ParsedQuery::responseMiddleware_) |
+      ql::views::filter(ad_utility::toBool) | ::ranges::to<std::vector>();
 
   std::vector<UpdateMetadata> metadatas;
 
@@ -1484,7 +1505,7 @@ Awaitable<void> Server::processUpdate(
   auto response = ad_utility::httpUtils::createJsonResponse(
       std::move(responseJson), request);
   for (auto& middleware : responseMiddlewares) {
-    response = middleware.applyUpdate(std::move(response), metadatas);
+    response = middleware->applyUpdate(std::move(response), metadatas);
   }
   // The body of the response is a single string, so it can be serialized on
   // the executor of this coroutine.
@@ -1747,6 +1768,7 @@ CPP_template_def(typename RequestT)(
 Awaitable<Server::ResponseT> Server::processRebuildIndex(
     const ParamValueMap& parameters, const RequestT& request) {
   using namespace ad_utility::httpUtils;
+  throwIfLoadedFromBlob("An index rebuild");
   auto config = co_await rebuildIndexUnlessInProgress(
       ad_utility::url_parser::checkParameter(parameters, "rebuild-tmp-dir",
                                              std::nullopt),

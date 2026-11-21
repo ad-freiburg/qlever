@@ -28,7 +28,7 @@
 #include "index/vocabulary/EncodedIriManager.h"
 #include "index/vocabulary/EncodedIriPattern.h"
 #include "util/Executor.h"
-#include "util/MemorySize/MemorySize.h"
+#include "util/memorySize/MemorySize.h"
 
 // Several useful functions to quickly set up an `Index` and a
 // `QueryExecutionContext` that store a small example knowledge graph. Those can
@@ -80,14 +80,12 @@ inline const EncodedIriManager* encodedIriManager() {
 // tests (like polygon testing in Spatial Joins).
 Index makeIndexWithTestSettings(ad_utility::MemorySize parserBufferSize = 1_kB);
 
-// Get names of all index files for a given basename. Needed for cleaning up
-// after tests using a test index.
-//
-// TODO: A better approach would be if the `Index` class itself kept track of
-// the files it creates and provides a member function to obtain all their
-// names. But for now this is good enough (and better then what we had before
-// when the files were not deleted after the test).
-std::vector<std::string> getAllIndexFilenames(const std::string& indexBasename);
+// Delete all files of the test index with the given `indexBasename` in the
+// current directory, by their common prefix `<indexBasename>.` (the input file
+// and the settings file of the index included). Failures are not logged,
+// because this also runs at process exit, when the logging may already be
+// destroyed.
+void deleteTestIndexFiles(const std::string& indexBasename);
 
 // A struct, that defines the configuration of an index, and after that,
 // a function that takes this struct and creates an index from it.
@@ -128,6 +126,9 @@ struct TestIndexConfig {
   // The normalization of the words of the `ql:has-word` triples.
   ad_utility::HasWordNormalization hasWordNormalization =
       ad_utility::HasWordNormalization::Lowercase;
+  // The predicates to which the `ql:has-word` triples are restricted (see
+  // `IndexImpl::setHasWordRestrictPredicates`).
+  std::vector<std::string> hasWordRestrictPredicates;
   // The words of the secondary vocabulary of the index (see
   // `index/vocabulary/SecondaryVocabulary.h`). They have to be sorted and
   // pairwise distinct (see `SecondaryVocabulary::appendSegment`), and must not
@@ -174,8 +175,9 @@ struct TestIndexConfig {
         c.addWordsFromLiterals, c.contentsOfWordsFileAndDocsfile,
         c.parserBufferSize, c.scoringMetric, c.bAndKParam, c.indexType,
         c.encodedPrefixesWithoutAngleBrackets, c.encodedIriPatterns,
-        c.addHasWordTriples, c.secondaryVocabWords, c.numThreads,
-        c.parseInParallel, c.additionalSettings, c.geoPointEncoding.value());
+        c.addHasWordTriples, c.hasWordRestrictPredicates, c.secondaryVocabWords,
+        c.numThreads, c.parseInParallel, c.additionalSettings,
+        c.geoPointEncoding.value());
   }
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(
       TestIndexConfig, turtleInput, loadAllPermutations, usePatterns,
@@ -183,8 +185,9 @@ struct TestIndexConfig {
       contentsOfWordsFileAndDocsfile, parserBufferSize, scoringMetric,
       bAndKParam, indexType, vocabularyType,
       encodedPrefixesWithoutAngleBrackets, encodedIriPatterns,
-      addHasWordTriples, secondaryVocabWords, numThreads, parseInParallel,
-      additionalSettings, geoPointEncoding)
+      addHasWordTriples, hasWordNormalization, hasWordRestrictPredicates,
+      secondaryVocabWords, numThreads, parseInParallel, additionalSettings,
+      geoPointEncoding)
 };
 
 // Create a test index at the given `indexBasename` and with the given `config`.

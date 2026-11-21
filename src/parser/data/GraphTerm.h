@@ -10,13 +10,11 @@
 #include <string>
 #include <variant>
 
-#include "backports/StartsWithAndEndsWith.h"
-#include "index/vocabulary/EncodedIriManager.h"
-#include "parser/RdfParser.h"
-#include "parser/TokenizerCtre.h"
+#include "parser/TripleComponent.h"
 #include "parser/data/BlankNode.h"
 #include "parser/data/Literal.h"
 #include "rdfTypes/Iri.h"
+#include "rdfTypes/Variable.h"
 #include "util/VisitMixin.h"
 
 using GraphTermBase = std::variant<Literal, BlankNode,
@@ -26,6 +24,9 @@ class GraphTerm : public GraphTermBase,
                   public VisitMixin<GraphTerm, GraphTermBase> {
  public:
   using GraphTermBase::GraphTermBase;
+  // Since C++26, `std::variant` also has a `visit` member function, so
+  // explicitly choose the one from the mixin to avoid an ambiguity.
+  using VisitMixin<GraphTerm, GraphTermBase>::visit;
   using Iri = ad_utility::triple_component::Iri;
 
   // ___________________________________________________________________________
@@ -42,23 +43,7 @@ class GraphTerm : public GraphTermBase,
   // `DELETE WHERE{...}`. It is necessary, because the parser internally
   // represents the templates of UPDATE requests and CONSTRUCT queries
   // differently than The "normal" WHERE clauses.
-  TripleComponent toTripleComponent() const {
-    return visit([](const auto& element) -> TripleComponent {
-      using T = std::decay_t<decltype(element)>;
-      if constexpr (ad_utility::SameAsAny<T, Variable, Iri>) {
-        return element;
-      } else if constexpr (std::is_same_v<T, Literal>) {
-        return RdfStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
-            element.toSparql());
-      } else {
-        static_assert(std::is_same_v<T, BlankNode>);
-        const auto& blankNode = element.toSparql();
-        AD_CORRECTNESS_CHECK(ql::starts_with(blankNode, "_:"));
-        return Variable{absl::StrCat(QLEVER_INTERNAL_BLANKNODE_VARIABLE_PREFIX,
-                                     blankNode.substr(2))};
-      }
-    });
-  }
+  TripleComponent toTripleComponent() const;
 };
 
 #endif  // QLEVER_SRC_PARSER_DATA_GRAPHTERM_H

@@ -19,6 +19,7 @@
 
 #include "backports/algorithm.h"
 #include "backports/numeric.h"
+#include "index/KeyOrder.h"
 #include "index/compressedRelationWriter/CompressedRelationWriter.h"
 #include "util/Algorithm.h"
 #include "util/ExceptionHandling.h"
@@ -28,6 +29,23 @@ namespace compressedRelationHelpers {
 static constexpr size_t c0Idx = 0;
 static constexpr size_t c1Idx = 1;
 static constexpr size_t c2Idx = 2;
+
+// Return the indices of the columns of the input of a permutation writer in the
+// order in which they are stored in the `permutation`, for inputs with
+// `numColumns` columns: the first three columns are permuted, all the others
+// (starting with the graph column) keep their position.
+inline std::vector<ColumnIndex> permutedColIndices(
+    const qlever::KeyOrder& permutation, size_t numColumns) {
+  auto [c0, c1, c2, c3] = permutation.keys();
+  AD_CORRECTNESS_CHECK(c3 == 3,
+                       "The fourth column of a permutation must always be the "
+                       "graph column, which is never permuted.");
+  std::vector<ColumnIndex> result{c0, c1, c2};
+  for (size_t colIdx = 3; colIdx < numColumns; ++colIdx) {
+    result.push_back(colIdx);
+  }
+  return result;
+}
 
 // Return the binary representation of the given `id` and make sure (using
 // `AD_EXPENSIVE_CHECK`) that it can be compared bitwise, which should always be
@@ -160,7 +178,7 @@ struct DistinctIdCountOfBlock {
 
 // Return the `DistinctIdCountOfBlock` of the `column`, which has to be sorted
 // and must not be empty.
-inline DistinctIdCountOfBlock countDistinctIds(ql::span<const Id> column) {
+inline DistinctIdCountOfBlock countDistinctIds(ConstIdColumnRef column) {
   AD_CORRECTNESS_CHECK(!column.empty());
   // Note: The comparison of the bits (instead of the general comparison of
   // `Id`s) is not only much cheaper per element, it also makes this reduction
@@ -187,7 +205,7 @@ class DistinctIdCounter {
   // Add the `column` of the next block, which has to be sorted, and whose
   // first ID must not be smaller than the last ID of the previous block. An
   // empty `column` is ignored.
-  void addBlock(ql::span<const Id> column) {
+  void addBlock(ConstIdColumnRef column) {
     if (column.empty()) {
       return;
     }

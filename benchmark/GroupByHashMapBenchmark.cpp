@@ -73,7 +73,7 @@ auto generateSortedGroupVec = [](size_t n, size_t g) {
 // indices.
 auto generateRandomLocalVocabAndIndicesVec =
     [](const LocalVocabContext& context, size_t n, size_t m) {
-      LocalVocab localVocab;
+      LocalVocab localVocab{ad_utility::testing::getQec()->getAllocator()};
       std::vector<LocalVocabIndex> indices;
 
       std::string alphanum =
@@ -386,7 +386,7 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
 
     // Create entries of second column
     decltype(auto) otherValues = table.getColumn(1);
-    auto localVocab = LocalVocab{};
+    auto localVocab = LocalVocab{qec->getAllocator()};
     if (valueTypes != ValueIdType::Strings) {
       auto secondColumn = generateRandomDoubleVec(numInputRows);
       ql::ranges::transform(

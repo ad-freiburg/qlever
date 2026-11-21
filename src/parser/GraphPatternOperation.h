@@ -14,16 +14,19 @@
 #include "backports/concepts.h"
 #include "engine/PathSearch.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
+#include "global/Id.h"
 #include "parser/DatasetClauses.h"
 #include "parser/ExternalValuesQuery.h"
 #include "parser/GraphPattern.h"
 #include "parser/MaterializedViewQuery.h"
 #include "parser/NamedCachedResult.h"
 #include "parser/PathQuery.h"
+#include "parser/RowNumberQuery.h"
 #include "parser/SpatialQuery.h"
 #include "parser/TextSearchQuery.h"
 #include "parser/TripleComponent.h"
 #include "rdfTypes/Variable.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/TransparentFunctors.h"
 #include "util/VisitMixin.h"
 
@@ -78,7 +81,7 @@ struct Load {
 
 /// A `BasicGraphPattern` represents a consecutive block of triples.
 struct BasicGraphPattern {
-  std::vector<SparqlTriple> _triples;
+  qlm::vector<SparqlTriple> _triples;
   /// Append the triples from `other` to this `BasicGraphPattern`
   void appendTriples(BasicGraphPattern other);
 
@@ -168,7 +171,7 @@ class Subquery {
   // `Subquery` is like a `ParsedQuery`, just with an own type).
   Subquery(const ParsedQuery&);
   Subquery(ParsedQuery&&) noexcept;
-  Subquery();
+  explicit Subquery(const qlever::Allocator<Id>& allocator);
   ~Subquery();
   Subquery(const Subquery&);
   Subquery(Subquery&&) noexcept;
@@ -227,11 +230,14 @@ using GraphPatternOperationVariant =
     std::variant<Optional, Union, Subquery, TransPath, Bind, BasicGraphPattern,
                  Values, Service, PathQuery, SpatialQuery, TextSearchQuery,
                  Minus, GroupGraphPattern, Describe, Load, NamedCachedResult,
-                 MaterializedViewQuery, ExternalValuesQuery>;
+                 MaterializedViewQuery, ExternalValuesQuery, RowNumberQuery>;
 struct GraphPatternOperation
     : public GraphPatternOperationVariant,
       public VisitMixin<GraphPatternOperation, GraphPatternOperationVariant> {
   using GraphPatternOperationVariant::GraphPatternOperationVariant;
+  // Since C++26, `std::variant` also has a `visit` member function, so
+  // explicitly choose the one from the mixin to avoid an ambiguity.
+  using VisitMixin<GraphPatternOperation, GraphPatternOperationVariant>::visit;
 
   // TODO<joka921> First refactor `SparqlParserTest.cpp`,
   // then get rid of this function.

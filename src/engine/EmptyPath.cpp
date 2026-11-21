@@ -157,8 +157,8 @@ std::string EmptyPath::getDescriptor() const {
 size_t EmptyPath::getResultWidth() const { return resultWidth_; }
 
 // _____________________________________________________________________________
-std::string EmptyPath::getCacheKeyImpl() const {
-  std::ostringstream os;
+qlm::string EmptyPath::getCacheKeyImpl() const {
+  qlm::ostringstream os{allocator()};
   os << "EMPTY PATH";
   if (graphVariable_.has_value()) {
     os << " with graph column";
@@ -230,9 +230,9 @@ bool EmptyPath::knownEmptyResult() {
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> EmptyPath::resultSortedOn() const {
+qlm::vector<ColumnIndex> EmptyPath::resultSortedOn() const {
   if (!checkedChild_.has_value()) {
-    return {0};
+    return {{0}, allocator()};
   }
   // The rows of the child are processed in order, so the sort order of the join
   // column is preserved. The only exception are UNDEF values, which match every
@@ -245,9 +245,9 @@ std::vector<ColumnIndex> EmptyPath::resultSortedOn() const {
       ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
   if (childSortedOn.empty() || childSortedOn.at(0) != joinColumn ||
       joinColumnMightBeUndef) {
-    return {};
+    return qlm::vector<ColumnIndex>{allocator()};
   }
-  return {0};
+  return {{0}, allocator()};
 }
 
 // _____________________________________________________________________________
@@ -345,7 +345,7 @@ cppcoro::generator<IdTable> EmptyPath::scanIndex(
 // _____________________________________________________________________________
 Result::Generator EmptyPath::computeAllEntities() const {
   for (IdTable& table : scanIndex(std::nullopt)) {
-    co_yield {std::move(table), LocalVocab{}};
+    co_yield {std::move(table), LocalVocab{allocator()}};
   }
 }
 
@@ -390,9 +390,12 @@ Result::Generator EmptyPath::processUndefRows(const IdTableView<0>& input,
                                               bool& hasWarnedAboutUndef) const {
   // A lazy child hands out several tables, each of which may contain UNDEF
   // values, so warn only once.
-  // NOTE: The QLever JSON export writes the `warnings` field before consuming
-  // the result, so this warning only makes it into the response if some
-  // operation above materializes the result eagerly (e.g. an `ORDER BY`).
+  //
+  // NOTE: The `application/qlever-results+json` export writes the `warnings`
+  // field before consuming the result, so there this warning only makes it
+  // into the response if some operation above materializes the result eagerly
+  // (e.g. an `ORDER BY`). The `application/sparql-results+json` export writes
+  // its `meta` field after the result and thus always includes it.
   if (!std::exchange(hasWarnedAboutUndef, true)) {
     addWarning(
         "The empty path is applied to a column that contains UNDEF values. "
@@ -535,7 +538,7 @@ Result EmptyPath::computeResult(bool requestLaziness) {
   // requests the result lazily, so realistically we only get here if the
   // result is pinned (which forces a fully materialized result).
   IdTable resultTable{getResultWidth(), allocator()};
-  LocalVocab localVocab;
+  LocalVocab localVocab{allocator()};
   for (auto& [idTable, vocab] : generator) {
     resultTable.insertAtEnd(idTable);
     localVocab.mergeWith(vocab);

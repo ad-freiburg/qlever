@@ -15,6 +15,7 @@
 #include <string>
 #include <vector>
 
+#include "./util/GTestHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "./util/IndexTestHelpers.h"
 #include "backports/StartsWithAndEndsWith.h"
@@ -74,29 +75,33 @@ TEST(OrderByComparator, getTermKind) {
   auto* qec = getQec();
   const auto& context = qec->getLocalVocabContext();
   auto getId = makeGetId(qec->getIndex());
+  auto getLocalVocabId = ad_utility::testing::makeGetLocalVocabId();
   OrderByComparator comparator{context};
   auto kind = [&comparator](Id id) { return comparator.getTermKind(id); };
 
   EXPECT_EQ(kind(UndefId()), TermKind::Undefined);
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      kind(Id::makeFromTripleTermIndex(TripleTermIndex::make(3))),
+      ::testing::StrEq("ORDER BY for triple terms is not supported yet"),
+      std::runtime_error);
 
   EXPECT_EQ(kind(BlankNodeId(3)), TermKind::BlankNode);
   auto blankNodeOfBnodeFunction = localVocabEntryFromStringRepresentation(
       absl::StrCat(QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX, "_:un_label_0>"),
       context);
-  EXPECT_EQ(kind(Id::makeFromLocalVocabIndex(&blankNodeOfBnodeFunction)),
+  EXPECT_EQ(kind(getLocalVocabId(blankNodeOfBnodeFunction)),
             TermKind::BlankNode);
 
   EXPECT_EQ(kind(getId("<x>")), TermKind::Iri);
   auto localIri = localVocabEntryFromStringRepresentation("<a:1>", context);
-  EXPECT_EQ(kind(Id::makeFromLocalVocabIndex(&localIri)), TermKind::Iri);
+  EXPECT_EQ(kind(getLocalVocabId(localIri)), TermKind::Iri);
   EXPECT_EQ(kind(Id::makeFromEncodedVal(5)), TermKind::Iri);
   EXPECT_EQ(kind(Id::makeFromSecondaryVocabIndex(SecondaryVocabIndex::make(2))),
             TermKind::Iri);
 
   EXPECT_EQ(kind(getId("\"alpha\"")), TermKind::Literal);
   auto localLiteral = LocalVocabEntry::literalWithoutQuotes("alx", context);
-  EXPECT_EQ(kind(Id::makeFromLocalVocabIndex(&localLiteral)),
-            TermKind::Literal);
+  EXPECT_EQ(kind(getLocalVocabId(localLiteral)), TermKind::Literal);
   EXPECT_EQ(kind(BoolId(true)), TermKind::Literal);
   EXPECT_EQ(kind(IntId(-3)), TermKind::Literal);
   EXPECT_EQ(kind(DoubleId(2.5)), TermKind::Literal);
@@ -108,8 +113,8 @@ TEST(OrderByComparator, getTermKind) {
             TermKind::Literal);
 
   // An `Id` with an invalid datatype.
-  static_assert(static_cast<int>(Datatype::MaxValue) < 15);
-  EXPECT_ANY_THROW(kind(Id::fromBits(Id::T{15} << Id::numDataBits)));
+  static_assert(qlever::enumSize<Datatype> <= 15);
+  EXPECT_ANY_THROW(kind(Id::fromBits(Id::DatatypeType{15}, 0)));
 }
 
 // Test the order on groups of `Id`s: the `Id`s of one group are equivalent, and
@@ -118,9 +123,7 @@ TEST(OrderByComparator, compare) {
   auto* qec = getQec();
   const auto& context = qec->getLocalVocabContext();
   auto getId = makeGetId(qec->getIndex());
-  auto local = [](const LocalVocabEntry& entry) {
-    return Id::makeFromLocalVocabIndex(&entry);
-  };
+  auto local = ad_utility::testing::makeGetLocalVocabId();
   auto blankNodeOfBnodeFunction = localVocabEntryFromStringRepresentation(
       absl::StrCat(QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX, "_:un_label_0>"),
       context);

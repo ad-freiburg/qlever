@@ -15,7 +15,7 @@
 
 #include "util/GTestHelpers.h"
 #include "util/OwnedOrViewedVector.h"
-#include "util/Serializer/ByteBufferSerializer.h"
+#include "util/serializer/ByteBufferSerializer.h"
 
 namespace {
 using ad_utility::OwnedOrViewedVector;

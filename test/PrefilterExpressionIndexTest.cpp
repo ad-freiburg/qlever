@@ -137,7 +137,7 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   const IndexImpl& indexImpl = qet->getIndex().getImpl();
   std::function<Id(const std::string&)> getVocabId =
       ad_utility::testing::makeGetId(qet->getIndex());
-  LocalVocab vocab{};
+  LocalVocab vocab{ad_utility::testing::makeAllocator()};
   const Id referenceDate1 = DateId(DateParser, "1999-11-11");
   const Id referenceDate2 = DateId(DateParser, "2005-02-27");
   const Id undef = Id::makeUndefined();

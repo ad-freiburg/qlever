@@ -13,7 +13,7 @@ add_subdirectory(vocabulary)
 # `LocalVocabContext` interface, whose only implementation is
 # `LocalVocabContextImpl`, which is part of the `index` library below.
 add_library(localVocab LocalVocabEntry.cpp LocalVocabContext.cpp LocalVocab.cpp)
-qlever_target_link_libraries(localVocab basicParser)
+qlever_target_link_libraries(localVocab qlever_util rdfTypes)
 
 add_library(index
         Index.cpp IndexImpl.cpp IndexImpl.Text.cpp
@@ -22,6 +22,11 @@ add_library(index
         DocsDB.cpp FTSAlgorithms.cpp
         CompressedRelationMetadata.cpp CompressedRelationReader.cpp
         CompressedRelationReaderBlockSelection.cpp compressedRelationWriter/CompressedRelationWriter.cpp
+        chunkwisePermutationWriter/BoundaryConsolidator.cpp
+        chunkwisePermutationWriter/ChunkWriter.cpp
+        chunkwisePermutationWriter/ChunkwisePermutationWriter.cpp
+        chunkwisePermutationWriter/ConcurrentCallbackDispatcher.cpp
+        chunkwisePermutationWriter/Statistics.cpp
         DistinctCol0Ids.cpp
         PatternCreator.cpp ScanSpecification.cpp
         DeltaTriples.cpp TextScoring.cpp TextScoringEnum.cpp TextIndexReadWrite.cpp

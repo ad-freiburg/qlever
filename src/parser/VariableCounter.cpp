@@ -36,8 +36,14 @@ void VariableCounter::operator()(const SparqlFilter& filter) {
 
 // _____________________________________________________________________________
 void VariableCounter::operator()(const Subquery& op) {
-  (*this)(op.get()._rootGraphPattern);
-  if (const auto& values = op.get().postQueryValuesClause_) {
+  const auto& query = op.get();
+  (*this)(query._rootGraphPattern);
+  // With a `GROUP BY`, the aliases of the `SELECT` clause are not turned into
+  // `BIND`s of the root graph pattern, so count their targets here.
+  for (const auto& alias : query.selectClause().getAliases()) {
+    (*this)(alias._target);
+  }
+  if (const auto& values = query.postQueryValuesClause_) {
     (*this)(values.value());
   }
 }
@@ -176,6 +182,12 @@ void VariableCounter::operator()(const MaterializedViewQuery& op) {
 // _____________________________________________________________________________
 void VariableCounter::operator()(const ExternalValuesQuery& op) {
   (*this)(op.variables_);
+}
+
+// ____________________________________________________________________________
+void VariableCounter::operator()(const RowNumberQuery& op) {
+  (*this)(op.rowNumberVariable_);
+  (*this)(op.childGraphPattern_);
 }
 
 }  // namespace parsedQuery

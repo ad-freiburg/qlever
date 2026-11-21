@@ -114,8 +114,9 @@ std::optional<PreprocessedTriple>
 ConstructTemplatePreprocessor::preprocessTriple(
     const std::array<GraphTerm, NUM_TRIPLE_POSITIONS>& triple) {
   PreprocessedTriple preprocessedTriple;
-  for (size_t pos = 0; pos < NUM_TRIPLE_POSITIONS; ++pos) {
-    auto role = static_cast<PositionInTriple>(pos);
+  static_assert(NUM_TRIPLE_POSITIONS == qlever::enumSize<PositionInTriple>);
+  for (PositionInTriple role : qlever::allEnumValues<PositionInTriple>) {
+    auto pos = static_cast<size_t>(role);
     auto preprocessed = preprocessTermImpl(triple.at(pos), role);
     if (!preprocessed) return std::nullopt;
     preprocessedTriple.at(pos) = std::move(*preprocessed);
@@ -126,8 +127,8 @@ ConstructTemplatePreprocessor::preprocessTriple(
 // _____________________________________________________________________________
 PreprocessedConstructTemplate ConstructTemplatePreprocessor::preprocess(
     const Triples& templateTriples, const VariableToColumnMap& variableColumns,
-    const Index& index) {
-  return ConstructTemplatePreprocessor{variableColumns, index}.run(
+    const Index& index, const LocalVocab::Allocator& allocator) {
+  return ConstructTemplatePreprocessor{variableColumns, index, allocator}.run(
       templateTriples);
 }
 

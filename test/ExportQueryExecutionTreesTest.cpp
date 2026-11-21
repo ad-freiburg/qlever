@@ -7,11 +7,13 @@
 #include <gmock/gmock.h>
 
 #include "./WordsAndDocsFileLineCreator.h"
+#include "./util/LocalVocabTestHelpers.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/QueryPlanner.h"
 #include "index/ExportIds.h"
 #include "parser/SparqlParser.h"
 #include "rdfTypes/RdfEscaping.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IdTestHelpers.h"
@@ -19,6 +21,8 @@
 #include "util/ParseableDuration.h"
 #include "util/ParsedQueryTestHelpers.h"
 #include "util/RuntimeParametersTestHelpers.h"
+
+using ad_utility::testing::makeLocalVocab;
 
 using namespace std::string_literals;
 using namespace std::chrono_literals;
@@ -29,6 +33,10 @@ using ::testing::HasSubstr;
 
 namespace {
 using ad_utility::testing::parseQuery;
+
+// The empty sort order for the `Result`s constructed in the tests below.
+const qlm::vector<ColumnIndex> noSortedColumns{
+    ad_utility::testing::makeAllocator()};
 
 // Run the given SPARQL `query` on the index that is built from the `config` and
 // export the result as the `mediaType`.
@@ -150,7 +158,7 @@ void runSelectQueryTestCase(
     const TestCaseSelectQuery& testCase, bool useTextIndex = false,
     ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto cleanup = setRuntimeParameterForTest<
-      &RuntimeParameters::sparqlResultsJsonWithTime_>(false);
+      &RuntimeParameters::sparqlResultsJsonWithMeta_>(false);
   auto trace = generateLocationTrace(l, "runSelectQueryTestCase");
   using enum ad_utility::MediaType;
   EXPECT_EQ(
@@ -194,7 +202,7 @@ void runConstructQueryTestCase(
     const TestCaseConstructQuery& testCase,
     ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
   auto cleanup = setRuntimeParameterForTest<
-      &RuntimeParameters::sparqlResultsJsonWithTime_>(false);
+      &RuntimeParameters::sparqlResultsJsonWithMeta_>(false);
   auto trace = generateLocationTrace(l, "runConstructQueryTestCase");
   using enum ad_utility::MediaType;
   EXPECT_EQ(runQueryStreamableResult(testCase.kg, testCase.query, tsv),
@@ -1460,7 +1468,7 @@ TEST(ExportQueryExecutionTrees, TextRecordWithQuotes) {
 
   // The SPARQL JSON and XML exports contain the whole text as a plain literal.
   auto cleanup = setRuntimeParameterForTest<
-      &RuntimeParameters::sparqlResultsJsonWithTime_>(false);
+      &RuntimeParameters::sparqlResultsJsonWithMeta_>(false);
   EXPECT_EQ(
       nlohmann::json::parse(
           runQueryStreamableResult(config, query, sparqlJson)),
@@ -1475,7 +1483,7 @@ TEST(ExportQueryExecutionTrees, TextRecordWithQuotes) {
 
 // Test that a SELECT query can be exported in QLever's binary format.
 TEST(ExportQueryExecutionTrees, BinaryQLeverExport) {
-  // The format itself is tested in `engine/BinaryExportTest.cpp`.
+  // The format itself is tested in `engine/binaryExport/BinaryExportTest.cpp`.
   auto result = runQueryStreamableResult(
       "<s> <p> <o> .", "SELECT ?o WHERE { <s> <p> ?o }",
       ad_utility::MediaType::binaryQleverExport);
@@ -1785,11 +1793,11 @@ TEST(ExportQueryExecutionTrees, CornerCases) {
   auto qec = ad_utility::testing::getQec(kg);
   AD_EXPECT_THROW_WITH_MESSAGE(
       ql::exportIds::idToStringAndType(qec->getIndex(), Id::max(),
-                                       LocalVocab{}),
+                                       makeLocalVocab()),
       ::testing::ContainsRegex("should be unreachable"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       ql::exportIds::getLiteralOrIriFromVocabIndex(qec->getIndex(), Id::max(),
-                                                   LocalVocab{}),
+                                                   makeLocalVocab()),
       ::testing::ContainsRegex("should be unreachable"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       ql::exportIds::idToStringAndTypeForEncodedValue(
@@ -1886,7 +1894,7 @@ INSTANTIATE_TEST_SUITE_P(StreamableMediaTypes, StreamableMediaTypesFixture,
 TEST(ExportQueryExecutionTrees, getIdTablesReturnsSingletonIterator) {
   auto idTable = makeIdTableFromVector({{42}, {1337}});
 
-  Result result{idTable.clone(), {}, LocalVocab{}};
+  Result result{idTable.clone(), noSortedColumns, makeLocalVocab()};
   auto generator = ExportQueryExecutionTrees::getIdTables(result);
 
   EXPECT_THAT(convertToVector(std::move(generator)), matchesIdTables(idTable));
@@ -1898,12 +1906,12 @@ TEST(ExportQueryExecutionTrees, getIdTablesMirrorsGenerator) {
   IdTable idTable2 = makeIdTableFromVector({{42}, {1337}});
   auto tableGenerator = [](IdTable idTableA,
                            IdTable idTableB) -> Result::Generator {
-    co_yield {std::move(idTableA), LocalVocab{}};
+    co_yield {std::move(idTableA), makeLocalVocab()};
 
-    co_yield {std::move(idTableB), LocalVocab{}};
+    co_yield {std::move(idTableB), makeLocalVocab()};
   }(idTable1.clone(), idTable2.clone());
 
-  Result result{std::move(tableGenerator), {}};
+  Result result{std::move(tableGenerator), noSortedColumns};
   auto generator = ExportQueryExecutionTrees::getIdTables(result);
 
   EXPECT_THAT(convertToVector(std::move(generator)),
@@ -1914,11 +1922,11 @@ TEST(ExportQueryExecutionTrees, getIdTablesMirrorsGenerator) {
 TEST(ExportQueryExecutionTrees, ensureCorrectSlicingOfSingleIdTable) {
   auto tableGenerator = []() -> Result::Generator {
     Result::IdTableVocabPair pair1{makeIdTableFromVector({{1}, {2}, {3}}),
-                                   LocalVocab{}};
+                                   makeLocalVocab()};
     co_yield pair1;
   }();
 
-  Result result{std::move(tableGenerator), {}};
+  Result result{std::move(tableGenerator), noSortedColumns};
   uint64_t resultSizeTotal = 0;
   auto generator = ExportQueryExecutionTrees::getRowIndices(
       LimitOffsetClause{._limit = 1, ._offset = 1}, result, resultSizeTotal);
@@ -1934,15 +1942,15 @@ TEST(ExportQueryExecutionTrees,
      ensureCorrectSlicingOfIdTablesWhenFirstIsSkipped) {
   auto tableGenerator = []() -> Result::Generator {
     Result::IdTableVocabPair pair1{makeIdTableFromVector({{1}, {2}, {3}}),
-                                   LocalVocab{}};
+                                   makeLocalVocab()};
     co_yield pair1;
 
     Result::IdTableVocabPair pair2{makeIdTableFromVector({{4}, {5}}),
-                                   LocalVocab{}};
+                                   makeLocalVocab()};
     co_yield pair2;
   }();
 
-  Result result{std::move(tableGenerator), {}};
+  Result result{std::move(tableGenerator), noSortedColumns};
   uint64_t resultSizeTotal = 0;
   auto generator = ExportQueryExecutionTrees::getRowIndices(
       LimitOffsetClause{._limit = std::nullopt, ._offset = 3}, result,
@@ -1960,15 +1968,15 @@ TEST(ExportQueryExecutionTrees,
      ensureCorrectSlicingOfIdTablesWhenLastIsSkipped) {
   auto tableGenerator = []() -> Result::Generator {
     Result::IdTableVocabPair pair1{makeIdTableFromVector({{1}, {2}, {3}}),
-                                   LocalVocab{}};
+                                   makeLocalVocab()};
     co_yield pair1;
 
     Result::IdTableVocabPair pair2{makeIdTableFromVector({{4}, {5}}),
-                                   LocalVocab{}};
+                                   makeLocalVocab()};
     co_yield pair2;
   }();
 
-  Result result{std::move(tableGenerator), {}};
+  Result result{std::move(tableGenerator), noSortedColumns};
   uint64_t resultSizeTotal = 0;
   auto generator = ExportQueryExecutionTrees::getRowIndices(
       LimitOffsetClause{._limit = 3}, result, resultSizeTotal);
@@ -1985,15 +1993,15 @@ TEST(ExportQueryExecutionTrees,
      ensureCorrectSlicingOfIdTablesWhenFirstAndSecondArePartial) {
   auto tableGenerator = []() -> Result::Generator {
     Result::IdTableVocabPair pair1{makeIdTableFromVector({{1}, {2}, {3}}),
-                                   LocalVocab{}};
+                                   makeLocalVocab()};
     co_yield pair1;
 
     Result::IdTableVocabPair pair2{makeIdTableFromVector({{4}, {5}}),
-                                   LocalVocab{}};
+                                   makeLocalVocab()};
     co_yield pair2;
   }();
 
-  Result result{std::move(tableGenerator), {}};
+  Result result{std::move(tableGenerator), noSortedColumns};
   uint64_t resultSizeTotal = 0;
   auto generator = ExportQueryExecutionTrees::getRowIndices(
       LimitOffsetClause{._limit = 3, ._offset = 1}, result, resultSizeTotal);
@@ -2011,19 +2019,19 @@ TEST(ExportQueryExecutionTrees,
      ensureCorrectSlicingOfIdTablesWhenFirstAndLastArePartial) {
   auto tableGenerator = []() -> Result::Generator {
     Result::IdTableVocabPair pair1{makeIdTableFromVector({{1}, {2}, {3}}),
-                                   LocalVocab{}};
+                                   makeLocalVocab()};
     co_yield pair1;
 
     Result::IdTableVocabPair pair2{makeIdTableFromVector({{4}, {5}}),
-                                   LocalVocab{}};
+                                   makeLocalVocab()};
     co_yield pair2;
 
     Result::IdTableVocabPair pair3{makeIdTableFromVector({{6}, {7}, {8}, {9}}),
-                                   LocalVocab{}};
+                                   makeLocalVocab()};
     co_yield pair3;
   }();
 
-  Result result{std::move(tableGenerator), {}};
+  Result result{std::move(tableGenerator), noSortedColumns};
   uint64_t resultSizeTotal = 0;
   auto generator = ExportQueryExecutionTrees::getRowIndices(
       LimitOffsetClause{._limit = 5, ._offset = 2}, result, resultSizeTotal);
@@ -2047,7 +2055,7 @@ TEST(ExportQueryExecutionTrees, ensureGeneratorIsNotConsumedWhenNotRequired) {
       co_return;
     }();
 
-    Result result{std::move(throwingGenerator), {}};
+    Result result{std::move(throwingGenerator), noSortedColumns};
     uint64_t resultSizeTotal = 0;
     auto generator = ExportQueryExecutionTrees::getRowIndices(
         LimitOffsetClause{._limit = 0, ._offset = 0}, result, resultSizeTotal);
@@ -2057,7 +2065,7 @@ TEST(ExportQueryExecutionTrees, ensureGeneratorIsNotConsumedWhenNotRequired) {
   {
     auto throwAfterYieldGenerator = []() -> Result::Generator {
       Result::IdTableVocabPair pair1{makeIdTableFromVector({{1}}),
-                                     LocalVocab{}};
+                                     makeLocalVocab()};
       co_yield pair1;
 
       std::string message =
@@ -2067,7 +2075,7 @@ TEST(ExportQueryExecutionTrees, ensureGeneratorIsNotConsumedWhenNotRequired) {
       throw std::runtime_error(message);
     }();
 
-    Result result{std::move(throwAfterYieldGenerator), {}};
+    Result result{std::move(throwAfterYieldGenerator), noSortedColumns};
     uint64_t resultSizeTotal = 0;
     auto generator = ExportQueryExecutionTrees::getRowIndices(
         LimitOffsetClause{._limit = 1, ._offset = 0}, result, resultSizeTotal);
@@ -2227,8 +2235,8 @@ TEST(ExportQueryExecutionTrees, EncodedIriManagerUsage) {
   auto qec = ad_utility::testing::getQec(std::move(config));
 
   // Parse query with the same EncodedIriManager
-  auto parsedQuery =
-      SparqlParser::parseQuery(encodedIriManager.get(), query, {});
+  auto parsedQuery = SparqlParser::parseQuery(
+      encodedIriManager.get(), ad_utility::testing::makeAllocator(), query, {});
 
   auto cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
@@ -2269,39 +2277,47 @@ TEST(ExportQueryExecutionTrees, EncodedIriManagerUsage) {
   EXPECT_THAT(tsvResult, HasSubstr("http://test.com/id/111"));
 }
 
-// _____________________________________________________________________________
-// Test that a `sparql-results+json` export includes a `meta` field if and
-// only if the respective runtime parameter is enabled.
+// Test that a `sparql-results+json` export includes a `meta` field with the
+// query time, the result size, and the warnings if and only if the runtime
+// parameter `sparql-results-json-with-meta` is enabled.
 TEST(ExportQueryExecutionTrees, SparqlJsonWithMetaField) {
+  // A knowledge graph with a single triple, a query that matches it, and the
+  // parameter enabled.
   std::string kg = "<x> <y> <z>";
   std::string query = "SELECT ?s ?p ?o WHERE {?s ?p ?o}";
+  using enum ad_utility::MediaType;
+  auto cleanup = setRuntimeParameterForTest<
+      &RuntimeParameters::sparqlResultsJsonWithMeta_>(true);
 
-  // Case 1: Runtime parameter enabled (default).
-  {
-    auto cleanup = setRuntimeParameterForTest<
-        &RuntimeParameters::sparqlResultsJsonWithTime_>(true);
-    auto result = runJSONQuery(kg, query, ad_utility::MediaType::sparqlJson);
-    ASSERT_TRUE(result.contains("head"));
-    ASSERT_TRUE(result.contains("results"));
-    ASSERT_TRUE(result["head"].contains("vars"));
-    ASSERT_TRUE(result.contains("meta"));
-    ASSERT_TRUE(result["meta"].contains("query-time-ms"));
-    ASSERT_TRUE(result["meta"].contains("result-size-total"));
-    ASSERT_TRUE(result["meta"]["query-time-ms"].is_number());
-    ASSERT_TRUE(result["meta"]["result-size-total"].is_number());
-    EXPECT_GE(result["meta"]["query-time-ms"].get<int64_t>(), 0);
-    EXPECT_EQ(result["meta"]["result-size-total"].get<int64_t>(), 1);
-  }
+  // With the parameter enabled, `meta` contains the query time, the result
+  // size, and an empty list of warnings.
+  auto result = runJSONQuery(kg, query, sparqlJson);
+  const auto& meta = result.at("meta");
+  EXPECT_GE(meta.at("query-time-ms").get<int64_t>(), 0);
+  EXPECT_EQ(meta.at("result-size-total").get<int64_t>(), 1);
+  EXPECT_THAT(meta.at("warnings"), ::testing::IsEmpty());
 
-  // Case 2: Runtime parameter disabled.
+  // A warning from the query planning is part of `meta`.
+  EXPECT_THAT(
+      runJSONQuery(kg, "SELECT (COUNT(?s) AS ?c) WHERE {?s ?p ?o} ORDER BY ?c",
+                   sparqlJson)
+          .at("meta")
+          .at("warnings"),
+      ElementsAre(HasSubstr("The ORDER BY clause has no effect")));
+
+  // A warning that is added during the lazy computation of the result is also
+  // part of `meta` (because `meta` is written after the result).
+  EXPECT_THAT(runJSONQuery(kg, "SELECT * WHERE {VALUES ?s {UNDEF} ?s <y>* ?o}",
+                           sparqlJson)
+                  .at("meta")
+                  .at("warnings"),
+              ElementsAre(HasSubstr("contains UNDEF values")));
+
+  // With the parameter disabled, there is no `meta` field.
   {
-    auto cleanup = setRuntimeParameterForTest<
-        &RuntimeParameters::sparqlResultsJsonWithTime_>(false);
-    auto result = runJSONQuery(kg, query, ad_utility::MediaType::sparqlJson);
-    ASSERT_TRUE(result.contains("head"));
-    ASSERT_TRUE(result.contains("results"));
-    ASSERT_TRUE(result["head"].contains("vars"));
-    ASSERT_FALSE(result.contains("meta"));
+    auto cleanupDisabled = setRuntimeParameterForTest<
+        &RuntimeParameters::sparqlResultsJsonWithMeta_>(false);
+    EXPECT_FALSE(runJSONQuery(kg, query, sparqlJson).contains("meta"));
   }
 }
 

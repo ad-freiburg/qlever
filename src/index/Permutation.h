@@ -22,6 +22,7 @@
 #include "index/KeyOrder.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "util/CancellationHandle.h"
+#include "util/EnumSize.h"
 #include "util/Executor.h"
 #include "util/File.h"
 #include "util/HashSet.h"
@@ -43,6 +44,7 @@ class Permutation {
   using KeyOrder = qlever::KeyOrder;
   /// Identifiers for the six possible permutations.
   enum struct Enum { PSO, POS, SPO, SOP, OPS, OSP };
+  QLEVER_NESTED_ENUM_SIZE(Enum, 6);
   // Unfortunately there is a bug in GCC that doesn't allow use to simply use
   // `using enum`.
   static constexpr auto PSO = Enum::PSO;
@@ -304,6 +306,13 @@ class Permutation {
       ColumnIndex col) const;
 
  private:
+  // Throw a `std::runtime_error` that names this permutation if it was not
+  // loaded (see `loadFromDisk`), for example for a `Qlever` instance that was
+  // loaded from a blob of the named result cache. Called by the entry points
+  // of the scans, so that such queries fail with a readable message instead of
+  // an assertion deep inside the scan.
+  void throwIfNotLoaded() const;
+
   // Common implementation of the two `lazyScan` overloads above. Performs the
   // scan through the given `reader`, which may either be this permutation's
   // shared reader or an independently created one.

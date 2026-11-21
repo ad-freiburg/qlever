@@ -7,6 +7,7 @@
 #include "backports/algorithm.h"
 #include "backports/type_traits.h"
 #include "parser/GraphPatternOperation.h"
+#include "util/ContainersWithAllocator.h"
 
 namespace checkUsePatternTrick {
 // __________________________________________________________________________
@@ -64,11 +65,11 @@ bool isVariableContainedInGraphPatternOperation(
       return ad_utility::contains(arg._inlineValues._variables, variable);
     } else if constexpr (std::is_same_v<T, p::Service>) {
       return ad_utility::contains(arg.visibleVariables_, variable);
-    } else if constexpr (ad_utility::SameAsAny<T, p::PathQuery, p::SpatialQuery,
-                                               p::TextSearchQuery,
-                                               p::NamedCachedResult,
-                                               p::MaterializedViewQuery,
-                                               p::ExternalValuesQuery>) {
+    } else if constexpr (ad_utility::SameAsAny<
+                             T, p::PathQuery, p::SpatialQuery,
+                             p::TextSearchQuery, p::NamedCachedResult,
+                             p::MaterializedViewQuery, p::ExternalValuesQuery,
+                             p::RowNumberQuery>) {
       // For `MagicServiceQuery`s disable the pattern trick. This might slow
       // things down more than necessary but is never wrong. In the future this
       // could potentially be enabled for certain magic service queries.
@@ -91,7 +92,7 @@ bool isVariableContainedInGraphPatternOperation(
 // permutation or, if no triple suitable for adding this column exists, by
 // adding a triple `?subject ql:has-pattern ?predicate`.
 static void rewriteTriplesForPatternTrick(const PatternTrickTuple& subAndPred,
-                                          std::vector<SparqlTriple>& triples) {
+                                          qlm::vector<SparqlTriple>& triples) {
   // The following lambda tries to find a triple in the `triples` that has the
   // subject variable of the pattern trick in its `triplePosition` (which is
   // either the subject or the object) and a fixed predicate (no variable). If
