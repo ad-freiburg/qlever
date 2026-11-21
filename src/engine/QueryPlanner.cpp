@@ -46,6 +46,7 @@
 #include "engine/NeutralElementOperation.h"
 #include "engine/NeutralOptional.h"
 #include "engine/OptionalJoin.h"
+#include "engine/OptionalJoinConditionPlanning.h"
 #include "engine/OrderBy.h"
 #include "engine/PathSearch.h"
 #include "engine/PermutationSelector.h"
@@ -289,7 +290,10 @@ std::shared_ptr<QueryExecutionTree> QueryPlanner::createExecutionTree(
 }
 
 // _____________________________________________________________________________
-SubtreePlanVec QueryPlanner::optimize(ParsedQuery::GraphPattern* rootPattern) {
+SubtreePlanVec QueryPlanner::optimize(
+    ParsedQuery::GraphPattern* rootPattern,
+    const std::optional<ad_utility::HashSet<Variable>>&
+        variablesOfLeftSideOfOptional) {
   // Split each FILTER with a conjunct that is a fact (e.g. a maximum
   // distance) into its conjuncts, so that the fact can be rewritten on its
   // own (e.g. to a `SpatialJoin`).
@@ -310,8 +314,8 @@ SubtreePlanVec QueryPlanner::optimize(ParsedQuery::GraphPattern* rootPattern) {
   // it might be, that we have not yet applied all the filters
   // (it might be, that the last join was optional and introduced new variables)
   if (!candidatePlans.empty()) {
-    applyFiltersIfPossible<FilterMode::ApplyAllFiltersAndReplaceUnfiltered>(
-        candidatePlans[0], optimizer.filtersAndSubst_);
+    applyRemainingFilters(candidatePlans[0], optimizer.filtersAndSubst_,
+                          variablesOfLeftSideOfOptional);
     applyTextLimitsIfPossible(
         candidatePlans[0],
         TextLimitVec{rootPattern->textLimits_.begin(),
@@ -332,12 +336,75 @@ SubtreePlanVec QueryPlanner::optimize(ParsedQuery::GraphPattern* rootPattern) {
       auto neutralPlans =
           singlePlanVec(makeSubtreePlan<NeutralElementOperation>(_qec));
       // Neutral element can potentially still get filtered out
-      applyFiltersIfPossible<FilterMode::ApplyAllFiltersAndReplaceUnfiltered>(
-          neutralPlans, optimizer.filtersAndSubst_);
+      applyRemainingFilters(neutralPlans, optimizer.filtersAndSubst_,
+                            variablesOfLeftSideOfOptional);
       return neutralPlans;
     }
     return candidatePlans[0];
   }
+}
+
+// _____________________________________________________________________________
+void QueryPlanner::applyRemainingFilters(
+    SubtreePlanVec& plans, const FiltersAndOptionalSubstitutes& filters,
+    const std::optional<ad_utility::HashSet<Variable>>&
+        variablesOfLeftSideOfOptional) const {
+  // The FILTERs that are the condition of an OPTIONAL are not applied to its
+  // group, but stored in the plans, because they have to be evaluated on the
+  // joined rows.
+  uint64_t idsOfConditionFilters = 0;
+  if (variablesOfLeftSideOfOptional.has_value()) {
+    idsOfConditionFilters = getIdsOfOptionalJoinConditionFilters(
+        plans, filters, variablesOfLeftSideOfOptional.value());
+    for (auto& plan : plans) {
+      for (const auto& [i, filterAndSubst] :
+           ::ranges::views::enumerate(filters)) {
+        // NOTE: A FILTER of the condition can only be part of `plan` already
+        // if it has been replaced by a `SpatialJoin`, which only needs one of
+        // its variables. It then stays in the group, like before the condition
+        // was determined.
+        // TODO<ninofrey> Don't create such a `SpatialJoin` for a FILTER that
+        // uses a variable of the left side which is not bound in the group.
+        if (((idsOfConditionFilters >> i) & 1) != 0 &&
+            ((plan._idsOfIncludedFilters >> i) & 1) == 0) {
+          plan.optionalJoinCondition_.push_back(
+              filterAndSubst.filter_.expression_);
+        }
+      }
+    }
+  }
+  applyFiltersIfPossible<FilterMode::ApplyAllFiltersAndReplaceUnfiltered>(
+      plans, filters, idsOfConditionFilters);
+}
+
+// _____________________________________________________________________________
+uint64_t QueryPlanner::getIdsOfOptionalJoinConditionFilters(
+    const SubtreePlanVec& plans, const FiltersAndOptionalSubstitutes& filters,
+    const ad_utility::HashSet<Variable>& variablesOfLeftSideOfOptional) const {
+  auto getIds = [&](const SubtreePlan& plan) {
+    auto isAlwaysDefined = [&plan](const Variable& variable) {
+      return plan._qet->getRootOperation()->isVariableAlwaysDefined(variable);
+    };
+    // All FILTERs are checked, also those that have been applied before, see
+    // the NOTE in `applyRemainingFilters`.
+    uint64_t ids = 0;
+    for (const auto& [i, filterAndSubst] :
+         ::ranges::views::enumerate(filters)) {
+      if (qlever::queryPlanner::isPartOfOptionalJoinCondition(
+              filterAndSubst.filter_.expression_, variablesOfLeftSideOfOptional,
+              isAlwaysDefined)) {
+        ids |= uint64_t{1} << i;
+      }
+    }
+    return ids;
+  };
+  if (plans.empty()) {
+    return 0;
+  }
+  auto ids = getIds(plans.front());
+  AD_EXPENSIVE_CHECK(ql::ranges::all_of(
+      plans, [&](const SubtreePlan& plan) { return getIds(plan) == ids; }));
+  return ids;
 }
 
 // _____________________________________________________________________________
@@ -1402,7 +1469,8 @@ std::string QueryPlanner::getPruningKey(
 // _____________________________________________________________________________
 template <QueryPlanner::FilterMode mode>
 void QueryPlanner::applyFiltersIfPossible(
-    SubtreePlanVec& row, const FiltersAndOptionalSubstitutes& filters) const {
+    SubtreePlanVec& row, const FiltersAndOptionalSubstitutes& filters,
+    uint64_t idsOfFiltersToSkip) const {
   // For each plan in `row`, apply every filter that is not applied to it yet
   // and whose variables are all always defined in the plan (not just present,
   // see the NOTE at the check below). Whether the unfiltered plan is kept or
@@ -1425,7 +1493,7 @@ void QueryPlanner::applyFiltersIfPossible(
     for (const auto& [i, filterAndSubst] :
          ::ranges::views::enumerate(filters)) {
       checkCancellation();
-      if (((plan._idsOfIncludedFilters >> i) & 1) != 0) {
+      if ((((plan._idsOfIncludedFilters | idsOfFiltersToSkip) >> i) & 1) != 0) {
         continue;
       }
 
@@ -3062,6 +3130,50 @@ QueryPlanner::GraphPatternPlanner::getVariablesOfPreviousPatterns() const {
 }
 
 // _____________________________________________________________________________
+ad_utility::HashSet<Variable>
+QueryPlanner::GraphPatternPlanner::getVariablesOfLeftSideOfOptional() const {
+  auto variables = getVariablesOfPreviousPatterns();
+  // The index scan of a triple inside of `GRAPH ?g {...}` has a column for
+  // `?g`, but only once the triple is planned (contains-word and materialized
+  // views are not allowed inside a `GRAPH` clause). The planned triples are
+  // among the `candidatePlans_` and have this column, but the triples in
+  // `candidateTriples_` are not planned yet.
+  if (const auto& graphVariable = planner_.activeGraphVariable_;
+      graphVariable.has_value() && !candidateTriples_._triples.empty()) {
+    variables.insert(graphVariable.value());
+  }
+  return variables;
+}
+
+// _____________________________________________________________________________
+void QueryPlanner::GraphPatternPlanner::applyOptionalJoinConditionToGroup(
+    SubtreePlanVec& candidates,
+    const ad_utility::HashSet<Variable>& variablesOfLeftSideOfOptional) {
+  std::vector<std::string> warnings;
+  for (auto& plan : candidates) {
+    auto condition = std::move(plan.optionalJoinCondition_);
+    plan.optionalJoinCondition_.clear();
+    for (const auto& expression : condition) {
+      auto warning = qlever::queryPlanner::getOptionalJoinConditionWarning(
+          expression, variablesOfLeftSideOfOptional,
+          [&plan](const Variable& variable) {
+            return plan._qet->getRootOperation()->isVariableAlwaysDefined(
+                variable);
+          });
+      if (!ad_utility::contains(warnings, warning)) {
+        warnings.push_back(std::move(warning));
+      }
+      SubtreePlan newPlan =
+          makeSubtreePlan<Filter>(qec_, plan._qet, expression);
+      mergeSubtreePlanIds(newPlan, newPlan, plan);
+      newPlan.type = plan.type;
+      plan = std::move(newPlan);
+    }
+  }
+  ql::ranges::move(warnings, std::back_inserter(planner_.warnings_));
+}
+
+// _____________________________________________________________________________
 template <typename Variables>
 bool QueryPlanner::GraphPatternPlanner::handleUnconnectedMinusOrOptional(
     SubtreePlanVec& candidates, const Variables& variables,
@@ -3072,21 +3184,19 @@ bool QueryPlanner::GraphPatternPlanner::handleUnconnectedMinusOrOptional(
     return false;
   }
   // Inside `GRAPH ?g {...}` the patterns are evaluated per graph, so an
-  // OPTIONAL has to be joined on `?g` if the previous patterns bind it. The
-  // triples only get their `?g` column when they are planned (contains-word and
-  // materialized views are not allowed inside a `GRAPH` clause).
+  // OPTIONAL has to be joined on `?g` if the previous patterns bind it, see
+  // `getVariablesOfLeftSideOfOptional`.
   //
   // For a MINUS on the other hand, `?g` only counts as a shared variable if it
   // is in scope on both sides without the implicit graph columns of the index
   // scans. Otherwise, the MINUS would remove all rows of every graph in which
   // its pattern matches. If the MINUS is connected via other variables, it
   // is still joined on `?g`, as the patterns are evaluated per graph.
-  auto previousVariables = getVariablesOfPreviousPatterns();
+  auto previousVariables = type == OPTIONAL ? getVariablesOfLeftSideOfOptional()
+                                            : getVariablesOfPreviousPatterns();
   if (const auto& graphVariable = planner_.activeGraphVariable_;
       graphVariable.has_value()) {
-    if (type == OPTIONAL && !candidateTriples_._triples.empty()) {
-      previousVariables.insert(graphVariable.value());
-    } else if (type == MINUS && !isGraphVariableInScopeOnBothSidesOfMinus) {
+    if (type == MINUS && !isGraphVariableInScopeOnBothSidesOfMinus) {
       previousVariables.erase(graphVariable.value());
     }
   }
@@ -3265,7 +3375,12 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
       }
     }
 
-    auto candidates = planner_.optimize(&arg._child);
+    std::optional<ad_utility::HashSet<Variable>> variablesOfLeftSideOfOptional;
+    if constexpr (std::is_same_v<T, p::Optional>) {
+      variablesOfLeftSideOfOptional = getVariablesOfLeftSideOfOptional();
+    }
+    auto candidates =
+        planner_.optimize(&arg._child, variablesOfLeftSideOfOptional);
 
     if constexpr (std::is_same_v<T, p::GroupGraphPattern>) {
       if (const auto* graphPair = std::get_if<std::pair<
@@ -3278,7 +3393,11 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     if constexpr (std::is_same_v<T, p::Optional>) {
       for (auto& c : candidates) {
         c.type = SubtreePlan::OPTIONAL;
+        // TODO<ninofrey> Pass the condition to the `OptionalJoin`, which has
+        // to evaluate it on the joined rows.
       }
+      applyOptionalJoinConditionToGroup(candidates,
+                                        variablesOfLeftSideOfOptional.value());
     }
     visitGroupOptionalOrMinus(std::move(candidates));
     if (datasetBackup.has_value()) {
