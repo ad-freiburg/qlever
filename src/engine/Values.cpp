@@ -34,9 +34,9 @@ std::shared_ptr<QueryExecutionTree> makeValuesForSingleValue(
 }
 
 // ____________________________________________________________________________
-std::string Values::getCacheKeyImpl() const {
-  return absl::StrCat("VALUES (", parsedValues_.variablesToString(), ") { ",
-                      parsedValues_.valuesToString(), " }");
+qlm::string Values::getCacheKeyImpl() const {
+  return qlm::StrCat(allocator(), "VALUES (", parsedValues_.variablesToString(),
+                     ") { ", parsedValues_.valuesToString(), " }");
 }
 
 // ____________________________________________________________________________
@@ -131,7 +131,7 @@ Result Values::computeResult([[maybe_unused]] bool requestLaziness) {
   IdTable idTable{getExecutionContext()->getAllocator()};
   idTable.setNumColumns(getResultWidth());
 
-  LocalVocab localVocab{};
+  LocalVocab localVocab{allocator()};
 
   // Fill the result table using the `writeValues` method below.
   size_t resWidth = getResultWidth();

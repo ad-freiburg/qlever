@@ -235,4 +235,23 @@ constexpr inline size_t NumColumnsIndexBuilding = 4;
 // is stored in the metadata of the block.
 constexpr inline size_t MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA = 20;
 
+// The bounds of the memory limit of the twin sorter of a single chunk of the
+// chunkwise permutation writer (see
+// `chunkwisePermutationWriter::Options::twinSorterMemoryPerChunk_`). Each
+// running chunk has its own twin sorter, so the memory of the sorter whose
+// output is written is split evenly among the threads, and the result is
+// clamped to these bounds (see `IndexImpl::createPermutationPairImpl`).
+//
+// NOTE: The lower bound keeps the twin sorters from writing tiny runs (and
+// hence from merging very many of them) if there are many threads. The upper
+// bound is enough for the twin rows of almost every single relation, and a
+// relation with more twin rows only needs a (cheap) merge of the runs that its
+// twin sorter has written.
+constexpr inline ad_utility::MemorySize
+    CHUNKWISE_WRITER_MIN_TWIN_SORTER_MEMORY_PER_CHUNK =
+        ad_utility::MemorySize::megabytes(64);
+constexpr inline ad_utility::MemorySize
+    CHUNKWISE_WRITER_MAX_TWIN_SORTER_MEMORY_PER_CHUNK =
+        ad_utility::MemorySize::gigabytes(1);
+
 #endif  // QLEVER_SRC_INDEX_CONSTANTSINDEXBUILDING_H

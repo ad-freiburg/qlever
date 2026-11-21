@@ -77,6 +77,11 @@ class CacheValue {
 // That way, two identical trees with different snapshot indices will have a
 // different cache key. This has the (desired!) effect that UPDATE requests
 // correctly invalidate preexisting cache results.
+//
+// TODO<RobinTF> Support heterogeneous lookup in the `QueryResultCache` (e.g.
+// with a key that holds a `std::string_view`), s.t. the lookups (e.g. in
+// `QueryExecutionTree::readFromCache`) don't have to copy the cache key of
+// the operation (which is a `qlm::string`) into a `std::string`.
 struct QueryCacheKey {
   std::string key_;
   size_t locatedTriplesSnapshotIndex_;

@@ -9,6 +9,7 @@
 #include <exception>
 #include <regex>
 
+#include "./util/LocalVocabTestHelpers.h"
 #include "backports/StartsWithAndEndsWith.h"
 #include "engine/Join.h"
 #include "engine/Service.h"
@@ -34,6 +35,8 @@
 #include "util/RuntimeParametersTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
 #include "util/http/HttpUtils.h"
+
+using ad_utility::testing::makeLocalVocab;
 
 using ad_utility::testing::colIndices;
 using ad_utility::testing::iriLocalVocabEntry;
@@ -129,7 +132,7 @@ class ServiceTest : public ::testing::Test {
   static Service::SiblingInfo siblingInfoFromOp(std::shared_ptr<Operation> op) {
     return Service::SiblingInfo{op->getResult(),
                                 op->getExternallyVisibleVariableColumns(),
-                                op->getCacheKey()};
+                                std::string{op->getCacheKey()}};
   };
 };
 
@@ -886,7 +889,7 @@ TEST_F(ServiceTest, blankNodesAcrossResponseChunks) {
 // ____________________________________________________________________________
 TEST_F(ServiceTest, idToValueForValuesClause) {
   auto idToVc = Service::idToValueForValuesClause;
-  LocalVocab localVocab{};
+  LocalVocab localVocab = makeLocalVocab();
   auto index = ad_utility::testing::makeIndexWithTestSettings();
 
   // blanknode -> nullopt
@@ -900,6 +903,15 @@ TEST_F(ServiceTest, idToValueForValuesClause) {
   EXPECT_EQ(idToVc(index, Id::makeFromInt(42), localVocab), "42");
   EXPECT_EQ(idToVc(index, Id::makeFromDouble(3.14), localVocab), "3.14");
   EXPECT_EQ(idToVc(index, Id::makeFromBool(true), localVocab), "true");
+
+  // Non-finite doubles have no bare SPARQL syntax -> typed literal.
+  auto xsdDouble = absl::StrCat("\"^^<", XSD_DOUBLE_TYPE, ">");
+  EXPECT_EQ(idToVc(index, Id::makeFromDouble(INFINITY), localVocab),
+            absl::StrCat("\"INF", xsdDouble));
+  EXPECT_EQ(idToVc(index, Id::makeFromDouble(-INFINITY), localVocab),
+            absl::StrCat("\"-INF", xsdDouble));
+  EXPECT_EQ(idToVc(index, Id::makeFromDouble(NAN), localVocab),
+            absl::StrCat("\"NaN", xsdDouble));
 
   // Escape Quotes within literals.
   auto getLocalVocabId = ad_utility::testing::makeGetLocalVocabId();
@@ -1013,7 +1025,8 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
                             ad_utility::makeUnlimitedAllocator<IdTable>()};
                 for (size_t i = 0; i < clone.size(); ++i) {
                   idt.push_back(clone[i]);
-                  Result::IdTableVocabPair pair{std::move(idt), LocalVocab{}};
+                  Result::IdTableVocabPair pair{std::move(idt),
+                                                makeLocalVocab()};
                   co_yield pair;
                   idt.clear();
                 }
