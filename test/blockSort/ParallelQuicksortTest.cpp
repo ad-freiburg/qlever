@@ -42,6 +42,7 @@
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "util/CancellationHandle.h"
+#include "util/EnumSize.h"
 #include "util/blockSort/ParallelQuicksort.h"
 #include "util/blockSort/SortState.h"
 #include "util/blockSort/TaskGroup.h"
@@ -193,7 +194,7 @@ enum class Shape {
   NearlySorted,
   SortedBlocksShuffled,
 };
-constexpr size_t numShapes = 10;
+QLEVER_ENUM_SIZE(Shape, 10);
 
 // `numKeys` keys of the given `shape`.
 std::vector<Key> makeKeys(Shape shape, size_t numKeys, std::mt19937_64& gen) {
@@ -302,7 +303,7 @@ void fuzzSort(size_t numIterations, bool withFailures, bool serial) {
     // Big enough for several levels of parallel recursion.
     size_t numKeys =
         random(0, 3) == 0 ? random(0, 40) : random(0, 100 * maxElementsPerTask);
-    auto shape = static_cast<Shape>(random(0, numShapes - 1));
+    auto shape = static_cast<Shape>(random(0, qlever::enumSize<Shape> - 1));
     SCOPED_TRACE(absl::StrCat(
         "iteration=", iteration, " shape=", static_cast<int>(shape),
         " numKeys=", numKeys, " maxElementsPerTask=", maxElementsPerTask,

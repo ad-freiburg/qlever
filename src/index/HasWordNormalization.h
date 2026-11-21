@@ -19,6 +19,7 @@
 namespace ad_utility {
 
 enum class HasWordNormalizationEnum : uint8_t { Lowercase, LowercaseNoAccents };
+QLEVER_ENUM_SIZE(HasWordNormalizationEnum, 2);
 
 // The normalization that is applied to the words of the `ql:has-word` triples
 // (option `--has-word-normalization` of `qlever-index`). In all modes, literals
@@ -34,7 +35,8 @@ class HasWordNormalization
  public:
   using Enum = HasWordNormalizationEnum;
 
-  static constexpr std::array<std::pair<Enum, std::string_view>, 2>
+  static constexpr std::array<std::pair<Enum, std::string_view>,
+                              qlever::enumSize<Enum>>
       descriptions_{{{Enum::Lowercase, "lowercase"},
                      {Enum::LowercaseNoAccents, "lowercase-no-accents"}}};
 
@@ -58,6 +60,12 @@ const inline HasWordNormalization HasWordNormalization::LowercaseNoAccents{
 // its words are normalized with `Lowercase`.
 inline constexpr std::string_view HAS_WORD_NORMALIZATION_KEY =
     "has-word-normalization";
+
+// The key under which it is stored in the configuration of an index whether
+// the index has `ql:has-word` triples. An index that was built before this key
+// existed has no entry for it and is treated as having none.
+inline constexpr std::string_view ADD_HAS_WORD_TRIPLES_KEY =
+    "add-has-word-triples";
 
 // The key under which the predicates to which the `ql:has-word` triples are
 // restricted are stored in the configuration of an index. An index that was

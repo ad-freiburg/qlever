@@ -39,9 +39,9 @@ std::unique_ptr<Operation> DistinctGraphs::cloneImpl() const {
 }
 
 // ____________________________________________________________________________
-std::string DistinctGraphs::getCacheKeyImpl() const {
-  return absl::StrCat("DistinctGraphs includeDefaultGraph=",
-                      includeDefaultGraph_ ? "true" : "false");
+qlm::string DistinctGraphs::getCacheKeyImpl() const {
+  return qlm::StrCat(allocator(), "DistinctGraphs includeDefaultGraph=",
+                     includeDefaultGraph_ ? "true" : "false");
 }
 
 // ____________________________________________________________________________
@@ -87,7 +87,7 @@ Result DistinctGraphs::computeResult([[maybe_unused]] bool requestLaziness) {
   idTable.resize(graphIds.size());
   ql::ranges::transform(graphIds, idTable.getColumn(0).begin(), Id::fromBitsL);
   numOfDistinctGraphs_ = graphIds.size();
-  return {std::move(idTable), resultSortedOn(), LocalVocab{}};
+  return {std::move(idTable), resultSortedOn(), LocalVocab{allocator()}};
 }
 
 // ____________________________________________________________________________

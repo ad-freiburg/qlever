@@ -11,8 +11,7 @@
 
 // The actual implementation of sorting an `IdTable` according to the
 // `sortCols`.
-void IdTableUtils::sort(IdTable& idTable,
-                        const std::vector<ColumnIndex>& sortCols,
+void IdTableUtils::sort(IdTable& idTable, ql::span<const ColumnIndex> sortCols,
                         const SortConfig& sortConfig) {
   size_t width = idTable.numColumns();
 

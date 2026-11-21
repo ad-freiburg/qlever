@@ -7,7 +7,7 @@
 #include <string>
 
 #include "util/ParseException.h"
-#include "util/http/HttpParser/AcceptHeaderQleverVisitor.h"
+#include "util/http/httpParser/AcceptHeaderQleverVisitor.h"
 
 using namespace antlr4;
 using std::string;
@@ -49,11 +49,15 @@ TEST(AcceptHeaderParser, singleTypeNQuads) {
 
 // Test that the name of QLever's binary export format contains its version.
 TEST(AcceptHeaderParser, singleTypeBinaryQleverExport) {
-  auto c = parseAcceptHeader("application/vnd.qlever.results.v1");
+#ifdef QLEVER_USE_SPLIT_LAYOUT
+  std::string name = "application/vnd.qlever.results.v1337";
+#else
+  std::string name = "application/vnd.qlever.results.v1";
+#endif
+  auto c = parseAcceptHeader(name);
   ASSERT_EQ(c.size(), 1u);
   ASSERT_EQ(c[0], MediaType::binaryQleverExport);
-  ASSERT_EQ(toString(MediaType::binaryQleverExport),
-            "application/vnd.qlever.results.v1");
+  ASSERT_EQ(toString(MediaType::binaryQleverExport), name);
 }
 
 // _____________________________________________________________________________

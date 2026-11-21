@@ -69,7 +69,8 @@ std::optional<S2Polyline> SpatialJoinCachedIndex::getPolyline(
     const IdTableView<0>& restable, size_t row, ColumnIndex col,
     const Index& index) {
   auto id = restable.at(row, col);
-  auto str = ql::exportIds::idToStringAndType(index, id, {});
+  auto str = ql::exportIds::idToStringAndType(
+      index, id, LocalVocab{index.getImpl().allocator()});
   if (!str.has_value()) {
     return std::nullopt;
   }

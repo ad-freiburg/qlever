@@ -13,9 +13,9 @@
 #include "global/Constants.h"
 #include "util/Exception.h"
 #include "util/Log.h"
-#include "util/Serializer/SerializeArrayOrTuple.h"
-#include "util/Serializer/SerializeVector.h"
 #include "util/StringUtils.h"
+#include "util/serializer/SerializeArrayOrTuple.h"
+#include "util/serializer/SerializeVector.h"
 
 // TODO<joka921> Include the relevant constants directly here.
 

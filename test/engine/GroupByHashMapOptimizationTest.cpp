@@ -17,7 +17,7 @@ class GroupByHashMapOptimizationTest : public ::testing::Test {
  protected:
   QueryExecutionContext* qec_ = ad_utility::testing::getQec();
   VariableToColumnMap varToColMap_;
-  LocalVocab localVocab_;
+  LocalVocab localVocab_{ad_utility::testing::makeAllocator()};
   IdTable table_{qec_->getAllocator()};
   sparqlExpression::EvaluationContext context_{
       *qec_,
@@ -43,7 +43,8 @@ class GroupByHashMapOptimizationTest : public ::testing::Test {
 
   std::string idToString(Id result, bool stripQuotes = true) const {
     auto index = result.getLocalVocabIndex();
-    auto resultString = localVocab_.getWord(index).toStringRepresentation();
+    std::string resultString{
+        localVocab_.getWord(index).toStringRepresentation()};
     if (!stripQuotes) {
       return resultString;
     }
@@ -291,6 +292,7 @@ TEST_F(GroupByHashMapOptimizationTest,
   EXPECT_TRUE(calc().isUndefined());
 
   data.reset();
-  addValue(localVocab_.getWord(idFromString("Abc").getLocalVocabIndex()));
+  addValue(
+      localVocab_.getWord(idFromString("Abc").getLocalVocabIndex()).toOwned());
   EXPECT_EQ(calc(), idFromString("Abc"));
 }
