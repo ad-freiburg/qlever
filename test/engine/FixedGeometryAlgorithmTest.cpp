@@ -295,7 +295,7 @@ TEST(FixedGeometryAlgorithm, notApplicable) {
 TEST(FixedGeometryAlgorithm, parseFixedGeometry) {
   auto* qec = buildTestQEC();
   const auto& index = qec->getIndex();
-  LocalVocab localVocab;
+  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
   auto literalId = [&localVocab, qec](const std::string& literal) {
     return Id::makeFromLocalVocabIndex(
         localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{
@@ -356,7 +356,7 @@ TEST(FixedGeometryAlgorithm, parseFixedGeometry) {
 // bounding box and the box ids, agrees with the exact check.
 TEST(FixedGeometryAlgorithm, relate) {
   auto* qec = buildTestQEC();
-  LocalVocab localVocab;
+  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
   auto polygon = FixedGeometryAlgorithm::parseFixedGeometry(
       Id::makeFromLocalVocabIndex(
           localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{
