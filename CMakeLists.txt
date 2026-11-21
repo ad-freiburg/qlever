@@ -17,7 +17,19 @@ if (APPLE)
         message(STATUS "Found Homebrew at: ${HOMEBREW_PREFIX}")
         list(APPEND CMAKE_PREFIX_PATH "${HOMEBREW_PREFIX}")
         link_directories(${HOMEBREW_PREFIX}/lib)
-        include_directories(${HOMEBREW_PREFIX}/include)
+        # Treat Homebrew's include directory like a system include directory
+        # on Linux: search it after all other include directories
+        # (`-idirafter`), and never pass it explicitly (CMake drops implicit
+        # include directories from the command line, also when an imported
+        # target like `Boost::headers` requests them). Otherwise, the headers
+        # of the dependencies that QLever fetches itself (e.g. abseil) are
+        # shadowed by different versions of the same libraries that happen to
+        # be installed via Homebrew.
+        list(APPEND CMAKE_C_IMPLICIT_INCLUDE_DIRECTORIES
+             "${HOMEBREW_PREFIX}/include")
+        list(APPEND CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES
+             "${HOMEBREW_PREFIX}/include")
+        add_compile_options(-idirafter "${HOMEBREW_PREFIX}/include")
     else()
         message(WARNING "Homebrew not found. You may need to manually set CMAKE_PREFIX_PATH to locate dependencies (Boost, ICU, OpenSSL, etc.)")
     endif()
