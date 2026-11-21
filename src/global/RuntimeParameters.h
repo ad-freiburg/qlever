@@ -23,6 +23,7 @@ struct RuntimeParameters {
       ad_utility::detail::parameterShortNames::DurationParameter<DurationTp>;
   using MemorySizeParameter =
       ad_utility::detail::parameterShortNames::MemorySizeParameter;
+  using Double = ad_utility::detail::parameterShortNames::Double;
   using SizeT = ad_utility::detail::parameterShortNames::SizeT;
   using String = ad_utility::detail::parameterShortNames::String;
   using SpaceSeparatedStrings =
@@ -92,6 +93,15 @@ struct RuntimeParameters {
   // rebuild. When the pool is idle, the rebuild uses this many of its threads,
   // and when the pool is busy, it shares them with the queries.
   SizeT rebuildIndexMaxNumThreads_{0, "rebuild-index-max-num-threads"};
+  // The share (in percent) of the threads of the executor of the `Qlever`
+  // instance that the background work gets when the foreground work (all the
+  // rest, in particular the queries) competes for the threads. The foreground
+  // work gets the rest. When there is no competition, either of them may use
+  // all the threads. Currently, the only background work is a runtime index
+  // rebuild (see also `rebuild-index-max-num-threads`), but more may be added
+  // in the future. Must be strictly between 0 and 100, fractions like `12.5`
+  // are allowed.
+  Double backgroundThreadSharePercent_{25.0, "background-thread-share-percent"};
   // The maximum number of permutation pairs (PSO+POS, SPO+SOP, OPS+OSP, and
   // the internal PSO+POS) that a runtime index rebuild processes in
   // parallel. Each pair costs several CPU cores, several GB/s of memory
@@ -281,9 +291,25 @@ struct RuntimeParameters {
   DeduplicationModeParameter constructDeduplication_{
       DeduplicationMode{DeduplicationMode::None{}}, "construct-deduplication"};
 
+  // If set to `true`, a `SERVICE` requests the result in QLever's binary format
+  // (see `engine/binaryExport/BinaryExport.h`), which is much more efficient
+  // than JSON. Only QLever endpoints that support the same version of the
+  // format respond in that format, all others respond with JSON as before.
+  Bool binaryServiceEnabled_{true, "binary-service-enabled"};
+
+  // The maximum size of a single batch of strings (and of a single string) of
+  // a `SERVICE` result in QLever's binary format. The exporting instance sends
+  // batches with about 16 MB of strings, plus the strings of at most one row
+  // that can be larger (like the WKT literal of a large polygon, which can take
+  // up tens of megabytes). The limit protects against allocating huge amounts
+  // of memory for an invalid or malicious response.
+  MemorySizeParameter serviceMaxBinaryBatchSize_{
+      ad_utility::MemorySize::megabytes(256), "service-max-binary-batch-size"};
+
   // ___________________________________________________________________________
   // IMPORTANT NOTE: IF YOU ADD PARAMETERS ABOVE, ALSO REGISTER THEM IN THE
   // CONSTRUCTOR, S.T. THEY CAN ALSO BE ACCESSED VIA THE RUNTIME INTERFACE.
+  // (With C++26 reflection, the constructor checks this.)
   // ___________________________________________________________________________
 
   std::map<std::string, ad_utility::ParameterBase*, std::less<>> runtimeMap_;

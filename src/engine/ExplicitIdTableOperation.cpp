@@ -12,7 +12,7 @@
 // _____________________________________________________________________________
 ExplicitIdTableOperation::ExplicitIdTableOperation(
     QueryExecutionContext* ctx, IdTableOrView table,
-    VariableToColumnMap variables, std::vector<ColumnIndex> sortedColumns,
+    VariableToColumnMap variables, qlm::vector<ColumnIndex> sortedColumns,
     LocalVocab localVocab, std::string cacheKey)
     : Operation(ctx),
       idTable_(std::move(table)),
@@ -63,8 +63,8 @@ qlm::vector<QueryExecutionTree*> ExplicitIdTableOperation::getChildrenImpl()
 }
 
 // _____________________________________________________________________________
-std::string ExplicitIdTableOperation::getCacheKeyImpl() const {
-  return cacheKey_;
+qlm::string ExplicitIdTableOperation::getCacheKeyImpl() const {
+  return qlm::string{cacheKey_, allocator()};
 }
 
 // _____________________________________________________________________________
@@ -105,7 +105,7 @@ std::unique_ptr<Operation> ExplicitIdTableOperation::cloneImpl() const {
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> ExplicitIdTableOperation::resultSortedOn() const {
+qlm::vector<ColumnIndex> ExplicitIdTableOperation::resultSortedOn() const {
   return sortedColumns_;
 }
 

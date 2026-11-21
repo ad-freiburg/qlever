@@ -26,8 +26,8 @@ CountAvailablePredicates::CountAvailablePredicates(
       countVariable_(std::move(countVariable)) {}
 
 // _____________________________________________________________________________
-std::string CountAvailablePredicates::getCacheKeyImpl() const {
-  std::ostringstream os;
+qlm::string CountAvailablePredicates::getCacheKeyImpl() const {
+  qlm::ostringstream os{allocator()};
   if (subtree_ == nullptr) {
     os << "COUNT_AVAILABLE_PREDICATES for all entities";
   } else {
@@ -49,9 +49,9 @@ std::string CountAvailablePredicates::getDescriptor() const {
 size_t CountAvailablePredicates::getResultWidth() const { return 2; }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> CountAvailablePredicates::resultSortedOn() const {
+qlm::vector<ColumnIndex> CountAvailablePredicates::resultSortedOn() const {
   // The result is not sorted on any column.
-  return {};
+  return qlm::vector<ColumnIndex>{allocator()};
 }
 
 // _____________________________________________________________________________
@@ -151,7 +151,7 @@ Result CountAvailablePredicates::computeResult(
     CountAvailablePredicates::computePatternTrickAllEntities(
         &idTable, patterns, *subresult,
         subtree_->getVariableColumn(predicateVariable_));
-    return {std::move(idTable), resultSortedOn(), LocalVocab{}};
+    return {std::move(idTable), resultSortedOn(), LocalVocab{allocator()}};
   } else {
     std::shared_ptr<const Result> subresult = subtree_->getResult();
     AD_LOG_DEBUG << "CountAvailablePredicates subresult computation done."

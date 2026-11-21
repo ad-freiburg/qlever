@@ -17,11 +17,12 @@
 #include <cmath>
 #include <functional>
 
+#include "engine/idTable/IdColumnByteIO.h"
 #include "global/RuntimeParameters.h"
 #include "index/GraphComputation.h"
 #include "index/compressedRelationWriter/CompressedRelationHelpersImpl.h"
 #include "index/compressedRelationWriter/CompressedRelationPermutationWriterImpl.h"
-#include "util/CompressionUsingZstd/ZstdWrapper.h"
+#include "util/compressionUsingZstd/ZstdWrapper.h"
 #include "util/views/AsyncTransformView.h"
 
 // ____________________________________________________________________________
@@ -55,9 +56,10 @@ void CompressedRelationWriter::writeBufferedRelationsToSingleBlock() {
 // ____________________________________________________________________________
 CompressedBlockMetadata::OffsetAndCompressedSize
 CompressedRelationWriter::compressAndWriteColumn(ConstIdColumnRef column) {
-  static_assert(sizeof(column[0]) == BYTES_PER_ID_COLUMN_ENTRY);
-  std::vector<char> compressedBlock = ZstdWrapper::compress(
-      (void*)(column.data()), column.size() * sizeof(column[0]));
+  ql::span<const char> compressedBlock =
+      ad_utility::idColumnByteIO::encode(column, [this](const auto& chunks) {
+        return zstdContext_.compressChunks(chunks);
+      });
   auto compressedSize = compressedBlock.size();
   // Reserve a range of the file and write to it with the positioned
   // `File::write`, which needs a shared lock only. The compression above and
@@ -230,6 +232,13 @@ CompressedRelationMetadata CompressedRelationWriter::addCompleteLargeRelation(
 
   return finishLargeRelation(distinctCol1Counter.getAndReset());
 }
+
+// The instantiation for the twins of the relations that span several chunks of
+// a parallel merge (see `chunkwisePermutationWriter::BoundaryConsolidator`,
+// whose call site doesn't see the definition above).
+template CompressedRelationMetadata
+CompressedRelationWriter::addCompleteLargeRelation(
+    Id col0Id, ad_utility::InputRangeTypeErased<IdTableStatic<0>>&&);
 
 // _____________________________________________________________________________
 void CompressedRelationWriter::writeLargeRelationBlockInSlices(Id col0Id,

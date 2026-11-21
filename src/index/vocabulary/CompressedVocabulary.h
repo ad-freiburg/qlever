@@ -15,10 +15,10 @@
 #include "util/FsstCompressor.h"
 #include "util/InputRangeUtils.h"
 #include "util/OverloadCallOperator.h"
-#include "util/Serializer/FileSerializer.h"
-#include "util/Serializer/SerializeVector.h"
-#include "util/Serializer/Serializer.h"
 #include "util/TaskQueue.h"
+#include "util/serializer/FileSerializer.h"
+#include "util/serializer/SerializeVector.h"
+#include "util/serializer/Serializer.h"
 
 namespace detail {
 

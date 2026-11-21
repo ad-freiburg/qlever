@@ -88,6 +88,7 @@ enum class SpatialJoinAlgorithmEnum {
   LIBSPATIALJOIN,
   S2_POINT_POLYLINE
 };
+QLEVER_ENUM_SIZE(SpatialJoinAlgorithmEnum, 5);
 
 // Wrapper around `SpatialJoinAlgorithmEnum` that provides conversion to and
 // from the string representation used in the SPARQL syntax (the value of the
@@ -98,7 +99,8 @@ class SpatialJoinAlgorithm
  public:
   using Enum = SpatialJoinAlgorithmEnum;
 
-  static constexpr std::array<std::pair<Enum, std::string_view>, 5>
+  static constexpr std::array<std::pair<Enum, std::string_view>,
+                              qlever::enumSize<Enum>>
       descriptions_{{{Enum::BASELINE, "baseline"},
                      {Enum::S2_GEOMETRY, "s2"},
                      {Enum::BOUNDING_BOX, "boundingBox"},
