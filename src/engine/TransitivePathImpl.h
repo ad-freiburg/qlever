@@ -29,14 +29,14 @@ template <typename ColumnType>
 struct TableColumnWithVocab {
   PayloadTable payload_;
   ColumnType startNodes_;
-  ql::span<const Id> targetNodes_;
+  ConstIdColumnRef targetNodes_;
   LocalVocab vocab_;
 
   // Explicit to prevent issues with co_yield and lifetime.
   // See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=103909 for more info.
   TableColumnWithVocab(std::optional<IdTableView<0>> payload,
                        ColumnType startNodes, LocalVocab vocab,
-                       ql::span<const Id> targetNodes = {})
+                       ConstIdColumnRef targetNodes = {})
       : payload_{std::move(payload)},
         startNodes_{std::move(startNodes)},
         targetNodes_{targetNodes},
@@ -155,7 +155,7 @@ class TransitivePathImpl : public TransitivePathBase {
     // Technically we should pass the localVocab of `sub` here, but this will
     // just lead to a merge with itself later on in the pipeline.
     detail::TableColumnWithVocab<const decltype(nodes)&> tableInfo{
-        std::nullopt, nodes, LocalVocab{}};
+        std::nullopt, nodes, LocalVocab{allocator()}};
 
     NodeGenerator hull = transitiveHull(
         std::move(edges), sub->getCopyOfLocalVocab(), ql::span{&tableInfo, 1},
@@ -222,7 +222,7 @@ class TransitivePathImpl : public TransitivePathBase {
     ad_utility::Timer timer{ad_utility::Timer::Stopped};
     // `targetId` is only ever used for comparisons, and never stored in the
     // result, so we use a separate local vocabulary.
-    LocalVocab targetHelper;
+    LocalVocab targetHelper{allocator()};
     const auto& index = getIndex();
 
     std::optional<Id> targetId =
@@ -259,7 +259,7 @@ class TransitivePathImpl : public TransitivePathBase {
             targetId = graphId;
           } else if (targetNodesAreBound) {
             // We can treat undef targets the same as a nonexistent target.
-            const auto& targetCandidate = tableColumn.targetNodes_[currentRow];
+            const Id targetCandidate = tableColumn.targetNodes_[currentRow];
             targetId = targetCandidate.isUndefined()
                            ? std::nullopt
                            : std::optional{targetCandidate};
@@ -285,7 +285,7 @@ class TransitivePathImpl : public TransitivePathBase {
             // Reset vocab to prevent merging the same vocab over and over
             // again.
             if (yieldOnce) {
-              mergedVocab = LocalVocab{};
+              mergedVocab = LocalVocab{allocator()};
             }
           }
         }
@@ -331,7 +331,7 @@ class TransitivePathImpl : public TransitivePathBase {
       return result;
     }
     // id -> var|id
-    LocalVocab helperVocab;
+    LocalVocab helperVocab{allocator()};
     Id startId =
         toValueId(TripleComponent{startSide.value_}, getIndex(), helperVocab);
     // Make sure we retrieve the Id from an IndexScan, so we don't have to pass
@@ -376,13 +376,13 @@ class TransitivePathImpl : public TransitivePathBase {
       return idTable.asColumnSubsetView(columnsWithoutJoinColumns);
     };
 
-    // If it is bound, get the nodes on the target side inside a simple
-    // `ql::span`. Otherwise, the span is empty.
+    // If it is bound, get the nodes on the target side as a view of a column.
+    // Otherwise, the view is empty.
     auto targetNodes = [joinColumn, targetJoinColumn](const auto& idTable) {
       if (!targetJoinColumn.has_value()) {
-        return ql::span<const Id>();
+        return ConstIdColumnRef();
       }
-      ql::span<const Id> targetNodes =
+      ConstIdColumnRef targetNodes =
           idTable.getColumn(targetJoinColumn.value());
       AD_CORRECTNESS_CHECK(targetNodes.size() ==
                            idTable.getColumn(joinColumn).size());

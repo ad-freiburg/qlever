@@ -43,9 +43,9 @@ bool Distinct::isDistinctByImpl(
 }
 
 // _____________________________________________________________________________
-string Distinct::getCacheKeyImpl() const {
-  return absl::StrCat("DISTINCT (", subtree_->getCacheKey(), ") (",
-                      absl::StrJoin(keepIndices_, ","), ")");
+qlm::string Distinct::getCacheKeyImpl() const {
+  return qlm::StrCat(allocator(), "DISTINCT (", subtree_->getCacheKey(), ") (",
+                     qlm::StrJoin(allocator(), keepIndices_, ","), ")");
 }
 
 // _____________________________________________________________________________
@@ -76,7 +76,8 @@ Result::LazyResult Distinct::lazyDistinct(Result::LazyResult input,
     return Result::LazyResult{lazySingleValueRange(
         [getDistinctResult,
          aggregateTable = IdTable{subtree_->getResultWidth(), allocator()},
-         aggregateVocab = LocalVocab{}, input = std::move(input)]() mutable {
+         aggregateVocab = LocalVocab{allocator()},
+         input = std::move(input)]() mutable {
           for (auto& [idTable, localVocab] : input) {
             IdTable result = getDistinctResult(std::move(idTable));
             if (!result.empty()) {
