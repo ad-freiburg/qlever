@@ -2497,13 +2497,13 @@ void QueryPlanner::applyGeoRectanglePrefilters(
     size_t maxCost =
         getRuntimeParameter<&RuntimeParameters::geoPrefilterPlanningMaxCost_>();
     auto componentOfSeed = QueryGraph::computeConnectedComponents(
-        seeds, FiltersAndOptionalSubstitutes{});
+        seeds, FiltersAndOptionalSubstitutes{allocator()});
     // The filters that a component is evaluated with: those without a
     // substitute. A filter with a substitute is a spatial join, whose other
     // side may lie outside the component, and which may not be evaluable as
     // a plain filter at all. Leaving it out only makes the result larger,
     // which keeps the rectangle valid.
-    FiltersAndOptionalSubstitutes filtersWithoutSubstitutes;
+    FiltersAndOptionalSubstitutes filtersWithoutSubstitutes{allocator()};
     // The index in `filters` of each filter in `filtersWithoutSubstitutes`.
     std::vector<size_t> originalFilterIndex;
     for (size_t i = 0; i < filters.size(); ++i) {
@@ -2606,7 +2606,7 @@ void QueryPlanner::applyGeoRectanglePrefilters(
                                          false)
               .first;
       auto plans = runDynamicProgrammingOnConnectedComponent(
-          std::move(component), componentFilters, TextLimitVec{}, tg,
+          std::move(component), componentFilters, TextLimitVec{allocator()}, tg,
           std::move(componentReplacementPlans));
       applyFiltersIfPossible<FilterMode::ReplaceUnfilteredNoSubstitutes>(
           plans, componentFilters);
