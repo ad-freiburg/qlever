@@ -2359,11 +2359,14 @@ SubtreePlanVec QueryPlanner::createJoinCandidates(
   // if one of the inputs is the spatial join and the other input is compatible
   // with the SpatialJoin, add it as a child to the spatialJoin. As unbound
   // SpatialJoin operations are incompatible with normal join operations, we
-  // return immediately instead of creating a normal join below as well.
-  // Note, that this if statement should be evaluated first, such that no other
-  // join options get considered, when one of the candidates is a SpatialJoin.
-  if (auto opt = createSpatialJoin(a, b, jcs)) {
-    candidates.push_back(std::move(opt.value()));
+  // return immediately instead of creating a normal join below as well (also if
+  // the other input is not compatible). Note, that this if statement should be
+  // evaluated first, such that no other join options get considered, when one
+  // of the candidates is a SpatialJoin.
+  if (auto [aIs, bIs] = checkSpatialJoin(a, b); aIs || bIs) {
+    if (auto opt = createSpatialJoin(a, b, jcs)) {
+      candidates.push_back(std::move(opt.value()));
+    }
     return candidates;
   }
 
@@ -2461,6 +2464,25 @@ auto QueryPlanner::createSpatialJoin(const SubtreePlan& a, const SubtreePlan& b,
   auto spatialJoin = static_cast<SpatialJoin*>(op.get());
 
   if (spatialJoin->isConstructed()) {
+    return std::nullopt;
+  }
+
+  // Do not attach `otherSubtreePlan` if it shares a variable with the child
+  // that is already attached (another subtree may still be attached later).
+  //
+  // NOTE: The `SpatialJoin` only joins on its two spatial variables, so it
+  // would not check that the values of the shared variable are equal. Such a
+  // variable is not contained in `jcs`, because an incomplete `SpatialJoin`
+  // only has a column for its missing spatial variable (see
+  // `SpatialJoin::computeVariableToColumnMap`).
+  const auto& otherVariables = otherSubtreePlan._qet->getVariableColumns();
+  auto sharesVariable = [&otherVariables](const QueryExecutionTree* child) {
+    return ql::ranges::any_of(child->getVariableColumns() | ql::views::keys,
+                              [&otherVariables](const Variable& variable) {
+                                return otherVariables.contains(variable);
+                              });
+  };
+  if (ql::ranges::any_of(spatialJoin->getChildren(), sharesVariable)) {
     return std::nullopt;
   }
 
