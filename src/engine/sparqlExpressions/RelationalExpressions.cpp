@@ -1,16 +1,23 @@
-//  Copyright 2022, University of Freiburg,
-//  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2022 - 2026 The QLever Authors, in particular:
 //
+// 2022 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
+// 2026 Hannah Bast <bast@cs.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
 // Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
+#include "engine/sparqlExpressions/QueryRewriteExpressionHelpers.h"
 #include "engine/sparqlExpressions/RelationalExpressionHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "util/TypeTraits.h"
+#include "util/UnitOfMeasurement.h"
 
 using namespace sparqlExpression;
 
@@ -515,6 +522,34 @@ static std::optional<std::pair<Variable, bool>> getOptVariableAndIsYear(
   return std::nullopt;
 }
 
+namespace {
+// If `expr` (a comparison with `<=`) has the form `distance <= number`, where
+// `distance` is a call of `geof:distance` or `geof:metricDistance` with a unit
+// of length, return the call and the number in meters. Otherwise return
+// `std::nullopt`.
+//
+// NOTE: The query planner recognizes these filters via `engine/filterFacts`,
+// which also resolves variables with the definitions of the query. Here, only
+// the expression is available.
+std::optional<std::pair<GeoFunctionCall, double>> getGeoDistanceFilter(
+    const SparqlExpression& expr) {
+  auto children = expr.children();
+  auto call = getGeoDistanceExpressionParameters(*children[0]);
+  auto constant = children[1]->getConstantValue();
+  auto number = constant.has_value() ? constant->getNumber() : std::nullopt;
+  if (!call.has_value() || !ad_utility::detail::isLengthUnit(call->unit_) ||
+      !number.has_value()) {
+    return std::nullopt;
+  }
+  double meters = call->unit_ == UnitOfMeasurement::METERS
+                      ? number.value()
+                      : ad_utility::detail::valueInUnitToKilometer(
+                            number.value(), call->unit_) *
+                            1000;
+  return std::pair{GeoFunctionCall{call.value()}, meters};
+}
+}  // namespace
+
 // _____________________________________________________________________________
 template <Comparison comp>
 std::vector<PrefilterExprVariablePair>
@@ -524,6 +559,41 @@ RelationalExpression<comp>::getPrefilterExpressionForMetadata(
   AD_CORRECTNESS_CHECK(children_.size() == 2);
   const SparqlExpression* child0 = children_.at(0).get();
   const SparqlExpression* child1 = children_.at(1).get();
+
+  // Special case: a spatial distance filter with a fixed geometry, e.g.
+  // `geof:metricDistance("POINT(...)"^^geo:wktLiteral, ?wkt) <= 1000`. Blocks
+  // whose geometries certainly lie outside the padded query rectangle can be
+  // pruned via the `GeoRectangleExpression` (which exploits the geo cell grid
+  // bits of WKT literal IDs and the latitude order of `GeoPoint` IDs). The
+  // `isNegated` argument can be ignored: under negation the
+  // `GeoRectangleExpression`'s conservative `logicalComplement` keeps all
+  // blocks (see also the comment at the `InExpression` below).
+  if constexpr (comp == valueIdComparators::Comparison::LE) {
+    if (auto geoFilter = getGeoDistanceFilter(*this); geoFilter.has_value()) {
+      const auto& [call, maxDistMeters] = geoFilter.value();
+      const TripleComponent* constantOperand = nullptr;
+      std::optional<Variable> variable = std::nullopt;
+      if (call.left_.isVariable() && !call.right_.isVariable()) {
+        variable = call.left_.getVariable();
+        constantOperand = &call.right_;
+      } else if (call.right_.isVariable() && !call.left_.isVariable()) {
+        variable = call.right_.getVariable();
+        constantOperand = &call.left_;
+      }
+      if (variable.has_value()) {
+        auto rectangle = geoRectangleOfConstantGeometry(*constantOperand);
+        if (rectangle.has_value()) {
+          std::vector<PrefilterExprVariablePair> geoVec;
+          geoVec.emplace_back(
+              std::make_unique<prefilterExpressions::GeoRectangleExpression>(
+                  ad_utility::padGeoRectangle(rectangle.value(),
+                                              maxDistMeters)),
+              variable.value());
+          return geoVec;
+        }
+      }
+    }
+  }
 
   const auto tryGetPrefilterExprVariablePairVec =
       [&context](const SparqlExpression* child0, const SparqlExpression* child1,

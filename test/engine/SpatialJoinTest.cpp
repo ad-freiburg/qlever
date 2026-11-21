@@ -1433,9 +1433,13 @@ TEST(SpatialJoin, InvalidGeometriesAreExcludedFromNonEmptyCheck) {
   // event lists; none of the values of `?b` (two invalid literals and one point
   // that is not contained in `?a`) contribute a valid geometry.
   auto details = spatialJoin->runtimeInfo().details_;
-  EXPECT_THAT(details, AllOf(HasKeyMatching("num-valid-geoms-parsed", Eq(1)),
-                             HasKeyMatching("num-geoms-parsed", Eq(3)),
-                             HasKeyMatching("num-geoms-invalid", Eq(2))));
+  // Of the three values of `?b` (the larger side), the point outside `?a`'s
+  // box is dropped by the prefilter; the two invalid literals survive it (they
+  // are never prefiltered) but fail to parse.
+  EXPECT_THAT(details,
+              AllOf(HasKeyMatching("num-valid-geoms-parsed", Eq(1)),
+                    HasKeyMatching("num-geoms-after-bbox-prefilter", Eq(2)),
+                    HasKeyMatching("num-geoms-invalid", Eq(2))));
   EXPECT_THAT(spatialJoin->collectWarnings(),
               Contains(HasSubstr(
                   "Spatial Join of ?a and ?b using contains: skipped rows with "
@@ -1473,13 +1477,13 @@ TEST(SpatialJoin, NoValidGeometryOnSmallerSideSkipsLargerSide) {
   auto spatialJoin = std::dynamic_pointer_cast<SpatialJoin>(
       spatialJoinOperation->getRootOperation());
 
-  // The result is empty, and all three literals are parsed, but none of them
-  // is added to the event lists.
+  // The result is empty, and none of the three literals is added to the event
+  // lists (the larger side `?b` has two of them).
   auto result = spatialJoin->computeResult(false);
   EXPECT_EQ(result.idTableView().numRows(), 0);
   EXPECT_THAT(spatialJoin->runtimeInfo().details_,
               AllOf(HasKeyMatching("num-valid-geoms-parsed", Eq(0)),
-                    HasKeyMatching("num-geoms-parsed", Eq(3))));
+                    HasKeyMatching("num-geoms-after-block-prefilter", Eq(2))));
 }
 
 // Test that the warning for skipped rows lists the left side before the
