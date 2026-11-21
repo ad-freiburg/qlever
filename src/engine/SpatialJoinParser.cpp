@@ -13,6 +13,8 @@
 #include <range/v3/numeric/accumulate.hpp>
 
 #include "engine/spatialJoinAlgorithms/LibspatialjoinAlgorithm.h"
+#include "rdfTypes/GeometryInfo.h"
+#include "rdfTypes/ParsedGeometry.h"
 #include "util/ExceptionHandling.h"
 
 namespace ad_utility::detail::parallel_wkt_parser {
@@ -27,6 +29,7 @@ WKTParser::WKTParser(sj::GeometryStore* store, sj::PreparedGeomMetaCb metaCb,
       _numSkipped(numThreads),
       _numSkippedByCell(numThreads),
       _numParsed(numThreads),
+      _numFromIndex(numThreads),
       _usePrefiltering(usePrefiltering),
       _prefilterLatLngBox(prefilterLatLngBox),
       _requireContainment(requireContainment),
@@ -92,11 +95,17 @@ size_t WKTParser::getParseCounter() {
 }
 
 // _____________________________________________________________________________
+size_t WKTParser::getFromIndexCounter() {
+  return ::ranges::accumulate(_numFromIndex, 0);
+}
+
+// _____________________________________________________________________________
 void WKTParser::processQueue(size_t t) {
   std::vector<SpatialJoinParseJob> batch;
   size_t prefilterCounter = 0;
   size_t cellPrefilterCounter = 0;
   size_t parseCounter = 0;
+  size_t fromIndexCounter = 0;
   while ((batch = _jobs.get()).size()) {
     // An exception on this worker thread (for example, if `_store` cannot
     // open or write its file) is thrown by `done()` on the main thread instead
@@ -133,12 +142,21 @@ void WKTParser::processQueue(size_t t) {
             continue;
           }
 
-          // If we have not filtered out this geometry, read and parse the full
-          // string. Invalid WKT (according to the strict parsing mode) is
-          // skipped, so it never matches (see GeoSPARQL 1.1, Section 10.9.1).
-          job.wkt = _index.indexToString(job.valueId.getVocabIndex());
-          parseWKTGeometry(job.wkt.c_str(), std::to_string(job.line), t, w,
-                           true);
+          // If the geometry was parsed at index build time, add it to the
+          // store in its stored form (see `ParsedGeometry`). Otherwise read
+          // and parse the full string. Invalid WKT (according to the strict
+          // parsing mode) is skipped, so it never matches (see GeoSPARQL 1.1,
+          // Section 10.9.1).
+          auto parsed =
+              _index.getVocab().getParsedGeometry(job.valueId.getVocabIndex());
+          if (parsed.has_value()) {
+            addBox(parsed.value().addToBatch(*_store, job.line, w), t);
+            fromIndexCounter++;
+          } else {
+            job.wkt = _index.indexToString(job.valueId.getVocabIndex());
+            parseWKTGeometry(job.wkt.c_str(), std::to_string(job.line), t, w,
+                             true);
+          }
           parseCounter++;
         } else if (dt == Datatype::GeoPoint) {
           const auto& p = job.valueId.getGeoPoint();
@@ -191,6 +209,7 @@ void WKTParser::processQueue(size_t t) {
   _numSkipped[t] = prefilterCounter;
   _numSkippedByCell[t] = cellPrefilterCounter;
   _numParsed[t] = parseCounter;
+  _numFromIndex[t] = fromIndexCounter;
 }
 
 // _____________________________________________________________________________
