@@ -1700,17 +1700,18 @@ TEST(ParserTest, parseWithDatasets) {
 
   ad_utility::BlankNodeManager bnm;
   EncodedIriManager ev;
+  auto alloc = ad_utility::testing::makeAllocator();
   // If the datasets are specified externally, then `USING [NAMED]` is forbidden
   // by the SPARQL standard.
   AD_EXPECT_THROW_WITH_MESSAGE(
-      SparqlParser::parseUpdate(&bnm, &ev,
+      SparqlParser::parseUpdate(&bnm, &ev, alloc,
                                 "DELETE { ?x <b> <c> } USING <g> WHERE { ?x ?y "
                                 "?z FILTER EXISTS {?a ?b ?c} }",
                                 {{{iri("<h>"), false}}}),
       ::testing::HasSubstr("`USING [NAMED]` is disallowed"));
   // Same goes for `WITH`
   AD_EXPECT_THROW_WITH_MESSAGE(
-      SparqlParser::parseUpdate(&bnm, &ev,
+      SparqlParser::parseUpdate(&bnm, &ev, alloc,
                                 "WITH <g> DELETE { ?x <b> <c> } WHERE { "
                                 "?x ?y ?z "
                                 "FILTER EXISTS {?a ?b ?c} }",
@@ -1748,18 +1749,18 @@ TEST(ParserTest, parseWithDatasets) {
   auto insertDataOp = m::GraphUpdate(
       {}, {SparqlTripleSimpleWithGraph{iri("<a>"), iri("<b>"), iri("<c>"),
                                        std::monostate{}}});
-  EXPECT_THAT(
-      SparqlParser::parseUpdate(
-          &bnm, &ev, "DELETE WHERE { ?s ?p ?o }; INSERT DATA { <a> <b> <c> }",
-          {DatasetClause{iri("<foo>"), false},
-           DatasetClause{iri("<bar>"), true}}),
-      testing::ElementsAre(
-          m::UpdateClause(
-              deleteWhereOp, deleteWherePattern,
-              m::datasetClausesMatcher({{iri("<foo>")}}, {{iri("<bar>")}})),
-          m::UpdateClause(
-              insertDataOp, m::GraphPattern(),
-              m::datasetClausesMatcher({{iri("<foo>")}}, {{iri("<bar>")}}))));
+  EXPECT_THAT(SparqlParser::parseUpdate(
+                  &bnm, &ev, alloc,
+                  "DELETE WHERE { ?s ?p ?o }; INSERT DATA { <a> <b> <c> }",
+                  {DatasetClause{iri("<foo>"), false},
+                   DatasetClause{iri("<bar>"), true}}),
+              testing::ElementsAre(
+                  m::UpdateClause(deleteWhereOp, deleteWherePattern,
+                                  m::datasetClausesMatcher({{iri("<foo>")}},
+                                                           {{iri("<bar>")}})),
+                  m::UpdateClause(insertDataOp, m::GraphPattern(),
+                                  m::datasetClausesMatcher({{iri("<foo>")}},
+                                                           {{iri("<bar>")}}))));
 }
 
 // _____________________________________________________________________________
