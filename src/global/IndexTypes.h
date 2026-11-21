@@ -13,7 +13,7 @@
 
 // Note the `VocabIndex` is declared in a separate header `VocabIndex` to break
 // a cyclic dependency (it is needed by `LocalVocabEntry.h`).
-using LocalVocabIndex = const LocalVocabEntry*;
+using LocalVocabIndex = const LocalVocabEntryView*;
 inline constexpr ad_utility::IndexTag textRecordIndexTag = "TextRecordIndex";
 using TextRecordIndex = ad_utility::TypedIndex<uint64_t, textRecordIndexTag>;
 inline constexpr ad_utility::IndexTag wordVocabIndexTag = "WordVocabIndex";
@@ -26,5 +26,7 @@ using SecondaryVocabIndex =
     ad_utility::TypedIndex<uint64_t, secondaryVocabIndexTag>;
 inline constexpr ad_utility::IndexTag documentIndexTag = "DocumentIndex";
 using DocumentIndex = ad_utility::TypedIndex<uint64_t, documentIndexTag>;
+inline constexpr ad_utility::IndexTag tripleTermIndexTag = "TripleTermIndex";
+using TripleTermIndex = ad_utility::TypedIndex<uint64_t, tripleTermIndexTag>;
 
 #endif  // QLEVER_SRC_GLOBAL_INDEXTYPES_H

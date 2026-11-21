@@ -26,10 +26,10 @@
 #include "backports/span.h"
 #include "backports/three_way_comparison.h"
 #include "util/Exception.h"
-#include "util/Serializer/SerializeArrayOrTuple.h"
-#include "util/Serializer/SerializeVariant.h"
-#include "util/Serializer/SerializeVector.h"
-#include "util/Serializer/Serializer.h"
+#include "util/serializer/SerializeArrayOrTuple.h"
+#include "util/serializer/SerializeVariant.h"
+#include "util/serializer/SerializeVector.h"
+#include "util/serializer/Serializer.h"
 
 namespace ad_utility {
 
@@ -44,7 +44,7 @@ class BinaryDiffApplierSerializer;
 // see BASE IDENTIFICATION below) and then appending instructions (see
 // `addAlign`, `addCopy` and `addInsert`), and it is applied to a base via
 // `apply`. It can be serialized and deserialized with the QLever serializer
-// framework (see `util/Serializer/Serializer.h`, and
+// framework (see `util/serializer/Serializer.h`, and
 // `BinaryDiffApplierSerializer` below for the format).
 //
 // NOTE: This class does not *compute* the difference between two buffers.
@@ -250,7 +250,7 @@ class BinaryDiffApplier {
 // format version, and the identification of the base, followed by the
 // instructions
 // (as an ordinary `std::vector` of `std::variant`s, which the serialization
-// framework can handle generically, see `util/Serializer/SerializeVariant.h`).
+// framework can handle generically, see `util/serializer/SerializeVariant.h`).
 // When reading, verify the magic bytes, the format version, and the
 // alignments, and report a truncated or otherwise unreadable input with a
 // descriptive message.
@@ -337,7 +337,7 @@ class BinaryDiffApplierSerializer {
 
 // Serialize and deserialize a `BinaryDiffApplier`, see
 // `BinaryDiffApplierSerializer` for the format and
-// `util/Serializer/Serializer.h` for the framework.
+// `util/serializer/Serializer.h` for the framework.
 AD_SERIALIZE_FUNCTION(BinaryDiffApplier) {
   if constexpr (ad_utility::serialization::WriteSerializer<S>) {
     BinaryDiffApplierSerializer::write(serializer, arg);

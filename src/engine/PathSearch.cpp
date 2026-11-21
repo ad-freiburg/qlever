@@ -138,8 +138,8 @@ qlm::vector<QueryExecutionTree*> PathSearch::getChildrenImpl() const {
 }
 
 // _____________________________________________________________________________
-std::string PathSearch::getCacheKeyImpl() const {
-  std::ostringstream os;
+qlm::string PathSearch::getCacheKeyImpl() const {
+  qlm::ostringstream os{allocator()};
   os << "PathSearch:\n";
   os << config_.toString();
 
@@ -203,7 +203,9 @@ bool PathSearch::knownEmptyResult() {
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> PathSearch::resultSortedOn() const { return {}; }
+qlm::vector<ColumnIndex> PathSearch::resultSortedOn() const {
+  return qlm::vector<ColumnIndex>{allocator()};
+}
 
 // _____________________________________________________________________________
 void PathSearch::bindSourceSide(std::shared_ptr<QueryExecutionTree> sourcesOp,
