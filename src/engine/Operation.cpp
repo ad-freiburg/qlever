@@ -641,6 +641,10 @@ void Operation::createRuntimeInfoFromEstimates(
   _runtimeInfo->numCols_ = numCols;
   _runtimeInfo->descriptor_ = getDescriptor();
 
+  // This function may run a second time on an operation that is shared
+  // between the original tree and a tree rebuilt at execution time (see
+  // `SpatialJoin::prepareJoin`), so the children are set anew, not appended.
+  _runtimeInfo->children_.clear();
   auto chargedCosts = getCostEstimatesChargedForChildren();
   auto children = getChildren();
   AD_CORRECTNESS_CHECK(chargedCosts.size() == children.size());
