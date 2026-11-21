@@ -8,10 +8,12 @@
 #include "engine/Result.h"
 #include "engine/VariableToColumnMap.h"
 #include "rdfTypes/Variable.h"
+#include "util/EnumSize.h"
 
 // Forward declarations to avoid cyclic dependencies
 class Index;
 enum struct PositionInTriple : int { SUBJECT, PREDICATE, OBJECT };
+QLEVER_ENUM_SIZE(PositionInTriple, 3);
 
 // All the data that is needed to evaluate an element in a construct query.
 struct ConstructQueryExportContext {

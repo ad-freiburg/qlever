@@ -6,6 +6,8 @@
 #ifndef QLEVER_TEST_ENGINE_VALUESFORTESTING_H
 #define QLEVER_TEST_ENGINE_VALUESFORTESTING_H
 
+#include "../util/AllocatorTestHelpers.h"
+#include "../util/LocalVocabTestHelpers.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/Result.h"
@@ -38,13 +40,31 @@ class ValuesForTesting : public Operation {
   // Create an operation that has as its result the given `table` and the given
   // `variables`. The number of variables must be equal to the number
   // of columns in the table.
-  explicit ValuesForTesting(QueryExecutionContext* ctx, IdTable table,
-                            std::vector<std::optional<Variable>> variables,
-                            bool handlesLimit = false,
-                            std::vector<ColumnIndex> sortedColumns = {},
-                            LocalVocab localVocab = LocalVocab{},
-                            std::optional<float> multiplicity = std::nullopt,
-                            bool forceFullyMaterialized = false)
+  explicit ValuesForTesting(
+      QueryExecutionContext* ctx, IdTable table,
+      std::vector<std::optional<Variable>> variables, bool handlesLimit = false,
+      std::vector<ColumnIndex> sortedColumns = {},
+      LocalVocab localVocab = ad_utility::testing::makeLocalVocab(),
+      std::optional<float> multiplicity = std::nullopt,
+      bool forceFullyMaterialized = false)
+      : ValuesForTesting{
+            ctx,
+            std::move(table),
+            std::move(variables),
+            handlesLimit,
+            qlm::vector<ColumnIndex>{sortedColumns.begin(), sortedColumns.end(),
+                                     ctx->getAllocator()},
+            std::move(localVocab),
+            multiplicity,
+            forceFullyMaterialized} {}
+
+  explicit ValuesForTesting(
+      QueryExecutionContext* ctx, IdTable table,
+      std::vector<std::optional<Variable>> variables, bool handlesLimit,
+      qlm::vector<ColumnIndex> sortedColumns,
+      LocalVocab localVocab = ad_utility::testing::makeLocalVocab(),
+      std::optional<float> multiplicity = std::nullopt,
+      bool forceFullyMaterialized = false)
       : Operation{ctx},
         tables_{},
         variables_{std::move(variables)},
@@ -70,6 +90,16 @@ class ValuesForTesting : public Operation {
                             std::vector<std::optional<Variable>> variables,
                             bool unlikelyToFitInCache = false,
                             std::vector<ColumnIndex> sortedColumns = {})
+      : ValuesForTesting{
+            ctx, std::move(tables), std::move(variables), unlikelyToFitInCache,
+            qlm::vector<ColumnIndex>{sortedColumns.begin(), sortedColumns.end(),
+                                     ctx->getAllocator()}} {}
+
+  explicit ValuesForTesting(QueryExecutionContext* ctx,
+                            std::vector<Result::IdTableVocabPair> tables,
+                            std::vector<std::optional<Variable>> variables,
+                            bool unlikelyToFitInCache,
+                            qlm::vector<ColumnIndex> sortedColumns)
       : Operation{ctx},
         tables_{std::move(tables)},
         variables_{std::move(variables)},
@@ -91,12 +121,12 @@ class ValuesForTesting : public Operation {
     costEstimate_ = totalRows;
   }
 
-  explicit ValuesForTesting(QueryExecutionContext* ctx,
-                            std::vector<IdTable> tables,
-                            std::vector<std::optional<Variable>> variables,
-                            bool unlikelyToFitInCache = false,
-                            std::vector<ColumnIndex> sortedColumns = {},
-                            LocalVocab localVocab = LocalVocab{})
+  template <typename SortColumns = std::vector<ColumnIndex>>
+  explicit ValuesForTesting(
+      QueryExecutionContext* ctx, std::vector<IdTable> tables,
+      std::vector<std::optional<Variable>> variables,
+      bool unlikelyToFitInCache = false, SortColumns sortedColumns = {},
+      LocalVocab localVocab = ad_utility::testing::makeLocalVocab())
       : ValuesForTesting{ctx,
                          liftToPairs(std::move(tables), std::move(localVocab)),
                          std::move(variables), unlikelyToFitInCache,
@@ -120,7 +150,7 @@ class ValuesForTesting : public Operation {
           });
       return {Result::LazyResult{lazyRange}, resultSortedOn()};
     }
-    LocalVocab aggregateLocalVocab;
+    LocalVocab aggregateLocalVocab{allocator()};
     IdTable table{tables()[0].numColumns(), tables()[0].getAllocator()};
     for (const auto& [idTable, localVocab] : tables_) {
       table.insertAtEnd(idTable);
@@ -154,8 +184,8 @@ class ValuesForTesting : public Operation {
 
  private:
   // ___________________________________________________________________________
-  std::string getCacheKeyImpl() const override {
-    std::stringstream str;
+  qlm::string getCacheKeyImpl() const override {
+    qlm::ostringstream str{allocator()};
     auto numRowsView = tables() | ql::views::transform(&IdTable::numRows);
     auto totalNumRows = ::ranges::accumulate(numRowsView, 0ULL);
     auto numCols = tables_.empty() ? 0 : tables()[0].numColumns();
@@ -187,7 +217,7 @@ class ValuesForTesting : public Operation {
     return tables_.empty() ? 1 : tables()[0].numColumns();
   }
 
-  std::vector<ColumnIndex> resultSortedOn() const override {
+  qlm::vector<ColumnIndex> resultSortedOn() const override {
     return resultSortedColumns_;
   }
 
@@ -234,6 +264,7 @@ class ValuesForTesting : public Operation {
     return m;
   }
 
+ protected:
   // _____________________________________________________________________________
   ValuesForTesting(const ValuesForTesting& other)
       : Operation{other._executionContext},
@@ -258,7 +289,7 @@ class ValuesForTesting : public Operation {
     return std::make_unique<ValuesForTesting>(ValuesForTesting{*this});
   }
 
-  std::vector<ColumnIndex> resultSortedColumns_;
+  qlm::vector<ColumnIndex> resultSortedColumns_;
   std::optional<float> multiplicity_;
   bool forceFullyMaterialized_ = false;
 };
@@ -286,6 +317,22 @@ class ValuesForTestingCountingDeterminismChecks : public ValuesForTesting {
   bool isDeterministicImpl() const override {
     ++numDeterminismChecks_;
     return true;
+  }
+};
+
+// Count how often the tree of this class was cloned.
+class ValuesForTestingCountClones : public ValuesForTesting {
+ public:
+  // Clone counter, must be reset.
+  static inline size_t numClones = 0;
+
+  ValuesForTestingCountClones(QueryExecutionContext* ctx, IdTable table,
+                              std::vector<std::optional<Variable>> variables)
+      : ValuesForTesting{ctx, std::move(table), variables} {}
+
+  std::unique_ptr<Operation> cloneImpl() const override {
+    numClones++;
+    return std::make_unique<ValuesForTestingCountClones>(*this);
   }
 };
 

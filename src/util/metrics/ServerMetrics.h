@@ -17,7 +17,7 @@
 #include <memory>
 
 #include "engine/UpdateMetadata.h"
-#include "util/MemorySize/MemorySize.h"
+#include "util/memorySize/MemorySize.h"
 
 // Owns all OTEL instruments and deregisters observable callbacks on
 // destruction.

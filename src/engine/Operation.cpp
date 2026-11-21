@@ -21,7 +21,9 @@
 #include "parser/GraphPatternOperation.h"
 #include "util/Algorithm.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
+#include "util/ParseException.h"
 #include "util/TransparentFunctors.h"
+#include "util/Views.h"
 
 using namespace std::chrono_literals;
 
@@ -314,7 +316,8 @@ std::shared_ptr<const Result> Operation::getResult(
   }
   auto& cache = _executionContext->getQueryTreeCache();
   const QueryCacheKey cacheKey = {
-      getCacheKey(), _executionContext->locatedTriplesState().index_};
+      std::string{getCacheKey()},
+      _executionContext->locatedTriplesState().index_};
   const bool pinFinalResultButNotSubtrees =
       _executionContext->_pinResult && isRoot;
   const bool pinResult =
@@ -459,15 +462,14 @@ void Operation::storeToNamedResultCache(const Result& result) {
 
   // TODO<joka921> The explicit `clone` here is unfortunate, but addressing
   // it would require a major refactoring of the `Result` class.
-  auto valueForNamedResultCache = NamedResultCache::Value{
-      std::make_shared<const IdTable>(
-          result.cloneIdTable(cancellationChecker())),
-      getExternallyVisibleVariableColumns(),
-      // TODO<vrbommireddy>: Remove this conversion after `resultSortedOn()` is
-      // migrated to `qlm::vector` throughout the Operation hierarchy.
-      std::vector<ColumnIndex>{result.sortedBy().begin(),
-                               result.sortedBy().end()},
-      result.localVocab().clone(), getCacheKey(), geoIndex()};
+  auto valueForNamedResultCache =
+      NamedResultCache::Value{std::make_shared<const IdTable>(
+                                  result.cloneIdTable(cancellationChecker())),
+                              getExternallyVisibleVariableColumns(),
+                              result.sortedBy(),
+                              result.localVocab().clone(),
+                              std::string{getCacheKey()},
+                              geoIndex()};
   _executionContext->namedResultCache().store(
       name, std::move(valueForNamedResultCache));
 
@@ -621,6 +623,15 @@ void Operation::applyLimitOffsetToChild(
   child->applyLimitOffset(limitOffset, true);
 }
 
+// _____________________________________________________________________________
+std::vector<size_t> Operation::getCostEstimatesChargedForChildren() {
+  // Not piped as a temporary: libc++ would then wrap it in an `owning_view`,
+  // which requires the (deleted) default constructor of the allocator.
+  auto children = getChildren();
+  return ::ranges::to_vector(
+      children | ql::views::transform(&QueryExecutionTree::getCostEstimate));
+}
+
 // __________________________________________________________________
 void Operation::createRuntimeInfoFromEstimates(
     std::shared_ptr<const RuntimeInformation> root) {
@@ -630,11 +641,26 @@ void Operation::createRuntimeInfoFromEstimates(
   _runtimeInfo->numCols_ = numCols;
   _runtimeInfo->descriptor_ = getDescriptor();
 
-  for (const auto& child : getChildren()) {
+  auto chargedCosts = getCostEstimatesChargedForChildren();
+  auto children = getChildren();
+  AD_CORRECTNESS_CHECK(chargedCosts.size() == children.size());
+  for (const auto& [child, chargedCost] :
+       ::ranges::views::zip(children, chargedCosts)) {
     AD_CONTRACT_CHECK(child);
     child->getRootOperation()->createRuntimeInfoFromEstimates(root);
-    _runtimeInfo->children_.push_back(
-        child->getRootOperation()->getRuntimeInfoPointer());
+    auto childInfo = child->getRootOperation()->getRuntimeInfoPointer();
+    // Show the cost that this operation charges for the child, so that the
+    // operation costs in the runtime information add up to the total cost.
+    // NOTE: The runtime information of a child is updated in place, so the
+    // detail of a previous computation is erased if it no longer applies.
+    if (chargedCost != childInfo->costEstimate_) {
+      childInfo->addDetail("standalone-cost-estimate",
+                           childInfo->costEstimate_);
+      childInfo->costEstimate_ = chargedCost;
+    } else {
+      childInfo->eraseDetail("standalone-cost-estimate");
+    }
+    _runtimeInfo->children_.push_back(std::move(childInfo));
   }
 
   _runtimeInfo->costEstimate_ = getCostEstimate();
@@ -648,12 +674,10 @@ void Operation::createRuntimeInfoFromEstimates(
     _runtimeInfo->addDetail("offset", offset);
   }
 
-  std::vector<float> multiplicityEstimates;
-  multiplicityEstimates.reserve(numCols);
-  for (size_t i = 0; i < numCols; ++i) {
-    multiplicityEstimates.push_back(getMultiplicity(i));
-  }
-  _runtimeInfo->multiplicityEstimates_ = multiplicityEstimates;
+  _runtimeInfo->multiplicityEstimates_ =
+      ad_utility::integerRange(numCols) |
+      ql::views::transform([this](size_t i) { return getMultiplicity(i); }) |
+      ::ranges::to_vector;
 
   // Add the warnings that were added before the runtime information was
   // (re)created, e.g. during the query planning.
@@ -661,8 +685,9 @@ void Operation::createRuntimeInfoFromEstimates(
     _runtimeInfo->addDetail("warnings", *warnings);
   }
 
+  // TODO<RobinTF> Avoid the copy of the cache key, see `QueryCacheKey`.
   auto cachedResult = _executionContext->getQueryTreeCache().getIfContained(
-      {getCacheKey(), locatedTriplesState().index_});
+      {std::string{getCacheKey()}, locatedTriplesState().index_});
   if (cachedResult.has_value()) {
     const auto& [resultPointer, cacheStatus] = cachedResult.value();
     _runtimeInfo->cacheStatus_ = cacheStatus;
@@ -734,7 +759,7 @@ std::optional<Variable> Operation::getPrimarySortKeyVariable() const {
 }
 
 // ___________________________________________________________________________
-const std::vector<ColumnIndex>& Operation::getResultSortedOn() const {
+const qlm::vector<ColumnIndex>& Operation::getResultSortedOn() const {
   // TODO<joka921> refactor this without a mutex (for details see the
   // `getVariableColumns` method for details.
   std::lock_guard l{_resultSortedColumnsMutex};
@@ -748,25 +773,24 @@ const std::vector<ColumnIndex>& Operation::getResultSortedOn() const {
 
 void Operation::signalQueryUpdate(
     RuntimeInformation::SendPriority sendPriority) const {
-  if (_executionContext && _executionContext->areWebsocketUpdatesEnabled()) {
+  if (_executionContext->areWebsocketUpdatesEnabled()) {
     _executionContext->signalQueryUpdate(*_rootRuntimeInfo, sendPriority);
   }
 }
 
 // _____________________________________________________________________________
-std::string Operation::getCacheKey() const {
-  AD_CORRECTNESS_CHECK(_executionContext);
+qlm::string Operation::getCacheKey() const {
   if (_executionContext->disableCaching()) {
     // Cache key computation is costly, so we can save it when caching is
     // disabled.
-    return "";
+    return qlm::string{allocator()};
   }
   auto result = getCacheKeyImpl();
   if (limitOffset_._limit.has_value()) {
-    absl::StrAppend(&result, " LIMIT ", limitOffset_._limit.value());
+    qlm::StrAppend(&result, " LIMIT ", limitOffset_._limit.value());
   }
   if (limitOffset_._offset != 0) {
-    absl::StrAppend(&result, " OFFSET ", limitOffset_._offset);
+    qlm::StrAppend(&result, " OFFSET ", limitOffset_._offset);
   }
   return result;
 }
@@ -863,7 +887,7 @@ void Operation::getExternalValues(
 }
 
 // _____________________________________________________________________________
-bool Operation::isSortedBy(const std::vector<ColumnIndex>& sortColumns) const {
+bool Operation::isSortedBy(ql::span<const ColumnIndex> sortColumns) const {
   auto inputSortedOn = resultSortedOn();
   if (sortColumns.size() > inputSortedOn.size()) {
     return false;
@@ -878,14 +902,14 @@ bool Operation::isSortedBy(const std::vector<ColumnIndex>& sortColumns) const {
 
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>> Operation::makeSortedTree(
-    const std::vector<ColumnIndex>& sortColumns) const {
+    ql::span<const ColumnIndex> sortColumns) const {
   AD_CONTRACT_CHECK(!isSortedBy(sortColumns));
   return std::nullopt;
 }
 
 // _____________________________________________________________________________
 bool Operation::isDistinctBy(
-    const std::vector<ColumnIndex>& distinctIndices) const {
+    ql::span<const ColumnIndex> distinctIndices) const {
   const auto& limit = getLimitOffset()._limit;
   if (limit.has_value() && limit.value() <= 1) {
     return true;
@@ -895,13 +919,13 @@ bool Operation::isDistinctBy(
 
 // _____________________________________________________________________________
 bool Operation::isDistinctByImpl(
-    [[maybe_unused]] const std::vector<ColumnIndex>& distinctIndices) const {
+    [[maybe_unused]] ql::span<const ColumnIndex> distinctIndices) const {
   return false;
 }
 
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>> Operation::makeDistinctTree(
-    const std::vector<ColumnIndex>& distinctIndices) const {
+    ql::span<const ColumnIndex> distinctIndices) const {
   AD_CONTRACT_CHECK(!isDistinctBy(distinctIndices));
   return std::nullopt;
 }
@@ -950,7 +974,7 @@ bool Operation::areVariablesVisible(
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Operation::cloneWithNewChildren(
-    std::vector<std::shared_ptr<QueryExecutionTree>>) const {
+    qlm::vector<std::shared_ptr<QueryExecutionTree>>) const {
   AD_THROW(absl::StrCat("`cloneWithNewChildren` is not implemented for ",
                         getDescriptor()));
 }
@@ -959,10 +983,15 @@ std::unique_ptr<Operation> Operation::cloneWithNewChildren(
 std::optional<std::shared_ptr<QueryExecutionTree>>
 Operation::pushDownBindToChild(
     const parsedQuery::Bind& bind,
-    std::vector<std::shared_ptr<QueryExecutionTree>> children,
+    qlm::vector<std::shared_ptr<QueryExecutionTree>> children,
     size_t childIndex) const {
   auto& child = children.at(childIndex);
   AD_CORRECTNESS_CHECK(child != nullptr);
+
+  // Refuse a `BIND` of a constant (see the header).
+  if (bind._expression.getConstantValue().has_value()) {
+    return std::nullopt;
+  }
 
   // Return true iff any of the `children` (except the one at `excludedIndex`,
   // if given) contains `var`. Compare by position, not by identity: the same
@@ -1015,7 +1044,7 @@ Operation::pushDownBindToChild(
 std::optional<std::shared_ptr<QueryExecutionTree>>
 Operation::pushDownBindToAnyChild(
     const parsedQuery::Bind& bind,
-    std::vector<std::shared_ptr<QueryExecutionTree>> children) const {
+    qlm::vector<std::shared_ptr<QueryExecutionTree>> children) const {
   AD_CORRECTNESS_CHECK(ql::ranges::all_of(
       children, [](const auto& child) { return child != nullptr; }));
   for (size_t i = 0; i < children.size(); ++i) {

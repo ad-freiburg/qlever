@@ -38,6 +38,11 @@ SparqlExpression::Ptr makeOrExpression(SparqlExpression::Ptr child1,
 SparqlExpression::Ptr makeSubtractExpression(SparqlExpression::Ptr child1,
                                              SparqlExpression::Ptr child2);
 
+// Return true iff `expression` is an `&&` (made by `makeAndExpression`).
+bool isAndExpression(const SparqlExpression& expression);
+// Return true iff `expression` is an `||` (made by `makeOrExpression`).
+bool isOrExpression(const SparqlExpression& expression);
+
 SparqlExpression::Ptr makeUnaryMinusExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeUnaryNegateExpression(SparqlExpression::Ptr child);
 

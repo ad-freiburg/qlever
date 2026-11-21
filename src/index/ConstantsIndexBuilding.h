@@ -10,7 +10,7 @@
 #include <string>
 #include <string_view>
 
-#include "util/MemorySize/MemorySize.h"
+#include "util/memorySize/MemorySize.h"
 
 // Constants which are only used during index creation
 
@@ -50,7 +50,7 @@ inline ad_utility::MemorySize& RDF_PARSER_MAX_TOTAL_BUFFER_SIZE() {
 constexpr inline std::string_view PARTIAL_VOCAB_WORDS_INFIX =
     ".partial-vocab.words.tmp.";
 // The size of the blocks into which the words of a partial vocabulary are
-// grouped on disk (see `index/vocabulary_merger/PartialVocabularyFile.h`).
+// grouped on disk (see `index/vocabularyMerger/PartialVocabularyFile.h`).
 //
 // NOTE: Each chunk of the parallel vocabulary merge (see
 // `PartialVocabularyRunsInput` in that header) reads about one block per
@@ -85,7 +85,7 @@ constexpr inline size_t QUEUE_SIZE_BEFORE_PARALLEL_PARSING = 10;
 
 // The number of index mappings (which is the same as the number of merged
 // words) that are collected in a single batch of the vocabulary merging (see
-// `index/vocabulary_merger/WordBatch.h`). This is also the number of words in
+// `index/vocabularyMerger/WordBatch.h`). This is also the number of words in
 // an output block of the parallel merge of the partial vocabularies (see
 // `vocabularyMergeOptions` in `VocabularyMergerImpl.h`).
 constexpr inline size_t VOCAB_MERGER_WORD_BATCH_SIZE = 100'000;
@@ -98,7 +98,7 @@ constexpr inline ad_utility::MemorySize VOCAB_MERGER_WORD_BATCH_MEMORY_SIZE =
 
 // The size of the buffers for the bytes of the blocks of the partial
 // vocabulary files, the first of the two pools of the vocabulary merging (see
-// `BufferPools` in `index/vocabulary_merger/MergeBlock.h`).
+// `BufferPools` in `index/vocabularyMerger/MergeBlock.h`).
 //
 // NOTE: A block of a file ends after the word that makes it at least
 // `PARTIAL_VOCAB_BLOCK_SIZE` large (see `PartialVocabularyWriter`), so it is a
@@ -126,7 +126,7 @@ constexpr inline ad_utility::MemorySize VOCAB_MERGER_MERGED_WORDS_BUFFER_SIZE =
         VOCAB_MERGER_WORD_BATCH_MEMORY_SIZE.getBytes() / 8);
 
 // The number of merged words after which the vocabulary merger cuts a new
-// segment (see `index/vocabulary_merger/Segment.h`), which is the unit of work
+// segment (see `index/vocabularyMerger/Segment.h`), which is the unit of work
 // of the stages behind the merge. Larger segments mean fewer tasks but more
 // memory per task and a later start of the writing.
 constexpr inline size_t VOCAB_MERGER_SEGMENT_NUM_WORDS = 1u << 20;
@@ -134,7 +134,7 @@ constexpr inline size_t VOCAB_MERGER_SEGMENT_NUM_WORDS = 1u << 20;
 // The minimal memory of the merged words after which the vocabulary merger
 // cuts a new segment (it also cuts at `VOCAB_MERGER_SEGMENT_NUM_WORDS`). The
 // actual threshold derives from the memory limit, see `SegmentPipeline` in
-// `index/vocabulary_merger/SegmentPipeline.h`; this minimum only avoids tiny
+// `index/vocabularyMerger/SegmentPipeline.h`; this minimum only avoids tiny
 // segments for a tiny memory limit.
 constexpr inline ad_utility::MemorySize VOCAB_MERGER_MIN_SEGMENT_MEMORY =
     ad_utility::MemorySize::megabytes(4);
@@ -148,7 +148,7 @@ constexpr inline double VOCAB_MERGER_MEMORY_SHARE_OF_CHUNKS = 0.5;
 
 // The number of groups into which the partial ID maps are split for writing
 // (the maps of a group are written by one task per segment, on a strand of
-// the global thread pool), see `index/vocabulary_merger/IdMapWriters.h`.
+// the global thread pool), see `index/vocabularyMerger/IdMapWriters.h`.
 constexpr inline size_t VOCAB_MERGER_NUM_ID_MAP_WRITER_GROUPS = 8;
 
 // The amount of input (the serialized words of the partial vocabularies,
@@ -202,7 +202,7 @@ constexpr inline size_t VOCAB_MERGER_NUM_BUFFERED_BLOCKS_PER_CHUNK =
 
 // The maximal number of segments that may be waiting in the queue of each
 // group of the ID map writers of the vocabulary merger (see
-// `index/vocabulary_merger/IdMapWriters.h`). A queued segment holds its ID map
+// `index/vocabularyMerger/IdMapWriters.h`). A queued segment holds its ID map
 // entries (about 16 bytes per merged word) in memory.
 constexpr inline size_t VOCAB_MERGER_ID_MAP_QUEUE_SIZE = 16;
 
@@ -234,5 +234,24 @@ constexpr inline size_t NumColumnsIndexBuilding = 4;
 // The maximal number of distinct graphs in a block such that this information
 // is stored in the metadata of the block.
 constexpr inline size_t MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA = 20;
+
+// The bounds of the memory limit of the twin sorter of a single chunk of the
+// chunkwise permutation writer (see
+// `chunkwisePermutationWriter::Options::twinSorterMemoryPerChunk_`). Each
+// running chunk has its own twin sorter, so the memory of the sorter whose
+// output is written is split evenly among the threads, and the result is
+// clamped to these bounds (see `IndexImpl::createPermutationPairImpl`).
+//
+// NOTE: The lower bound keeps the twin sorters from writing tiny runs (and
+// hence from merging very many of them) if there are many threads. The upper
+// bound is enough for the twin rows of almost every single relation, and a
+// relation with more twin rows only needs a (cheap) merge of the runs that its
+// twin sorter has written.
+constexpr inline ad_utility::MemorySize
+    CHUNKWISE_WRITER_MIN_TWIN_SORTER_MEMORY_PER_CHUNK =
+        ad_utility::MemorySize::megabytes(64);
+constexpr inline ad_utility::MemorySize
+    CHUNKWISE_WRITER_MAX_TWIN_SORTER_MEMORY_PER_CHUNK =
+        ad_utility::MemorySize::gigabytes(1);
 
 #endif  // QLEVER_SRC_INDEX_CONSTANTSINDEXBUILDING_H

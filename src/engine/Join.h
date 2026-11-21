@@ -42,8 +42,9 @@ class Join : public Operation {
   // Virtual functions inherited from the 'Operation' base class.
   std::string getDescriptor() const override;
   size_t getResultWidth() const override;
-  std::vector<ColumnIndex> resultSortedOn() const override;
+  qlm::vector<ColumnIndex> resultSortedOn() const override;
   size_t getCostEstimate() override;
+  std::vector<size_t> getCostEstimatesChargedForChildren() override;
   bool knownEmptyResult() override;
   float getMultiplicity(size_t col) override;
 
@@ -60,7 +61,7 @@ class Join : public Operation {
       const std::vector<PrefilterVariablePair>& prefilters) const override;
   bool columnOriginatesFromGraphOrUndef(
       const Variable& variable) const override;
-  std::string getCacheKeyImpl() const override;
+  qlm::string getCacheKeyImpl() const override;
   std::unique_ptr<Operation> cloneImpl() const override;
   Result computeResult(bool requestLaziness) override;
 
