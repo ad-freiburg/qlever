@@ -198,6 +198,7 @@ class Service : public Operation {
   FRIEND_TEST(ServiceTest, precomputeSiblingResult);
   FRIEND_TEST(ServiceTest, precomputeSiblingResultWithStripColumns);
   FRIEND_TEST(ServiceTest, pushDownValuesPlacesValuesAtEnd);
+  FRIEND_TEST(ServiceTest, siblingValuesClauseSkipsColumnsWithUndef);
 };
 #else
 // In the C++17 mode, where the If we disable the `Service` operation isled,
