@@ -21,6 +21,7 @@
 #include "util/Exception.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
+#include "util/StringUtils.h"
 
 using std::string;
 using LazyScanMetadata = CompressedRelationReader::LazyScanMetadata;
@@ -135,8 +136,8 @@ IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
 }
 
 // _____________________________________________________________________________
-string IndexScan::getCacheKeyImpl() const {
-  std::ostringstream os;
+qlm::string IndexScan::getCacheKeyImpl() const {
+  qlm::ostringstream os{allocator()};
   // This string only represents the type of permutation, like "SPO".
   auto permutationString = Permutation::toString(permutation().permutation());
 
@@ -159,11 +160,12 @@ string IndexScan::getCacheKeyImpl() const {
   os << " on index " << permutation().onDiskBase();
   if (!additionalColumns_.empty()) {
     os << " Additional Columns: ";
-    os << absl::StrJoin(additionalColumns(), " ");
+    ad_utility::lazyStrJoin(&os, additionalColumns(), " ");
   }
   if (!constantColumns_.empty()) {
     os << " Constant Columns: ";
-    os << absl::StrJoin(
+    ad_utility::lazyStrJoin(
+        &os,
         constantColumns_ | ql::views::keys | ql::views::transform(&Id::getBits),
         " ");
   }
@@ -172,8 +174,8 @@ string IndexScan::getCacheKeyImpl() const {
   graphsToFilter_.format(os, &toRdfLiteral);
 
   if (varsToKeep_.has_value()) {
-    os << " column subset "
-       << absl::StrJoin(getSubsetForStrippedColumns(), ",");
+    os << " column subset ";
+    ad_utility::lazyStrJoin(&os, getSubsetForStrippedColumns(), ",");
   }
   return std::move(os).str();
 }

@@ -813,10 +813,7 @@ struct ContextWithSecondaryVocab {
   // deleting a file that is still open is fine on the platforms that QLever
   // supports, and the index is only ever read from.
   ~ContextWithSecondaryVocab() {
-    for (const std::string& filename :
-         ad_utility::testing::getAllIndexFilenames(indexBasename_)) {
-      ad_utility::deleteFile(filename, false);
-    }
+    ad_utility::testing::deleteTestIndexFiles(indexBasename_);
   }
 };
 

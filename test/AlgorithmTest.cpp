@@ -231,6 +231,10 @@ TEST(AlgorithmTest, transformArray) {
   auto addressOf = [](auto&& x) { return &x; };
   ASSERT_EQ(transformArray(input, addressOf),
             (std::array{&input[0], &input[1], &input[2]}));
+
+  // A `const` lvalue array can be transformed, too.
+  static constexpr std::array constInput{1, 3, 5};
+  ASSERT_EQ(transformArray(constInput, inc), (std::array{3, 5, 7}));
 }
 
 TEST(AlgorithmTest, lowerUpperBoundIterator) {
