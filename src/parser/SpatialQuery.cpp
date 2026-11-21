@@ -221,9 +221,9 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
         "for the right side may not be specified in the `SERVICE`.");
   }
 
-  // Only if the number of results is limited, it is mandatory that the right
-  // variable must be selected inside the service. If only the distance is
-  // limited, it may be declared inside or outside of the service.
+  // Only a nearest neighbors search requires the right variable to be selected
+  // inside the service. For all other searches it may be declared inside or
+  // outside of the service.
   throwIf(
       !ignoreMissingRightChild_ && maxResults_.has_value() &&
           !childGraphPattern_.has_value(),

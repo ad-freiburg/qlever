@@ -6,12 +6,34 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <array>
+#include <cstddef>
+
 #include "../test/util/GTestHelpers.h"
 #include "util/CompilerWarnings.h"
-#include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/Random.h"
+#include "util/compressionUsingZstd/ZstdContext.h"
+#include "util/compressionUsingZstd/ZstdWrapper.h"
+#include "util/jthread.h"
 
 using ::testing::HasSubstr;
+
+namespace {
+// Compress the `chunks` with a `ZstdContext` of their own, and return a copy of
+// the compressed bytes.
+std::vector<char> compressChunks(
+    ql::span<const ql::span<const std::byte>> chunks) {
+  std::vector<char> buffer;
+  auto compressed = ad_utility::ZstdContext{}.compressChunks(chunks, buffer);
+  return {compressed.begin(), compressed.end()};
+}
+
+// Decompress the `compressed` chunks with a `ZstdContext` of their own.
+void decompressChunks(ql::span<const char> compressed,
+                      ql::span<const ql::span<std::byte>> targets) {
+  ad_utility::ZstdContext{}.decompressChunks(compressed, targets);
+}
+}  // namespace
 
 // _____________________________________________________________________________
 TEST(CompressionTest, Basic) {
@@ -32,6 +54,90 @@ TEST(CompressionTest, DecompressToBuffer) {
       comp.data(), comp.size(), decomp.data(), decomp.size() * sizeof(int));
   ASSERT_EQ(x, decomp);
   ASSERT_EQ(4ul * sizeof(int), numBytesDecompressed);
+}
+
+// Test that `compressChunks` writes each chunk as a frame of its own, and that
+// `decompressChunks` reads each frame back into its own buffer, also when
+// all the chunks are empty.
+TEST(CompressionTest, compressAndDecompressSeveralChunks) {
+  std::vector<std::byte> payloads(800, std::byte{7});
+  std::vector<std::byte> datatypes(100, std::byte{3});
+  std::array<ql::span<const std::byte>, 2> chunks{payloads, datatypes};
+  auto compressed = compressChunks(chunks);
+  // Two frames, one after the other.
+  auto firstFrameSize =
+      ZSTD_findFrameCompressedSize(compressed.data(), compressed.size());
+  EXPECT_LT(firstFrameSize, compressed.size());
+  EXPECT_EQ(ZstdWrapper::getUncompressedSize(compressed.data(), firstFrameSize),
+            payloads.size());
+  EXPECT_EQ(
+      ZstdWrapper::getUncompressedSize(compressed.data() + firstFrameSize,
+                                       compressed.size() - firstFrameSize),
+      datatypes.size());
+
+  // Each frame is decompressed into its own buffer.
+  std::vector<std::byte> payloadsResult(800);
+  std::vector<std::byte> datatypesResult(100);
+  std::array<ql::span<std::byte>, 2> buffers{payloadsResult, datatypesResult};
+  decompressChunks(compressed, buffers);
+  EXPECT_EQ(payloadsResult, payloads);
+  EXPECT_EQ(datatypesResult, datatypes);
+
+  // Empty chunks, as for an empty column.
+  std::array<ql::span<const std::byte>, 2> emptyChunks{};
+  std::array<ql::span<std::byte>, 2> emptyBuffers{};
+  decompressChunks(compressChunks(emptyChunks), emptyBuffers);
+}
+
+// Test that a single chunk is a plain ZSTD frame, so that the permutations of
+// existing indexes, which were written with the plain `compress`, can be read
+// with `decompressChunks`, and the other way round.
+TEST(CompressionTest, singleChunkIsPlainFrame) {
+  std::vector<std::byte> ids(800, std::byte{7});
+  std::vector<std::byte> result(ids.size());
+  std::array<ql::span<std::byte>, 1> buffers{result};
+
+  auto oldFormat = ZstdWrapper::compress(ids.data(), ids.size());
+  decompressChunks(oldFormat, buffers);
+  EXPECT_EQ(result, ids);
+
+  std::array<ql::span<const std::byte>, 1> chunks{ids};
+  auto newFormat = compressChunks(chunks);
+  EXPECT_EQ(newFormat, oldFormat);
+}
+
+// Test that a column is not read with the wrong layout: a single frame (a
+// column of whole `Id`s) cannot be read into payloads and datatypes, two frames
+// (a column of the split layout) cannot be read into a single buffer, and a
+// truncated block cannot be read at all.
+TEST(CompressionTest, framesMustMatchTheBuffers) {
+  std::vector<std::byte> payloads(800, std::byte{7});
+  std::vector<std::byte> datatypes(100, std::byte{3});
+  std::array<ql::span<const std::byte>, 2> chunks{payloads, datatypes};
+  auto twoFrames = compressChunks(chunks);
+  auto oneFrame = ZstdWrapper::compress(payloads.data(), payloads.size());
+
+  std::vector<std::byte> payloadsResult(800);
+  std::vector<std::byte> datatypesResult(100);
+  std::array<ql::span<std::byte>, 2> splitBuffers{payloadsResult,
+                                                  datatypesResult};
+  std::array<ql::span<std::byte>, 1> singleBuffer{payloadsResult};
+  EXPECT_ANY_THROW(decompressChunks(oneFrame, splitBuffers));
+  EXPECT_ANY_THROW(decompressChunks(twoFrames, singleBuffer));
+  twoFrames.pop_back();
+  EXPECT_ANY_THROW(decompressChunks(twoFrames, splitBuffers));
+}
+
+// Test the blocks for which no bytes were ever written (blocks of the
+// permutations that only exist in the metadata): they are read as empty
+// columns, but a column that is not empty is an error and not left unwritten.
+TEST(CompressionTest, noBytesAreAnEmptyColumn) {
+  std::array<ql::span<std::byte>, 2> emptyBuffers{};
+  decompressChunks({}, emptyBuffers);
+
+  std::vector<std::byte> payloads(8);
+  std::array<ql::span<std::byte>, 2> buffers{payloads, ql::span<std::byte>{}};
+  EXPECT_ANY_THROW(decompressChunks({}, buffers));
 }
 
 // _____________________________________________________________________________
@@ -253,4 +359,126 @@ TEST(CompressionTest, CheckError) {
   EXPECT_TRUE(ZSTD_isError(errorCode));
   AD_EXPECT_THROW_WITH_MESSAGE(ZstdWrapper::checkError(errorCode),
                                HasSubstr("ZSTD error: "));
+}
+
+// Test that many inputs of different sizes and with different compression
+// levels can be compressed and decompressed with the same `ZstdContext` and
+// buffer. In particular, a small input is compressed after a much larger one,
+// and the result is always the same as that of the one-shot
+// `ZstdWrapper::compress`. The large inputs get the cheap levels, the level 19
+// is slow for them.
+TEST(ZstdContext, ReuseForManyInputs) {
+  ad_utility::ZstdContext context;
+  std::vector<char> buffer;
+  ad_utility::FastRandomIntGenerator<uint64_t> randomGenerator{
+      ad_utility::RandomSeed::make(42)};
+  std::vector<size_t> sizes{0, 1, 50'000, 3, 1'000'000, 7, 0, 1'000'000, 1};
+  std::vector<int> levels{1, 3, 19};
+  size_t maxBufferSize = 0;
+  for (size_t i = 0; i < sizes.size(); ++i) {
+    // Use few distinct values, s.t. the data is compressible.
+    std::vector<uint64_t> input(sizes[i]);
+    ql::ranges::generate(
+        input, [&randomGenerator]() { return randomGenerator() % 16; });
+    size_t numBytes = input.size() * sizeof(uint64_t);
+    int level = levels[i % levels.size()];
+    auto compressed = context.compress(input.data(), numBytes, buffer, level);
+    EXPECT_EQ(compressed.data(), buffer.data());
+    EXPECT_THAT(compressed, ::testing::ElementsAreArray(ZstdWrapper::compress(
+                                input.data(), numBytes, level)));
+
+    // The buffer is never shrunk.
+    EXPECT_GE(buffer.size(), maxBufferSize);
+    maxBufferSize = buffer.size();
+
+    std::vector<uint64_t> result(input.size());
+    EXPECT_EQ(
+        context.decompressToBuffer(
+            compressed, ql::as_writable_bytes(ql::span<uint64_t>{result})),
+        numBytes);
+    EXPECT_EQ(result, input);
+  }
+}
+
+// Test that a `ZstdContext` reports a target that is too small and corrupted
+// data as errors, and still decompresses correctly afterwards.
+TEST(ZstdContext, DecompressionErrors) {
+  ad_utility::ZstdContext context;
+  std::vector<char> buffer;
+  std::vector<uint64_t> input(100, 7);
+  auto compressed =
+      context.compress(input.data(), input.size() * sizeof(uint64_t), buffer);
+  // The target is too small.
+  std::vector<uint64_t> result(input.size() - 1);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      context.decompressToBuffer(
+          compressed, ql::as_writable_bytes(ql::span<uint64_t>{result})),
+      HasSubstr("ZSTD error: "));
+  // The data is corrupted.
+  std::vector<char> corrupted(compressed.begin(), compressed.end());
+  corrupted.at(0) = 'x';
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      context.decompressToBuffer(
+          corrupted, ql::as_writable_bytes(ql::span<uint64_t>{result})),
+      HasSubstr("ZSTD error: "));
+
+  // The context still works after the failures.
+  std::vector<uint64_t> fullResult(input.size());
+  EXPECT_EQ(
+      context.decompressToBuffer(
+          compressed, ql::as_writable_bytes(ql::span<uint64_t>{fullResult})),
+      input.size() * sizeof(uint64_t));
+  EXPECT_EQ(fullResult, input);
+}
+
+// Test that `ThreadLocalZstdContext` (de)compresses correctly, that each thread
+// gets a compression buffer of its own and keeps using it, and that different
+// objects have different buffers.
+TEST(ThreadLocalZstdContext, PerThreadState) {
+  // Compress and decompress with the `threadLocal`, check the round trip, and
+  // return the address of the compressed bytes, which are in the buffer of
+  // the calling thread.
+  auto roundTrip = [](const ad_utility::ThreadLocalZstdContext& threadLocal) {
+    std::vector<uint64_t> input(1000, 3);
+    size_t numBytes = input.size() * sizeof(uint64_t);
+    std::array chunks{
+        ql::as_bytes(ql::span<const uint64_t>{input}).subspan(0, numBytes / 2),
+        ql::as_bytes(ql::span<const uint64_t>{input}).subspan(numBytes / 2)};
+    auto compressedChunks = threadLocal.compressChunks(chunks);
+    std::vector<uint64_t> result(input.size());
+    auto resultBytes = ql::as_writable_bytes(ql::span<uint64_t>{result});
+    std::array targets{resultBytes.subspan(0, numBytes / 2),
+                       resultBytes.subspan(numBytes / 2)};
+    threadLocal.decompressChunks(compressedChunks, targets);
+    EXPECT_EQ(result, input);
+
+    ql::ranges::fill(result, 0);
+    auto compressed = threadLocal.compress(input.data(), numBytes);
+    EXPECT_EQ(threadLocal.decompressToBuffer(compressed, resultBytes),
+              numBytes);
+    EXPECT_EQ(result, input);
+    return compressed.data();
+  };
+
+  ad_utility::ThreadLocalZstdContext threadLocal;
+  const char* buffer = roundTrip(threadLocal);
+  EXPECT_EQ(roundTrip(threadLocal), buffer);
+
+  std::vector<const char*> bufferOfThreads(4);
+  std::vector<ad_utility::JThread> threads;
+  for (size_t i = 0; i < bufferOfThreads.size(); ++i) {
+    threads.emplace_back([&roundTrip, &threadLocal, &bufferOfThreads, i] {
+      bufferOfThreads[i] = roundTrip(threadLocal);
+      EXPECT_EQ(roundTrip(threadLocal), bufferOfThreads[i]);
+    });
+  }
+  // Join the threads, s.t. all the `bufferOfThreads` are set.
+  threads.clear();
+  for (const char* bufferOfThread : bufferOfThreads) {
+    EXPECT_NE(bufferOfThread, buffer);
+  }
+
+  // Another object has a buffer of its own.
+  ad_utility::ThreadLocalZstdContext other;
+  EXPECT_NE(roundTrip(other), roundTrip(threadLocal));
 }

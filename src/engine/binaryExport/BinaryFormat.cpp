@@ -11,20 +11,29 @@
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include "engine/binaryExport/BinaryFormat.h"
 
+#include <algorithm>
 #include <array>
+#include <type_traits>
 
-#include "util/Serializer/ByteBufferSerializer.h"
-#include "util/Serializer/SerializeString.h"
-#include "util/Serializer/SerializeVector.h"
 #include "util/http/MediaTypes.h"
+#include "util/serializer/ByteBufferSerializer.h"
+#include "util/serializer/SerializeString.h"
+#include "util/serializer/SerializeVector.h"
 
 namespace qlever::binary_export {
 
 // The format transfers the bits of `Id`s directly, so a change of their
 // representation requires increasing `ad_utility::binaryQleverExportVersion`.
-// The following assertions only detect a change of the datatype tags.
-static_assert(ad_utility::binaryQleverExportVersion == 1);
+// Version 1 transfers the `Id`s of the legacy layout (`Id::T` is a `uint64_t`)
+// and version 1337 the ones of the split layout. The first assertion ties the
+// version to the actual type of `Id::T`, so that a version that does not match
+// the layout does not compile. The remaining assertions only detect a change
+// of the datatype tags.
+static_assert(ad_utility::binaryQleverExportVersion ==
+              (std::is_same_v<Id::T, uint64_t> ? 1 : 1337));
+#ifndef QLEVER_USE_SPLIT_LAYOUT
 static_assert(Id::numDatatypeBits == 4);
+#endif
 static constexpr auto datatypesOfVersion1 = []() {
   using enum Datatype;
   return std::to_array({Undefined, Bool, Int, Double, VocabIndex,
@@ -32,7 +41,18 @@ static constexpr auto datatypesOfVersion1 = []() {
                         Date, GeoPoint, WordVocabIndex, BlankNodeIndex,
                         EncodedVal});
 }();
-static_assert(isListOfAllDatatypesInOrder(datatypesOfVersion1));
+// The datatypes of version 1 are exactly the first ones of the current enum,
+// which has exactly one more (`TripleTermIndex`).
+//
+// NOTE: We never transmit `TripleTermIndex` in the binary export because
+// `StringMapping::remapId` rejects it. The existing datatype tags are
+// unchanged, so the export remains compatible with version 1, which predates
+// this datatype. If that rejection is removed, reassess
+// `binaryQleverExportVersion` and these format checks before transmitting
+// triple-term references.
+static_assert(std::equal(datatypesOfVersion1.begin(), datatypesOfVersion1.end(),
+                         qlever::allEnumValues<Datatype>.begin()));
+static_assert(datatypesOfVersion1.size() + 1 == qlever::enumSize<Datatype>);
 
 // _____________________________________________________________________________
 std::string Header::serialize() const {
