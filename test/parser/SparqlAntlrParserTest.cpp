@@ -82,6 +82,7 @@ TEST(SparqlParser, Prefix) {
   {
     static ad_utility::BlankNodeManager blankNodeManager;
     ParserAndVisitor p{&blankNodeManager, encodedIriManager(),
+                       ad_utility::testing::makeAllocator(),
                        "PREFIX wd: <www.wikidata.org/>"};
     auto defaultPrefixes = p.visitor_.prefixMap();
     ASSERT_EQ(defaultPrefixes.size(), 0);
@@ -1553,8 +1554,11 @@ TEST(SparqlParser, ConstructQuery) {
 // _____________________________________________________________________________
 TEST(SparqlParser, ensureExceptionOnInvalidGraphTerm) {
   static ad_utility::BlankNodeManager blankNodeManager;
-  SparqlQleverVisitor visitor{
-      &blankNodeManager, encodedIriManager(), {}, std::nullopt};
+  SparqlQleverVisitor visitor{&blankNodeManager,
+                              encodedIriManager(),
+                              ad_utility::testing::makeAllocator(),
+                              {},
+                              std::nullopt};
 
   EXPECT_THROW(
       visitor.toGraphPattern({{Var{"?a"}, BlankNode{true, "0"}, Var{"?b"}}}),
@@ -1562,6 +1566,81 @@ TEST(SparqlParser, ensureExceptionOnInvalidGraphTerm) {
   EXPECT_THROW(
       visitor.toGraphPattern({{Var{"?a"}, Literal{"\"Abc\""}, Var{"?b"}}}),
       ad_utility::Exception);
+}
+
+// Test that the triples, the filters, and the nested graph patterns of a
+// `WHERE` clause count towards the memory limit of the allocator that is
+// passed to the parser. The memory of the `ParsedQuery` has to grow with the
+// number of these elements by at least the size of the elements.
+TEST(SparqlParser, graphPatternAllocationsCountTowardsMemoryLimit) {
+  // Parse a query that consists of `n` patterns, where the `i`-th pattern is
+  // created by `makePattern(i)`, and return the memory (in bytes) that the
+  // resulting `ParsedQuery` has allocated from the allocator.
+  auto memoryUsedByParsedQuery = [](size_t n, const auto& makePattern) {
+    std::string query = "SELECT ?s { ?s <p> ?o ";
+    for (size_t i = 0; i < n; ++i) {
+      query += makePattern(i);
+    }
+    query += "}";
+    auto allocator = ad_utility::testing::makeAllocator(
+        ad_utility::MemorySize::megabytes(100));
+    const size_t memoryLeftBefore = allocator.amountMemoryLeft().getBytes();
+    auto pq = SparqlParser::parseQuery(encodedIriManager(), allocator, query);
+    return memoryLeftBefore - allocator.amountMemoryLeft().getBytes();
+  };
+  auto expectGrowth = [&memoryUsedByParsedQuery](const auto& makePattern,
+                                                 size_t sizeOfElement) {
+    constexpr size_t numSmall = 10;
+    constexpr size_t numLarge = 1000;
+    EXPECT_GE(memoryUsedByParsedQuery(numLarge, makePattern),
+              memoryUsedByParsedQuery(numSmall, makePattern) +
+                  (numLarge - numSmall) * sizeOfElement);
+  };
+  expectGrowth(
+      [](size_t i) { return absl::StrCat(". ?s <p", i, "> ?o", i, " "); },
+      sizeof(SparqlTriple));
+  expectGrowth(
+      [](size_t i) { return absl::StrCat("FILTER(?s != <x", i, ">) "); },
+      sizeof(SparqlFilter));
+  expectGrowth(
+      [](size_t i) { return absl::StrCat("OPTIONAL { ?s <q", i, "> ?x } "); },
+      sizeof(parsedQuery::GraphPatternOperation));
+}
+
+// Test that the parser respects the memory limit of the passed allocator.
+TEST(SparqlParser, parsingRespectsTheMemoryLimitOfTheAllocator) {
+  EncodedIriManager encodedIriManager;
+  auto parseWithLimit = [&encodedIriManager](ad_utility::MemorySize limit) {
+    return SparqlParser::parseQuery(&encodedIriManager,
+                                    ad_utility::testing::makeAllocator(limit),
+                                    "SELECT * { ?s ?p ?o FILTER(?s = ?o) }");
+  };
+  EXPECT_NO_THROW(parseWithLimit(ad_utility::MemorySize::megabytes(1)));
+  EXPECT_THROW(parseWithLimit(ad_utility::MemorySize::bytes(1)),
+               ad_utility::detail::AllocationExceedsLimitException);
+}
+
+// Test that the containers of the `ParsedQuery` and of its clauses use the
+// allocator that is passed to the parser, i.e. they count towards its memory
+// limit and release the memory when the query is destroyed.
+TEST(SparqlParser, parsedQueryAllocationsCountTowardsMemoryLimit) {
+  auto expectLimited = [](const std::string& query) {
+    auto allocator = ad_utility::testing::makeAllocator(
+        ad_utility::MemorySize::megabytes(1));
+    const auto memoryLeftBefore = allocator.amountMemoryLeft();
+    {
+      auto pq = SparqlParser::parseQuery(encodedIriManager(), allocator, query);
+      EXPECT_LT(allocator.amountMemoryLeft(), memoryLeftBefore);
+    }
+    EXPECT_EQ(allocator.amountMemoryLeft(), memoryLeftBefore);
+  };
+  expectLimited("SELECT ?x ?y { ?x <p> ?y }");
+  expectLimited("SELECT * { ?x <p> ?y }");
+  expectLimited(
+      "SELECT ?x (COUNT(?y) AS ?c) { ?x <p> ?y } GROUP BY ?x HAVING (?c > 1) "
+      "ORDER BY ?x");
+  expectLimited("CONSTRUCT { ?x <q> ?y } WHERE { ?x <p> ?y }");
+  expectLimited("ASK { ?x <p> ?y }");
 }
 
 // Test that ASK queries are parsed as they should.
@@ -2133,7 +2212,9 @@ TEST(ParserTest, propertyPathInCollection) {
       "SELECT * { ?s ?p ([:p* 123] [^:r \"hello\"]) }";
   EncodedIriManager encodedIriManager;
   EXPECT_THAT(
-      SparqlParser::parseQuery(&encodedIriManager, std::move(query)),
+      SparqlParser::parseQuery(&encodedIriManager,
+                               ad_utility::testing::makeAllocator(),
+                               std::move(query)),
       m::SelectQuery(
           m::AsteriskSelect(),
           m::GraphPattern(m::Triples(
@@ -2218,7 +2299,8 @@ TEST(SparqlParser, EncodedIriManagerUsage) {
 
   auto parseWithEncoding = [&](const std::string& input) {
     static ad_utility::BlankNodeManager blankNodeManager;
-    return ParserAndVisitor{&blankNodeManager, encodedIriManager.get(), input}
+    return ParserAndVisitor{&blankNodeManager, encodedIriManager.get(),
+                            ad_utility::testing::makeAllocator(), input}
         .parseTypesafe(&SparqlAutomaticParser::query);
   };
 
@@ -2367,7 +2449,7 @@ TEST(SparqlParser, strictInlineWktForGeoFunctions) {
   auto parse = [](std::string_view body) {
     EncodedIriManager encodedIriManager;
     return SparqlParser::parseQuery(
-        &encodedIriManager,
+        &encodedIriManager, ad_utility::testing::makeAllocator(),
         absl::StrCat("PREFIX geo: <http://www.opengis.net/ont/geosparql#> "
                      "PREFIX geof: <http://www.opengis.net/def/function/"
                      "geosparql/> PREFIX ql: <",

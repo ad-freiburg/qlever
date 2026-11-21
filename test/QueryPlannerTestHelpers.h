@@ -603,7 +603,7 @@ class QueryPlannerWithMockFilterSubstitute : public QueryPlanner {
   using QueryPlanner::QueryPlanner;
 
   FiltersAndOptionalSubstitutes seedFilterSubstitutes(
-      const std::vector<SparqlFilter>& filters) override {
+      ql::span<const SparqlFilter> filters) override {
     FiltersAndOptionalSubstitutes plans{getQec()->getAllocator()};
     plans.reserve(filters.size());
 

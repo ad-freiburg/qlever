@@ -126,12 +126,14 @@ TEST(GraphStoreProtocolTest, transformPostAndTsop) {
   auto index = ad_utility::testing::makeTestIndex(TestIndexConfig{});
   runTests(
       [&index](http::request<http::string_body> request, GraphOrDefault graph) {
-        return GraphStoreProtocol::transformPost(request, graph, index);
+        return GraphStoreProtocol::transformPost(request, graph, index,
+                                                 makeAllocator());
       },
       true);
   runTests(
       [&index](http::request<http::string_body> request, GraphOrDefault graph) {
-        return GraphStoreProtocol::transformTsop(request, graph, index);
+        return GraphStoreProtocol::transformTsop(request, graph, index,
+                                                 makeAllocator());
       },
       false);
 }
@@ -143,9 +145,9 @@ TEST(GraphStoreProtocolTest, transformGet) {
          const testing::Matcher<const ParsedQuery&>& matcher,
          ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
         auto trace = generateLocationTrace(l);
-        EXPECT_THAT(
-            GraphStoreProtocol::transformGet(graph, encodedIriManager()),
-            matcher);
+        EXPECT_THAT(GraphStoreProtocol::transformGet(graph, encodedIriManager(),
+                                                     makeAllocator()),
+                    matcher);
       };
   expectTransformGet(
       DEFAULT{},
@@ -165,7 +167,8 @@ TEST(GraphStoreProtocolTest, transformPut) {
       ad_utility::source_location l = AD_CURRENT_SOURCE_LOC())(
       requires ad_utility::httpUtils::HttpRequest<RequestT>) {
     auto trace = generateLocationTrace(l);
-    EXPECT_THAT(GraphStoreProtocol::transformPut(request, graph, index),
+    EXPECT_THAT(GraphStoreProtocol::transformPut(request, graph, index,
+                                                 makeAllocator()),
                 testing::ElementsAre(testing::AllOf(dropMatcher, HasMiddleware),
                                      insertMatcher));
   };
@@ -191,13 +194,13 @@ TEST(GraphStoreProtocolTest, transformPut) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       GraphStoreProtocol::transformPut(
           ad_utility::testing::makeRequest(http::verb::put, "/?default"),
-          DEFAULT{}, index),
+          DEFAULT{}, index, makeAllocator()),
       testing::HasSubstr("Mediatype empty or not set."));
   AD_EXPECT_THROW_WITH_MESSAGE(
       GraphStoreProtocol::transformPut(
           ad_utility::testing::makePostRequest(
               "/?default", "application/sparql-results+xml", ""),
-          DEFAULT{}, index),
+          DEFAULT{}, index, makeAllocator()),
       testing::HasSubstr(
           "Mediatype \"application/sparql-results+xml\" is not supported for "
           "SPARQL Graph Store HTTP Protocol in QLever."));
@@ -208,7 +211,7 @@ TEST(GraphStoreProtocolTest, transformPut) {
       GraphStoreProtocol::transformPut(
           ad_utility::testing::makePostRequest(
               "/?default", "application/n-quads", "<a> <b> <c> <d> ."),
-          DEFAULT{}, index),
+          DEFAULT{}, index, makeAllocator()),
       testing::HasSubstr(
           "Mediatype \"application/n-quads\" is not supported for "
           "SPARQL Graph Store HTTP Protocol in QLever."));
@@ -217,7 +220,7 @@ TEST(GraphStoreProtocolTest, transformPut) {
           ad_utility::testing::makePostRequest(
               "/?default", "application/this-media-type-does-not-exist",
               "fantasy"),
-          DEFAULT{}, index),
+          DEFAULT{}, index, makeAllocator()),
       testing::HasSubstr(
           "Not a single media type known to this parser was "
           "detected in \"application/this-media-type-does-not-exist\"."));
@@ -225,7 +228,7 @@ TEST(GraphStoreProtocolTest, transformPut) {
       GraphStoreProtocol::transformPut(
           ad_utility::testing::makePostRequest(
               "/?default", "application/unknown", "fantasy"),
-          DEFAULT{}, index),
+          DEFAULT{}, index, makeAllocator()),
       testing::HasSubstr("Not a single media type known to this parser was "
                          "detected in \"application/unknown\"."));
 }
@@ -238,7 +241,9 @@ TEST(GraphStoreProtocolTest, transformDelete) {
                const testing::Matcher<const ParsedQuery&>& matcher,
                ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
         auto trace = generateLocationTrace(l);
-        EXPECT_THAT(GraphStoreProtocol::transformDelete(graph, index), matcher);
+        EXPECT_THAT(
+            GraphStoreProtocol::transformDelete(graph, index, makeAllocator()),
+            matcher);
       };
   expectTransformDelete(DEFAULT{}, ClearGraph(iri(DEFAULT_GRAPH_IRI)));
   expectTransformDelete(iri("<foo>"), ClearGraph(iri("<foo>")));
@@ -249,7 +254,8 @@ TEST(GraphStoreProtocolTest, transformGraphStoreProtocol) {
   auto index = ad_utility::testing::makeTestIndex(TestIndexConfig{});
   EXPECT_THAT(GraphStoreProtocol::transformGraphStoreProtocol(
                   GraphStoreOperation{DEFAULT{}},
-                  ad_utility::testing::makeGetRequest("/?default"), index),
+                  ad_utility::testing::makeGetRequest("/?default"), index,
+                  makeAllocator()),
               testing::ElementsAre(m::ConstructQuery(
                   {{Var{"?s"}, Var{"?p"}, Var{"?o"}}},
                   m::GraphPattern(matchers::Triples({SparqlTriple(
@@ -259,7 +265,7 @@ TEST(GraphStoreProtocolTest, transformGraphStoreProtocol) {
           GraphStoreOperation{DEFAULT{}},
           ad_utility::testing::makePostRequest(
               "/?default", "application/n-triples", "<foo> <bar> <baz> ."),
-          index),
+          index, makeAllocator()),
       testing::ElementsAre(m::UpdateClause(
           m::GraphUpdate({}, {{iri("<foo>"), iri("<bar>"), iri("<baz>"),
                                std::monostate{}}}),
@@ -270,7 +276,7 @@ TEST(GraphStoreProtocolTest, transformGraphStoreProtocol) {
                       "TSOP", "/?default",
                       {{http::field::content_type, "application/n-triples"}},
                       "<foo> <bar> <baz> ."),
-                  index),
+                  index, makeAllocator()),
               testing::ElementsAre(m::UpdateClause(
                   m::GraphUpdate({{iri("<foo>"), iri("<bar>"), iri("<baz>"),
                                    std::monostate{}}},
@@ -280,7 +286,7 @@ TEST(GraphStoreProtocolTest, transformGraphStoreProtocol) {
       GraphStoreProtocol::transformGraphStoreProtocol(
           GraphStoreOperation{iri("<foo>")},
           ad_utility::testing::makeRequest(http::verb::delete_, "/?graph=foo"),
-          index),
+          index, makeAllocator()),
       testing::ElementsAre(ClearGraph(iri("<foo>"))));
   EXPECT_THAT(
       GraphStoreProtocol::transformGraphStoreProtocol(
@@ -288,7 +294,7 @@ TEST(GraphStoreProtocolTest, transformGraphStoreProtocol) {
           ad_utility::testing::makeRequest(
               http::verb::put, "/?graph=foo",
               {{http::field::content_type, "text/turtle"}}, "<a> <b> <c>"),
-          index),
+          index, makeAllocator()),
       testing::ElementsAre(
           ClearGraph(iri("<foo>")),
           m::UpdateClause(m::GraphUpdate({}, {{iri("<a>"), iri("<b>"),
@@ -298,7 +304,7 @@ TEST(GraphStoreProtocolTest, transformGraphStoreProtocol) {
                   GraphStoreOperation{iri("<foo>")},
                   ad_utility::testing::makeRequest(http::verb::head,
                                                    "/?graph=foo", {}, ""),
-                  index),
+                  index, makeAllocator()),
               testing::ElementsAre(
                   testing::AllOf(GetGraph(iri("<foo>")), HasMiddleware)));
   auto expectUnsupportedMethod = [&index](const http::verb method,
@@ -308,7 +314,8 @@ TEST(GraphStoreProtocolTest, transformGraphStoreProtocol) {
     AD_EXPECT_THROW_WITH_MESSAGE(
         GraphStoreProtocol::transformGraphStoreProtocol(
             GraphStoreOperation{DEFAULT{}},
-            ad_utility::testing::makeRequest(method, "/?default"), index),
+            ad_utility::testing::makeRequest(method, "/?default"), index,
+            makeAllocator()),
         testing::HasSubstr(
             absl::StrCat(std::string{boost::beast::http::to_string(method)},
                          " in the SPARQL Graph Store HTTP Protocol")));
@@ -319,12 +326,13 @@ TEST(GraphStoreProtocolTest, transformGraphStoreProtocol) {
           GraphStoreOperation{DEFAULT{}},
           ad_utility::testing::makeRequest(boost::beast::http::verb::connect,
                                            "/?default"),
-          index),
+          index, makeAllocator()),
       testing::HasSubstr("Unsupported HTTP method \"CONNECT\""));
   AD_EXPECT_THROW_WITH_MESSAGE(
       GraphStoreProtocol::transformGraphStoreProtocol(
           GraphStoreOperation{DEFAULT{}},
-          ad_utility::testing::makeRequest("PUMPKIN", "/?default"), index),
+          ad_utility::testing::makeRequest("PUMPKIN", "/?default"), index,
+          makeAllocator()),
       testing::HasSubstr("Unsupported HTTP method \"PUMPKIN\""));
 }
 
@@ -465,7 +473,8 @@ TEST(GraphStoreProtocolTest, EncodedIriManagerUsage) {
       ad_utility::source_location l = AD_CURRENT_SOURCE_LOC())(
       requires ad_utility::httpUtils::HttpRequest<RequestT>) {
     auto trace = generateLocationTrace(l);
-    EXPECT_THAT(GraphStoreProtocol::transformPost(request, graph, index),
+    EXPECT_THAT(GraphStoreProtocol::transformPost(request, graph, index,
+                                                  makeAllocator()),
                 matcher);
   };
 
@@ -511,8 +520,8 @@ TEST(GraphStoreProtocolTest, EncodedIriManagerUsage) {
           m::GraphPattern()));
 
   // Test transformGet functionality
-  auto getQuery =
-      GraphStoreProtocol::transformGet(DEFAULT{}, encodedIriManager());
+  auto getQuery = GraphStoreProtocol::transformGet(
+      DEFAULT{}, encodedIriManager(), makeAllocator());
   EXPECT_EQ(getQuery._originalString,
             "CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }");
   EXPECT_TRUE(
@@ -521,8 +530,8 @@ TEST(GraphStoreProtocolTest, EncodedIriManagerUsage) {
   // Test transformGet with specific graph IRI
   auto graphIri =
       ad_utility::triple_component::Iri::fromIriref("<http://example.org/123>");
-  auto graphQuery =
-      GraphStoreProtocol::transformGet(graphIri, encodedIriManager());
+  auto graphQuery = GraphStoreProtocol::transformGet(
+      graphIri, encodedIriManager(), makeAllocator());
   EXPECT_THAT(
       graphQuery._originalString,
       testing::HasSubstr("GRAPH <http://example.org/123> { ?s ?p ?o }"));
