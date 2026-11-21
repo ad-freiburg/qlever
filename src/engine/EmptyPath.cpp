@@ -157,8 +157,8 @@ std::string EmptyPath::getDescriptor() const {
 size_t EmptyPath::getResultWidth() const { return resultWidth_; }
 
 // _____________________________________________________________________________
-std::string EmptyPath::getCacheKeyImpl() const {
-  std::ostringstream os;
+qlm::string EmptyPath::getCacheKeyImpl() const {
+  qlm::ostringstream os{allocator()};
   os << "EMPTY PATH";
   if (graphVariable_.has_value()) {
     os << " with graph column";
@@ -345,7 +345,7 @@ cppcoro::generator<IdTable> EmptyPath::scanIndex(
 // _____________________________________________________________________________
 Result::Generator EmptyPath::computeAllEntities() const {
   for (IdTable& table : scanIndex(std::nullopt)) {
-    co_yield {std::move(table), LocalVocab{}};
+    co_yield {std::move(table), LocalVocab{allocator()}};
   }
 }
 
@@ -538,7 +538,7 @@ Result EmptyPath::computeResult(bool requestLaziness) {
   // requests the result lazily, so realistically we only get here if the
   // result is pinned (which forces a fully materialized result).
   IdTable resultTable{getResultWidth(), allocator()};
-  LocalVocab localVocab;
+  LocalVocab localVocab{allocator()};
   for (auto& [idTable, vocab] : generator) {
     resultTable.insertAtEnd(idTable);
     localVocab.mergeWith(vocab);

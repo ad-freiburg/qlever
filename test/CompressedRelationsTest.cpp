@@ -16,6 +16,7 @@
 
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
+#include "./util/LocalVocabTestHelpers.h"
 #include "./util/PermutationPairTestHelpers.h"
 #include "global/Constants.h"
 #include "index/CompressedRelationReader.h"
@@ -32,6 +33,8 @@
 #include "util/RuntimeParametersTestHelpers.h"
 #include "util/SourceLocation.h"
 #include "util/serializer/ByteBufferSerializer.h"
+
+using ad_utility::testing::makeLocalVocab;
 
 // Multi-threaded, to exercise the concurrency of the tested code.
 static constexpr auto executor = &ad_utility::testing::multiThreadExecutor;
@@ -828,7 +831,7 @@ TEST(CompressedRelationReader, getBlocksForJoinWithColumn) {
                        {{V(42), V(3), V(0), g}, {V(42), V(6), V(9), g}}});
 
   auto test = [&metadataAndBlocks](
-                  const std::vector<Id>& joinColumn,
+                  const IdColumn& joinColumn,
                   const std::vector<CompressedBlockMetadata>& expectedBlocks,
                   size_t numHandledBlocksExpected,
                   source_location l = AD_CURRENT_SOURCE_LOC()) {
@@ -866,10 +869,11 @@ TEST(CompressedRelationReader, getBlocksForJoinWithColumn) {
   // skips the entries smaller than the next block then has many entries to
   // search, and the result must be the same as for the short columns above.
   auto longColumn = [](const std::vector<int64_t>& excluded) {
-    std::vector<Id> column;
+    IdColumn column;
     for (int64_t i = 0; i < 100; ++i) {
       if (!ad_utility::contains(excluded, i)) {
-        column.insert(column.end(), {V(i), V(i)});
+        column.push_back(V(i));
+        column.push_back(V(i));
       }
     }
     return column;
@@ -1229,7 +1233,7 @@ TEST(CompressedRelationReader, getDistinctCol0IdsWithGraphFilter) {
       [&blocks](ScanSpecification::GraphFilter filter) {
         return CompressedRelationReader::ScanSpecAndBlocks{
             ScanSpecification{std::nullopt, std::nullopt, std::nullopt,
-                              LocalVocab{}, std::move(filter)},
+                              makeLocalVocab(), std::move(filter)},
             getBlockMetadataRangesfromVec(blocks)};
       };
 
@@ -1297,7 +1301,7 @@ TEST(CompressedRelationReader, getDistinctCol0IdsWithUnknownGraphsInBlock) {
       [&blocks](ScanSpecification::GraphFilter filter) {
         return CompressedRelationReader::ScanSpecAndBlocks{
             ScanSpecification{std::nullopt, std::nullopt, std::nullopt,
-                              LocalVocab{}, std::move(filter)},
+                              makeLocalVocab(), std::move(filter)},
             getBlockMetadataRangesfromVec(blocks)};
       };
 
@@ -1357,7 +1361,7 @@ TEST(CompressedRelationReader, getDistinctCol0IdsWithSeveralGraphsInBlock) {
       [&blocks](ScanSpecification::GraphFilter filter) {
         return CompressedRelationReader::ScanSpecAndBlocks{
             ScanSpecification{std::nullopt, std::nullopt, std::nullopt,
-                              LocalVocab{}, std::move(filter)},
+                              makeLocalVocab(), std::move(filter)},
             getBlockMetadataRangesfromVec(blocks)};
       };
 
@@ -1433,7 +1437,7 @@ TEST(CompressedRelationReader, getDistinctCol0IdsWithDeltaTriples) {
                               ScanSpecification::GraphFilter::All()) {
     CompressedRelationReader::ScanSpecAndBlocks scanSpecAndBlocks{
         ScanSpecification{std::nullopt, std::nullopt, std::nullopt,
-                          LocalVocab{}, std::move(graphFilter)},
+                          makeLocalVocab(), std::move(graphFilter)},
         getBlockMetadataRangesfromVec(locatedTriples.getAugmentedMetadata())};
     return getDistinctCol0Ids(*reader, scanSpecAndBlocks, addGraphColumn,
                               std::nullopt, locatedTriples);
@@ -2745,9 +2749,7 @@ TEST(CompressedRelationWriter, distinctCol1CountAcrossBlockBoundaries) {
 // _____________________________________________________________________________
 TEST(CountDistinctIds, countAndBoundaryIds) {
   using compressedRelationHelpers::countDistinctIds;
-  auto count = [](const std::vector<Id>& ids) {
-    return countDistinctIds(ql::span<const Id>{ids});
-  };
+  auto count = [](const IdColumn& ids) { return countDistinctIds(ids); };
 
   {
     auto result = count({V(1)});
@@ -2773,9 +2775,7 @@ TEST(CountDistinctIds, countAndBoundaryIds) {
 // _____________________________________________________________________________
 TEST(DistinctIdCounter, blocksAndReset) {
   compressedRelationHelpers::DistinctIdCounter counter;
-  auto addBlock = [&counter](const std::vector<Id>& ids) {
-    counter.addBlock(ql::span<const Id>{ids});
-  };
+  auto addBlock = [&counter](const IdColumn& ids) { counter.addBlock(ids); };
   // A fresh counter has counted nothing.
   EXPECT_EQ(counter.getAndReset(), 0);
 
