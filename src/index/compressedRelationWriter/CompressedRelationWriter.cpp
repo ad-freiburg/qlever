@@ -54,11 +54,17 @@ void CompressedRelationWriter::writeBufferedRelationsToSingleBlock() {
                         BlockToWrite{std::move(block.rows_)}, true);
 }
 // ____________________________________________________________________________
+int CompressedRelationWriter::getCompressionLevel() {
+  return static_cast<int>(
+      getRuntimeParameter<&RuntimeParameters::permutationCompressionLevel_>());
+}
+
+// ____________________________________________________________________________
 CompressedBlockMetadata::OffsetAndCompressedSize
 CompressedRelationWriter::compressAndWriteColumn(ConstIdColumnRef column) {
   ql::span<const char> compressedBlock =
       ad_utility::idColumnByteIO::encode(column, [this](const auto& chunks) {
-        return zstdContext_.compressChunks(chunks);
+        return zstdContext_.compressChunks(chunks, compressionLevel_);
       });
   auto compressedSize = compressedBlock.size();
   // Reserve a range of the file and write to it with the positioned
