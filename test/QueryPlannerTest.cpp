@@ -13,7 +13,7 @@
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "QueryPlannerTestHelpers.h"
 #include "engine/QueryPlanner.h"
-#include "engine/RowNumber.h"
+#include "engine/operation/RowNumber.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/MagicServiceQuery.h"
 #include "rdfTypes/Variable.h"

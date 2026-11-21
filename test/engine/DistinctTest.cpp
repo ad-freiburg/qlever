@@ -8,9 +8,9 @@
 #include "../util/IndexTestHelpers.h"
 #include "../util/LocalVocabTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
-#include "engine/Distinct.h"
-#include "engine/NeutralElementOperation.h"
-#include "engine/StripColumns.h"
+#include "engine/operation/Distinct.h"
+#include "engine/operation/NeutralElementOperation.h"
+#include "engine/operation/StripColumns.h"
 
 using ad_utility::testing::colIndices;
 using ad_utility::testing::makeAllocator;

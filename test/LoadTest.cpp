@@ -9,8 +9,8 @@
 
 #include "DeltaTriplesTestHelpers.h"
 #include "engine/ExecuteUpdate.h"
-#include "engine/Load.h"
 #include "engine/QueryPlanner.h"
+#include "engine/operation/Load.h"
 #include "index/TripleComponentConversions.h"
 #include "parser/SparqlParser.h"
 #include "util/GTestHelpers.h"
