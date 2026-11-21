@@ -177,7 +177,7 @@ class BlankNodeExpression : public SparqlExpression {
                   // Named, because `*it` is a prvalue for a split column (see
                   // `resultGeneratorImpl`) and moving a prvalue prevents copy
                   // elision.
-                  auto&& input = *it;
+                  decltype(auto) input = *it;
                   const auto& value =
                       StringValueGetter{}(std::move(input), context);
                   ++it;

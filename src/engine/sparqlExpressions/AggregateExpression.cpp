@@ -94,7 +94,7 @@ struct EvaluateOnChildOperand {
       for (++it; it != inputs.end(); ++it) {
         // Named, because `*it` is a prvalue for a split column (see
         // `resultGeneratorImpl`) and moving a prvalue prevents copy elision.
-        auto&& input = *it;
+        decltype(auto) input = *it;
         result = aggregateTwoValues(std::move(result),
                                     valueGetter(std::move(input), context));
         checkCancellation();
