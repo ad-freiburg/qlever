@@ -10,7 +10,7 @@
 
 #include "index/vocabulary/GeoVocabulary.h"
 
-#include <spatialjoin/Sweeper.h>
+#include <spatialjoin/GeometryStore.h>
 
 #include <boost/asio/post.hpp>
 #include <boost/asio/use_future.hpp>
@@ -28,7 +28,7 @@
 #include "util/Exception.h"
 #include "util/File.h"
 #include "util/GlobalExecutor.h"
-#include "util/MemorySize/MemorySize.h"
+#include "util/memorySize/MemorySize.h"
 
 using ad_utility::GeometryInfo;
 using ad_utility::ParsedGeometry;
@@ -98,13 +98,19 @@ void GeoVocabulary<V>::open(const std::string& filename) {
     uint64_t parsedGeometriesVersion = 0;
     parsedGeometriesFile_.read(&parsedGeometriesVersion,
                                sizeof(parsedGeometriesVersion), 0);
+    // The parsed geometries of another version are not used, the literals are
+    // then parsed at query time (see `getParsedGeometry`).
     if (parsedGeometriesVersion != ad_utility::PARSED_GEOMETRY_VERSION) {
-      throw std::runtime_error(absl::StrCat(
-          "The parsed geometry version of ", parsedGeometriesFilename, " is ",
-          parsedGeometriesVersion, ", which is incompatible with version ",
-          ad_utility::PARSED_GEOMETRY_VERSION,
-          " as required by this version of QLever. Please rebuild your "
-          "index."));
+      AD_LOG_WARN << "The parsed geometry version of "
+                  << parsedGeometriesFilename << " is "
+                  << parsedGeometriesVersion
+                  << ", but this version of QLever requires version "
+                  << ad_utility::PARSED_GEOMETRY_VERSION
+                  << ". The parsed geometries are not used, which makes "
+                     "spatial joins with large geometries slower. Rebuild the "
+                     "index to use them."
+                  << std::endl;
+      parsedGeometriesFile_.close();
     }
   }
 
@@ -510,14 +516,14 @@ GeoVocabulary<V>::ParsedGeometriesWriter::ParsedGeometriesWriter(
   fileSize_ = file_.write(&ad_utility::PARSED_GEOMETRY_VERSION,
                           sizeof(ad_utility::PARSED_GEOMETRY_VERSION));
 
-  // The sweeper that computes the parsed geometries, if any are to be stored.
-  // Its temporary files (which it deletes itself) go next to the vocabulary.
+  // The store that preprocesses the parsed geometries, if any are to be
+  // stored. Nothing is added to it, so it never writes a file.
   if (minLength_ > 0) {
     ql::filesystem::path path{filename};
     std::string dir = path.parent_path().string();
-    sweeper_ = std::make_unique<sj::Sweeper>(
-        ParsedGeometry::sweeperConfig(), dir.empty() ? "." : dir,
-        absl::StrCat(path.filename().string(), ".spatialjoin"));
+    store_ = std::make_unique<sj::GeometryStore>(
+        ParsedGeometry::spatialJoinConfig(), dir.empty() ? "." : dir,
+        absl::StrCat(path.filename().string(), ".spatialjoin"), false);
   }
 }
 
@@ -539,7 +545,7 @@ void GeoVocabulary<V>::ParsedGeometriesWriter::store(
 
   // Parse the literal and append it to the file, see the class comment.
   std::lock_guard lock{mutex_};
-  auto parsed = ParsedGeometry::fromWktLiteral(word, *sweeper_);
+  auto parsed = ParsedGeometry::fromWktLiteral(word, *store_);
   if (!parsed.has_value()) {
     ++numSkipped_;
     return;

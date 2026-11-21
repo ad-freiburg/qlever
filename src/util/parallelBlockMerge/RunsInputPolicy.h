@@ -15,7 +15,7 @@
 
 #include "backports/algorithm.h"
 #include "backports/concepts.h"
-#include "util/MemorySize/MemorySize.h"
+#include "util/memorySize/MemorySize.h"
 
 // The input policy of the block merge: the `InputConcept` that an input of the
 // merge has to fulfill. For the terminology (runs, blocks, and chunks) see

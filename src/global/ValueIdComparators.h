@@ -12,6 +12,7 @@
 #include "backports/algorithm.h"
 #include "global/Id.h"
 #include "util/Algorithm.h"
+#include "util/EnumSize.h"
 #include "util/Log.h"
 #include "util/OverloadCallOperator.h"
 
@@ -19,6 +20,7 @@ namespace valueIdComparators {
 // This enum encodes the different numeric comparators LessThan, LessEqual,
 // Equal, NotEqual, GreaterEqual, GreaterThan.
 enum struct Comparison { LT, LE, EQ, NE, GE, GT };
+QLEVER_ENUM_SIZE(Comparison, 6);
 
 // The result of the comparisons is actually ternary because we sometimes
 // distinguish between "false" and "type mismatch" (see the comment directly
@@ -389,6 +391,12 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForId(
     case Datatype::Date:
     case Datatype::GeoPoint:
     case Datatype::BlankNodeIndex:
+    // A `TripleTermIndex` is compared by its bits, which is correct for the
+    // equality as long as there are no query-local triple terms. The order
+    // comparisons also use the bit order for now.
+    // TODO<Prashanth0703> Determine the correct semantic ordering of triple
+    // terms.
+    case Datatype::TripleTermIndex:
       // TODO<joka921> The same caveat as for `EncodedVal` above applies to the
       // `SecondaryVocabIndex` type: the comparison via bits is only correct for
       // equality, because the words of a secondary vocabulary are all sorted

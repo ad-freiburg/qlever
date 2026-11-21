@@ -22,7 +22,7 @@
 #include "backports/filesystem.h"
 #include "util/Exception.h"
 #include "util/Log.h"
-#include "util/Random.h"
+#include "util/UuidGenerator.h"
 
 namespace ad_utility::testing {
 inline auto filenameForTesting() {

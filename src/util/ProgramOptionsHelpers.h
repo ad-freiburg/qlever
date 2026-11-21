@@ -13,8 +13,8 @@
 #include "index/vocabulary/VocabularyType.h"
 #include "util/Concepts.h"
 #include "util/EnumWithStringsProgramOptions.h"
-#include "util/MemorySize/MemorySize.h"
 #include "util/Parameters.h"
+#include "util/memorySize/MemorySize.h"
 namespace ad_utility {
 
 // Shared body for the boost::program_options `validate` overloads whose only

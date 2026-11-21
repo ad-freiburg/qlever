@@ -84,7 +84,9 @@ double wktDistImpl(GeoPoint point1, GeoPoint point2) {
 
 // _____________________________________________________________________________
 std::optional<std::string> geometryNAsWkt(GeoPointOrWkt wkt, int64_t n) {
-  return utilGeomToWkt(getGeometryN(wkt, n));
+  auto parseResult = parseGeoPointOrWkt(wkt);
+  return utilGeomToWkt(getGeometryN(parseResult.parsedWkt_, n),
+                       parseResult.sourceCrs_);
 }
 
 // _____________________________________________________________________________

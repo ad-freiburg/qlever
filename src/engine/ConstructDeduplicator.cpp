@@ -52,6 +52,7 @@ ConstructDeduplicator::ConstructDeduplicator(
     : mode_{mode},
       queryExecutionContext_{queryExecutionContext},
       maxDedupVocabBytes_{computeMaxDedupVocabBytes(mode, maxDedupVocabSize)},
+      dedupVocab_{queryExecutionContext.getAllocator()},
       filter_{mode, queryExecutionContext} {}
 
 //______________________________________________________________________________
@@ -132,9 +133,10 @@ ValueId ConstructDeduplicator::canonicalize(ValueId id) {
   // be missed.
   ValueId canonicalId = dedupVocab_.getIdAndAddIfNotContained(entry);
   // Only `Lru` bounds the size of `dedupVocab_`, so only there do we
-  // track the vocab's byte size and check the threshold. We do not track the
-  // size of the `dedupVocab_` for `Full` mode, but delegate it in this case
-  // to the `LocalVocab` class itself.
+  // track the vocab's byte size and check the threshold. In `Full` mode, the
+  // size of the `dedupVocab_` is only bounded by the memory limit of the
+  // query, toward which its words count (see the class comment of
+  // `LocalVocab`).
   const bool addedNewString = dedupVocab_.size() != sizeBefore;
   if (isLru() && addedNewString) {
     dedupVocabBytes_ += entry.toStringRepresentation().size();
@@ -153,7 +155,7 @@ void ConstructDeduplicator::resetIfVocabTooLarge() {
     return;
   }
   filter_ = TripleDeduplicator{mode_, queryExecutionContext_};
-  dedupVocab_ = LocalVocab();
+  dedupVocab_ = LocalVocab{queryExecutionContext_.get().getAllocator()};
   dedupVocabBytes_ = 0;
 }
 
