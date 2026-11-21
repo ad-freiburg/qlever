@@ -44,7 +44,7 @@ class GeoRectangleRowFilter : public Operation {
 
   const ad_utility::GeoRectangle& rectangle() const { return rectangle_; }
 
-  std::string getCacheKeyImpl() const override;
+  qlm::string getCacheKeyImpl() const override;
   std::string getDescriptor() const override;
   size_t getResultWidth() const override;
   size_t getCostEstimate() override;
@@ -60,7 +60,7 @@ class GeoRectangleRowFilter : public Operation {
   qlm::vector<QueryExecutionTree*> getChildrenImpl() const override;
   [[nodiscard]] bool isDeterministicImpl() const override { return true; }
   std::unique_ptr<Operation> cloneImpl() const override;
-  [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override;
+  [[nodiscard]] qlm::vector<ColumnIndex> resultSortedOn() const override;
   Result computeResult(bool requestLaziness) override;
   VariableToColumnMap computeVariableToColumnMap() const override;
 

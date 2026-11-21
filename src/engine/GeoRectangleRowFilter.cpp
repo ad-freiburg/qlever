@@ -37,11 +37,11 @@ qlm::vector<QueryExecutionTree*> GeoRectangleRowFilter::getChildrenImpl()
 }
 
 // _____________________________________________________________________________
-std::string GeoRectangleRowFilter::getCacheKeyImpl() const {
-  return absl::StrCat("GeoRectangleRowFilter(col ", geometryColumn_, ", [",
-                      rectangle_.minLng_, ", ", rectangle_.minLat_, ", ",
-                      rectangle_.maxLng_, ", ", rectangle_.maxLat_, "], ",
-                      child_->getCacheKey(), ")");
+qlm::string GeoRectangleRowFilter::getCacheKeyImpl() const {
+  return qlm::StrCat(allocator(), "GeoRectangleRowFilter(col ", geometryColumn_,
+                     ", [", rectangle_.minLng_, ", ", rectangle_.minLat_, ", ",
+                     rectangle_.maxLng_, ", ", rectangle_.maxLat_, "], ",
+                     child_->getCacheKey(), ")");
 }
 
 // _____________________________________________________________________________
@@ -82,7 +82,7 @@ std::unique_ptr<Operation> GeoRectangleRowFilter::cloneImpl() const {
 }
 
 // _____________________________________________________________________________
-std::vector<ColumnIndex> GeoRectangleRowFilter::resultSortedOn() const {
+qlm::vector<ColumnIndex> GeoRectangleRowFilter::resultSortedOn() const {
   return child_->resultSortedOn();
 }
 
