@@ -55,7 +55,7 @@ class SparqlQleverVisitor {
   using PredicateObjectPairsAndTriples =
       ad_utility::sparql_types::PredicateObjectPairsAndTriples;
   using OperationsAndFilters =
-      std::pair<std::vector<GraphPatternOperation>, qlm::vector<SparqlFilter>>;
+      std::pair<qlm::vector<GraphPatternOperation>, qlm::vector<SparqlFilter>>;
   using OperationOrFilterAndMaybeTriples =
       std::pair<std::variant<GraphPatternOperation, SparqlFilter>,
                 std::optional<parsedQuery::BasicGraphPattern>>;
@@ -81,9 +81,8 @@ class SparqlQleverVisitor {
   // Needed to efficiently encode common IRIs directly into the ID.
   const EncodedIriManager* encodedIriManager_;
 
-  // The allocator for the containers that only live inside the visitor (as
-  // opposed to the containers of the resulting `ParsedQuery`) and for the
-  // `LocalVocab`s of updates.
+  // The allocator for the containers of the resulting `ParsedQuery` and for
+  // the containers that only live inside the visitor.
   qlever::Allocator<Id> allocator_;
   const qlever::Allocator<Id>& allocator() const { return allocator_; }
 
@@ -142,7 +141,7 @@ class SparqlQleverVisitor {
 
   // This is the parsed query so far. Currently, this only contains information
   // about the number of internal variables that have already been assigned.
-  ParsedQuery parsedQuery_;
+  ParsedQuery parsedQuery_{allocator()};
 
   // The trailing `VALUES` clause of the top-level query. It is visited before
   // the query itself, because `ParsedQuery::addSolutionModifiers` needs it.
@@ -198,7 +197,7 @@ class SparqlQleverVisitor {
 
   // Report an error if a `VALUES` clause in `ops` binds a variable from
   // `geoFunctionArgVariables_` to an invalid WKT literal.
-  void checkWktInValues(const std::vector<GraphPatternOperation>& ops,
+  void checkWktInValues(ql::span<const GraphPatternOperation> ops,
                         const antlr4::ParserRuleContext* ctx) const;
 
   // Report an error if the blank node label `label` (including the leading
@@ -325,11 +324,11 @@ class SparqlQleverVisitor {
 
   SolutionModifiers visit(Parser::SolutionModifierContext* ctx);
 
-  std::vector<GroupKey> visit(Parser::GroupClauseContext* ctx);
+  qlm::vector<GroupKey> visit(Parser::GroupClauseContext* ctx);
 
   GroupKey visit(Parser::GroupConditionContext* ctx);
 
-  std::vector<SparqlFilter> visit(Parser::HavingClauseContext* ctx);
+  qlm::vector<SparqlFilter> visit(Parser::HavingClauseContext* ctx);
 
   SparqlFilter visit(Parser::HavingConditionContext* ctx);
 
@@ -553,6 +552,9 @@ class SparqlQleverVisitor {
 
   GraphTerm visit(Parser::VarOrTermContext* ctx);
 
+  // Recognize `tripleTerm` syntax and explicitly reject its translation.
+  [[noreturn]] static GraphTerm visit(const Parser::TripleTermContext* ctx);
+
   VarOrIri visit(Parser::VarOrIriContext* ctx);
 
   static Variable visit(Parser::VarContext* ctx);
@@ -752,6 +754,13 @@ class SparqlQleverVisitor {
   auto visitVector(const std::vector<Ctx*>& childContexts)
       -> std::vector<decltype(visit(childContexts[0]))>;
 
+  // Like `visitVector`, but the result is a `qlm::vector` that uses the
+  // `allocator()` of the visitor.
+  CPP_template(typename Ctx)(requires CPP_NOT(
+              SparqlQleverVisitor::voidWhenVisited<SparqlQleverVisitor, Ctx>))
+  auto visitQlmVector(const std::vector<Ctx*>& childContexts)
+      -> qlm::vector<decltype(visit(childContexts[0]))>;
+
   // Check that exactly one of the `ctxs` is not `null`, visit that context,
   // cast the result to `Out` and return it. Requires that for all of the
   // `ctxs`, `visit(ctxs)` is convertible to `Out`.
@@ -829,6 +838,16 @@ class SparqlQleverVisitor {
   // inside the query or update. Then returns the currently active datasets.
   const parsedQuery::DatasetClauses& setAndGetDatasetClauses(
       const std::vector<DatasetClause>& clauses);
+
+  // Make a `GraphPatternOperation` that matches all triples in the given graph.
+  GraphPatternOperation makeAllTripleGraphPattern(
+      TripleComponent::Iri graphIri) const;
+
+  // Make a `GraphPatternOperation` that matches all triples in either all
+  // graphs, or just named graphs, depending on the value of `behaviour`.
+  GraphPatternOperation makeAllTripleGraphPattern(
+      Variable graphVariable,
+      parsedQuery::GroupGraphPattern::GraphVariableBehaviour behaviour) const;
 
   // Construct a `ParsedQuery` that clears the given graph equivalent to
   // `DELETE WHERE { GRAPH graph { ?s ?p ?o } }`.

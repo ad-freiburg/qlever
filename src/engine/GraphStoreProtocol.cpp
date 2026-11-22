@@ -6,6 +6,7 @@
 #include "engine/GraphStoreProtocol.h"
 
 #include "parser/Tokenizer.h"
+#include "util/UuidGenerator.h"
 #include "util/http/beast.h"
 
 // ____________________________________________________________________________
@@ -56,7 +57,7 @@ std::vector<TurtleTriple> GraphStoreProtocol::parseTriples(
 // ____________________________________________________________________________
 updateClause::GraphUpdate::Triples GraphStoreProtocol::convertTriples(
     const GraphOrDefault& graph, std::vector<TurtleTriple>&& triples,
-    BlankNodeAdder& blankNodeAdder) {
+    BlankNodeAdder& blankNodeAdder, const qlever::Allocator<Id>& allocator) {
   SparqlTripleSimpleWithGraph::Graph tripleGraph{std::monostate{}};
   if (std::holds_alternative<GraphRef>(graph)) {
     tripleGraph = std::get<GraphRef>(graph);
@@ -75,7 +76,8 @@ updateClause::GraphUpdate::Triples GraphStoreProtocol::convertTriples(
         transformTc(std::move(triple.predicate_)),
         transformTc(std::move(triple.object_)), tripleGraph);
   };
-  return {ad_utility::transform(std::move(triples), transformTurtleTriple),
+  return {ad_utility::transform(std::move(triples), transformTurtleTriple,
+                                allocator),
           blankNodeAdder.localVocab_.clone()};
 }
 
@@ -124,8 +126,8 @@ ParsedQuery GraphStoreProtocol::transformHead(
   auto pq = transformGet(graph, encodedIriManager, std::move(allocator));
   // HEAD does the same as GET except that the response has no body.
   // Overwrite the body to be empty.
-  pq.responseMiddleware_ =
-      ResponseMiddleware([](ResponseMiddleware::ResponseT&& response) {
+  pq.responseMiddleware_ = std::make_shared<const ResponseMiddleware>(
+      [](ResponseMiddleware::ResponseT&& response) {
         response.body() = []() -> cppcoro::generator<std::string> {
           co_return;
         }();
@@ -154,7 +156,7 @@ ParsedQuery GraphStoreProtocol::transformDelete(
   // DELETE must return 404 if the graph being deleted does not exist (GSP 5.4).
   // With implicit graph existence a graph existed iff triples were actually
   // deleted.
-  update.responseMiddleware_ = ResponseMiddleware(
+  update.responseMiddleware_ = std::make_shared<const ResponseMiddleware>(
       [](ResponseMiddleware::ResponseT response, const auto& result) {
         AD_CORRECTNESS_CHECK(result.size() == 1);
         const auto& updateMeta = result.at(0);

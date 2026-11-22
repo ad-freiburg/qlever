@@ -35,16 +35,18 @@
 #include "parser/ParsedQuery.h"
 #include "parser/SparqlParser.h"
 #include "util/AsioHelpers.h"
-#include "util/ConcurrencyLimitedExecutor.h"
 #include "util/Exception.h"
+#include "util/FairShareExecutor.h"
 #include "util/ParseException.h"
 #include "util/ParseableDuration.h"
 #include "util/QueryEventLog.h"
 #include "util/ResourceMonitor.h"
 #include "util/TimeTracer.h"
+#include "util/TransparentFunctors.h"
 #include "util/TypeTraits.h"
 #include "util/http/HttpServer.h"
 #include "util/http/HttpUtils.h"
+#include "util/http/ResponseMiddleware.h"
 #include "util/http/UrlParser.h"
 #include "util/http/websocket/MessageSender.h"
 #include "util/memorySize/MemorySize.h"
@@ -292,9 +294,9 @@ class QueryAlreadyInUseError : public std::runtime_error {
 namespace {
 // Return an executor for a single query, which runs at most
 // `max-num-threads-per-query` tasks on the `executor` at the same time.
-qlever::Executor makeQueryExecutor(qlever::Executor executor) {
-  return ad_utility::makeConcurrencyLimitedExecutor(
-      std::move(executor),
+qlever::Executor makeQueryExecutor(const qlever::Executor& executor) {
+  return ad_utility::makeFairShareClientExecutor(
+      executor, ad_utility::FairShareClass::Foreground,
       getRuntimeParameter<&RuntimeParameters::maxNumThreadsPerQuery_>());
 }
 }  // namespace
@@ -1161,10 +1163,8 @@ Awaitable<void> Server::sendStreamableResponse(
 
   auto response = ad_utility::httpUtils::createOkResponse(
       std::move(responseGenerator), request, mediaType);
-  if (plannedQuery.parsedQuery().responseMiddleware_.has_value()) {
-    response =
-        plannedQuery.parsedQuery().responseMiddleware_.value().applyQuery(
-            std::move(response));
+  if (const auto& middleware = plannedQuery.parsedQuery().responseMiddleware_) {
+    response = middleware->applyQuery(std::move(response));
   }
   try {
     // The result of the query is computed lazily while the response is being
@@ -1408,11 +1408,8 @@ Awaitable<void> Server::processUpdate(
       updates, [](const ParsedQuery& p) { return p.hasUpdateClause(); }));
 
   auto responseMiddlewares =
-      ad_utility::RvalueView(
-          updates | ql::views::transform(&ParsedQuery::responseMiddleware_) |
-          ql::views::filter(ad_utility::hasValue) |
-          ql::views::transform(ad_utility::value)) |
-      ::ranges::to<std::vector>();
+      updates | ql::views::transform(&ParsedQuery::responseMiddleware_) |
+      ql::views::filter(ad_utility::toBool) | ::ranges::to<std::vector>();
 
   std::vector<UpdateMetadata> metadatas;
 
@@ -1508,7 +1505,7 @@ Awaitable<void> Server::processUpdate(
   auto response = ad_utility::httpUtils::createJsonResponse(
       std::move(responseJson), request);
   for (auto& middleware : responseMiddlewares) {
-    response = middleware.applyUpdate(std::move(response), metadatas);
+    response = middleware->applyUpdate(std::move(response), metadatas);
   }
   // The body of the response is a single string, so it can be serialized on
   // the executor of this coroutine.

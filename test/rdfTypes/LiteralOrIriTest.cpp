@@ -15,9 +15,9 @@
 #include "../util/GTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "index/IndexImpl.h"
-#include "parser/LiteralOrIri.h"
 #include "rdfTypes/Iri.h"
 #include "rdfTypes/Literal.h"
+#include "rdfTypes/LiteralOrIri.h"
 #include "util/HashSet.h"
 #include "util/ParsedUri.h"
 

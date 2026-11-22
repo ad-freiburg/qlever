@@ -33,9 +33,9 @@
 #include "index/LocalVocabEntry.h"
 #include "index/TripleComponentConversions.h"
 #include "index/vocabulary/SecondaryVocabulary.h"
-#include "parser/LiteralOrIri.h"
 #include "parser/SparqlParser.h"
 #include "parser/TripleComponent.h"
+#include "rdfTypes/LiteralOrIri.h"
 #include "util/CompactStringVector.h"
 #include "util/LocalVocabEntryTestHelpers.h"
 #include "util/serializer/ByteBufferSerializer.h"
@@ -813,10 +813,7 @@ struct ContextWithSecondaryVocab {
   // deleting a file that is still open is fine on the platforms that QLever
   // supports, and the index is only ever read from.
   ~ContextWithSecondaryVocab() {
-    for (const std::string& filename :
-         ad_utility::testing::getAllIndexFilenames(indexBasename_)) {
-      ad_utility::deleteFile(filename, false);
-    }
+    ad_utility::testing::deleteTestIndexFiles(indexBasename_);
   }
 };
 
