@@ -100,8 +100,8 @@ TEST(SplitLayoutId, makeFromDoubleIsLossless) {
 }
 
 // Test that the bytes of an `Id` are completely determined by its payload and
-// datatype (the padding is always zero), because the serialization copies the
-// raw bytes.
+// datatype (the padding is always zero), and that the serialization writes only
+// the payload and the datatype.
 TEST(SplitLayoutId, byteRepresentation) {
   // 8 bytes payload + 1 byte datatype + 7 bytes explicit padding.
   static_assert(sizeof(SplitLayoutId) == 16);
@@ -125,12 +125,20 @@ TEST(SplitLayoutId, byteRepresentation) {
   EXPECT_FALSE(
       bytesEqual(SplitLayoutId::makeFromInt(0), SplitLayoutId::makeFromInt(1)));
 
-  // The serialization copies these 16 bytes.
+  // The serialization writes 9 of these 16 bytes, and reading them back gives
+  // the same bytes again (see `IdBaseTest.Serialization` for the round trip
+  // of the values).
   for (auto id : makeRandomIds<SplitLayoutId>()) {
     EXPECT_TRUE(bytesEqual(id, SplitLayoutId::fromBits(id.getBits())));
     ad_utility::serialization::ByteBufferWriteSerializer writer;
     writer << id;
-    EXPECT_EQ(std::move(writer).data().size(), sizeof(SplitLayoutId));
+    auto data = std::move(writer).data();
+    EXPECT_EQ(data.size(), sizeof(SplitLayoutId::PayloadType) +
+                               sizeof(SplitLayoutId::DatatypeType));
+    ad_utility::serialization::ByteBufferReadSerializer reader{std::move(data)};
+    SplitLayoutId read;
+    reader >> read;
+    EXPECT_TRUE(bytesEqual(read, id));
   }
 }
 }  // namespace columnBasedIdTable::splitLayout

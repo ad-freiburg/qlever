@@ -82,8 +82,15 @@ struct CompressedBlockMetadataNoBlockIndex {
       return str;
     }
 
-    template <typename T>
-    friend std::true_type allowTrivialSerialization(PermutedTriple, T);
+    // Serialize the four `Id`s one by one, so that they are written in the
+    // format of the `Id` and not as the bytes of this struct (which contain
+    // the padding of the split layout).
+    AD_SERIALIZE_FRIEND_FUNCTION(PermutedTriple) {
+      serializer | arg.col0Id_;
+      serializer | arg.col1Id_;
+      serializer | arg.col2Id_;
+      serializer | arg.graphId_;
+    }
 
     // Helper function to make `PermutedTriple` easier to compare without
     // `graphId_`.
@@ -253,7 +260,9 @@ struct CompressedRelationMetadata {
 
 // Serialization of the compressed "relation" meta data.
 AD_SERIALIZE_FUNCTION(CompressedRelationMetadata) {
-  serializer | arg.col0Id_;
+  // The file of this metadata keeps the layout of an array of this struct (see
+  // `MetaDataWrapperDense`), so the `Id` is written with all its bytes.
+  ad_utility::serialization::triviallySerialize(serializer, arg.col0Id_);
   serializer | arg.numRows_;
   serializer | arg.multiplicityCol1_;
   serializer | arg.multiplicityCol2_;
