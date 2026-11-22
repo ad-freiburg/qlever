@@ -184,9 +184,8 @@ TEST(IdColumnTest, algorithmsOnColumns) {
   // Writing via a lambda that takes the explicit `IdRef`. Depending on the
   // library, `ql::ranges::for_each` does not accept this lambda (see the NOTE
   // above `CanRangesForEach`). `std::for_each` and range-based `for` loops
-  // always do.
-  //
-  // TODO<pas-kes>: Fix this test once the new `SplitLayoutId` is available.
+  // always do. For the columns of an `IdTable`, `ql::ranges::for_each` accepts
+  // it in both layouts (see `IdTable.rangeAlgorithmOnColumnWithIdRef`).
   const Id one = Id::makeFromInt(1);
   std::for_each(view.begin(), view.end(), [one](IdRef id) { id = one; });
   for (size_t i = 0; i < view.size(); ++i) {
@@ -221,10 +220,15 @@ TEST(IdColumnTest, algorithmsOnColumns) {
 //   2. an lvalue of the value type of the column (`std::iter_value_t<It>&`),
 //      which is an `Id&` for the legacy as well as for the split layout.
 // In the legacy layout a column is a `ql::span<Id>` and `IdRef` is just `Id&`
-// (see `IdTable.h`), so both hold. In the split layout, `*it` yields a proxy,
-// and requirement 2 fails for a parameter `IdRef`, `ConstIdRef` or
-// `IdRef::Base`: An `Id&` refers to a packed `Id`, from which no pair of
-// pointers into the two separate arrays of a split column can be built.
+// (see `IdTable.h`), so both hold. In the split layout, `*it` yields a proxy.
+// Without `USE_SPLIT_LAYOUT`, requirement 2 fails for a parameter `IdRef`,
+// `ConstIdRef` or `IdRef::Base`: An `Id&` refers to a folded `Id`, from which
+// no pair of pointers into the two separate arrays of a split column can be
+// built. With it, `IdRef` and `ConstIdRef` can refer to an `Id` (see
+// `IdRef.h`), so only `IdRef::Base` fails. That is on purpose: the restricted
+// reference cannot be built from an `Id&`, because otherwise its common
+// reference with `Id` would be ambiguous (see `IdRef.h`). A function for a
+// column takes `IdRef`, `ConstIdRef`, `Id` or `auto&&`.
 // `std::for_each` and range-based `for` loops do not have requirement 2, and a
 // parameter of type `Id` or `auto&&` is fine, too.
 //
@@ -241,19 +245,6 @@ struct CanRangesForEach<Range, F,
                         std::void_t<decltype(ql::ranges::for_each(
                             std::declval<Range>(), std::declval<F>()))>>
     : std::true_type {};
-
-// Call `ql::ranges::for_each(column, f)` and return `true` if that is possible.
-// Otherwise do nothing and return `false`. This is what lets a test compile
-// both before and after the problem is solved.
-template <typename Column, typename F>
-bool rangesForEachIfAccepted(Column& column, F f) {
-  if constexpr (CanRangesForEach<Column&, F>::value) {
-    ql::ranges::for_each(column, std::move(f));
-    return true;
-  } else {
-    return false;
-  }
-}
 
 // Algorithms that work for a legacy column (`ql::span<Id>`) as well as for a
 // split column. `WriteRef` is the type that a function takes to write to an
@@ -416,68 +407,4 @@ TEST(IdColumnRangesForEachTest,
   std::for_each(column.begin(), column.end(), restricted);
   const ConstIdColumnRef constColumn = column;
   std::for_each(constColumn.begin(), constColumn.end(), read);
-}
-
-// Test `ql::ranges::for_each` on a split column with a function that takes an
-// `IdRef`, a `ConstIdRef` or an `IdRef::Base`. Whether the library accepts
-// these functions differs (see the NOTE above `CanRangesForEach`):
-//  - If it rejects them, the test is reported as SKIPPED (with the reason).
-//  - If it accepts them, all three calls are made for real, and the test
-//    checks their effect, so it is reported as PASSED.
-//
-// TODO<pas-kes>: Remove the `GTEST_SKIP` branch and `rangesForEachIfAccepted`
-// once all supported libraries accept the functions.
-TEST(IdColumnRangesForEachTest, splitColumnWithIdRefFunctions) {
-  auto ids = sampleIds();
-  auto [payloads, datatypes] = splitIds(ids);
-  const IdColumnRef column{payloads.data(), datatypes.data(), payloads.size()};
-  std::vector<std::string> rejected;
-
-  // Write via `IdRef`.
-  const Id one = Id::makeFromInt(1);
-  if (rangesForEachIfAccepted(column, [one](IdRef id) { id = one; })) {
-    for (size_t i = 0; i < column.size(); ++i) {
-      EXPECT_EQ(column[i], one);
-    }
-  } else {
-    rejected.push_back("[](IdRef id)");
-  }
-
-  // Read via `ConstIdRef` (needs the const view of the column).
-  size_t numOnes = 0;
-  ConstIdColumnRef constColumn = column;
-  if (rangesForEachIfAccepted(constColumn, [&numOnes, one](ConstIdRef id) {
-        numOnes += (id == one) ? 1 : 0;
-      })) {
-    EXPECT_EQ(numOnes, column.size());
-  } else {
-    rejected.push_back("[](ConstIdRef id)");
-  }
-
-  // Write via the restricted reference. Note that the assignment needs an
-  // rvalue.
-  const Id two = Id::makeFromInt(2);
-  if (rangesForEachIfAccepted(column,
-                              [two](IdRef::Base id) { std::move(id) = two; })) {
-    for (size_t i = 0; i < column.size(); ++i) {
-      EXPECT_EQ(column[i], two);
-    }
-  } else {
-    rejected.push_back("[](IdRef::Base id)");
-  }
-
-  if (!rejected.empty()) {
-    std::string functions;
-    for (const auto& function : rejected) {
-      functions += (functions.empty() ? "" : ", ") + function;
-    }
-    GTEST_SKIP()
-        << "Problem not solved yet: ql::ranges::for_each rejects " << functions
-        << " for a split column, because it requires that the function can "
-           "also be called with an `Id&` (std::iter_value_t&), and `Id&` is "
-           "convertible to IdRef: "
-        << std::is_convertible_v<Id&, IdRef> << ", to ConstIdRef: "
-        << std::is_convertible_v<Id&, ConstIdRef> << ", to IdRef::Base: "
-        << std::is_convertible_v<Id&, IdRef::Base> << ".";
-  }
 }

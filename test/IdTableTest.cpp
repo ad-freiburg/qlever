@@ -1256,6 +1256,27 @@ TEST(IdTable, addEmptyColumn) {
   EXPECT_EQ(table.getColumn(1).size(), 2);
 }
 
+// Test that a range algorithm accepts a function that takes `IdRef` or
+// `ConstIdRef` for a column of an `IdTable` (see
+// `std::indirectly_unary_invocable`). Without `USE_SPLIT_LAYOUT` these are
+// `Id&` and `const Id&`, with it they are proxies that can also refer to an
+// `Id` (see `IdRef.h`).
+TEST(IdTable, rangeAlgorithmOnColumnWithIdRef) {
+  IdTable table{1, ad_utility::makeUnlimitedAllocator<Id>()};
+  table.push_back({V(1)});
+  table.push_back({V(2)});
+  table.push_back({V(3)});
+
+  ql::ranges::for_each(table.getColumn(0), [](IdRef id) { id = V(7); });
+  EXPECT_THAT(table.getColumn(0), ::testing::ElementsAre(V(7), V(7), V(7)));
+
+  size_t numSevens = 0;
+  ql::ranges::for_each(
+      std::as_const(table).getColumn(0),
+      [&numSevens](ConstIdRef id) { numSevens += (id == V(7)) ? 1 : 0; });
+  EXPECT_EQ(numSevens, 3);
+}
+
 // _____________________________________________________________________________
 TEST(IdTable, moveOrClone) {
   IdTable table{1, ad_utility::makeUnlimitedAllocator<Id>()};
