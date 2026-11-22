@@ -26,6 +26,7 @@
 #include "backports/algorithm.h"
 #include "backports/filesystem.h"
 #include "engine/MaterializedViews.h"
+#include "engine/idTable/splitLayout/SplitLayoutId.h"
 #include "global/Constants.h"
 #include "global/FileSuffixConstants.h"
 #include "index/ExportIds.h"
@@ -53,6 +54,10 @@ using namespace std::string_literals;
 using ::testing::UnorderedElementsAre;
 
 namespace {
+// Whether this binary is built with `USE_SPLIT_LAYOUT`.
+constexpr bool idHasSplitLayout =
+    std::is_same_v<Id, columnBasedIdTable::splitLayout::SplitLayoutId>;
+
 // Create a `QueryExecutionContext` with the given `turtleInput`, and the given
 // settings for which permutations to load and whether to use patterns.
 auto makeQec(std::string turtleInput, bool loadAllPermutations,
@@ -1459,6 +1464,9 @@ TEST(IndexImpl, loadConfigFromOldIndex) {
   stats["geo-point-encoding"] =
       ad_utility::GeoPointEncoding{GeoPoint::encoding()};
   stats["has-icu-support"] = ad_utility::useICUDefault;
+  if constexpr (idHasSplitLayout) {
+    stats[std::string{SPLIT_ID_LAYOUT_KEY}] = true;
+  }
 
   std::string jsonFile = onDiskBase + CONFIGURATION_FILE;
   std::ifstream in{jsonFile};
@@ -1502,6 +1510,31 @@ TEST(IndexImpl, icuSupportConfigurationMustMatch) {
   }
 }
 
+// _____________________________________________________________________________
+TEST(IndexImpl, splitIdLayoutConfigurationMustMatch) {
+  auto index =
+      makeTestIndex("splitIdLayoutConfigurationMustMatch", "<a> <b> <c> .");
+  auto& indexImpl = index.getImpl();
+  const std::string key{SPLIT_ID_LAYOUT_KEY};
+
+  // Only an index with the split layout records its layout, so the
+  // configuration of an index with the folded layout does not change.
+  const auto originalConfig = indexImpl.configurationJson();
+  EXPECT_EQ(originalConfig.contains(key), idHasSplitLayout);
+  EXPECT_NO_THROW(indexImpl.applyConfiguration(originalConfig));
+
+  // An index with the other layout must not be loaded.
+  auto otherLayoutConfig = originalConfig;
+  if (idHasSplitLayout) {
+    otherLayoutConfig.erase(key);
+  } else {
+    otherLayoutConfig[key] = true;
+  }
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      indexImpl.applyConfiguration(otherLayoutConfig),
+      ::testing::HasSubstr("The two store their `Id`s differently"));
+}
+
 namespace {
 // Return a minimal configuration (index metadata) that
 // `IndexImpl::applyConfiguration` accepts. The tests below tamper with single
@@ -1519,6 +1552,9 @@ nlohmann::json minimalValidConfiguration() {
   configuration["num-predicates"] = Index::NumNormalAndInternal{2, 1};
   // This is the key `BLANK_NODE_ALLOCATION_START` from `IndexImpl.cpp`.
   configuration["num-blank-nodes-total"] = 0;
+  if constexpr (idHasSplitLayout) {
+    configuration[std::string{SPLIT_ID_LAYOUT_KEY}] = true;
+  }
   return configuration;
 }
 }  // namespace

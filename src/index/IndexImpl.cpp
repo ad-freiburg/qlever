@@ -27,6 +27,7 @@
 #include "backports/algorithm.h"
 #include "backports/filesystem.h"
 #include "engine/AddCombinedRowToTable.h"
+#include "engine/idTable/splitLayout/SplitLayoutId.h"
 #include "global/FileSuffixConstants.h"
 #include "global/RuntimeParameters.h"
 #include "index/Index.h"
@@ -73,6 +74,11 @@ static constexpr size_t NUM_EXTERNAL_SORTERS_AT_SAME_TIME = 2u;
 // added or removed via updates. For backwards compatibility we keep the name.
 constexpr std::string_view BLANK_NODE_ALLOCATION_START =
     "num-blank-nodes-total";
+
+// Whether this binary is built with `USE_SPLIT_LAYOUT` (see
+// `SPLIT_ID_LAYOUT_KEY`).
+constexpr bool idHasSplitLayout =
+    std::is_same_v<Id, columnBasedIdTable::splitLayout::SplitLayoutId>;
 
 // _____________________________________________________________________________
 IndexImpl::IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator)
@@ -1444,6 +1450,11 @@ void IndexImpl::writeConfiguration() const {
   // interchangeable; `readConfiguration` throws if the configuration of the
   // loaded index does not match the current binary.
   configuration["has-icu-support"] = ad_utility::useICUDefault;
+  // Record the split layout of the `Id`s, but only for this layout, so that the
+  // configuration of an index with the folded layout does not change.
+  if constexpr (idHasSplitLayout) {
+    configuration[std::string{SPLIT_ID_LAYOUT_KEY}] = true;
+  }
   auto f = ad_utility::makeOfstream(onDiskBase_ + CONFIGURATION_FILE);
   f << configuration;
 }
@@ -1653,6 +1664,21 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
         " it. The two use different string collations and are not "
         "interchangeable. Please rebuild the index or use a matching QLever "
         "binary.")};
+  }
+
+  // The same holds for the layout of the `Id`s: a binary with the other layout
+  // would read the `Id`s of the index wrongly. An index without the key has
+  // the folded layout.
+  bool indexHasSplitIdLayout =
+      configurationJson_.value(std::string{SPLIT_ID_LAYOUT_KEY}, false);
+  if (indexHasSplitIdLayout != idHasSplitLayout) {
+    auto withOrWithout = [](bool split) { return split ? "with" : "without"; };
+    throw std::runtime_error{absl::StrCat(
+        "This index was built ", withOrWithout(indexHasSplitIdLayout),
+        " `USE_SPLIT_LAYOUT`, but the QLever binary you are using was built ",
+        withOrWithout(idHasSplitLayout),
+        " it. The two store their `Id`s differently. Please rebuild the index "
+        "or use a matching QLever binary.")};
   }
 
   if (configurationJson_.find("prefixes-external") !=
