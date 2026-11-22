@@ -20,6 +20,7 @@
 #include "util/AllocatorTestHelpers.h"
 #include "util/ContainersWithAllocator.h"
 #include "util/GTestHelpers.h"
+#include "util/ParseException.h"
 #include "util/ParsedQueryTestHelpers.h"
 #include "util/RuntimeParametersTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
@@ -710,7 +711,7 @@ qet-width: 3
 }
 )xxx");
 
-  auto actual = strip(qet->getCacheKey());
+  auto actual = strip(std::string{qet->getCacheKey()});
 
   if (actual != possible1 && actual != possible2 && actual != possible3 &&
       actual != possible4 && actual != possible5) {
@@ -971,6 +972,21 @@ TEST(QueryPlanner, TransitivePathBindRight) {
       ad_utility::testing::getQec("<x> <p> <o>. <x2> <p> <o2>"));
 }
 
+TEST(QueryPlanner, TransitivePathBindBoth) {
+  auto scan = h::IndexScanFromStrings;
+  TransitivePathSide left{std::nullopt, 0, Variable("?x"), 0};
+  TransitivePathSide right{std::nullopt, 1, Variable("?y"), 1};
+  h::expect(
+      "SELECT ?x ?y WHERE {"
+      "?x <p>+ ?y."
+      "?x <p> ?y }",
+      h::transitivePath(
+          left, right, 1, std::numeric_limits<size_t>::max(),
+          scan("?x", "<p>", "?y"),
+          scan(internalVar(0), "<p>", internalVar(1), {Permutation::PSO})),
+      ad_utility::testing::getQec("<x> <p> <o>. <x2> <p> <o2>. <x1> <p> <x2>"));
+}
+
 // Test that two row number services on the same sorted subquery with different
 // offsets (the equivalent of the SQL window function `LAG`) are joined without
 // sorting, and that invalid configurations are rejected.
@@ -1116,8 +1132,8 @@ TEST(QueryPlanner, PathSearchSingleTarget) {
   auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
 
-  std::vector<Id> sources{getId("<x>")};
-  std::vector<Id> targets{getId("<z>")};
+  IdColumn sources{getId("<x>")};
+  IdColumn targets{getId("<z>")};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
                                  targets,
@@ -1148,8 +1164,8 @@ TEST(QueryPlanner, PathSearchMultipleTargets) {
   auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
 
-  std::vector<Id> sources{getId("<x>")};
-  std::vector<Id> targets{getId("<y>"), getId("<z>")};
+  IdColumn sources{getId("<x>")};
+  IdColumn targets{getId("<y>"), getId("<z>")};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
                                  targets,
@@ -1182,8 +1198,8 @@ TEST(QueryPlanner, PathSearchMultipleSourcesAndTargets) {
       ad_utility::testing::getQec("<x1> <p> <y>. <x2> <p> <y>. <y> <p> <z>");
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
 
-  std::vector<Id> sources{getId("<x1>"), getId("<x2>")};
-  std::vector<Id> targets{getId("<y>"), getId("<z>")};
+  IdColumn sources{getId("<x1>"), getId("<x2>")};
+  IdColumn targets{getId("<y>"), getId("<z>")};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
                                  targets,
@@ -1217,8 +1233,8 @@ TEST(QueryPlanner, PathSearchMultipleSourcesAndTargetsCartesian) {
       ad_utility::testing::getQec("<x1> <p> <y>. <x2> <p> <y>. <y> <p> <z>");
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
 
-  std::vector<Id> sources{getId("<x1>"), getId("<x2>")};
-  std::vector<Id> targets{getId("<y>"), getId("<z>")};
+  IdColumn sources{getId("<x1>"), getId("<x2>")};
+  IdColumn targets{getId("<y>"), getId("<z>")};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
                                  targets,
@@ -1253,8 +1269,8 @@ TEST(QueryPlanner, PathSearchMultipleSourcesAndTargetsNonCartesian) {
       ad_utility::testing::getQec("<x1> <p> <y>. <x2> <p> <y>. <y> <p> <z>");
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
 
-  std::vector<Id> sources{getId("<x1>"), getId("<x2>")};
-  std::vector<Id> targets{getId("<y>"), getId("<z>")};
+  IdColumn sources{getId("<x1>"), getId("<x2>")};
+  IdColumn targets{getId("<y>"), getId("<z>")};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
                                  targets,
@@ -1291,8 +1307,8 @@ TEST(QueryPlanner, numPathsPerTarget) {
       ad_utility::testing::getQec("<x1> <p> <y>. <x2> <p> <y>. <y> <p> <z>");
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
 
-  std::vector<Id> sources{getId("<x1>"), getId("<x2>")};
-  std::vector<Id> targets{getId("<y>"), getId("<z>")};
+  IdColumn sources{getId("<x1>"), getId("<x2>")};
+  IdColumn targets{getId("<y>"), getId("<z>")};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
                                  targets,
@@ -1330,8 +1346,8 @@ TEST(QueryPlanner, maxDepth) {
       ad_utility::testing::getQec("<x1> <p> <y>. <x2> <p> <y>. <y> <p> <z>");
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
 
-  std::vector<Id> sources{getId("<x1>"), getId("<x2>")};
-  std::vector<Id> targets{getId("<y>"), getId("<z>")};
+  IdColumn sources{getId("<x1>"), getId("<x2>")};
+  IdColumn targets{getId("<y>"), getId("<z>")};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
                                  targets,
@@ -1376,8 +1392,8 @@ TEST(QueryPlanner, PathSearchWithEdgeProperties) {
       "<x> <p1> <m1>. <m1> <p2> <y>. <y> <p1> <m2>. <m2> <p2> <z>");
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
 
-  std::vector<Id> sources{getId("<x>")};
-  std::vector<Id> targets{getId("<z>")};
+  IdColumn sources{getId("<x>")};
+  IdColumn targets{getId("<z>")};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
                                  targets,
@@ -1420,8 +1436,8 @@ TEST(QueryPlanner, PathSearchWithMultipleEdgePropertiesAndTargets) {
       "<m2> <p2> <z>");
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
 
-  std::vector<Id> sources{getId("<x>")};
-  std::vector<Id> targets{getId("<z>"), getId("<y>")};
+  IdColumn sources{getId("<x>")};
+  IdColumn targets{getId("<z>"), getId("<y>")};
   PathSearchConfiguration config{
       PathSearchAlgorithm::ALL_PATHS,
       sources,
@@ -1464,8 +1480,8 @@ TEST(QueryPlanner, PathSearchJoinOnEdgeProperty) {
       "<x> <p1> <m1>. <m1> <p2> <y>. <y> <p1> <m2>. <m2> <p2> <z>");
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
 
-  std::vector<Id> sources{getId("<x>")};
-  std::vector<Id> targets{getId("<z>")};
+  IdColumn sources{getId("<x>")};
+  IdColumn targets{getId("<z>")};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
                                  targets,
@@ -1505,7 +1521,7 @@ TEST(QueryPlanner, PathSearchSourceBound) {
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
 
   Variable sources{"?source"};
-  std::vector<Id> targets{getId("<z>")};
+  IdColumn targets{getId("<z>")};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
                                  targets,
@@ -1539,7 +1555,7 @@ TEST(QueryPlanner, PathSearchTargetBound) {
   auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
 
-  std::vector<Id> sources{getId("<x>")};
+  IdColumn sources{getId("<x>")};
   Variable targets{"?target"};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
@@ -3899,20 +3915,17 @@ TEST(QueryPlanner, PropertyPathWithGraphVariable) {
         query, h::MultiColumnJoin(h::Sort(values), h::Sort(completeHull(1))),
         std::nullopt, greedyBudgets);
 
-    // Ensure join with too many columns doesn't result in an exception. (This
-    // could be optimized in the future.)
+    // Ensure join with too many columns doesn't result in an exception and that
+    // both sides are bound at once.
     h::expect(
         "SELECT * "
         "{ VALUES (?g ?a ?b) { (1 1 1) } GRAPH ?g { ?a <label>+ ?b } }",
-        h::MultiColumnJoin(
-            h::Sort(h::ValuesClause("VALUES (?g\t?a\t?b) { (1 1 1) }")),
-            h::Sort(h::transitivePath(
-                left, right, 1, std::numeric_limits<size_t>::max(),
-                // Sort by ?g
-                h::Sort(h::IndexScanFromStrings(
-                    "?_QLever_internal_variable_qp_0", "<label>",
-                    "?_QLever_internal_variable_qp_1", {}, NamedTag{},
-                    {Variable{"?g"}}, {3}))))));
+        h::transitivePath(left, right, 1, std::numeric_limits<size_t>::max(),
+                          h::ValuesClause("VALUES (?g\t?a\t?b) { (1 1 1) }"),
+                          h::Sort(h::IndexScanFromStrings(
+                              "?_QLever_internal_variable_qp_0", "<label>",
+                              "?_QLever_internal_variable_qp_1", {}, NamedTag{},
+                              {Variable{"?g"}}, {3}))));
 
     h::expectWithGivenBudgets(
         "SELECT * WHERE { GRAPH ?g { ?a <label>+ ?b . VALUES ?a { UNDEF } } }",
@@ -4356,18 +4369,16 @@ TEST(QueryPlanner, bindTransitivePathWithGraphTwice) {
                       {Variable{"?g"}}, {3})))),
               h::IndexScanFromStrings("?g", "<b>", "?g2")),
       qec, {16, 64'000'000});
-  // Double bind is currently not supported
-  h::expect("SELECT * { GRAPH ?g { ?s <a>+ ?o } ?s <b> ?o }",
-            h::MultiColumnJoin(
-                h::Sort(h::transitivePath(
-                    left, right1, 1, std::numeric_limits<size_t>::max(),
-                    // The sort is because of missing graph permutations.
-                    h::Sort(h::IndexScanFromStrings(
-                        "?_QLever_internal_variable_qp_0", "<a>",
-                        "?_QLever_internal_variable_qp_1", {}, NamedTag{},
-                        {Variable{"?g"}}, {3})))),
-                h::IndexScanFromStrings("?s", "<b>", "?o")),
-            qec);
+  // This tests double binding (both columns at once).
+  h::expect(
+      "SELECT * { GRAPH ?g { ?s <a>+ ?o } ?s <b> ?o }",
+      h::transitivePath(left, right1, 1, std::numeric_limits<size_t>::max(),
+                        h::IndexScanFromStrings("?s", "<b>", "?o"),
+                        h::Sort(h::IndexScanFromStrings(
+                            "?_QLever_internal_variable_qp_0", "<a>",
+                            "?_QLever_internal_variable_qp_1", {}, NamedTag{},
+                            {Variable{"?g"}}, {3}))),
+      qec);
 
   TransitivePathSide right2{std::nullopt, 1, Variable{"?g"}, 1};
   h::expect("SELECT * { { GRAPH ?g { ?s <a>+ ?g } ?s <b> ?s2 } . ?g <b> ?g2 }",

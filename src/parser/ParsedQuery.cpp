@@ -19,6 +19,7 @@
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "global/RuntimeParameters.h"
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
+#include "util/ParseException.h"
 #include "util/TransparentFunctors.h"
 
 using std::string;
@@ -173,7 +174,9 @@ void ParsedQuery::addSolutionModifiers(
     if (isGroupBy) {
       postQueryValuesClause_ = std::move(postQueryValues);
     } else {
-      auto where = std::exchange(_rootGraphPattern, GraphPattern{});
+      auto where = std::exchange(
+          _rootGraphPattern,
+          GraphPattern{_rootGraphPattern._graphPatterns.get_allocator()});
       _rootGraphPattern._graphPatterns.emplace_back(
           parsedQuery::GroupGraphPattern{std::move(where)});
       _rootGraphPattern._graphPatterns.emplace_back(
@@ -336,7 +339,7 @@ const qlm::vector<Variable>& ParsedQuery::getVisibleVariables() const {
 
 // _____________________________________________________________________________
 void ParsedQuery::registerVariablesVisibleInQueryBody(
-    const vector<Variable>& variables) {
+    ql::span<const Variable> variables) {
   for (const auto& var : variables) {
     registerVariableVisibleInQueryBody(var);
   }
@@ -353,7 +356,8 @@ void ParsedQuery::registerVariableVisibleInQueryBody(const Variable& variable) {
 }
 
 // __________________________________________________________________________
-ParsedQuery::GraphPattern::GraphPattern() : _optional(false) {}
+ParsedQuery::GraphPattern::GraphPattern(const qlever::Allocator<Id>& allocator)
+    : _optional(false), _filters{allocator}, _graphPatterns{allocator} {}
 
 // __________________________________________________________________________
 bool ParsedQuery::GraphPattern::addLanguageFilter(
@@ -429,13 +433,17 @@ bool ParsedQuery::GraphPattern::addLanguageFilter(
                         "triple. "
                         "Using literal-to-language predicate instead.\n";
 
+    const auto allocator = _graphPatterns.get_allocator();
     std::vector<BasicGraphPattern> operations;
     for (const auto& langTag : langTags) {
-      operations.push_back({std::vector{SparqlTriple{
-          variable,
-          PropertyPath::fromIri(ad_utility::triple_component::Iri::fromIriref(
-              LANGUAGE_PREDICATE)),
-          ad_utility::triple_component::Iri::fromLangtag(langTag)}}});
+      operations.push_back(
+          {{{SparqlTriple{
+                variable,
+                PropertyPath::fromIri(
+                    ad_utility::triple_component::Iri::fromIriref(
+                        LANGUAGE_PREDICATE)),
+                ad_utility::triple_component::Iri::fromLangtag(langTag)}},
+            allocator}});
     }
 
     // Optimization if there already is a `BasicGraphPattern` we can use.
@@ -446,8 +454,8 @@ bool ParsedQuery::GraphPattern::addLanguageFilter(
       std::get<BasicGraphPattern>(_graphPatterns.back())
           ._triples.push_back(std::move(operations.at(0)._triples.at(0)));
     } else {
-      auto makeOp = [](GraphPatternOperation basicPattern) {
-        GraphPattern pattern;
+      auto makeOp = [this](GraphPatternOperation basicPattern) {
+        GraphPattern pattern{_graphPatterns.get_allocator()};
         pattern._graphPatterns.push_back(std::move(basicPattern));
         return pattern;
       };
@@ -707,7 +715,9 @@ void ParsedQuery::addHavingClauseWithoutGroupBy(
     }
     return "";
   };
-  auto where = std::exchange(_rootGraphPattern, GraphPattern{});
+  auto where = std::exchange(
+      _rootGraphPattern,
+      GraphPattern{_rootGraphPattern._graphPatterns.get_allocator()});
   for (auto& having : havingClauses) {
     // Like `checkUsedVariablesAreVisible`, but with an explanation per
     // variable. `true` excludes the variables that only occur inside `EXISTS`.

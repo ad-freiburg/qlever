@@ -33,7 +33,9 @@
 // that header is a compatibility shim that includes *this* header. Each backend
 // therefore includes its concrete implementation header directly.
 
+#include <type_traits>
 #include <utility>
+#include <vector>
 
 #include "util/memorySize/MemorySize.h"
 
@@ -56,6 +58,22 @@ template <typename T>
 using Allocator = ad_utility::allocatorImpl::AllocatorWithLimit<T>;
 
 #endif  // QLEVER_USE_PMR_ALLOCATOR
+
+// True iff `T` is an instantiation of `qlever::Allocator`.
+//
+// NOTE: This cannot be expressed via `isInstantiation`, because clang rejects
+// the pack expansion for the alias template `qlever::Allocator`.
+template <typename T, typename = void>
+inline constexpr bool isQleverAllocator = false;
+template <typename T>
+inline constexpr bool
+    isQleverAllocator<T, std::void_t<typename T::value_type>> =
+        std::is_same_v<T, Allocator<typename T::value_type>>;
+
+static_assert(isQleverAllocator<Allocator<int>>);
+static_assert(!isQleverAllocator<int>);
+// Has a `value_type`, but is not an allocator.
+static_assert(!isQleverAllocator<std::vector<int>>);
 
 template <typename T>
 Allocator<T> makeUnlimitedAllocator() {

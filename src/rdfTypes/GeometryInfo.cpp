@@ -11,6 +11,7 @@
 #include "rdfTypes/GeometryInfo.h"
 
 #include <absl/base/casts.h>
+#include <absl/strings/str_cat.h>
 
 #include <array>
 #include <cmath>
@@ -25,6 +26,12 @@
 #include "util/Log.h"
 
 namespace ad_utility {
+
+// Check that the constants `crsTypeUnsupported` and `crsTypeCrs84` of
+// `GeometryInfo.h` (which only forward-declares `CRSType`) are the enum values
+// they stand for.
+static_assert(crsTypeUnsupported == ::util::geo::CRSType::UNSUPPORTED);
+static_assert(crsTypeCrs84 == ::util::geo::CRSType::CRS84);
 
 // ____________________________________________________________________________
 GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
@@ -87,7 +94,7 @@ std::optional<GeometryInfo> GeometryInfo::fromWktLiteral(std::string_view wkt) {
   }
 
   auto boundingBox = boundingBoxAsGeoPoints(parsed.value());
-  auto centroid = centroidAsGeoPoint(parsed.value());
+  auto centroid = centroidAsGeoPoint(parsed.value(), sourceCrs);
   auto numGeom = countChildGeometries(parsed.value());
   auto metricLength = computeMetricLength(parsed.value());
   if (!boundingBox.has_value() || !centroid.has_value()) {
@@ -214,6 +221,14 @@ std::optional<std::string_view> SourceCrsType::asIri() const {
   return detail::crsTypeToIri(type_);
 }
 
+// _____________________________________________________________________________
+::util::geo::CRSType SourceCrsType::iriToCrsType(std::string_view uri) {
+  // Wrap the IRI in angle brackets, because `getCRSType` parses the CRS
+  // prefix of a WKT literal (`<http://...> POINT(...)`) and treats a missing
+  // opening bracket as "no CRS given", which is CRS84 and not `UNSUPPORTED`.
+  return ::util::geo::getCRSType(absl::StrCat("<", uri, ">"));
+}
+
 // ____________________________________________________________________________
 Centroid GeometryInfo::getCentroid() const {
   return Centroid{GeoPoint::fromBitRepresentation(geometryTypeAndCentroid_ &
@@ -226,7 +241,8 @@ std::optional<Centroid> GeometryInfo::getCentroid(std::string_view wkt) {
   if (!parseResult.parsedWkt_.has_value()) {
     return std::nullopt;
   }
-  return detail::centroidAsGeoPoint(parseResult.parsedWkt_.value());
+  return detail::centroidAsGeoPoint(parseResult.parsedWkt_.value(),
+                                    parseResult.sourceCrs_);
 }
 
 // ____________________________________________________________________________
@@ -274,6 +290,19 @@ std::optional<MetricArea> GeometryInfo::getMetricArea(std::string_view wkt) {
 // ____________________________________________________________________________
 std::string BoundingBox::asWkt() const {
   return detail::boundingBoxAsWkt(lowerLeft_, upperRight_);
+}
+
+// ____________________________________________________________________________
+std::string BoundingBox::asWkt(SourceCrsType crs) const {
+  return detail::boundingBoxAsWkt(lowerLeft_, upperRight_,
+                                  static_cast<util::geo::CRSType>(crs.type()));
+}
+
+// ____________________________________________________________________________
+std::string Centroid::asWkt(SourceCrsType crs) const {
+  return util::geo::getWKT(detail::geoPointToUtilPoint(centroid_),
+                           detail::defaultCrs,
+                           static_cast<util::geo::CRSType>(crs.type()));
 }
 
 // ____________________________________________________________________________

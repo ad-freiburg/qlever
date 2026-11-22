@@ -464,6 +464,19 @@ graphNodePath
 varOrTerm
     : var
     | graphTerm
+    | tripleTerm
+    ;
+
+tripleTerm
+    : '<<(' tripleTermSubject verb tripleTermObject ')>>'
+    ;
+
+tripleTermSubject
+    : var | iri | rdfLiteral | numericLiteral | booleanLiteral | blankNode | tripleTerm
+    ;
+
+tripleTermObject
+    : var | iri | rdfLiteral | numericLiteral | booleanLiteral | blankNode | tripleTerm
     ;
 
 varOrIri

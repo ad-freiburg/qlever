@@ -35,6 +35,7 @@
 #include "index/PartialVocabularyBuilder.h"
 #include "index/TripleComponentConversions.h"
 #include "index/VocabularyMerger.h"
+#include "index/chunkwisePermutationWriter/ChunkwisePermutationWriter.h"
 #include "parser/AsyncRdfParserBase.h"
 #include "parser/AsyncSerialParserAdapter.h"
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
@@ -359,7 +360,7 @@ std::pair<size_t, size_t> IndexImpl::createInternalPSOandPOS(
   auto configurationJsonBackup = configurationJson_;
   onDiskBase_.append(QLEVER_INTERNAL_INDEX_INFIX);
 
-  auto internalTriplesUnique = ad_utility::uniqueBlockView(
+  BlocksOfTriples internalTriplesUnique = ad_utility::uniqueBlockView(
       internalTriplesPsoSorter.template getSortedBlocks<0>());
   createPSOAndPOSImpl(NumColumnsIndexBuilding, std::move(internalTriplesUnique),
                       false);
@@ -512,36 +513,55 @@ void IndexImpl::createFromFilesAfterPreparation(
         createInternalPSOandPOS(*indexBuilderData.sorter_.internalTriplesPso_);
   };
 
-  auto firstSorterWithUnique =
-      ad_utility::uniqueBlockView(firstSorter.getSortedOutput());
-
+  // The `firstSorter` is type-erased, because it sorts by PSO if only two
+  // permutations are built, and by SPO otherwise (see
+  // `IndexBuilderDataAsFirstPermutationSorter`). The chunkwise writer needs
+  // the concrete sorter, so it is cast back here.
   if (!loadAllPermutations_) {
     createInternalPsoAndPosAndSetMetadata();
     // Only two permutations, no patterns, in this case the `firstSorter` is a
-    // PSO sorter, and `createPermutationPair` creates PSO/POS permutations.
-    createFirstPermutationPair(NumColumnsIndexBuilding,
-                               std::move(firstSorterWithUnique));
+    // PSO sorter, and `createPSOAndPOS` creates PSO/POS permutations.
+    auto& firstSorterPso =
+        dynamic_cast<ExternalSorter<SortByPSO>&>(firstSorter);
+    // The first sorter may yield duplicate triples, which are removed by the
+    // writer of the first pair of permutations (also below).
+    createPSOAndPOS(NumColumnsIndexBuilding,
+                    ChunkwiseInput{firstSorterPso, RemoveDuplicates::True});
     configurationJson_["has-all-permutations"] = false;
   } else if (!usePatterns_) {
     createInternalPsoAndPosAndSetMetadata();
     // Without patterns, we explicitly have to pass in the next sorters to all
-    // permutation creating functions.
+    // permutation creating functions. All the pairs are written directly from
+    // the chunks of the merge of the respective sorter.
+    auto& firstSorterSpo =
+        dynamic_cast<ExternalSorter<FirstPermutation>&>(firstSorter);
     auto secondSorter = makeSorter<SecondPermutation>("second");
-    createFirstPermutationPair(NumColumnsIndexBuilding,
-                               std::move(firstSorterWithUnique), secondSorter);
+    createFirstPermutationPair(
+        NumColumnsIndexBuilding,
+        ChunkwiseInput{firstSorterSpo, RemoveDuplicates::True}, secondSorter);
     firstSorter.clearUnderlying();
 
     auto thirdSorter = makeSorter<ThirdPermutation>("third");
-    createSecondPermutationPair(NumColumnsIndexBuilding,
-                                secondSorter.getSortedBlocks<0>(), thirdSorter);
+    createSecondPermutationPair(
+        NumColumnsIndexBuilding,
+        ChunkwiseInput{secondSorter, RemoveDuplicates::False}, thirdSorter);
     secondSorter.clear();
-    createThirdPermutationPair(NumColumnsIndexBuilding,
-                               thirdSorter.getSortedBlocks<0>());
+    createThirdPermutationPair(
+        NumColumnsIndexBuilding,
+        ChunkwiseInput{thirdSorter, RemoveDuplicates::False});
     configurationJson_["has-all-permutations"] = true;
   } else {
     // Load all permutations and also load the patterns. In this case the
     // `createFirstPermutationPair` function returns the next sorter, already
     // enriched with the patterns of the subjects in the triple.
+    //
+    // NOTE: The pattern creation needs the triples in order, so the first
+    // pair of permutations is written from the sequential (deduplicated)
+    // output of the sorter, and the second pair from the output of the join
+    // with the patterns (see `buildOspWithPatterns`). Only the last pair is
+    // written directly from the chunks of the merge of its sorter.
+    BlocksOfTriples firstSorterWithUnique =
+        ad_utility::uniqueBlockView(firstSorter.getSortedOutput());
     auto patternOutput = createFirstPermutationPair(
         NumColumnsIndexBuilding, std::move(firstSorterWithUnique));
     firstSorter.clearUnderlying();
@@ -549,8 +569,9 @@ void IndexImpl::createFromFilesAfterPreparation(
         buildOspWithPatterns(std::move(patternOutput.value()),
                              *indexBuilderData.sorter_.internalTriplesPso_);
     createInternalPsoAndPosAndSetMetadata();
-    createThirdPermutationPair(NumColumnsIndexBuilding + 2,
-                               thirdSorterPtr->template getSortedBlocks<0>());
+    createThirdPermutationPair(
+        NumColumnsIndexBuilding + 2,
+        ChunkwiseInput{*thirdSorterPtr, RemoveDuplicates::False});
     configurationJson_["has-all-permutations"] = true;
   }
 
@@ -847,12 +868,73 @@ auto liftCallback(Callback callback) {
   };
 }
 
-// Callbacks that already work on complete blocks are used as they are. Pushing
-// a complete block into an external sorter is much more efficient than pushing
-// its rows one by one, because the `IdTable`s are stored column-based.
-template <typename Table>
-auto liftCallback(ad_utility::PushBlockCallback<Table> callback) {
-  return callback;
+// A callback for `IndexImpl::createPermutationPairImpl` that pushes each block
+// of the input to the external sorter for the next pair of permutations, see
+// `pushToNextSorter` below.
+//
+// NOTE: This struct only holds a reference, so `std::reference_wrapper` could
+// be used instead. It is used as a tag for the overload resolution of the
+// callbacks (see `toSequentialBlockCallback` and `toConcurrentBlockCallback`),
+// which we want to be explicitly visible.
+template <typename Sorter>
+struct PushToNextSorter {
+  Sorter& sorter_;
+};
+
+// Return a `PushToNextSorter` for the `sorter`.
+template <typename Sorter>
+PushToNextSorter<Sorter> pushToNextSorter(Sorter& sorter) {
+  return {sorter};
+}
+
+// Turn one of the callbacks of `IndexImpl::createPermutationPairImpl` into a
+// callback for the classical sequential writer, see
+// `CompressedRelationWriter::createPermutationPair`.
+template <typename Callback>
+std::function<void(const IdTableStatic<0>&)> toSequentialBlockCallback(
+    Callback callback) {
+  if constexpr (ad_utility::isInstantiation<Callback, PushToNextSorter>) {
+    // Pushing a complete block into an external sorter is much more efficient
+    // than pushing its rows one by one, because the `IdTable`s are stored
+    // column-based.
+    return callback.sorter_.makePushBlockCallback();
+  } else {
+    return callback;
+  }
+}
+
+// Turn one of the callbacks of `IndexImpl::createPermutationPairImpl` into a
+// callback for the chunkwise writer, see
+// `chunkwisePermutationWriter::ConcurrentBlockCallback`.
+template <typename Callback>
+chunkwisePermutationWriter::ConcurrentBlockCallback toConcurrentBlockCallback(
+    Callback callback) {
+  if constexpr (ad_utility::isInstantiation<Callback, PushToNextSorter>) {
+    return callback.sorter_.makeAsyncPushBlockCallback();
+  } else {
+    return chunkwisePermutationWriter::toConcurrentBlockCallback(
+        std::move(callback));
+  }
+}
+
+// Return the blocks of the `input` as a sequential range, with the duplicates
+// removed if `removeDuplicates_` is `RemoveDuplicates::True`.
+template <typename Sorter>
+IndexImpl::BlocksOfTriples toSequentialInput(
+    const IndexImpl::ChunkwiseInput<Sorter>& input) {
+  IndexImpl::BlocksOfTriples blocks =
+      input.sorter_.template getSortedBlocks<0>();
+  if (input.removeDuplicates_ == IndexImpl::RemoveDuplicates::True) {
+    blocks = ad_utility::uniqueBlockView(std::move(blocks));
+  }
+  return blocks;
+}
+
+// Raise the `maximum` atomically to the `value` if it is smaller.
+inline void atomicMax(std::atomic<uint64_t>& maximum, uint64_t value) {
+  uint64_t current = maximum.load();
+  while (current < value && !maximum.compare_exchange_weak(current, value)) {
+  }
 }
 }  // namespace
 
@@ -884,7 +966,21 @@ IndexImpl::createPermutationPairImpl(size_t numColumns,
                                      const std::string& fileName2,
                                      T&& sortedTriples,
                                      Permutation::KeyOrder permutation,
-                                     Callbacks&&... perTripleCallbacks) {
+                                     Callbacks&&... callbacks) {
+  constexpr bool isChunkwise =
+      ad_utility::isInstantiation<std::decay_t<T>, ChunkwiseInput>;
+  static_assert(isChunkwise ||
+                std::is_same_v<std::decay_t<T>, BlocksOfTriples>);
+#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  // There is no chunkwise writer in this mode (see
+  // `chunkwisePermutationWriter::createPermutationPair`), so the sorted blocks
+  // are consumed sequentially by the classical writer.
+  if constexpr (isChunkwise) {
+    return createPermutationPairImpl(numColumns, fileName1, fileName2,
+                                     toSequentialInput(sortedTriples),
+                                     permutation, AD_FWD(callbacks)...);
+  }
+#endif
   IndexMetaData metaData1;
   auto writerAndCallback1 = getWriterAndCallback(
       metaData1, numColumns, fileName1, ad_utility::globalExecutor());
@@ -892,14 +988,46 @@ IndexImpl::createPermutationPairImpl(size_t numColumns,
   auto writerAndCallback2 = getWriterAndCallback(
       metaData2, numColumns, fileName2, ad_utility::globalExecutor());
 
-  std::vector<std::function<void(const IdTableStatic<0>&)>> perBlockCallbacks{
-      liftCallback(perTripleCallbacks)...};
-
-  auto [numDistinctCol0, blockData1, blockData2] =
-      CompressedRelationWriter::createPermutationPair(
+  auto writePermutations = [&]() {
+    if constexpr (isChunkwise) {
+      // The input is a sorter whose chunks are written directly, see
+      // `ChunkwiseInput`. The callbacks are invoked concurrently.
+      //
+      // NOTE: The callbacks are move-only, so they cannot be passed via an
+      // `std::initializer_list`.
+      std::vector<chunkwisePermutationWriter::ConcurrentBlockCallback>
+          concurrentCallbacks;
+      (concurrentCallbacks.push_back(
+           toConcurrentBlockCallback(AD_FWD(callbacks))),
+       ...);
+      chunkwisePermutationWriter::Options options;
+      options.removeDuplicates_ =
+          sortedTriples.removeDuplicates_ == RemoveDuplicates::True;
+      // The twin sorters of the chunks share the memory of the sorter that is
+      // being consumed, and the consolidation of the boundary relations (which
+      // runs while the chunks are suspended) may use all of it, see
+      // `CHUNKWISE_WRITER_MIN_TWIN_SORTER_MEMORY_PER_CHUNK`.
+      const auto sorterMemory =
+          memoryLimitIndexBuilding() / NUM_EXTERNAL_SORTERS_AT_SAME_TIME;
+      options.twinSorterMemoryPerChunk_ =
+          std::clamp(sorterMemory / ad_utility::globalExecutorNumThreads(),
+                     CHUNKWISE_WRITER_MIN_TWIN_SORTER_MEMORY_PER_CHUNK,
+                     CHUNKWISE_WRITER_MAX_TWIN_SORTER_MEMORY_PER_CHUNK);
+      options.boundaryTwinMergeMemory_ = sorterMemory;
+      return chunkwisePermutationWriter::createPermutationPair(
+          fileName1, std::move(writerAndCallback1),
+          std::move(writerAndCallback2), sortedTriples.sorter_, permutation,
+          std::move(concurrentCallbacks), options);
+    } else {
+      std::vector<std::function<void(const IdTableStatic<0>&)>>
+          sequentialCallbacks{toSequentialBlockCallback(AD_FWD(callbacks))...};
+      return CompressedRelationWriter::createPermutationPair(
           fileName1, std::move(writerAndCallback1),
           std::move(writerAndCallback2), AD_FWD(sortedTriples), permutation,
-          perBlockCallbacks);
+          sequentialCallbacks);
+    }
+  };
+  auto [numDistinctCol0, blockData1, blockData2] = writePermutations();
   metaData1.blockData() = std::move(blockData1);
   metaData2.blockData() = std::move(blockData2);
 
@@ -930,13 +1058,13 @@ std::tuple<size_t, IndexMetaData> IndexImpl::createPermutationImpl(
 template <typename T, typename... Callbacks>
 std::tuple<size_t, IndexMetaData, IndexMetaData> IndexImpl::createPermutations(
     size_t numColumns, T&& sortedTriples, const Permutation& p1,
-    const Permutation& p2, Callbacks&&... perTripleCallbacks) {
+    const Permutation& p2, Callbacks&&... callbacks) {
   AD_LOG_INFO << "Creating permutations " << p1.readableName() << " and "
               << p2.readableName() << " ..." << std::endl;
   auto metaData = createPermutationPairImpl(
       numColumns, getFilenameForPermutation(p1, false),
       getFilenameForPermutation(p2, false), AD_FWD(sortedTriples),
-      p1.keyOrder(), AD_FWD(perTripleCallbacks)...);
+      p1.keyOrder(), AD_FWD(callbacks)...);
 
   auto& [numDistinctCol0, meta1, meta2] = metaData;
   meta1.calculateStatistics(numDistinctCol0);
@@ -992,9 +1120,9 @@ size_t IndexImpl::createPermutationPair(size_t numColumns,
                                         SortedTriplesType&& sortedTriples,
                                         const Permutation& p1,
                                         const Permutation& p2,
-                                        CallbackTypes&&... perTripleCallbacks) {
+                                        CallbackTypes&&... callbacks) {
   auto [numDistinctC0, metaData1, metaData2] = createPermutations(
-      numColumns, AD_FWD(sortedTriples), p1, p2, AD_FWD(perTripleCallbacks)...);
+      numColumns, AD_FWD(sortedTriples), p1, p2, AD_FWD(callbacks)...);
   AD_LOG_DEBUG << "Writing meta data for " << p1.readableName() << " and "
                << p2.readableName() << " ..." << std::endl;
   writeMetaData(metaData1, getFilenameForPermutation(p1, false));
@@ -2095,14 +2223,18 @@ std::string IndexImpl::getPatternFilename() const {
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
-void IndexImpl::createPSOAndPOSImpl(size_t numColumns,
-                                    BlocksOfTriples sortedTriples,
+CPP_template_def(typename Input, typename... NextSorter)(
+    requires(sizeof...(NextSorter) <= 1))
+void IndexImpl::createPSOAndPOSImpl(size_t numColumns, Input sortedTriples,
                                     bool doWriteConfiguration,
-                                    NextSorter&&... nextSorter) {
-  size_t numTriples = 0;
-  auto countTriples = [&numTriples](const auto&) mutable { ++numTriples; };
-  uint64_t nextAvailableIndex = 1;
+                                    NextSorter&... nextSorter) {
+  // NOTE: For a `ChunkwiseInput` the callbacks are invoked concurrently, hence
+  // the atomics (which are only accessed once per block).
+  std::atomic<size_t> numTriples = 0;
+  auto countTriples = [&numTriples](const IdTableStatic<0>& block) {
+    numTriples.fetch_add(block.numRows());
+  };
+  std::atomic<uint64_t> nextAvailableIndex = 1;
   auto newGraphPrefixIdx = [this]() {
     auto prefix = encodedIriManager_.getIndexOfPrefix(QLEVER_NEW_GRAPH_PREFIX);
     AD_CORRECTNESS_CHECK(prefix.has_value());
@@ -2122,20 +2254,19 @@ void IndexImpl::createPSOAndPOSImpl(size_t numColumns,
         if (prefix != newGraphPrefixIdx) {
           return;
         }
-        nextAvailableIndex =
-            std::max(nextAvailableIndex,
-                     EncodedIriManager::decodeDecimalFrom64Bit(payload) + 1);
+        atomicMax(nextAvailableIndex,
+                  EncodedIriManager::decodeDecimalFrom64Bit(payload) + 1);
       };
   size_t numPredicates =
-      createPermutationPair(numColumns, AD_FWD(sortedTriples), *pso_, *pos_,
-                            nextSorter.makePushBlockCallback()..., countTriples,
-                            determineNextAvailableInternalGraph);
+      createPermutationPair(numColumns, std::move(sortedTriples), *pso_, *pos_,
+                            pushToNextSorter(nextSorter)..., countTriples,
+                            liftCallback(determineNextAvailableInternalGraph));
   configurationJson_["num-predicates"] =
       NumNormalAndInternal::fromNormal(numPredicates);
   configurationJson_["num-triples"] =
-      NumNormalAndInternal::fromNormal(numTriples);
+      NumNormalAndInternal::fromNormal(numTriples.load());
   graphNameManager_ = GraphNameManager(std::string(QLEVER_NEW_GRAPH_PREFIX),
-                                       nextAvailableIndex);
+                                       nextAvailableIndex.load());
   configurationJson_["graphNameManager"] = graphNameManager_;
   if (doWriteConfiguration) {
     writeConfiguration();
@@ -2143,21 +2274,26 @@ void IndexImpl::createPSOAndPOSImpl(size_t numColumns,
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
-void IndexImpl::createPSOAndPOS(size_t numColumns,
-                                BlocksOfTriples sortedTriples,
-                                NextSorter&&... nextSorter) {
+CPP_template_def(typename Input, typename... NextSorter)(
+    requires(sizeof...(NextSorter) <= 1))
+void IndexImpl::createPSOAndPOS(size_t numColumns, Input sortedTriples,
+                                NextSorter&... nextSorter) {
   createPSOAndPOSImpl(numColumns, std::move(sortedTriples), true,
-                      AD_FWD(nextSorter)...);
+                      nextSorter...);
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
+CPP_template_def(typename Input, typename... NextSorter)(
+    requires(sizeof...(NextSorter) <= 1))
 std::optional<PatternCreator::TripleSorter> IndexImpl::createSPOAndSOP(
-    size_t numColumns, BlocksOfTriples sortedTriples,
-    NextSorter&&... nextSorter) {
+    size_t numColumns, Input sortedTriples, NextSorter&... nextSorter) {
   std::optional<PatternCreator::TripleSorter> result;
   if (usePatterns_) {
+    // The pattern creation needs the triples in order.
+    AD_CORRECTNESS_CHECK(
+        (!ad_utility::isInstantiation<Input, ChunkwiseInput>),
+        "The patterns can't be built while the SPO and SOP permutations are "
+        "written chunkwise");
     // We will return the next sorter.
     AD_CORRECTNESS_CHECK(sizeof...(nextSorter) == 0);
     // For now (especially for testing) We build the new pattern format as well
@@ -2165,17 +2301,20 @@ std::optional<PatternCreator::TripleSorter> IndexImpl::createSPOAndSOP(
     PatternCreator patternCreator{
         getPatternFilename(), idOfHasPatternDuringIndexBuilding_.value(),
         memoryLimitIndexBuilding() / NUM_EXTERNAL_SORTERS_AT_SAME_TIME};
-    auto pushTripleToPatterns = [&patternCreator](const auto& triple) {
-      static_assert(NumColumnsIndexBuilding == 4,
-                    "this place probably has to be changed when additional "
-                    "payload columns are added");
-      auto tripleArr =
-          std::array<Id, 4>{triple[0], triple[1], triple[2], triple[3]};
-      patternCreator.processTriple(tripleArr);
-    };
-    size_t numSubjects = createPermutationPair(
-        numColumns, AD_FWD(sortedTriples), *spo_, *sop_,
-        nextSorter.makePushBlockCallback()..., pushTripleToPatterns);
+    auto pushTriplesToPatterns =
+        [&patternCreator](const IdTableStatic<0>& block) {
+          static_assert(NumColumnsIndexBuilding == 4,
+                        "this place probably has to be changed when additional "
+                        "payload columns are added");
+          for (const auto& triple : block) {
+            auto tripleArr =
+                std::array<Id, 4>{triple[0], triple[1], triple[2], triple[3]};
+            patternCreator.processTriple(tripleArr);
+          }
+        };
+    size_t numSubjects =
+        createPermutationPair(numColumns, std::move(sortedTriples), *spo_,
+                              *sop_, pushTriplesToPatterns);
     patternCreator.finish();
     configurationJson_["num-subjects"] =
         NumNormalAndInternal::fromNormal(numSubjects);
@@ -2184,8 +2323,8 @@ std::optional<PatternCreator::TripleSorter> IndexImpl::createSPOAndSOP(
   } else {
     AD_CORRECTNESS_CHECK(sizeof...(nextSorter) == 1);
     size_t numSubjects =
-        createPermutationPair(numColumns, AD_FWD(sortedTriples), *spo_, *sop_,
-                              nextSorter.makePushBlockCallback()...);
+        createPermutationPair(numColumns, std::move(sortedTriples), *spo_,
+                              *sop_, pushToNextSorter(nextSorter)...);
     configurationJson_["num-subjects"] =
         NumNormalAndInternal::fromNormal(numSubjects);
     writeConfiguration();
@@ -2194,15 +2333,15 @@ std::optional<PatternCreator::TripleSorter> IndexImpl::createSPOAndSOP(
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
-void IndexImpl::createOSPAndOPS(size_t numColumns,
-                                BlocksOfTriples sortedTriples,
-                                NextSorter&&... nextSorter) {
+CPP_template_def(typename Input, typename... NextSorter)(
+    requires(sizeof...(NextSorter) <= 1))
+void IndexImpl::createOSPAndOPS(size_t numColumns, Input sortedTriples,
+                                NextSorter&... nextSorter) {
   // For the last pair of permutations we don't need a next sorter, so we
   // have no fourth argument.
   size_t numObjects =
-      createPermutationPair(numColumns, AD_FWD(sortedTriples), *osp_, *ops_,
-                            nextSorter.makePushBlockCallback()...);
+      createPermutationPair(numColumns, std::move(sortedTriples), *osp_, *ops_,
+                            pushToNextSorter(nextSorter)...);
   configurationJson_["num-objects"] =
       NumNormalAndInternal::fromNormal(numObjects);
   configurationJson_["has-all-permutations"] = true;
