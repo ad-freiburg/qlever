@@ -371,9 +371,9 @@ TEST_F(MaterializedViewsPatternMatchingTest, restrictingModifiersNotRewritten) {
 // _____________________________________________________________________________
 TEST(MaterializedViewsPatternRewriteRejectionTest,
      emptyGraphPatternNotRewritten) {
-  ParsedQuery parsed;
+  ParsedQuery parsed{alloc()};
   parsed._rootGraphPattern._graphPatterns.emplace_back(
-      parsedQuery::BasicGraphPattern{});
+      parsedQuery::BasicGraphPattern{{{}, alloc()}});
 
   auto result =
       materializedViewsQueryAnalysis::getTriplesForPatternRewrite(parsed);

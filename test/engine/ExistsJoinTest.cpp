@@ -843,11 +843,12 @@ TEST(ExistsJoin, addExistsJoinsToSubtreeDoesntCollideForHiddenVariables) {
       qec, makeIdTableFromVector({{0, 1}}),
       std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?b"}});
 
-  ParsedQuery query;
+  ParsedQuery query{qec->getAllocator()};
   query._rootGraphPattern._graphPatterns.push_back(
       parsedQuery::BasicGraphPattern{
-          {SparqlTriple{TripleComponent{Variable{"?a"}}, iri("<something>"),
-                        TripleComponent{Variable{"?b"}}}}});
+          {{SparqlTriple{TripleComponent{Variable{"?a"}}, iri("<something>"),
+                         TripleComponent{Variable{"?b"}}}},
+           qec->getAllocator()}});
   // Only add ?a (and select it via `*`, exactly as the parser does) to see if
   // ?b remains hidden.
   query.selectClause().setAsterisk();
@@ -877,11 +878,12 @@ TEST(ExistsJoin, addExistsJoinsToSubtreeSkipsAlreadyHandledExists) {
       qec, makeIdTableFromVector({{0, 1}}),
       std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?b"}});
 
-  ParsedQuery query;
+  ParsedQuery query{qec->getAllocator()};
   query._rootGraphPattern._graphPatterns.push_back(
       parsedQuery::BasicGraphPattern{
-          {SparqlTriple{TripleComponent{Variable{"?a"}}, iri("<something>"),
-                        TripleComponent{Variable{"?b"}}}}});
+          {{SparqlTriple{TripleComponent{Variable{"?a"}}, iri("<something>"),
+                         TripleComponent{Variable{"?b"}}}},
+           qec->getAllocator()}});
   // Select the visible variables via `*`, exactly as the parser does.
   query.selectClause().setAsterisk();
   query.selectClause().addVisibleVariable(Variable{"?a"});
@@ -912,11 +914,12 @@ TEST(ExistsJoin, cacheKeyDiffersForDifferentJoinColumns) {
       qec, makeIdTableFromVector({{0, 1}}),
       std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?b"}});
 
-  ParsedQuery query;
+  ParsedQuery query{qec->getAllocator()};
   query._rootGraphPattern._graphPatterns.push_back(
       parsedQuery::BasicGraphPattern{
-          {SparqlTriple{TripleComponent{Variable{"?a"}}, iri("<something>"),
-                        TripleComponent{Variable{"?b"}}}}});
+          {{SparqlTriple{TripleComponent{Variable{"?a"}}, iri("<something>"),
+                         TripleComponent{Variable{"?b"}}}},
+           qec->getAllocator()}});
 
   // Select the visible variables via `*`, exactly as the parser does.
   query.selectClause().setAsterisk();

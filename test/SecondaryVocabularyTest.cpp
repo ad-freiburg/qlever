@@ -825,7 +825,8 @@ std::string runQuery(QueryExecutionContext* qec, const std::string& query) {
   static const EncodedIriManager encodedIriManager;
   auto cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
-  auto parsedQuery = SparqlParser::parseQuery(&encodedIriManager, query);
+  auto parsedQuery = SparqlParser::parseQuery(
+      &encodedIriManager, ad_utility::testing::makeAllocator(), query);
   QueryPlanner queryPlanner{qec, cancellationHandle};
   auto executionTree = queryPlanner.createExecutionTree(parsedQuery);
   ad_utility::Timer timer{ad_utility::Timer::Started};
@@ -859,7 +860,8 @@ void runUpdate(ContextWithSecondaryVocab& context, const std::string& update) {
       std::make_shared<ad_utility::CancellationHandle<>>();
   ad_utility::BlankNodeManager blankNodeManager;
   auto parsedQueries =
-      SparqlParser::parseUpdate(&blankNodeManager, &encodedIriManager, update);
+      SparqlParser::parseUpdate(&blankNodeManager, &encodedIriManager,
+                                ad_utility::testing::makeAllocator(), update);
   context.index_->deltaTriplesManager().modify<void>(
       [&context, &parsedQueries,
        &cancellationHandle](DeltaTriples& deltaTriples) {

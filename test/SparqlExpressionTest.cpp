@@ -851,7 +851,8 @@ TEST(SparqlExpression, sharedDateDispatchBypassesVariants) {
   context._endIndex = 2;
   const Id date = Dat(DateYearOrDuration::parseXsdDate, "2020-01-01");
   V<Id> dates{{date, date}, alloc};
-  ConstIdColumnRef column{dates.data(), dates.size()};
+  IdColumn dateColumn{date, date};
+  ConstIdColumnRef column{dateColumn};
   auto result =
       hn::evaluateHomogeneousNumericOperation<TypedOnly, DateYearOrDuration,
                                               DateYearOrDuration>(
@@ -2400,6 +2401,24 @@ TEST(SparqlExpression, geoSparqlExpressions) {
       },
       exampleMultiGeoms, Ids{I(2), I(2), I(2), I(2), I(2)});
 
+  // The function `geof:transform`: an unknown CRS IRI yields `UNDEF`.
+  auto checkTransform =
+      std::bind_front(testNaryExpression, &makeTransformExpression);
+  auto examplePoint = geoLit("POINT(1 2)");
+  checkTransform(
+      IdOrLocalVocabEntryVec{
+          geoLit("POINT(1 2)"), U,
+          geoLit("<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(2 1)"),
+          geoLit("<http://www.opengis.net/def/crs/EPSG/0/3857> "
+                 "POINT(111319.490793 222684.208506)")},
+      IdOrLocalVocabEntryVec{examplePoint, examplePoint, examplePoint,
+                             examplePoint},
+      IdOrLocalVocabEntryVec{
+          iriref("<http://www.opengis.net/def/crs/OGC/1.3/CRS84>"),
+          iriref("<http://www.opengis.net/bla/bli/>"),
+          iriref("<http://www.opengis.net/def/crs/EPSG/0/4326>"),
+          iriref("<http://www.opengis.net/def/crs/EPSG/0/3857>")});
+
   // The internal function `ql:simplifyGeometry`.
   auto checkSimplify =
       std::bind_front(testNaryExpression, &makeSimplifyGeometryExpression);
@@ -3009,7 +3028,7 @@ TEST(SingleUseExpression, simpleMembersForTestCoverage) {
 // `test/engine/ExistsJoinTest.cpp`.
 TEST(ExistsExpression, basicFunctionality) {
   using namespace ::testing;
-  ParsedQuery pq;
+  ParsedQuery pq{alloc};
   pq.selectClause().addVisibleVariable(Variable{"?testVar42"});
   pq.selectClause().setAsterisk();
   ExistsExpression exists{std::move(pq)};

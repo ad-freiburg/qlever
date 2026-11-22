@@ -5,12 +5,14 @@
 #ifndef QLEVER_SRC_PARSER_UPDATECLAUSE_H
 #define QLEVER_SRC_PARSER_UPDATECLAUSE_H
 
+#include "global/Id.h"
 #include "parser/SelectClause.h"
 #include "parser/SparqlTriple.h"
 #include "parser/UpdateTriples.h"
 #include "parser/data/GraphRef.h"
 #include "parser/data/Types.h"
 #include "rdfTypes/Iri.h"
+#include "util/Allocator.h"
 
 namespace updateClause {
 // A Graph Update is an Update operation that inserts or deletes some triples.
@@ -21,7 +23,10 @@ struct GraphUpdate {
   Triples toInsert_;
   Triples toDelete_;
 
-  GraphUpdate() = default;
+  // Create a `GraphUpdate` that inserts and deletes nothing. The `allocator` is
+  // used for the triples.
+  explicit GraphUpdate(const qlever::Allocator<Id>& allocator)
+      : toInsert_{allocator}, toDelete_{allocator} {}
   GraphUpdate(Triples toInsert, Triples toDelete)
       : toInsert_{std::move(toInsert)}, toDelete_{std::move(toDelete)} {}
 };
@@ -31,8 +36,11 @@ namespace parsedQuery {
 struct UpdateClause : ClauseBase {
   updateClause::GraphUpdate op_;
 
-  UpdateClause() = default;
-  explicit UpdateClause(updateClause::GraphUpdate op) : op_{std::move(op)} {}
+  explicit UpdateClause(const qlever::Allocator<Id>& allocator)
+      : ClauseBase{allocator}, op_{allocator} {}
+  UpdateClause(const qlever::Allocator<Id>& allocator,
+               updateClause::GraphUpdate op)
+      : ClauseBase{allocator}, op_{std::move(op)} {}
 };
 }  // namespace parsedQuery
 
