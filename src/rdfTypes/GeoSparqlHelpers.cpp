@@ -66,15 +66,20 @@ static constexpr auto wktPointRegex = ctll::fixed_string(
 // is returned.
 std::pair<double, double> parseWktPoint(const std::string_view point) {
   double lng = invalidCoordinate, lat = invalidCoordinate;
-  if (auto match = ctre::search<wktPointRegex>(point)) {
-    std::string_view lng_sv = match.get<1>();
-    std::string_view lat_sv = match.get<2>();
-    absl::from_chars(lng_sv.data(), lng_sv.data() + lng_sv.size(), lng);
-    absl::from_chars(lat_sv.data(), lat_sv.data() + lat_sv.size(), lat);
-    // This should never happen: if the regex matches, then each of the two
-    // coordinate strings should also parse to a double.
-    AD_CORRECTNESS_CHECK(!std::isnan(lng));
-    AD_CORRECTNESS_CHECK(!std::isnan(lat));
+
+  const std::string strPoint{point};
+  auto c = strPoint.c_str();
+  ::util::geo::CRSType sourceCrs = ::util::geo::getCRSType(c, &c);
+  ::util::geo::WKTType wktType = ::util::geo::getWKTType(c, &c);
+  auto projFunc = [](const ::util::geo::Point<double>& p,
+                     ::util::geo::CRSType sourceCrs) {
+    return projectToCRS(p, sourceCrs, defaultCrs);
+  };
+  if (wktType == ::util::geo::WKTType::POINT) {
+    auto utilPoint =
+        ::util::geo::pointFromWKTProj<double>(c, &c, projFunc, sourceCrs);
+    lng = utilPoint.getX();
+    lat = utilPoint.getY();
   }
   return std::pair(lng, lat);
 }

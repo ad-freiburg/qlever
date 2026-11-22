@@ -63,6 +63,8 @@ TEST(GeoSparqlHelpers, ParseWktPoint) {
   // Invalid WKT points because of issues unrelated to the number format (one of
   // the quotes missing, one of the parentheses missing, it must be exactly two
   // coordinates).
+  testParseWktPointCorrect("POINT42.0 7.8)", 2.0, 1.5);
+
   testWktPointInvalid("POINT42.0 7.8)");
   testWktPointInvalid("POINT(42.0 7.8");
   testWktPointInvalid("POINT(42.0)");
