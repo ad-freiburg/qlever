@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <ctre-unicode.hpp>
 #include <memory>
 #include <nlohmann/json.hpp>
 #include <optional>
@@ -549,7 +550,8 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name,
     // interested in analyzing the query structure, not in converting its
     // components to `ValueId`s.
     EncodedIriManager e;
-    parsedQuery_ = SparqlParser::parseQuery(&e, originalQuery_.value(), {});
+    parsedQuery_ =
+        SparqlParser::parseQuery(&e, allocator, originalQuery_.value(), {});
 
     // Compute the `BIND`-to-column map.
     coveredBinds_ = materializedViewsQueryAnalysis::extractBindExpressions(
@@ -962,7 +964,7 @@ std::shared_ptr<IndexScan> MaterializedViewsManager::makeIndexScan(
 
 // _____________________________________________________________________________
 std::shared_ptr<IndexScan> MaterializedViewsManager::makeIndexScan(
-    QueryExecutionContext* qec, const std::string& cacheKey,
+    QueryExecutionContext* qec, std::string_view cacheKey,
     const VariableToColumnMap& varToCol) const {
   // TODO<ullingerc> Do we want to forcefully disable query rewriting if delta
   // triples are present in the current index to prevent diverging results?
@@ -1000,8 +1002,8 @@ MaterializedView::computeCacheKey(
   auto encodedIriManager = qec.getIndex().encodedIriManager();
   // The query needs to be parsed again to take the `EncodedIriManager` into
   // account.
-  auto parsedQuery =
-      SparqlParser::parseQuery(&encodedIriManager, originalQuery_.value());
+  auto parsedQuery = SparqlParser::parseQuery(
+      &encodedIriManager, qec.getAllocator(), originalQuery_.value());
   const auto& viewCols = variableToColumnMap();
 
   auto planAndComputeMapping =
@@ -1032,7 +1034,7 @@ MaterializedView::computeCacheKey(
       }
       mapping.insert({col.columnIndex_, it->second.columnIndex_});
     }
-    return CacheKeyAndColumnMapping{executionTree->getCacheKey(),
+    return CacheKeyAndColumnMapping{std::string{executionTree->getCacheKey()},
                                     std::move(mapping)};
   };
 
