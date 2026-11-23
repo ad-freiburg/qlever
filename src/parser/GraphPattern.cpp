@@ -7,7 +7,7 @@
 // `GraphPatternOperation` in `GraphPattern.h` and its subsequent usage inside
 // `std::vector`.
 #include "parser/GraphPatternOperation.h"
-#include "parser/ParsedQuery.h"
+#include "parser/SparqlTriple.h"
 
 namespace parsedQuery {
 GraphPattern::GraphPattern(GraphPattern&& other) noexcept = default;

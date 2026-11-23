@@ -4,7 +4,6 @@
 
 #include "index/TextMetaData.h"
 
-#include "global/Constants.h"
 #include "util/ReadableNumberFacet.h"
 
 // _____________________________________________________________________________

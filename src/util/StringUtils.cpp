@@ -20,7 +20,6 @@
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "global/Constants.h"
-#include "util/Algorithm.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
 #include "util/StringUtilsImpl.h"

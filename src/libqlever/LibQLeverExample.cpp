@@ -7,7 +7,6 @@
 #include <iostream>
 
 #include "libqlever/Qlever.h"
-#include "util/Exception.h"
 #include "util/Timer.h"
 
 static const std::string query = R"(

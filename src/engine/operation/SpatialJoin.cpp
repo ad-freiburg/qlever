@@ -14,25 +14,20 @@
 
 #include <absl/container/flat_hash_set.h>
 #include <absl/functional/bind_front.h>
-#include <absl/strings/charconv.h>
 
 #include <cstdint>
 #include <iomanip>
 #include <limits>
 #include <memory>
 #include <optional>
-#include <queue>
 #include <tuple>
-#include <unordered_set>
 #include <variant>
 
 #include "backports/type_traits.h"
-#include "engine/ExportQueryExecutionTrees.h"
 #include "engine/NamedResultCache.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoinConfig.h"
 #include "engine/VariableToColumnMap.h"
-#include "engine/idTable/IdTable.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/QueryRewriteExpressionHelpers.h"
@@ -42,14 +37,9 @@
 #include "engine/spatialJoinAlgorithms/LibspatialjoinAlgorithm.h"
 #include "engine/spatialJoinAlgorithms/S2GeometryAlgorithm.h"
 #include "engine/spatialJoinAlgorithms/S2PointPolylineAlgorithm.h"
-#include "global/Constants.h"
 #include "global/Id.h"
-#include "parser/ParsedQuery.h"
-#include "rdfTypes/GeoSparqlHelpers.h"
-#include "util/AllocatorWithLimit.h"
 #include "util/ContainersWithAllocator.h"
 #include "util/Exception.h"
-#include "util/memorySize/MemorySize.h"
 
 // ____________________________________________________________________________
 SpatialJoin::SpatialJoin(
