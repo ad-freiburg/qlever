@@ -9,7 +9,6 @@
 
 #include "engine/filterFacts/Canonicalizer.h"
 
-#include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/QueryRewriteExpressionHelpers.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
@@ -202,26 +201,6 @@ std::optional<std::vector<double>> getNumbers(
     numbers.push_back(number.value());
   }
   return numbers;
-}
-
-// Return the possible values of `expression` if it is a literal or a variable
-// with values in `defs` (and `std::nullopt` otherwise).
-std::optional<std::vector<TripleComponent>> getConstants(
-    const SparqlExpression& expression, const Definitions& defs) {
-  const auto& resolved = resolve(expression, defs);
-  if (auto variable = resolved.getVariableOrNullopt()) {
-    auto it = defs.constants_.find(variable.value());
-    if (it == defs.constants_.end() || it->second.empty()) {
-      return std::nullopt;
-    }
-    return it->second;
-  }
-  if (const auto* literal =
-          dynamic_cast<const sparqlExpression::StringLiteralExpression*>(
-              &resolved)) {
-    return std::vector{TripleComponent{literal->value()}};
-  }
-  return std::nullopt;
 }
 
 // Return the canonical form of `LANG(?x) = c`, `c = LANG(?x)`,
