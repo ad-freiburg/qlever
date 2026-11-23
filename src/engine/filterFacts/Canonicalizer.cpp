@@ -9,7 +9,6 @@
 
 #include "engine/filterFacts/Canonicalizer.h"
 
-#include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/QueryRewriteExpressionHelpers.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
@@ -158,47 +157,50 @@ const SparqlExpression& resolve(const SparqlExpression& expression,
   return expression;
 }
 
-// Return the single value of `variable` from `defs` (from `VALUES` or a `BIND`
-// of a constant), and `std::nullopt` if it has none or several.
-std::optional<TripleComponent> getConstant(const Variable& variable,
-                                           const Definitions& defs) {
+// Return the values of `variable` in `defs` (from `VALUES` or a `BIND` of a
+// constant), and `std::nullopt` if it has none.
+std::optional<std::vector<TripleComponent>> getConstants(
+    const Variable& variable, const Definitions& defs) {
   auto it = defs.constants_.find(variable);
-  if (it == defs.constants_.end() || it->second.size() != 1) {
+  if (it == defs.constants_.end() || it->second.empty()) {
     return std::nullopt;
   }
-  return it->second.front();
+  return it->second;
 }
 
-// Return the value of `expression` if it is a number (an `Int` or `Double`
-// `Id`, e.g. `500` or `0.5`) or a variable with a single number in `defs`, and
-// `std::nullopt` otherwise (e.g. for the string "500").
-std::optional<double> getNumber(const SparqlExpression& expression,
-                                const Definitions& defs) {
-  const auto& resolved = resolve(expression, defs);
-  auto variable = resolved.getVariableOrNullopt();
-  auto constant = variable.has_value() ? getConstant(variable.value(), defs)
-                                       : resolved.getConstantValue();
-  return constant.has_value() ? constant->getNumber() : std::nullopt;
-}
-
-// Return the possible values of `expression` if it is a literal or a variable
-// with values in `defs` (and `std::nullopt` otherwise).
+// Return the possible values of `expression` if it is a constant or a variable
+// with values in `defs`, and `std::nullopt` otherwise.
 std::optional<std::vector<TripleComponent>> getConstants(
     const SparqlExpression& expression, const Definitions& defs) {
   const auto& resolved = resolve(expression, defs);
   if (auto variable = resolved.getVariableOrNullopt()) {
-    auto it = defs.constants_.find(variable.value());
-    if (it == defs.constants_.end() || it->second.empty()) {
+    return getConstants(variable.value(), defs);
+  }
+  auto constant = resolved.getConstantValue();
+  if (!constant.has_value()) {
+    return std::nullopt;
+  }
+  return std::vector{std::move(constant).value()};
+}
+
+// Return the possible values of `expression` if it is a number (an `Int` or
+// `Double` `Id`, e.g. `500` or `0.5`) or a variable with only numbers in
+// `defs`, and `std::nullopt` otherwise (e.g. for the string "500").
+std::optional<std::vector<double>> getNumbers(
+    const SparqlExpression& expression, const Definitions& defs) {
+  auto constants = getConstants(expression, defs);
+  if (!constants.has_value()) {
+    return std::nullopt;
+  }
+  std::vector<double> numbers;
+  for (const auto& constant : constants.value()) {
+    auto number = constant.getNumber();
+    if (!number.has_value()) {
       return std::nullopt;
     }
-    return it->second;
+    numbers.push_back(number.value());
   }
-  if (const auto* literal =
-          dynamic_cast<const sparqlExpression::StringLiteralExpression*>(
-              &resolved)) {
-    return std::vector{TripleComponent{literal->value()}};
-  }
-  return std::nullopt;
+  return numbers;
 }
 
 // Return the canonical form of `LANG(?x) = c`, `c = LANG(?x)`,
@@ -276,9 +278,9 @@ std::variant<DistanceComparison, LangEquals, Opaque> toCanonicalForm(
   }
   auto call = sparqlExpression::getGeoDistanceExpressionParameters(
       resolve(*expression.children()[0], defs));
-  auto number = getNumber(*expression.children()[1], defs);
+  auto numbers = getNumbers(*expression.children()[1], defs);
   if (!call.has_value() || !ad_utility::detail::isLengthUnit(call->unit_) ||
-      !number.has_value()) {
+      !numbers.has_value() || numbers->size() != 1) {
     return Opaque{};
   }
 
@@ -287,11 +289,12 @@ std::variant<DistanceComparison, LangEquals, Opaque> toCanonicalForm(
   // NOTE: A number in meters is not converted to kilometers and back (which may
   // change it). For the other units, the conversion is exact only up to the
   // rounding of the conversion factor.
-  double meters = call->unit_ == UnitOfMeasurement::METERS
-                      ? number.value()
-                      : ad_utility::detail::valueInUnitToKilometer(
-                            number.value(), call->unit_) *
-                            1000;
+  double number = numbers->front();
+  double meters =
+      call->unit_ == UnitOfMeasurement::METERS
+          ? number
+          : ad_utility::detail::valueInUnitToKilometer(number, call->unit_) *
+                1000;
   return DistanceComparison{Distance{call->left_, call->right_}, op.value(),
                             meters};
 }
