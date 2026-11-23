@@ -13,12 +13,12 @@
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
-#include "engine/ColumnStrippingHelpers.h"
-#include "engine/Distinct.h"
-#include "engine/IndexScan.h"
 #include "engine/MaterializedViews.h"
-#include "engine/Sort.h"
-#include "engine/StripColumns.h"
+#include "engine/operation/ColumnStrippingHelpers.h"
+#include "engine/operation/Distinct.h"
+#include "engine/operation/IndexScan.h"
+#include "engine/operation/Sort.h"
+#include "engine/operation/StripColumns.h"
 #include "global/RuntimeParameters.h"
 #include "util/Algorithm.h"
 
@@ -42,7 +42,7 @@ QueryExecutionTree::QueryExecutionTree(QueryExecutionContext* const qec,
 }
 
 // _____________________________________________________________________________
-std::string QueryExecutionTree::getCacheKey() const {
+const qlm::string& QueryExecutionTree::getCacheKey() const {
   return cacheKey_.value();
 }
 
@@ -229,8 +229,9 @@ bool QueryExecutionTree::readFromCache() {
     return false;
   }
   auto& cache = qec_->getQueryTreeCache();
-  auto res =
-      cache.getIfContained({getCacheKey(), qec_->locatedTriplesState().index_});
+  // TODO<RobinTF> Avoid the copy of the cache key, see `QueryCacheKey`.
+  auto res = cache.getIfContained(
+      {std::string{getCacheKey()}, qec_->locatedTriplesState().index_});
   if (res.has_value()) {
     cachedResult_ = res->_resultPointer->resultTablePtr();
     return true;

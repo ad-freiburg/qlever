@@ -107,7 +107,7 @@ struct CommonConfig {
 // Additional configuration used for building an index for a given dataset.
 struct IndexBuilderConfig : CommonConfig {
   // The specification of the input files, for which the index is built. See
-  // `src/engine/LibQleverExample.cpp` for an example use.
+  // `src/libqlever/LibQLeverExample.cpp` for an example use.
   std::vector<InputFileSpecification> inputFiles_;
 
   // QLever's parses the input in chunks of this size. The chunk size must be
@@ -320,7 +320,7 @@ struct EngineConfig : CommonConfig {
 };
 
 // Class to use QLever as an embedded database, without the HTTP server. See
-// `src/engine/LibQleverExample.cpp` for an example use. If you extend the
+// `src/libqlever/LibQLeverExample.cpp` for an example use. If you extend the
 // interface of this class, consider also adding bindings to
 // `QleverEmscriptenBindings.cpp` so it can be used by JS code.
 //

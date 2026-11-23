@@ -39,6 +39,7 @@ add_library(sparqlParser
         PathQuery.cpp
         SpatialQuery.cpp
         data/SparqlFilter.cpp
+        data/GraphTerm.cpp
         SelectClause.cpp
         GraphPatternOperation.cpp
         GraphPattern.cpp

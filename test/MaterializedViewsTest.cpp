@@ -27,18 +27,18 @@
 #include "./util/OperationTestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
-#include "engine/GroupByImpl.h"
-#include "engine/IndexScan.h"
 #include "engine/MaterializedViews.h"
 #include "engine/MaterializedViewsQueryAnalysis.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/operation/GroupByImpl.h"
+#include "engine/operation/IndexScan.h"
 #ifndef __EMSCRIPTEN__
 #include "engine/Server.h"
 #endif
 #include "engine/SpatialJoinConfig.h"
-#include "engine/StripColumns.h"
 #include "engine/VariableToColumnMap.h"
+#include "engine/operation/StripColumns.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "global/Constants.h"
@@ -232,7 +232,8 @@ TEST_F(MaterializedViewsTest, ParserConfigChecks) {
     auto trace = generateLocationTrace(location);
     EncodedIriManager encodedIriManager;
     AD_EXPECT_THROW_WITH_MESSAGE(
-        SparqlParser::parseQuery(&encodedIriManager, std::move(query), {}),
+        SparqlParser::parseQuery(&encodedIriManager, makeAllocator(),
+                                 std::move(query), {}),
         ::testing::HasSubstr(expectedError));
   };
 
@@ -267,8 +268,8 @@ TEST_F(MaterializedViewsTest, MetadataDependentConfigChecks) {
 
     // Parse query.
     EncodedIriManager encodedIriManager;
-    auto parsed =
-        SparqlParser::parseQuery(&encodedIriManager, std::move(query), {});
+    auto parsed = SparqlParser::parseQuery(&encodedIriManager, makeAllocator(),
+                                           std::move(query), {});
     ASSERT_TRUE(parsed.hasSelectClause());
     ASSERT_EQ(parsed.children().size(), 1);
 

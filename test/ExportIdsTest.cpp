@@ -13,7 +13,7 @@
 #include <gmock/gmock.h>
 
 #include "./util/LocalVocabTestHelpers.h"
-#include "engine/IndexScan.h"
+#include "engine/operation/IndexScan.h"
 #include "index/ExportIds.h"
 #include "index/LocalVocabEntry.h"
 #include "rdfTypes/Literal.h"

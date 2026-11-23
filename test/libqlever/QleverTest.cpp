@@ -16,9 +16,9 @@
 #include "../util/RuntimeParametersTestHelpers.h"
 #include "./QleverTestHelpers.h"
 #include "backports/filesystem.h"
-#include "engine/ExternalValues.h"
 #include "engine/MaterializedViews.h"
 #include "engine/UpdateMetadata.h"
+#include "engine/operation/ExternalValues.h"
 #include "global/FileSuffixConstants.h"
 #include "global/RuntimeParameters.h"
 #include "index/DeltaTriples.h"
@@ -889,9 +889,9 @@ TEST(LibQlever, applyUpdate) {
   // updates (see `SparqlParser::parseQuery` vs. `parseUpdate`), so an update
   // has to be parsed separately and then planned via `bindParsedQuery`.
   ad_utility::BlankNodeManager bnm;
-  auto parsedUpdates =
-      SparqlParser::parseUpdate(&bnm, ad_utility::testing::encodedIriManager(),
-                                "INSERT DATA { <a> <b> <c> }");
+  auto parsedUpdates = SparqlParser::parseUpdate(
+      &bnm, ad_utility::testing::encodedIriManager(), engine.allocator(),
+      "INSERT DATA { <a> <b> <c> }");
   ASSERT_THAT(parsedUpdates, SizeIs(1));
   auto plannedUpdate =
       engine.planQuery(engine.bindParsedQuery(std::move(parsedUpdates[0])));
@@ -1120,8 +1120,9 @@ TEST(Qlever, makeIndexRebuildConfig) {
 // accessors dereference it.
 TEST(LibQlever, plannedQueryRequiresQueryExecutionTree) {
   auto* qec = ad_utility::testing::getQec();
-  ParsedQuery parsedQuery = SparqlParser::parseQuery(
-      &qec->getIndex().encodedIriManager(), "SELECT * { ?s ?p ?o }");
+  ParsedQuery parsedQuery =
+      SparqlParser::parseQuery(&qec->getIndex().encodedIriManager(),
+                               qec->getAllocator(), "SELECT * { ?s ?p ?o }");
   AD_EXPECT_THROW_WITH_MESSAGE(
       PlannedQuery(std::move(parsedQuery), nullptr, *qec),
       HasSubstr("Assertion `queryExecutionTree_ != nullptr` failed."));
