@@ -37,11 +37,15 @@ enum class CRSType : uint8_t;
 
 namespace ad_utility {
 
-// The value `util::geo::CRSType::UNSUPPORTED`, which this header cannot name
-// (the enum is only forward-declared). Used by the `CRSTypeValueGetter` in
-// `SparqlExpressionValueGetters.h`, checked against the enum in
-// `GeometryInfo.cpp`.
+// The values `util::geo::CRSType::UNSUPPORTED` and `util::geo::CRSType::CRS84`
+// (the default CRS), which this header cannot name (the enum is only
+// forward-declared). Used by the `CRSTypeValueGetter` in
+// `SparqlExpressionValueGetters.h` and by `WktCentroid` in
+// `GeoSparqlHelpers.h`, checked against the enum in `GeometryInfo.cpp`.
 constexpr inline ::util::geo::CRSType crsTypeUnsupported{0};
+constexpr inline ::util::geo::CRSType crsTypeCrs84{1};
+
+struct SourceCrsType;
 
 // These encapsulating structs are required for the `RequestedInfo` templates
 // used in the `GeometryInfo` class and the `GeometryInfoValueGetter`.
@@ -56,6 +60,10 @@ struct Centroid {
   Centroid(double lat, double lng) : centroid_{lat, lng} {}
 
   GeoPoint centroid() const { return centroid_; }
+
+  // Return a `POINT` WKT literal without quotes or datatype representing this
+  // centroid, projected to `crs` (with the IRI of `crs` unless it is CRS84).
+  std::string asWkt(SourceCrsType crs) const;
 };
 
 // The individual coordinates describing the bounding box.
@@ -81,8 +89,10 @@ struct BoundingBox {
   }
 
   // Return a `POLYGON` WKT literal without quotes or datatype representing this
-  // bounding box.
+  // bounding box, in CRS84 or projected to `crs` (with the IRI of `crs` unless
+  // it is CRS84).
   std::string asWkt() const;
+  std::string asWkt(SourceCrsType crs) const;
 
   // Extract the minimum or maximum coordinates
   template <BoundingCoordinate RequestedCoordinate>
@@ -300,6 +310,17 @@ class GeometryInfo {
   // cannot be all-zero. This is currently used by the disk serialization of
   // `GeoVocabulary` to represent invalid literals.
   EncodedBoundingBox boundingBox_;
+  // The centroid is computed in the source CRS of the literal (see
+  // `sourceCrs_`), then projected to CRS84 and stored in CRS84.
+  //
+  // NOTE 1: Projecting the geometry to CRS84 first and computing the centroid
+  // there would give a different result, e.g. for Web Mercator, because its y
+  // axis is not linear in the latitude.
+  //
+  // NOTE 2: Records written before this rule (indices built between #3583 and
+  // #3787) hold the centroid computed in CRS84, which `geof:centroid` returns
+  // projected to the source CRS. Rebuild such an index if it has Web Mercator
+  // literals (for WGS84 both centroids are the same).
   uint64_t geometryTypeAndCentroid_;
   uint32_t numGeometries_;
   // The CRS named by the IRI of the literal (before the projection to CRS84),

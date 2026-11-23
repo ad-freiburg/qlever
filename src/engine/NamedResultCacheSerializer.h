@@ -13,6 +13,7 @@
 #include "backports/algorithm.h"
 #include "engine/NamedResultCache.h"
 #include "engine/NamedResultCacheFormatVersion.h"
+#include "engine/idTable/splitLayout/IdColumn.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/ContainersWithAllocator.h"
 #include "util/Exception.h"
@@ -99,15 +100,27 @@ void readValue(Serializer& serializer, NamedResultCache::Value& arg,
   ExplicitIdTableOperation::IdTableOrView resultTable;
   if constexpr (ZeroCopyReadSerializer<Serializer>) {
     // Zero-copy path: build a non-owning `IdTableView<0>` directly from
-    // spans into the serializer's buffer, without copying the column data.
-    // Since the writing side (see above) rejects any entry that contains a
-    // `LocalVocabIndex` id, `mapping` can never actually apply to any id in
-    // the columns, so skipping `deserializeIds`'s remapping step here is
-    // safe. We still defensively re-check the invariant.
+    // views of the columns in the serializer's buffer, without copying the
+    // column data.
+    //
+    // NOTE: The `mapping` is not applied here. The writing side (see above)
+    // rejects any entry with a `LocalVocabIndex` id, so the `mapping` can
+    // never apply to any id in the columns, which is checked again below.
     IdTableView<0>::ViewSpans columns;
     columns.reserve(numColumns);
     for (size_t i = 0; i < numColumns; ++i) {
-      auto column = zeroCopyDeserializeToSpan<Id>(serializer);
+      ConstIdColumnRef column = [&serializer] {
+        if constexpr (std::is_same_v<ConstIdColumnRef, ql::span<const Id>>) {
+          return zeroCopyDeserializeToSpan<Id>(serializer);
+        } else {
+          auto column =
+              columnBasedIdTable::splitLayout::zeroCopyDeserializeIdColumn(
+                  serializer);
+          // Break explicitly if the column type of the split layout changes.
+          static_assert(std::is_same_v<decltype(column), ConstIdColumnRef>);
+          return column;
+        }
+      }();
       AD_CORRECTNESS_CHECK(column.size() == numRows);
       AD_CORRECTNESS_CHECK(
           ql::ranges::find(column, Datatype::LocalVocabIndex,
@@ -230,7 +243,8 @@ namespace namedResultCacheSerializer {
 // Write `value` to the `serializer`, in exactly the format that the read
 // branch of the serialization of a `NamedResultCache::Value` below reads.
 //
-// The `columns` (a range of ranges of `Id`, one per column of the result) and
+// The `columns` (one per column of the result, each convertible to a
+// `ConstIdColumnRef`, for example the columns of an `IdTable`) and
 // the `resultSortedOn` are passed separately, so that a caller can write a
 // *rewritten* version of the `value`: a caller may for example replace the
 // `Id`s that refer to local vocab entries by `Id`s of the main or of a
@@ -257,8 +271,8 @@ void writeValue(Serializer& serializer, const NamedResultCache::Value& value,
         serializer, value.localVocab_);
   }
 
-  // Serialize the `IdTable` (uses the `serializeIds` helper which handles
-  // `LocalVocab` IDs).
+  // Serialize the `IdTable`, each column as a `ConstIdColumnRef`, which is the
+  // format that the read branch below expects.
   const auto& resultView = ExplicitIdTableOperation::viewOf(value.result_);
   serializer << resultView.numRows();
   serializer << resultView.numColumns();
@@ -293,7 +307,7 @@ void writeValue(Serializer& serializer, const NamedResultCache::Value& value,
         "also occur if SPARQL UPDATE operations have been performed on the "
         "index before creating the named cached result.");
     AD_CORRECTNESS_CHECK(ql::ranges::size(col) == resultView.numRows());
-    ad_utility::detail::serializeIds(serializer, col);
+    serializer << ConstIdColumnRef{col};
   }
 
   // Serialize the `VariableToColumnMap` deterministically, see

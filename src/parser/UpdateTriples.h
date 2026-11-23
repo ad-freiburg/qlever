@@ -7,22 +7,25 @@
 
 #include <vector>
 
+#include "global/Id.h"
 #include "index/LocalVocab.h"
 #include "parser/SparqlTriple.h"
+#include "util/Allocator.h"
+#include "util/ContainersWithAllocator.h"
 
 namespace updateClause {
 // A class that combines a vector of triples with a `LocalVocab`. The local
 // vocab is currently only used to store blank node IDs, all IRIs and literals
 // are still encoded as strings in the triples.
 struct UpdateTriples {
-  using Vec = std::vector<SparqlTripleSimpleWithGraph>;
-  Vec triples_{};
-  // The parser has no access to the allocator of the query, but the size of
-  // the local vocab is bounded by the size of the update.
+  using Vec = qlm::vector<SparqlTripleSimpleWithGraph>;
+  Vec triples_;
+  // The local vocab does not count towards the memory limit (unlike the
+  // `triples_`), but its size is bounded by the size of the update.
   LocalVocab localVocab_{ad_utility::makeUnlimitedAllocator<Id>()};
 
-  // Constructors
-  UpdateTriples() = default;
+  // Constructors. The `allocator` is used for the `triples_`.
+  explicit UpdateTriples(const qlever::Allocator<Id>& allocator);
   UpdateTriples(Vec triples, LocalVocab localVocab);
 
   // The copy operations have to be manually implemented because `LocalVocab` is
