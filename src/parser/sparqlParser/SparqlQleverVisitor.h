@@ -12,11 +12,15 @@
 
 #include <type_traits>
 
+#include "backports/span.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
+#include "global/Id.h"
 #include "parser/data/GraphRef.h"
 #include "parser/sparqlParser/DatasetClause.h"
+#include "util/Allocator.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/HashSet.h"
 #include "util/ParsedUri.h"
 #undef EOF
@@ -51,13 +55,13 @@ class SparqlQleverVisitor {
   using PredicateObjectPairsAndTriples =
       ad_utility::sparql_types::PredicateObjectPairsAndTriples;
   using OperationsAndFilters =
-      std::pair<std::vector<GraphPatternOperation>, std::vector<SparqlFilter>>;
+      std::pair<qlm::vector<GraphPatternOperation>, qlm::vector<SparqlFilter>>;
   using OperationOrFilterAndMaybeTriples =
       std::pair<std::variant<GraphPatternOperation, SparqlFilter>,
                 std::optional<parsedQuery::BasicGraphPattern>>;
   using OperationOrFilter = std::variant<GraphPatternOperation, SparqlFilter>;
   using PatternAndVisibleVariables =
-      std::pair<ParsedQuery::GraphPattern, std::vector<Variable>>;
+      std::pair<ParsedQuery::GraphPattern, qlm::vector<Variable>>;
   using SparqlExpressionPimpl = sparqlExpression::SparqlExpressionPimpl;
   using PrefixMap = ad_utility::HashMap<std::string, std::string>;
   using Parser = SparqlAutomaticParser;
@@ -77,6 +81,11 @@ class SparqlQleverVisitor {
   // Needed to efficiently encode common IRIs directly into the ID.
   const EncodedIriManager* encodedIriManager_;
 
+  // The allocator for the containers of the resulting `ParsedQuery` and for
+  // the containers that only live inside the visitor.
+  qlever::Allocator<Id> allocator_;
+  const qlever::Allocator<Id>& allocator() const { return allocator_; }
+
   // Convert a GraphTerm to TripleComponent with IRI encoding support
   TripleComponent graphTermToTripleComponentWithEncoding(
       const GraphTerm& graphTerm) const;
@@ -89,7 +98,7 @@ class SparqlQleverVisitor {
   // The visible variables in the order in which they are encountered in the
   // query. This may contain duplicates. A variable is added via
   // `addVisibleVariable`.
-  std::vector<Variable> visibleVariables_{};
+  qlm::vector<Variable> visibleVariables_{allocator()};
 
   // The `FROM` and `FROM NAMED` clauses of the query that is currently
   // being parsed. Those are inherited by certain constructs, which are
@@ -107,7 +116,7 @@ class SparqlQleverVisitor {
   // graph pattern together with the variables that are visible in it.
   struct NamedSubquery {
     ParsedQuery::GraphPattern pattern_;
-    std::vector<Variable> visibleVariables_;
+    qlm::vector<Variable> visibleVariables_;
   };
 
   // The named subqueries that have been defined so far, by name (including
@@ -132,7 +141,7 @@ class SparqlQleverVisitor {
 
   // This is the parsed query so far. Currently, this only contains information
   // about the number of internal variables that have already been assigned.
-  ParsedQuery parsedQuery_;
+  ParsedQuery parsedQuery_{allocator()};
 
   // The trailing `VALUES` clause of the top-level query. It is visited before
   // the query itself, because `ParsedQuery::addSolutionModifiers` needs it.
@@ -183,12 +192,12 @@ class SparqlQleverVisitor {
 
   // Report an error if one of `args` (the arguments of a geo function) is an
   // invalid WKT literal, and remember the variables among `args`.
-  void checkGeoFunctionArgs(const std::vector<ExpressionPtr>& args,
+  void checkGeoFunctionArgs(ql::span<const ExpressionPtr> args,
                             const antlr4::ParserRuleContext* ctx);
 
   // Report an error if a `VALUES` clause in `ops` binds a variable from
   // `geoFunctionArgVariables_` to an invalid WKT literal.
-  void checkWktInValues(const std::vector<GraphPatternOperation>& ops,
+  void checkWktInValues(ql::span<const GraphPatternOperation> ops,
                         const antlr4::ParserRuleContext* ctx) const;
 
   // Report an error if the blank node label `label` (including the leading
@@ -216,12 +225,14 @@ class SparqlQleverVisitor {
   // url parameters which override those in the operation.
   explicit SparqlQleverVisitor(
       ad_utility::BlankNodeManager* bnodeManager,
-      const EncodedIriManager* encodedIriManager, PrefixMap prefixMap,
+      const EncodedIriManager* encodedIriManager,
+      qlever::Allocator<Id> allocator, PrefixMap prefixMap,
       std::optional<ParsedQuery::DatasetClauses> datasetOverride,
       DisableSomeChecksOnlyForTesting disableSomeChecksOnlyForTesting =
           DisableSomeChecksOnlyForTesting::False)
       : blankNodeManager_{bnodeManager},
         encodedIriManager_{encodedIriManager},
+        allocator_{std::move(allocator)},
         prefixMap_{std::move(prefixMap)},
         disableSomeChecksOnlyForTesting_{disableSomeChecksOnlyForTesting} {
     if (datasetOverride.has_value()) {
@@ -313,11 +324,11 @@ class SparqlQleverVisitor {
 
   SolutionModifiers visit(Parser::SolutionModifierContext* ctx);
 
-  std::vector<GroupKey> visit(Parser::GroupClauseContext* ctx);
+  qlm::vector<GroupKey> visit(Parser::GroupClauseContext* ctx);
 
   GroupKey visit(Parser::GroupConditionContext* ctx);
 
-  std::vector<SparqlFilter> visit(Parser::HavingClauseContext* ctx);
+  qlm::vector<SparqlFilter> visit(Parser::HavingClauseContext* ctx);
 
   SparqlFilter visit(Parser::HavingConditionContext* ctx);
 
@@ -447,7 +458,7 @@ class SparqlQleverVisitor {
 
   ExpressionPtr visit(Parser::FunctionCallContext* ctx);
 
-  std::vector<ExpressionPtr> visit(Parser::ArgListContext* ctx);
+  qlm::vector<ExpressionPtr> visit(Parser::ArgListContext* ctx);
 
   std::vector<ExpressionPtr> visit(Parser::ExpressionListContext* ctx);
 
@@ -540,6 +551,9 @@ class SparqlQleverVisitor {
   SubjectOrObjectAndPathTriples visit(Parser::GraphNodePathContext* ctx);
 
   GraphTerm visit(Parser::VarOrTermContext* ctx);
+
+  // Recognize `tripleTerm` syntax and explicitly reject its translation.
+  [[noreturn]] static GraphTerm visit(const Parser::TripleTermContext* ctx);
 
   VarOrIri visit(Parser::VarOrIriContext* ctx);
 
@@ -670,7 +684,7 @@ class SparqlQleverVisitor {
   struct FreshQueryContextResult {
     Result result_;
     ParsedQuery parsedQuery_;
-    std::vector<Variable> visibleVariables_;
+    qlm::vector<Variable> visibleVariables_;
   };
 
   // Visit the given context with a fresh (initially empty) `parsedQuery_`,
@@ -711,7 +725,7 @@ class SparqlQleverVisitor {
   // `visitIriOrFunction`. `distinct` is true if the argument list starts with
   // `DISTINCT`, which is only allowed for custom aggregates like `ql:stdev`.
   ExpressionPtr processIriFunctionCall(const TripleComponent::Iri& iri,
-                                       std::vector<ExpressionPtr> argList,
+                                       qlm::vector<ExpressionPtr> argList,
                                        bool distinct,
                                        const antlr4::ParserRuleContext*);
 
@@ -739,6 +753,13 @@ class SparqlQleverVisitor {
               SparqlQleverVisitor::voidWhenVisited<SparqlQleverVisitor, Ctx>))
   auto visitVector(const std::vector<Ctx*>& childContexts)
       -> std::vector<decltype(visit(childContexts[0]))>;
+
+  // Like `visitVector`, but the result is a `qlm::vector` that uses the
+  // `allocator()` of the visitor.
+  CPP_template(typename Ctx)(requires CPP_NOT(
+              SparqlQleverVisitor::voidWhenVisited<SparqlQleverVisitor, Ctx>))
+  auto visitQlmVector(const std::vector<Ctx*>& childContexts)
+      -> qlm::vector<decltype(visit(childContexts[0]))>;
 
   // Check that exactly one of the `ctxs` is not `null`, visit that context,
   // cast the result to `Out` and return it. Requires that for all of the
@@ -817,6 +838,16 @@ class SparqlQleverVisitor {
   // inside the query or update. Then returns the currently active datasets.
   const parsedQuery::DatasetClauses& setAndGetDatasetClauses(
       const std::vector<DatasetClause>& clauses);
+
+  // Make a `GraphPatternOperation` that matches all triples in the given graph.
+  GraphPatternOperation makeAllTripleGraphPattern(
+      TripleComponent::Iri graphIri) const;
+
+  // Make a `GraphPatternOperation` that matches all triples in either all
+  // graphs, or just named graphs, depending on the value of `behaviour`.
+  GraphPatternOperation makeAllTripleGraphPattern(
+      Variable graphVariable,
+      parsedQuery::GroupGraphPattern::GraphVariableBehaviour behaviour) const;
 
   // Construct a `ParsedQuery` that clears the given graph equivalent to
   // `DELETE WHERE { GRAPH graph { ?s ?p ?o } }`.

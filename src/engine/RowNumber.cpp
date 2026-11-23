@@ -67,11 +67,11 @@ qlm::vector<QueryExecutionTree*> RowNumber::getChildrenImpl() const {
 }
 
 // _____________________________________________________________________________
-std::string RowNumber::getCacheKeyImpl() const {
+qlm::string RowNumber::getCacheKeyImpl() const {
   // The `sortedOn_` columns are not part of the key, because they don't change
   // the result.
-  return absl::StrCat("ROW NUMBER (offset ", offset_, ") ",
-                      child_->getCacheKey());
+  return qlm::StrCat(allocator(), "ROW NUMBER (offset ", offset_, ") ",
+                     child_->getCacheKey());
 }
 
 // _____________________________________________________________________________

@@ -11,6 +11,7 @@
 
 #include "parser/data/SparqlFilter.h"
 #include "rdfTypes/Variable.h"
+#include "util/ContainersWithAllocator.h"
 
 class QueryExecutionContext;
 class SpatialJoin;
@@ -39,7 +40,7 @@ std::shared_ptr<SpatialJoin> rewriteFilterToSpatialJoin(
 //
 // NOTE: If the fact is not exact (e.g. for different values of `?max` in
 // different rows), the conjunct is kept in addition to this FILTER.
-void rewriteFiltersWithFacts(std::vector<SparqlFilter>& filters,
+void rewriteFiltersWithFacts(qlm::vector<SparqlFilter>& filters,
                              const filterFacts::Definitions& defs);
 
 #endif  // QLEVER_SRC_ENGINE_QUERYREWRITEUTILS_H
