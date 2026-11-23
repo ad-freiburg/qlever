@@ -24,11 +24,11 @@ if (APPLE)
         # target like `Boost::headers` requests them). Otherwise, the headers
         # of the dependencies that QLever fetches itself (e.g. abseil) are
         # shadowed by different versions of the same libraries that happen to
-        # be installed via Homebrew.
-        list(APPEND CMAKE_C_IMPLICIT_INCLUDE_DIRECTORIES
-             "${HOMEBREW_PREFIX}/include")
-        list(APPEND CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES
-             "${HOMEBREW_PREFIX}/include")
+        # be installed via Homebrew. Now, for Libraries whose headers ship both in
+        # both SDK and Homebrew, the SDK headers win. 
+        foreach(lang C CXX)
+            list(APPEND CMAKE_${lang}_IMPLICIT_INCLUDE_DIRECTORIES "${HOMEBREW_PREFIX}/include")
+        endforeach ()
         add_compile_options(-idirafter "${HOMEBREW_PREFIX}/include")
     else()
         message(WARNING "Homebrew not found. You may need to manually set CMAKE_PREFIX_PATH to locate dependencies (Boost, ICU, OpenSSL, etc.)")
