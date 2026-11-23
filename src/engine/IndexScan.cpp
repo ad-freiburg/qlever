@@ -234,18 +234,21 @@ qlm::vector<ColumnIndex> IndexScan::resultSortedOn() const {
   // The full result of a scan of a view that is sorted by all its columns is
   // also sorted by the additional columns that directly follow the fourth
   // column of the view (which `variableAndGraphColumns` treats as the graph
-  // column).
+  // column). Append these columns to `result`, stop at the first gap.
   //
-  // NOTE: The additional columns are strictly increasing, so they directly
-  // follow the fourth column iff `additionalColumns_[i]` is
-  // `ADDITIONAL_COLUMN_GRAPH_ID + i`.
+  // NOTE: The additional columns are strictly increasing, so the first `i + 1`
+  // of them are the fourth column and the `i` columns directly following it
+  // iff `additionalColumns_[i]` is `ADDITIONAL_COLUMN_GRAPH_ID + i`. The fourth
+  // column itself (`i == 0`) is already in `result`.
   auto view = permutation().materializedView();
   if (view != nullptr && view->isSortedOnAllColumns()) {
-    for (size_t i = 1;
-         i < additionalColumns_.size() &&
-         additionalColumns_.at(i) == ADDITIONAL_COLUMN_GRAPH_ID + i;
-         ++i) {
-      result.push_back(numVariables_ + i);
+    for (size_t i = 0; i < additionalColumns_.size(); ++i) {
+      if (additionalColumns_[i] != ADDITIONAL_COLUMN_GRAPH_ID + i) {
+        break;
+      }
+      if (i > 0) {
+        result.push_back(numVariables_ + i);
+      }
     }
   }
 
