@@ -10,6 +10,7 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/ChunkedForLoop.h"
 #include "util/Random.h"
+#include "util/UuidGenerator.h"
 
 namespace sparqlExpression {
 namespace detail::uuidExpression {

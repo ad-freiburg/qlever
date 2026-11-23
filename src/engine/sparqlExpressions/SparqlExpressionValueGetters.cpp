@@ -14,10 +14,10 @@
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "index/ExportIds.h"
-#include "parser/LiteralOrIri.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/Literal.h"
+#include "rdfTypes/LiteralOrIri.h"
 #include "util/ParsedUri.h"
 
 using namespace sparqlExpression::detail;

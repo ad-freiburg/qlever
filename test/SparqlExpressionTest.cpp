@@ -30,10 +30,10 @@
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
 #include "index/Index.h"
-#include "parser/LiteralOrIri.h"
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/GeometryInfo.h"
+#include "rdfTypes/LiteralOrIri.h"
 #include "util/AllocatorTestHelpers.h"
 #include "util/IdTestHelpers.h"
 #include "util/LocalVocabEntryTestHelpers.h"
@@ -851,7 +851,8 @@ TEST(SparqlExpression, sharedDateDispatchBypassesVariants) {
   context._endIndex = 2;
   const Id date = Dat(DateYearOrDuration::parseXsdDate, "2020-01-01");
   V<Id> dates{{date, date}, alloc};
-  ConstIdColumnRef column{dates.data(), dates.size()};
+  IdColumn dateColumn{date, date};
+  ConstIdColumnRef column{dateColumn};
   auto result =
       hn::evaluateHomogeneousNumericOperation<TypedOnly, DateYearOrDuration,
                                               DateYearOrDuration>(
@@ -2156,30 +2157,67 @@ TEST(SparqlExpression, geoSparqlExpressions) {
 
   checkLat(v, vLat);
   checkLong(v, vLng);
-  checkCentroid(v, v);
+  checkCentroid(v, IdOrLocalVocabEntry{ValueId::makeFromGeoPoint(p)});
   checkIsGeoPoint(v, B(true));
   checkDist(D(0.0), v, v);
   checkLat(idOrLitOrStringVec({"NotAPoint", I(12)}), Ids{U, U});
   checkLong(idOrLitOrStringVec({D(4.2), "NotAPoint"}), Ids{U, U});
   checkIsGeoPoint(IdOrLocalVocabEntry{lit("NotAPoint")}, B(false));
   checkIsGeoPoint(U, U);
-  checkCentroid(IdOrLocalVocabEntry{lit("NotAPoint")}, U);
+  checkCentroid(IdOrLocalVocabEntry{lit("NotAPoint")}, IdOrLocalVocabEntry{U});
   checkDist(U, v, IdOrLocalVocabEntry{I(12)});
   checkDist(U, IdOrLocalVocabEntry{I(12)}, v);
   checkDist(U, v, IdOrLocalVocabEntry{lit("NotAPoint")});
   checkDist(U, IdOrLocalVocabEntry{lit("NotAPoint")}, v);
 
-  auto polygonCentroid = GP({3, 3});
+  // The centroid of a literal in CRS84 (with or without the IRI) is a
+  // `GeoPoint`, the centroid of a literal in another CRS is a WKT literal in
+  // that CRS.
+  checkCentroid(
+      IdOrLocalVocabEntry{lit(
+          "\"<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(26.8 24.3)\"",
+          "^^<http://www.opengis.net/ont/geosparql#wktLiteral>")},
+      geoLit("<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(26.8 24.3)"));
+
+  auto crs84CentroidId = ValueId::makeFromGeoPoint(GeoPoint{20, 50});
   checkCentroid(IdOrLocalVocabEntry{lit(
-                    "\"POLYGON((2 4, 4 4, 4 2, 2 2))\"",
+                    "\"POLYGON((40 10, 40 30, 60 30, 60 10))\"",
                     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>")},
-                polygonCentroid);
+                IdOrLocalVocabEntry{crs84CentroidId});
+
+  checkCentroid(IdOrLocalVocabEntry{lit(
+                    "\"<http://www.opengis.net/def/crs/OGC/1.3/CRS84> "
+                    "POLYGON((40 10, 40 30, 60 30, 60 10))\"",
+                    "^^<http://www.opengis.net/ont/geosparql#wktLiteral>")},
+                IdOrLocalVocabEntry{crs84CentroidId});
+
+  checkCentroid(
+      IdOrLocalVocabEntry{
+          lit("\"<http://www.opengis.net/def/crs/EPSG/0/4326> "
+              "POLYGON((10 40, 30 40, 30 60, 10 60))\"",
+              "^^<http://www.opengis.net/ont/geosparql#wktLiteral>")},
+      geoLit("<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(20 50)"));
+
+  // The centroid of a Web Mercator polygon is computed in Web Mercator (the
+  // center of this square), the projection of its CRS84 centroid would be
+  // `POINT(5000000 3924942.872771)`.
+  checkCentroid(
+      IdOrLocalVocabEntry{lit(
+          "\"<http://www.opengis.net/def/crs/EPSG/0/3857> "
+          "POLYGON((0 0, 10000000 0, 10000000 10000000, 0 10000000, 0 0))\"",
+          "^^<http://www.opengis.net/ont/geosparql#wktLiteral>")},
+      geoLit("<http://www.opengis.net/def/crs/EPSG/0/3857> POINT(5000000 "
+             "5000000)"));
 
   checkEnvelope(
       IdOrLocalVocabEntryVec{U, D(1.0), GP({4, 2}),
-                             geoLit("LINESTRING(2 4, 8 8)")},
+                             geoLit("LINESTRING(2 4, 8 8)"),
+                             geoLit("<http://www.opengis.net/def/crs/EPSG/0/"
+                                    "4326> LINESTRING(4 2, 8 8)")},
       IdOrLocalVocabEntryVec{U, U, geoLit("POLYGON((2 4,2 4,2 4,2 4,2 4))"),
-                             geoLit("POLYGON((2 4,8 4,8 8,2 8,2 4))")});
+                             geoLit("POLYGON((2 4,8 4,8 8,2 8,2 4))"),
+                             geoLit("<http://www.opengis.net/def/crs/EPSG/0/"
+                                    "4326> POLYGON((4 2,4 8,8 8,8 2,4 2))")});
   checkEnvelopeLL(IdOrLocalVocabEntryVec{U, D(1.0), GP({4, 2}),
                                          geoLit("LINESTRING(2 4, 8 8)")},
                   Ids{U, U, GP({4, 2}), GP({4, 2})});
@@ -2362,6 +2400,24 @@ TEST(SparqlExpression, geoSparqlExpressions) {
           geoLit("LINESTRING(2 8,4 6)"),
       },
       exampleMultiGeoms, Ids{I(2), I(2), I(2), I(2), I(2)});
+
+  // The function `geof:transform`: an unknown CRS IRI yields `UNDEF`.
+  auto checkTransform =
+      std::bind_front(testNaryExpression, &makeTransformExpression);
+  auto examplePoint = geoLit("POINT(1 2)");
+  checkTransform(
+      IdOrLocalVocabEntryVec{
+          geoLit("POINT(1 2)"), U,
+          geoLit("<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(2 1)"),
+          geoLit("<http://www.opengis.net/def/crs/EPSG/0/3857> "
+                 "POINT(111319.490793 222684.208506)")},
+      IdOrLocalVocabEntryVec{examplePoint, examplePoint, examplePoint,
+                             examplePoint},
+      IdOrLocalVocabEntryVec{
+          iriref("<http://www.opengis.net/def/crs/OGC/1.3/CRS84>"),
+          iriref("<http://www.opengis.net/bla/bli/>"),
+          iriref("<http://www.opengis.net/def/crs/EPSG/0/4326>"),
+          iriref("<http://www.opengis.net/def/crs/EPSG/0/3857>")});
 
   // The internal function `ql:simplifyGeometry`.
   auto checkSimplify =
@@ -2972,7 +3028,7 @@ TEST(SingleUseExpression, simpleMembersForTestCoverage) {
 // `test/engine/ExistsJoinTest.cpp`.
 TEST(ExistsExpression, basicFunctionality) {
   using namespace ::testing;
-  ParsedQuery pq;
+  ParsedQuery pq{alloc};
   pq.selectClause().addVisibleVariable(Variable{"?testVar42"});
   pq.selectClause().setAsterisk();
   ExistsExpression exists{std::move(pq)};

@@ -92,8 +92,8 @@ JoinImpl::JoinImpl(QueryExecutionContext* qec,
 }
 
 // _____________________________________________________________________________
-string JoinImpl::getCacheKeyImpl() const {
-  std::ostringstream os;
+qlm::string JoinImpl::getCacheKeyImpl() const {
+  qlm::ostringstream os{allocator()};
   os << "JOIN\n"
      << left_->getCacheKey() << " join-column: [" << leftJoinCol_ << "]\n";
   os << "|X|\n"

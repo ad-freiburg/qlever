@@ -14,6 +14,7 @@
 #include "backports/concepts.h"
 #include "engine/PathSearch.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
+#include "global/Id.h"
 #include "parser/DatasetClauses.h"
 #include "parser/ExternalValuesQuery.h"
 #include "parser/GraphPattern.h"
@@ -25,6 +26,7 @@
 #include "parser/TextSearchQuery.h"
 #include "parser/TripleComponent.h"
 #include "rdfTypes/Variable.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/TransparentFunctors.h"
 #include "util/VisitMixin.h"
 
@@ -79,7 +81,7 @@ struct Load {
 
 /// A `BasicGraphPattern` represents a consecutive block of triples.
 struct BasicGraphPattern {
-  std::vector<SparqlTriple> _triples;
+  qlm::vector<SparqlTriple> _triples;
   /// Append the triples from `other` to this `BasicGraphPattern`
   void appendTriples(BasicGraphPattern other);
 
@@ -169,7 +171,7 @@ class Subquery {
   // `Subquery` is like a `ParsedQuery`, just with an own type).
   Subquery(const ParsedQuery&);
   Subquery(ParsedQuery&&) noexcept;
-  Subquery();
+  explicit Subquery(const qlever::Allocator<Id>& allocator);
   ~Subquery();
   Subquery(const Subquery&);
   Subquery(Subquery&&) noexcept;
