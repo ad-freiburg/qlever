@@ -422,6 +422,37 @@ void testCompressedRelations(const Inputs& inputsOriginalBeforeCopy,
                     cancellationHandle, locatedTriples, executor());
     const auto& col1And2 = inputs[i].col1And2_;
     checkThatTablesAreEqual(col1And2, table);
+
+    // A scan with a `columnSubset` (no columns, a single column, all but the
+    // first column) yields the subset of the full result, both materialized
+    // and lazily.
+    std::vector<std::vector<ColumnIndex>> subsets{{}};
+    for (ColumnIndex col = 0; col < table.numColumns(); ++col) {
+      subsets.push_back({col});
+    }
+    if (table.numColumns() > 2) {
+      subsets.push_back(::ranges::to<std::vector>(
+          ql::views::iota(ColumnIndex{1}, table.numColumns())));
+    }
+    for (const auto& subset : subsets) {
+      IdTable expected = table.clone();
+      expected.setColumnSubset(subset);
+      EXPECT_THAT(reader.scan(ScanSpecAndBlocks{scanSpec, blocks},
+                              additionalColumns, cancellationHandle,
+                              locatedTriples, executor(), {}, subset),
+                  matchesIdTable(expected));
+      IdTable lazyResult{subset.size(), ad_utility::testing::makeAllocator()};
+      for (const auto& block : reader.lazyScan(
+               scanSpec,
+               CompressedRelationReader::convertBlockMetadataRangesToVector(
+                   CompressedRelationReader::getRelevantBlocks(scanSpec,
+                                                               blocks)),
+               additionalColumns, cancellationHandle, locatedTriples,
+               executor(), {}, subset)) {
+        lazyResult.insertAtEnd(block);
+      }
+      EXPECT_THAT(lazyResult, matchesIdTable(expected));
+    }
     table.clear();
     // Check that the scans also work with various values for LIMIT and OFFSET.
     std::vector<LimitOffsetClause> limitOffsetClauses{
@@ -831,7 +862,7 @@ TEST(CompressedRelationReader, getBlocksForJoinWithColumn) {
                        {{V(42), V(3), V(0), g}, {V(42), V(6), V(9), g}}});
 
   auto test = [&metadataAndBlocks](
-                  const std::vector<Id>& joinColumn,
+                  const IdColumn& joinColumn,
                   const std::vector<CompressedBlockMetadata>& expectedBlocks,
                   size_t numHandledBlocksExpected,
                   source_location l = AD_CURRENT_SOURCE_LOC()) {
@@ -869,10 +900,11 @@ TEST(CompressedRelationReader, getBlocksForJoinWithColumn) {
   // skips the entries smaller than the next block then has many entries to
   // search, and the result must be the same as for the short columns above.
   auto longColumn = [](const std::vector<int64_t>& excluded) {
-    std::vector<Id> column;
+    IdColumn column;
     for (int64_t i = 0; i < 100; ++i) {
       if (!ad_utility::contains(excluded, i)) {
-        column.insert(column.end(), {V(i), V(i)});
+        column.push_back(V(i));
+        column.push_back(V(i));
       }
     }
     return column;
@@ -2198,6 +2230,26 @@ TEST(CompressedRelationWriter, scanWithGraphs) {
                          {{3, 4}, {7, 4}, {8, 4}, {8, 5}, {9, 4}, {9, 5}}))
         << "Failed with rowsPerBlock " << rowsPerBlock;
 
+    // With a `columnSubset`, the deduplication still considers all columns.
+    res = reader->scan(
+        ScanSpecAndBlocks{spec, getBlockMetadataRangesfromVec(blocks)}, {},
+        handle, emptyLocatedTriples, executor(), {},
+        std::vector<ColumnIndex>{1});
+    EXPECT_THAT(res, matchesIdTableFromVector({{4}, {4}, {4}, {5}, {4}, {5}}))
+        << "Failed with rowsPerBlock " << rowsPerBlock;
+
+    // A `columnSubset` that is not strictly increasing or contains an index
+    // that is not a result column is rejected.
+    for (std::vector<ColumnIndex> subset :
+         {std::vector<ColumnIndex>{1, 0}, std::vector<ColumnIndex>{1, 1},
+          std::vector<ColumnIndex>{2}}) {
+      AD_EXPECT_THROW_WITH_MESSAGE(
+          reader->scan(
+              ScanSpecAndBlocks{spec, getBlockMetadataRangesfromVec(blocks)},
+              {}, handle, emptyLocatedTriples, executor(), {}, subset),
+          ::testing::HasSubstr("strictly increasing"));
+    }
+
     // std::nullopt matches all graphs, but the default graph ('0' in this test)
     // should be filtered out.
     spec = ScanSpecification{
@@ -2207,6 +2259,15 @@ TEST(CompressedRelationWriter, scanWithGraphs) {
         additionalColumns, handle, emptyLocatedTriples, executor());
     EXPECT_THAT(res, matchesIdTableFromVector(
                          {{3, 4, 1}, {8, 5, 1}, {9, 4, 1}, {9, 5, 1}}))
+        << "Failed with rowsPerBlock " << rowsPerBlock;
+
+    // With a `columnSubset` that drops the graph column, the graph filter is
+    // still applied.
+    res = reader->scan(
+        ScanSpecAndBlocks{spec, getBlockMetadataRangesfromVec(blocks)},
+        additionalColumns, handle, emptyLocatedTriples, executor(), {},
+        std::vector<ColumnIndex>{0});
+    EXPECT_THAT(res, matchesIdTableFromVector({{3}, {8}, {9}, {9}}))
         << "Failed with rowsPerBlock " << rowsPerBlock;
   }
 }
@@ -2748,9 +2809,7 @@ TEST(CompressedRelationWriter, distinctCol1CountAcrossBlockBoundaries) {
 // _____________________________________________________________________________
 TEST(CountDistinctIds, countAndBoundaryIds) {
   using compressedRelationHelpers::countDistinctIds;
-  auto count = [](const std::vector<Id>& ids) {
-    return countDistinctIds(ql::span<const Id>{ids});
-  };
+  auto count = [](const IdColumn& ids) { return countDistinctIds(ids); };
 
   {
     auto result = count({V(1)});
@@ -2776,9 +2835,7 @@ TEST(CountDistinctIds, countAndBoundaryIds) {
 // _____________________________________________________________________________
 TEST(DistinctIdCounter, blocksAndReset) {
   compressedRelationHelpers::DistinctIdCounter counter;
-  auto addBlock = [&counter](const std::vector<Id>& ids) {
-    counter.addBlock(ql::span<const Id>{ids});
-  };
+  auto addBlock = [&counter](const IdColumn& ids) { counter.addBlock(ids); };
   // A fresh counter has counted nothing.
   EXPECT_EQ(counter.getAndReset(), 0);
 

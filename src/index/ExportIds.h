@@ -26,7 +26,7 @@
 #include "index/Index.h"
 #include "index/IndexImpl.h"
 #include "index/LocalVocab.h"
-#include "parser/LiteralOrIri.h"
+#include "rdfTypes/LiteralOrIri.h"
 #include "util/Algorithm.h"
 #include "util/CompilerExtensions.h"
 #include "util/Exception.h"
