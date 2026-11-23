@@ -156,34 +156,50 @@ const SparqlExpression& resolve(const SparqlExpression& expression,
   return expression;
 }
 
-// Return the possible values of `expression` if it is a number or a variable
-// with only numbers in `defs` (and `std::nullopt` otherwise).
-std::optional<std::vector<double>> getNumbers(
+// Return the values of `variable` in `defs` (from `VALUES` or a `BIND` of a
+// constant), and `std::nullopt` if it has none.
+std::optional<std::vector<TripleComponent>> getConstants(
+    const Variable& variable, const Definitions& defs) {
+  auto it = defs.constants_.find(variable);
+  if (it == defs.constants_.end() || it->second.empty()) {
+    return std::nullopt;
+  }
+  return it->second;
+}
+
+// Return the possible values of `expression` if it is a constant or a variable
+// with values in `defs`, and `std::nullopt` otherwise.
+std::optional<std::vector<TripleComponent>> getConstants(
     const SparqlExpression& expression, const Definitions& defs) {
   const auto& resolved = resolve(expression, defs);
-
-  // A variable with the numbers of a `VALUES` clause or a `BIND`.
   if (auto variable = resolved.getVariableOrNullopt()) {
-    auto it = defs.constants_.find(variable.value());
-    if (it == defs.constants_.end() || it->second.empty()) {
+    return getConstants(variable.value(), defs);
+  }
+  auto constant = resolved.getConstantValue();
+  if (!constant.has_value()) {
+    return std::nullopt;
+  }
+  return std::vector{std::move(constant).value()};
+}
+
+// Return the possible values of `expression` if it is a number (an `Int` or
+// `Double` `Id`, e.g. `500` or `0.5`) or a variable with only numbers in
+// `defs`, and `std::nullopt` otherwise (e.g. for the string "500").
+std::optional<std::vector<double>> getNumbers(
+    const SparqlExpression& expression, const Definitions& defs) {
+  auto constants = getConstants(expression, defs);
+  if (!constants.has_value()) {
+    return std::nullopt;
+  }
+  std::vector<double> numbers;
+  for (const auto& constant : constants.value()) {
+    auto number = constant.getNumber();
+    if (!number.has_value()) {
       return std::nullopt;
     }
-    std::vector<double> numbers;
-    for (const auto& constant : it->second) {
-      auto number = constant.getNumber();
-      if (!number.has_value()) {
-        return std::nullopt;
-      }
-      numbers.push_back(number.value());
-    }
-    return numbers;
+    numbers.push_back(number.value());
   }
-
-  // A single number.
-  auto constant = resolved.getConstantValue();
-  auto number = constant.has_value() ? constant->getNumber() : std::nullopt;
-  return number.has_value() ? std::optional{std::vector{number.value()}}
-                            : std::nullopt;
+  return numbers;
 }
 
 // Return the canonical form of a single conjunct: `distance < number` and
