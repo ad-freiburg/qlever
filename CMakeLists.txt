@@ -17,15 +17,19 @@ if (APPLE)
         message(STATUS "Found Homebrew at: ${HOMEBREW_PREFIX}")
         list(APPEND CMAKE_PREFIX_PATH "${HOMEBREW_PREFIX}")
         link_directories(${HOMEBREW_PREFIX}/lib)
-        # Treat Homebrew's include directory like a system include directory
-        # on Linux: search it after all other include directories
-        # (`-idirafter`), and never pass it explicitly (CMake drops implicit
-        # include directories from the command line, also when an imported
-        # target like `Boost::headers` requests them). Otherwise, the headers
-        # of the dependencies that QLever fetches itself (e.g. abseil) are
-        # shadowed by different versions of the same libraries that happen to
-        # be installed via Homebrew. Now, for Libraries whose headers ship both in
-        # both SDK and Homebrew, the SDK headers win. 
+        # Search Homebrew's include directory after all other include
+        # directories (`-idirafter`), like `/usr/include` on Linux. Otherwise
+        # the headers of the dependencies that QLever fetches itself (e.g.
+        # abseil) are shadowed by different versions of the same libraries
+        # installed via Homebrew.
+        #
+        # NOTE 1: The directory is also marked as an implicit include
+        # directory, so that CMake never passes it explicitly, also not when
+        # an imported target like `Boost::headers` requests it.
+        #
+        # NOTE 2: `-idirafter` directories are searched after the SDK's
+        # `/usr/include`, so for headers that ship both in the SDK and in
+        # Homebrew, the SDK headers win.
         foreach(lang C CXX)
             list(APPEND CMAKE_${lang}_IMPLICIT_INCLUDE_DIRECTORIES "${HOMEBREW_PREFIX}/include")
         endforeach ()
