@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 
+#include "AllocatorTestHelpers.h"
 #include "IndexTestHelpers.h"
 #include "parser/SparqlParser.h"
 
@@ -20,8 +21,8 @@ namespace ad_utility::testing {
 // Parse a SPARQL query string into a typed `ParsedQuery` object.
 inline auto parseQuery(std::string query,
                        const std::vector<DatasetClause>& datasets = {}) {
-  return SparqlParser::parseQuery(encodedIriManager(), std::move(query),
-                                  datasets);
+  return SparqlParser::parseQuery(encodedIriManager(), makeAllocator(),
+                                  std::move(query), datasets);
 }
 
 }  // namespace ad_utility::testing

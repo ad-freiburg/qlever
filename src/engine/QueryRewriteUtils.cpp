@@ -154,9 +154,9 @@ SparqlFilter distanceBoundToFilter(const filterFacts::DistanceBound& bound) {
 }  // namespace
 
 // _____________________________________________________________________________
-void rewriteFiltersWithFacts(std::vector<SparqlFilter>& filters,
+void rewriteFiltersWithFacts(qlm::vector<SparqlFilter>& filters,
                              const filterFacts::Definitions& defs) {
-  std::vector<SparqlFilter> result;
+  qlm::vector<SparqlFilter> result{filters.get_allocator()};
   for (auto& filter : filters) {
     // Recognize the `DistanceBound` of each conjunct of `filter`. Keep a
     // FILTER without any as it is.

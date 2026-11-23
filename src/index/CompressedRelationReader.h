@@ -99,6 +99,11 @@ class CompressedRelationReader {
     // Delete the `graphColumn_` from `block` if `deleteGraphColumn_` is true.
     void deleteGraphColumnIfNecessary(IdTable& block) const;
 
+    // Return true iff `postprocessBlock` might filter the block specified by
+    // the `blockMetadata` (by graph or because of duplicates).
+    bool blockMightBeFiltered(
+        const CompressedBlockMetadata& blockMetadata) const;
+
    private:
     // Return a lambda that returns true if `desiredGraphs_` allows the given
     // `graph` and it is not the default graph.
@@ -118,10 +123,18 @@ class CompressedRelationReader {
         IdTable& block, const CompressedBlockMetadata& blockMetadata);
   };
 
-  // Classes holding various subsets of parameters relevant for a scan of a
-  // permutation, including a reference to the relevant located triples.
+  // The parameters of a scan of a permutation, including a reference to the
+  // relevant located triples. The `scanColumns_` are the columns read for a
+  // block that needs postprocessing (merging located triples, filtering by
+  // graph, removing duplicates), including the graph column. The result of the
+  // scan consists of the `outputColumns_`, which are the `scanColumns_` without
+  // the graph column (if it is deleted) and restricted to the `columnSubset_`
+  // (if any). A block that needs no postprocessing is read with only the
+  // `outputColumns_`.
   struct ScanImplConfig {
     ColumnIndices scanColumns_;
+    ColumnIndices outputColumns_;
+    std::optional<ColumnIndices> columnSubset_;
     FilterDuplicatesAndGraphs graphFilter_;
     const LocatedTriplesPerBlock& locatedTriples_;
   };
@@ -315,6 +328,11 @@ class CompressedRelationReader {
    * `lazyScan` below). This function must not be called from one of its
    * threads.
    *
+   * @param columnSubset If set, only these columns of the result (as specified
+   * above) are returned. The indices must be strictly increasing.
+   * The other columns are not read from disk, unless they are needed for
+   * merging located triples, filtering by graph, or removing duplicates.
+   *
    * The arguments `metadata`, `blocks`, and `file` must all be obtained from
    * the same `CompressedRelationWriter` (see `CompressedRelationWriter.h`).
    */
@@ -323,7 +341,8 @@ class CompressedRelationReader {
                const CancellationHandle& cancellationHandle,
                const LocatedTriplesPerBlock& locatedTriplesPerBlock,
                qlever::Executor executor,
-               const LimitOffsetClause& limitOffset = {}) const;
+               const LimitOffsetClause& limitOffset = {},
+               std::optional<ColumnIndices> columnSubset = std::nullopt) const;
 
   // Similar to `scan` (directly above), but the result of the scan is lazily
   // computed and returned as a generator of the single blocks that are scanned.
@@ -338,8 +357,8 @@ class CompressedRelationReader {
       std::vector<CompressedBlockMetadata> relevantBlockMetadata,
       ColumnIndices additionalColumns, CancellationHandle cancellationHandle,
       const LocatedTriplesPerBlock& locatedTriplesPerBlock,
-      qlever::Executor executor,
-      const LimitOffsetClause& limitOffset = {}) const;
+      qlever::Executor executor, const LimitOffsetClause& limitOffset = {},
+      std::optional<ColumnIndices> columnSubset = std::nullopt) const;
 
   // Retrieve all triples in the given block, ignoring updates. This is used in
   // `DeltaTriples::vacuum` to determine update triples that have no effect and
@@ -547,7 +566,7 @@ class CompressedRelationReader {
 
   // Read and decompress the parts of the block given by `blockMetaData` (which
   // identifies the block) and `scanConfig` (which specifies the part of that
-  // block).
+  // block). The result consists of the `scanConfig.outputColumns_`.
   std::optional<DecompressedBlockAndMetadata> readAndDecompressBlock(
       const CompressedBlockMetadata& blockMetaData,
       const ScanImplConfig& scanConfig) const;
@@ -594,7 +613,8 @@ class CompressedRelationReader {
 
   static ScanImplConfig getScanConfig(
       const ScanSpecification& scanSpec, ColumnIndicesRef additionalColumns,
-      const LocatedTriplesPerBlock& locatedTriples);
+      const LocatedTriplesPerBlock& locatedTriples,
+      std::optional<ColumnIndices> columnSubset = std::nullopt);
 };
 
 // TODO<joka921>

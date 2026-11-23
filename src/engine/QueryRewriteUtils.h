@@ -11,6 +11,7 @@
 
 #include "parser/data/SparqlFilter.h"
 #include "rdfTypes/Variable.h"
+#include "util/ContainersWithAllocator.h"
 
 class QueryExecutionContext;
 class SpatialJoin;
@@ -36,7 +37,7 @@ std::shared_ptr<SpatialJoin> rewriteFilterToSpatialJoin(
 // regular FILTERs. A conjunct that is a fact only with the definitions `defs`
 // of its group (e.g. `geof:distance(?a, ?b) <= ?max` with `VALUES ?max {
 // 500 }`) is replaced by an equivalent FILTER without them.
-void rewriteFiltersWithFacts(std::vector<SparqlFilter>& filters,
+void rewriteFiltersWithFacts(qlm::vector<SparqlFilter>& filters,
                              const filterFacts::Definitions& defs);
 
 #endif  // QLEVER_SRC_ENGINE_QUERYREWRITEUTILS_H

@@ -22,6 +22,7 @@
 #include "backports/functional.h"
 #endif
 #include "engine/idTable/IdTable.h"
+#include "engine/idTable/splitLayout/IdRef.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/Generator.h"
 
@@ -90,7 +91,19 @@ CPP_template(typename T, typename Transformation = ql::identity)(
 auto resultGeneratorImpl(T&& vector, size_t numItems,
                          Transformation transformation = {}) {
   AD_CONTRACT_CHECK(numItems == vector.size());
-  return AD_FWD(vector) | ql::views::transform(std::move(transformation));
+  if constexpr (ad_utility::SimilarToAny<
+                    ql::ranges::range_reference_t<T>,
+                    columnBasedIdTable::splitLayout::ConstIdRef::Base,
+                    columnBasedIdTable::splitLayout::IdRef::Base>) {
+    // An element of a split column converts to both `ValueId` and
+    // `IdOrLocalVocabEntry`, which makes a call of a value getter ambiguous,
+    // so it is passed on as the `Id` it refers to.
+    return AD_FWD(vector) |
+           ql::views::transform([transformation = std::move(transformation)](
+                                    Id id) { return transformation(id); });
+  } else {
+    return AD_FWD(vector) | ql::views::transform(std::move(transformation));
+  }
 }
 
 #ifdef QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17
