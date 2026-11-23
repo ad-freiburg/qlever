@@ -54,7 +54,7 @@ UpdateMetadata ExecuteUpdate::executeUpdate(
 std::pair<std::vector<ExecuteUpdate::TransformedTriple>, LocalVocab>
 ExecuteUpdate::transformTriplesTemplate(
     const IndexImpl& index, const VariableToColumnMap& variableColumns,
-    const std::vector<SparqlTripleSimpleWithGraph>& triples) {
+    ql::span<const SparqlTripleSimpleWithGraph> triples) {
   const auto& encodedIriManager = index.encodedIriManager();
   // We collect all `TripleComponent`s from `triples` in a hash set.
   ad_utility::HashSet<TripleComponent> lookupItems;
@@ -113,7 +113,7 @@ ExecuteUpdate::transformTriplesTemplate(
   // NOTE: Not necessarily all of these will be added to the `LocalVocab` of
   // the `DeltaTriple`. For example, with `<a> <b> ?c` in an `INSERT` template,
   // `<a>` and `<b>` would not become part of it if `?c` has no solutions.
-  LocalVocab localVocab{};
+  LocalVocab localVocab{index.allocator()};
 
   // Lookup the `TripleComponent`s in sorted order.
   //
@@ -234,8 +234,8 @@ ExecuteUpdate::computeGraphUpdateQuads(
   tracer.beginTrace("computeIds");
 
   auto prepareTemplateAndResultContainer =
-      [&index, &variableColumns, &result](
-          const std::vector<SparqlTripleSimpleWithGraph>& tripleTemplates) {
+      [&index, &variableColumns,
+       &result](ql::span<const SparqlTripleSimpleWithGraph> tripleTemplates) {
         auto [transformedTripleTemplates, localVocab] =
             transformTriplesTemplate(index, variableColumns, tripleTemplates);
         std::vector<IdTriple<>> updateTriples;

@@ -11,12 +11,12 @@
 
 #include "BenchmarkMeasurementContainer.h"
 #include "BenchmarkMetadata.h"
-#include "util/ConfigManager/ConfigManager.h"
-#include "util/ConfigManager/ConfigOption.h"
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
 #include "util/StringUtils.h"
+#include "util/configManager/ConfigManager.h"
+#include "util/configManager/ConfigOption.h"
 
 namespace ad_benchmark {
 

@@ -12,11 +12,12 @@
 namespace ad_utility::detail::parallel_wkt_parser {
 
 // _____________________________________________________________________________
-WKTParser::WKTParser(sj::Sweeper* sweeper, size_t numThreads,
-                     bool usePrefiltering,
+WKTParser::WKTParser(sj::GeometryStore* store, sj::PreparedGeomMetaCb metaCb,
+                     size_t numThreads, bool usePrefiltering,
                      const std::optional<::util::geo::DBox>& prefilterLatLngBox,
                      const Index& index)
-    : sj::WKTParserBase<SpatialJoinParseJob>(sweeper, numThreads),
+    : sj::WKTParserBase<SpatialJoinParseJob>(store, std::move(metaCb),
+                                             numThreads),
       _numSkipped(numThreads),
       _numParsed(numThreads),
       _usePrefiltering(usePrefiltering),
@@ -46,6 +47,15 @@ WKTParser::~WKTParser() {
 }
 
 // _____________________________________________________________________________
+void WKTParser::throwIfWorkerFailed() {
+  // A worker thread sets `_cancelled` after storing its exception (the
+  // destructor also sets it, but cannot run concurrently with this function).
+  if (_cancelled) {
+    done();
+  }
+}
+
+// _____________________________________________________________________________
 size_t WKTParser::getPrefilterCounter() {
   return ::ranges::accumulate(_numSkipped, 0);
 }
@@ -61,65 +71,83 @@ void WKTParser::processQueue(size_t t) {
   size_t prefilterCounter = 0;
   size_t parseCounter = 0;
   while ((batch = _jobs.get()).size()) {
-    sj::WriteBatch w;
-    for (auto& job : batch) {
-      if (_cancelled) break;
-
-      auto dt = job.valueId.getDatatype();
-      if (dt == Datatype::VocabIndex) {
-        // If we have a prefilter box, check if we also have a precomputed
-        // bounding box for the geometry this `VocabIndex` is referring to.
-        if (_usePrefiltering &&
-            LibspatialjoinAlgorithm::prefilterGeoByBoundingBox(
-                _prefilterLatLngBox, _index, job.valueId.getVocabIndex(),
-                job.boundingBox)) {
-          prefilterCounter++;
-          continue;
+    // An exception on this worker thread (for example, if `_store` cannot
+    // open or write its file) is thrown by `done()` on the main thread instead
+    // of terminating the program (`throwIfWorkerFailed` throws it earlier). The
+    // remaining batches are still taken from the queue (so that
+    // `addValueIdToQueue` never blocks), but skipped.
+    try {
+      sj::WriteBatch w;
+      for (auto& job : batch) {
+        if (_cancelled) {
+          break;
         }
 
-        // If we have not filtered out this geometry, read and parse the full
-        // string. Invalid WKT (according to the strict parsing mode) is
-        // skipped, so it never matches (see GeoSPARQL 1.1, Section 10.9.1).
-        job.wkt = _index.indexToString(job.valueId.getVocabIndex());
-        parseWKTGeometry(job.wkt.c_str(), std::to_string(job.line), t, w,
-                         job.side, true);
-        parseCounter++;
-      } else if (dt == Datatype::GeoPoint) {
-        const auto& p = job.valueId.getGeoPoint();
-        const ::util::geo::DPoint utilPoint{p.getLng(), p.getLat()};
+        auto dt = job.valueId.getDatatype();
+        if (dt == Datatype::VocabIndex) {
+          // If we have a prefilter box, check if we also have a precomputed
+          // bounding box for the geometry this `VocabIndex` is referring to.
+          if (_usePrefiltering &&
+              LibspatialjoinAlgorithm::prefilterGeoByBoundingBox(
+                  _prefilterLatLngBox, _index, job.valueId.getVocabIndex(),
+                  job.boundingBox)) {
+            prefilterCounter++;
+            continue;
+          }
 
-        // If point is not contained in the prefilter box, we can skip it
-        // immediately instead of feeding it to the parser.
-        if (_prefilterLatLngBox.has_value() &&
-            !::util::geo::intersects(_prefilterLatLngBox.value(), utilPoint)) {
-          prefilterCounter++;
-          continue;
-        }
-        // parse point directly
-        auto mercPoint = latLngToWebMerc(utilPoint);
-
-        ::util::geo::I32Point addPoint{
-            static_cast<int32_t>(mercPoint.getX() * PREC),
-            static_cast<int32_t>(mercPoint.getY() * PREC)};
-        _bboxes[t] = ::util::geo::extendBox(
-            _sweeper->add(addPoint, std::to_string(job.line), job.side, w),
-            _bboxes[t]);
-        parseCounter++;
-      } else if (dt == Datatype::LocalVocabIndex) {
-        // `LocalVocabEntry` has to be parsed in any case: we have no
-        // information except the string.
-        // Invalid WKT is skipped as above.
-        const auto& literalOrIri = *job.valueId.getLocalVocabIndex();
-        if (literalOrIri.isLiteral()) {
-          job.wkt = literalOrIri.getLiteral().getContent();
+          // If we have not filtered out this geometry, read and parse the full
+          // string. Invalid WKT (according to the strict parsing mode) is
+          // skipped, so it never matches (see GeoSPARQL 1.1, Section 10.9.1).
+          job.wkt = _index.indexToString(job.valueId.getVocabIndex());
           parseWKTGeometry(job.wkt.c_str(), std::to_string(job.line), t, w,
-                           job.side, true);
+                           true);
           parseCounter++;
+        } else if (dt == Datatype::GeoPoint) {
+          const auto& p = job.valueId.getGeoPoint();
+          const ::util::geo::DPoint utilPoint{p.getLng(), p.getLat()};
+
+          // If point is not contained in the prefilter box, we can skip it
+          // immediately instead of feeding it to the parser.
+          if (_prefilterLatLngBox.has_value() &&
+              !::util::geo::intersects(_prefilterLatLngBox.value(),
+                                       utilPoint)) {
+            prefilterCounter++;
+            continue;
+          }
+          // parse point directly
+          auto mercPoint = latLngToWebMerc(utilPoint);
+
+          ::util::geo::I32Point addPoint{
+              static_cast<int32_t>(mercPoint.getX() * PREC),
+              static_cast<int32_t>(mercPoint.getY() * PREC)};
+          addBox(_store->add(addPoint, std::to_string(job.line), w), t);
+          parseCounter++;
+        } else if (dt == Datatype::LocalVocabIndex) {
+          // `LocalVocabEntry` has to be parsed in any case: we have no
+          // information except the string.
+          // Invalid WKT is skipped as above.
+          const auto& literalOrIri = *job.valueId.getLocalVocabIndex();
+          if (literalOrIri.isLiteral()) {
+            job.wkt = literalOrIri.getLiteral().getContent();
+            parseWKTGeometry(job.wkt.c_str(), std::to_string(job.line), t, w,
+                             true);
+            parseCounter++;
+          }
         }
       }
-    }
 
-    _sweeper->addBatch(w);
+      if (!_cancelled) {
+        _store->addBatch(w, t, _metaCb);
+      }
+    } catch (...) {
+      {
+        std::lock_guard lock{_workerExceptionMtx};
+        if (!_workerException) {
+          _workerException = std::current_exception();
+        }
+      }
+      _cancelled = true;
+    }
   }
 
   _numSkipped[t] = prefilterCounter;
@@ -127,9 +155,9 @@ void WKTParser::processQueue(size_t t) {
 }
 
 // _____________________________________________________________________________
-void WKTParser::addValueIdToQueue(ValueId valueId, size_t rowIndex, bool side,
+void WKTParser::addValueIdToQueue(ValueId valueId, size_t rowIndex,
                                   std::optional<BoundingBox> boundingBox) {
-  _curBatch.push_back({valueId, rowIndex, side, "", std::move(boundingBox)});
+  _curBatch.push_back({valueId, rowIndex, "", std::move(boundingBox)});
 
   if (_curBatch.size() >= WKT_PARSER_BATCH_SIZE) {
     _jobs.add(std::move(_curBatch));

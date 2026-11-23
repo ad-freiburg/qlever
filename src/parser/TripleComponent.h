@@ -16,7 +16,7 @@
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "global/SpecialIds.h"
-#include "parser/LiteralOrIri.h"
+#include "rdfTypes/LiteralOrIri.h"
 #include "rdfTypes/RdfEscaping.h"
 #include "rdfTypes/Variable.h"
 #include "util/Date.h"
@@ -89,6 +89,13 @@ class TripleComponent {
   TripleComponent(std::string_view sv) : _variant{std::string{sv}} {
     checkThatStringIsValid();
   }
+
+  // Construct from a `LiteralOrIri`, which becomes a `Literal` or an `Iri`.
+  explicit TripleComponent(
+      ad_utility::triple_component::LiteralOrIri literalOrIri)
+      : _variant{literalOrIri.isIri()
+                     ? Variant{std::move(literalOrIri.getIri())}
+                     : Variant{std::move(literalOrIri.getLiteral())}} {}
 
   /// Defaulted copy and move constructors.
   TripleComponent(const TripleComponent&) = default;

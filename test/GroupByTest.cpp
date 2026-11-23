@@ -9,20 +9,21 @@
 #include "./util/ColumnStrippingTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
+#include "./util/LocalVocabTestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
-#include "engine/ExistsJoin.h"
-#include "engine/GroupBy.h"
-#include "engine/GroupByImpl.h"
-#include "engine/IndexScan.h"
-#include "engine/Join.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
 #include "engine/QueryPlanner.h"
-#include "engine/Sort.h"
-#include "engine/StripColumns.h"
-#include "engine/Values.h"
 #include "engine/ValuesForTesting.h"
+#include "engine/operation/ExistsJoin.h"
+#include "engine/operation/GroupBy.h"
+#include "engine/operation/GroupByImpl.h"
+#include "engine/operation/IndexScan.h"
+#include "engine/operation/Join.h"
+#include "engine/operation/Sort.h"
+#include "engine/operation/StripColumns.h"
+#include "engine/operation/Values.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/BlankNodeExpression.h"
 #include "engine/sparqlExpressions/CountStarExpression.h"
@@ -42,6 +43,8 @@
 #include "util/IndexTestHelpers.h"
 #include "util/LocalVocabEntryTestHelpers.h"
 #include "util/OperationTestHelpers.h"
+
+using ad_utility::testing::makeLocalVocab;
 
 static constexpr auto executor = &ad_utility::testing::singleThreadExecutor;
 
@@ -456,7 +459,7 @@ TEST_F(GroupByOptimizations, countStarOptimizationWorksAsExpected) {
         qec,
         makeIdTableFromVector({{Id::makeUndefined()}, {1}, {2}, {2}, {4}, {8}}),
         std::vector<std::optional<Variable>>{Variable{"?a"}}, false,
-        std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt, true);
+        std::vector<ColumnIndex>{}, makeLocalVocab(), std::nullopt, true);
     GroupByImpl groupBy{
         qec,
         {},
@@ -533,9 +536,9 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
 
   std::vector<Variable> variablesXAndY{varX, varY};
 
-  std::vector<ColumnIndex> sortedColumns = {0};
+  auto sortedColumns = colIndices({0});
   Tree subtreeWithSort =
-      makeExecutionTree<Sort>(qec, validJoinWhenGroupingByX, sortedColumns);
+      ::makeExecutionTree<Sort>(qec, validJoinWhenGroupingByX, sortedColumns);
 
   SparqlExpressionPimpl avgXPimpl = makeAvgPimpl(varX);
   SparqlExpressionPimpl avgDistinctXPimpl = makeAvgPimpl(varX, true);
@@ -701,16 +704,12 @@ TEST_F(GroupByOptimizations, existsInGroupByAlias) {
 
   auto makeExistsArgument = [](const std::vector<Variable>& variables,
                                const std::vector<std::vector<int64_t>>& rows) {
-    ParsedQuery pq;
+    ParsedQuery pq{makeAllocator()};
     parsedQuery::Values valuesClause;
     valuesClause._inlineValues._variables = variables;
     for (const auto& row : rows) {
-      std::vector<TripleComponent> valueRow;
-      valueRow.reserve(row.size());
-      for (int64_t value : row) {
-        valueRow.emplace_back(value);
-      }
-      valuesClause._inlineValues._values.push_back(std::move(valueRow));
+      valuesClause._inlineValues._values.push_back(
+          ::ranges::to<std::vector<TripleComponent>>(row));
     }
     pq._rootGraphPattern._graphPatterns.emplace_back(std::move(valuesClause));
     for (const auto& variable : variables) {
@@ -1365,8 +1364,8 @@ TEST_F(GroupByOptimizations, hashMapOptimizationGroupConcatIndex) {
       SparqlTripleSimple{varX, iri("<label>"), varY});
 
   // Optimization will not be used if subtree is not sort
-  std::vector<ColumnIndex> sortedColumns = {0};
-  Tree subtreeWithSort = makeExecutionTree<Sort>(qec, xyScan, sortedColumns);
+  auto sortedColumns = colIndices({0});
+  Tree subtreeWithSort = ::makeExecutionTree<Sort>(qec, xyScan, sortedColumns);
 
   auto groupConcatExpression1 = makeGroupConcatPimpl(varY);
   auto aliasGC1 = Alias{groupConcatExpression1, varZ};
@@ -1456,8 +1455,8 @@ TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxIndex) {
       SparqlTripleSimple{varX, iri("<label>"), varY});
 
   // Optimization will not be used if subtree is not sort
-  std::vector<ColumnIndex> sortedColumns = {0};
-  Tree subtreeWithSort = makeExecutionTree<Sort>(qec, xyScan, sortedColumns);
+  auto sortedColumns = colIndices({0});
+  Tree subtreeWithSort = ::makeExecutionTree<Sort>(qec, xyScan, sortedColumns);
 
   auto minExpression = makeMinPimpl(varY);
   auto aliasMin = Alias{minExpression, varZ};
@@ -1500,8 +1499,8 @@ TEST_F(GroupByOptimizations, hashMapOptimizationNonTrivial) {
       qec, Permutation::Enum::PSO,
       SparqlTripleSimple{Variable{"?z"}, iri("<is>"), Variable{"?y"}});
   Tree join = makeExecutionTree<Join>(qec, zxScan, zyScan, 0, 0);
-  std::vector<ColumnIndex> sortedColumns = {1};
-  Tree sortedJoin = makeExecutionTree<Sort>(qec, join, sortedColumns);
+  auto sortedColumns = colIndices({1});
+  Tree sortedJoin = ::makeExecutionTree<Sort>(qec, join, sortedColumns);
 
   // (AVG(?y) as ?avg)
   Variable varAvg{"?avg"};
@@ -2478,8 +2477,8 @@ TEST(GroupBy, AddedHavingRows) {
       " VALUES (?x ?y) {(0 1) (0 3) (0 5) (1 4) (1 3) } }"
       "GROUP BY ?x HAVING (?count > 2)";
   auto qec = ad_utility::testing::getQec();
-  auto pq =
-      SparqlParser::parseQuery(&qec->getIndex().encodedIriManager(), query);
+  auto pq = SparqlParser::parseQuery(&qec->getIndex().encodedIriManager(),
+                                     makeAllocator(), query);
   QueryPlanner qp{qec, std::make_shared<ad_utility::CancellationHandle<>>()};
   auto tree = qp.createExecutionTree(pq);
 
@@ -2901,7 +2900,7 @@ TEST(GroupBy, localVocabIsProperlyCloned) {
   idTables.push_back(makeIdTableFromVector({{1}, {2}}, &Id::makeFromInt));
   idTables.push_back(makeIdTableFromVector({{2}}, &Id::makeFromInt));
   // This issue occurs only when the vocab contains any actual values.
-  LocalVocab dummy{};
+  LocalVocab dummy = makeLocalVocab();
   dummy.getIndexAndAddIfNotContained(localVocabEntryFromStringRepresentation(
       "\"dummy\"", qec->getLocalVocabContext()));
   auto subtree = makeExecutionTree<ValuesForTesting>(
@@ -3358,8 +3357,8 @@ TEST(GroupBy, RegexOnGroupedVariableHashMapOptimization) {
   auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{abc, I(1)}, {abc, I(2)}, {xyz, I(3)}}),
       std::vector<std::optional<Variable>>{o, y});
-  auto sorted = ad_utility::makeExecutionTree<Sort>(
-      qec, values, std::vector<ColumnIndex>{0});
+  auto sorted =
+      ad_utility::makeExecutionTree<Sort>(qec, values, colIndices({0}));
 
   auto count = std::make_unique<CountExpression>(
       false, std::make_unique<VariableExpression>(y));
@@ -3934,8 +3933,8 @@ TEST(GroupBy, HashMapOptimizationWithoutGroupByColumns) {
     qec->getQueryTreeCache().clearAll();
     auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, std::move(input), std::vector<std::optional<Variable>>{x});
-    auto sorted = ad_utility::makeExecutionTree<Sort>(
-        qec, std::move(values), std::vector<ColumnIndex>{0});
+    auto sorted = ad_utility::makeExecutionTree<Sort>(qec, std::move(values),
+                                                      colIndices({0}));
     GroupByImpl groupBy{
         qec,
         std::move(groupByVariables),
@@ -3981,7 +3980,8 @@ TEST(GroupBy, aggregateOfComputedEncodableIri) {
         setRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled_>(
             hashMapEnabled);
     qec->clearCacheUnpinnedOnly();
-    auto parsedQuery = SparqlParser::parseQuery(&encodedIriManager, query, {});
+    auto parsedQuery = SparqlParser::parseQuery(&encodedIriManager,
+                                                makeAllocator(), query, {});
     QueryPlanner qp{qec, std::make_shared<ad_utility::CancellationHandle<>>()};
     auto qet = qp.createExecutionTree(parsedQuery);
     auto result = qet->getResult();

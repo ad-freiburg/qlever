@@ -10,14 +10,14 @@
 #include "./util/IdTableHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "engine/ExportQueryExecutionTrees.h"
-#include "engine/IndexScan.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
-#include "engine/OrderBy.h"
 #include "engine/OrderByOnSortedNumericInput.h"
 #include "engine/QueryPlanner.h"
-#include "engine/StripColumns.h"
 #include "engine/ValuesForTesting.h"
+#include "engine/operation/IndexScan.h"
+#include "engine/operation/OrderBy.h"
+#include "engine/operation/StripColumns.h"
 #include "global/ValueIdComparators.h"
 #include "index/IdTableUtils.h"
 #include "index/LocalVocabEntry.h"
@@ -202,9 +202,10 @@ TEST(OrderBy, mixedDatatypes) {
   auto U = Id::makeUndefined();
   auto* qec = ad_utility::testing::getQec();
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  auto getLocalVocabId = ad_utility::testing::makeGetLocalVocabId();
   auto localIri = localVocabEntryFromStringRepresentation(
       "<a>", qec->getLocalVocabContext());
-  Id a = Id::makeFromLocalVocabIndex(&localIri);
+  Id a = getLocalVocabId(localIri);
 
   VectorTable input{{I(13)},
                     {getId("<y>")},
@@ -251,10 +252,11 @@ TEST(OrderBy, mixedDatatypes) {
 TEST(OrderBy, irisBeforeNumbers) {
   auto I = ad_utility::testing::IntId;
   const auto& context = ad_utility::testing::getQec()->getLocalVocabContext();
+  auto getLocalVocabId = ad_utility::testing::makeGetLocalVocabId();
   auto x1 = localVocabEntryFromStringRepresentation("<x:1>", context);
   auto x2 = localVocabEntryFromStringRepresentation("<x:2>", context);
-  Id iri1 = Id::makeFromLocalVocabIndex(&x1);
-  Id iri2 = Id::makeFromLocalVocabIndex(&x2);
+  Id iri1 = getLocalVocabId(x1);
+  Id iri2 = getLocalVocabId(x2);
   VectorTable input{{I(3)}, {iri1}, {I(4)}, {iri2}};
   VectorTable expected{{iri1}, {iri2}, {I(3)}, {I(4)}};
   testOrderBy(makeIdTableFromVector(input), makeIdTableFromVector(expected),

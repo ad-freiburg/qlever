@@ -1,5 +1,7 @@
 addLinkAndDiscoverTest(IdColumnTest engine testUtil)
 
+addLinkAndDiscoverTest(IdColumnSerializationTest engine testUtil)
+
 addLinkAndDiscoverTest(IdColumnIteratorTest engine testUtil)
 
 addLinkAndDiscoverTest(IdRefTest engine testUtil)
@@ -7,3 +9,5 @@ addLinkAndDiscoverTest(IdRefTest engine testUtil)
 addLinkAndDiscoverTest(IdColumnVectorTest engine testUtil)
 
 addLinkAndDiscoverTest(SplitLayoutIdBitRepresentationTest engine testUtil)
+
+addLinkAndDiscoverTest(SplitLayoutIdTest engine testUtil)

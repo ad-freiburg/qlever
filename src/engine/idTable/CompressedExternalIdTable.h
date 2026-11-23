@@ -29,14 +29,12 @@
 #include "engine/idTable/IdTable.h"
 #include "util/AsyncStream.h"
 #include "util/CancellationHandle.h"
-#include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/ExceptionHandling.h"
 #include "util/File.h"
 #include "util/GlobalExecutor.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
 #include "util/Log.h"
-#include "util/MemorySize/MemorySize.h"
 #include "util/NoCopyNoMove.h"
 #include "util/ParallelExecutor.h"
 #include "util/Synchronized.h"
@@ -44,6 +42,8 @@
 #include "util/UniqueCleanup.h"
 #include "util/Views.h"
 #include "util/blockSort/BlockIndirectSort.h"
+#include "util/compressionUsingZstd/ZstdContext.h"
+#include "util/memorySize/MemorySize.h"
 #include "util/parallelBlockMerge/ParallelBlockMerge.h"
 #include "util/views/ChunkedIotaView.h"
 
@@ -91,6 +91,9 @@ class CompressedExternalIdTableWriter {
   std::atomic<off_t> nextOffset_{0};
   ad_utility::Synchronized<ad_utility::File, std::shared_mutex> file_{filename_,
                                                                       "w+"};
+  // The ZSTD context and compression buffer of each thread that compresses or
+  // decompresses blocks.
+  ad_utility::ThreadLocalZstdContext zstdContext_;
   // For a single column, the concatenation of the blocks for that column of all
   // `IdTables`.
   using ColumnMetadata = std::vector<CompressedBlockMetadata>;
@@ -242,8 +245,9 @@ class CompressedExternalIdTableWriter {
     AD_CORRECTNESS_CHECK(lower < upper);
     auto uncompressedSize = (upper - lower) * BYTES_PER_ID_COLUMN_ENTRY;
     auto compressed = idColumnByteIO::encode(
-        column.subspan(lower, upper - lower),
-        [](const auto& chunks) { return ZstdWrapper::compressChunks(chunks); });
+        column.subspan(lower, upper - lower), [this](const auto& chunks) {
+          return zstdContext_.compressChunks(chunks);
+        });
     auto offset = nextOffset_.fetch_add(static_cast<off_t>(compressed.size()));
     // NOTE: This throws if not all the bytes could be written.
     file_.rlock()->write(compressed.data(), compressed.size(), offset);
@@ -259,12 +263,10 @@ class CompressedExternalIdTableWriter {
   template <size_t N = 0>
   std::vector<InputRangeTypeErased<IdTableStatic<N>>> getAllGenerators() {
     file_.wlock()->flush();
-    std::vector<InputRangeTypeErased<IdTableStatic<N>>> result;
-    result.reserve(startOfSingleIdTables_.size());
-    for (auto i : ql::views::iota(0u, startOfSingleIdTables_.size())) {
-      result.push_back(makeGeneratorForIdTable<N>(i));
-    }
-    return result;
+    return ad_utility::integerRange(startOfSingleIdTables_.size()) |
+           ql::views::transform(
+               [this](size_t i) { return makeGeneratorForIdTable<N>(i); }) |
+           ::ranges::to_vector;
   }
 
   // The number of `IdTable`s (= presorted runs) that have been written.
@@ -402,8 +404,8 @@ class CompressedExternalIdTableWriter {
     AD_CORRECTNESS_CHECK(numBytesRead >= 0 &&
                          static_cast<size_t>(numBytesRead) ==
                              metaData.compressedSize_);
-    idColumnByteIO::decode(col, [&compressed](const auto& buffers) {
-      ZstdWrapper::decompressChunks(compressed, buffers);
+    idColumnByteIO::decode(col, [this, &compressed](const auto& buffers) {
+      zstdContext_.decompressChunks(compressed, buffers);
     });
   }
 
@@ -593,8 +595,7 @@ static_assert(parallelBlockMerge::InputConcept<CompressedIdTableRunsInput<3>>);
 // A callback that pushes complete blocks (instead of single rows) into a
 // `CompressedExternalIdTableBase` (see `makePushBlockCallback` below). This is
 // a named type and not a lambda, such that callers that accept both per-row
-// and per-block callbacks can tell the two apart (see e.g. `liftCallback` in
-// `IndexImpl.cpp`).
+// and per-block callbacks can tell the two apart.
 template <typename Table>
 struct PushBlockCallback {
   Table* table_;
@@ -1339,6 +1340,31 @@ class CompressedExternalIdTableSorter
                       CompletionToken&& completionToken) {
     return this->asyncPusher_->asyncPushBlock(std::move(table),
                                               AD_FWD(completionToken));
+  }
+
+  // Return a callback that takes a `std::shared_ptr` to a complete block (an
+  // `IdTable`) and a `done` callback, pushes the rows of the block via
+  // `asyncPushBlock`, and then invokes `done` (as an rvalue) with the
+  // `std::exception_ptr` of the push (or `nullptr`). The block is kept alive
+  // until the push has completed. As for `asyncPushBlock`, the callback may be
+  // invoked concurrently for several blocks (it is for example used as a
+  // `chunkwisePermutationWriter::ConcurrentBlockCallback`).
+  auto makeAsyncPushBlockCallback() {
+    // NOTE: `self = this` instead of `this` circumvents a false-positive
+    // `-Wunused-lambda-capture` warning of Clang for generic lambdas.
+    return [self = this](auto block, auto done) {
+      // The view (and the rows that it refers to) has to stay alive until the
+      // push has completed, which the aliasing `shared_ptr` guarantees.
+      using Holder = std::pair<decltype(block), IdTableView<0>>;
+      auto holder =
+          std::make_shared<Holder>(block, block->template asStaticView<0>());
+      auto* viewPtr = &holder->second;
+      std::shared_ptr<const IdTableView<0>> view{std::move(holder), viewPtr};
+      self->asyncPushBlock(std::move(view), [done = std::move(done)](
+                                                std::exception_ptr e) mutable {
+        std::move(done)(std::move(e));
+      });
+    };
   }
 
   // Set how the merge phase stores the output blocks that it spills (see

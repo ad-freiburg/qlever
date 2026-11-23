@@ -37,6 +37,16 @@ enum class CRSType : uint8_t;
 
 namespace ad_utility {
 
+// The values `util::geo::CRSType::UNSUPPORTED` and `util::geo::CRSType::CRS84`
+// (the default CRS), which this header cannot name (the enum is only
+// forward-declared). Used by the `CRSTypeValueGetter` in
+// `SparqlExpressionValueGetters.h` and by `WktCentroid` in
+// `GeoSparqlHelpers.h`, checked against the enum in `GeometryInfo.cpp`.
+constexpr inline ::util::geo::CRSType crsTypeUnsupported{0};
+constexpr inline ::util::geo::CRSType crsTypeCrs84{1};
+
+struct SourceCrsType;
+
 // These encapsulating structs are required for the `RequestedInfo` templates
 // used in the `GeometryInfo` class and the `GeometryInfoValueGetter`.
 
@@ -50,6 +60,10 @@ struct Centroid {
   Centroid(double lat, double lng) : centroid_{lat, lng} {}
 
   GeoPoint centroid() const { return centroid_; }
+
+  // Return a `POINT` WKT literal without quotes or datatype representing this
+  // centroid, projected to `crs` (with the IRI of `crs` unless it is CRS84).
+  std::string asWkt(SourceCrsType crs) const;
 };
 
 // Represents the source CRS type (before parsing/projecting), for the meaning
@@ -99,8 +113,10 @@ struct BoundingBox {
   }
 
   // Return a `POLYGON` WKT literal without quotes or datatype representing this
-  // bounding box.
+  // bounding box, in CRS84 or projected to `crs` (with the IRI of `crs` unless
+  // it is CRS84).
   std::string asWkt() const;
+  std::string asWkt(SourceCrsType crs) const;
 
   // Project the bounding coordinates to `projCrs` and extract the minimum or
   // maximum coordinates. As `GeometryInfoHelpersImpl.h` is not included here,
@@ -132,6 +148,32 @@ struct GeometryType {
   std::optional<std::string_view> asIri() const;
 
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL_CONSTEXPR(GeometryType, type_)
+};
+
+// Represents the source CRS type (before parsing/projecting), for the meaning
+// see `libspatialjoin`'s `CRSType`.
+struct SourceCrsType {
+ private:
+  // The default (for the C++17 default constructor) is CRS84, the value of
+  // `util::geo::CRSType::CRS84` (the util is not included in this header).
+  uint16_t type_ = 1;
+
+ public:
+  explicit SourceCrsType(uint16_t type);
+  explicit SourceCrsType(::util::geo::CRSType type);
+#ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  // Required for `bit_cast`.
+  SourceCrsType() = default;
+#endif
+
+  uint16_t type() const { return type_; }
+
+  // Returns the representing IRI.
+  std::optional<std::string_view> asIri() const;
+  // Convert a CRS IRI string to CRS type.
+  static ::util::geo::CRSType iriToCrsType(std::string_view uri);
+
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL_CONSTEXPR(SourceCrsType, type_)
 };
 
 // Represents the number of child geometries inside a collection geometry type.
@@ -294,6 +336,17 @@ class GeometryInfo {
   // cannot be all-zero. This is currently used by the disk serialization of
   // `GeoVocabulary` to represent invalid literals.
   EncodedBoundingBox boundingBox_;
+  // The centroid is computed in the source CRS of the literal (see
+  // `sourceCrs_`), then projected to CRS84 and stored in CRS84.
+  //
+  // NOTE 1: Projecting the geometry to CRS84 first and computing the centroid
+  // there would give a different result, e.g. for Web Mercator, because its y
+  // axis is not linear in the latitude.
+  //
+  // NOTE 2: Records written before this rule (indices built between #3583 and
+  // #3787) hold the centroid computed in CRS84, which `geof:centroid` returns
+  // projected to the source CRS. Rebuild such an index if it has Web Mercator
+  // literals (for WGS84 both centroids are the same).
   uint64_t geometryTypeAndCentroid_;
   uint32_t numGeometries_;
   // The CRS named by the IRI of the literal (before the projection to CRS84),

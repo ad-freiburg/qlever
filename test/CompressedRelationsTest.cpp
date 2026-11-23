@@ -16,6 +16,8 @@
 
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
+#include "./util/LocalVocabTestHelpers.h"
+#include "./util/PermutationPairTestHelpers.h"
 #include "global/Constants.h"
 #include "index/CompressedRelationReader.h"
 #include "index/DistinctCol0Ids.h"
@@ -29,8 +31,10 @@
 #include "util/LocalVocabEntryTestHelpers.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/RuntimeParametersTestHelpers.h"
-#include "util/Serializer/ByteBufferSerializer.h"
 #include "util/SourceLocation.h"
+#include "util/serializer/ByteBufferSerializer.h"
+
+using ad_utility::testing::makeLocalVocab;
 
 // Multi-threaded, to exercise the concurrency of the tested code.
 static constexpr auto executor = &ad_utility::testing::multiThreadExecutor;
@@ -41,19 +45,15 @@ using ad_utility::source_location;
 
 const LocatedTriplesPerBlock emptyLocatedTriples{};
 
-// Return an `ID` of type `VocabIndex` from `index`. Assert that `index`
-// is `>= 0`.
-Id V(int64_t index) {
-  AD_CONTRACT_CHECK(index >= 0);
-  return Id::makeFromVocabIndex(VocabIndex::make(index));
-}
+using permutationPairTestHelpers::scanRelation;
+using permutationPairTestHelpers::V;
 
 auto I = &Id::makeFromInt;
 
 // Compute the distinct graph IDs contained in the SPO permutation of `index`,
 // mirroring the access pattern used by `DistinctGraphs::computeResult()`
-// (`src/engine/DistinctGraphs.cpp`), but starting from a plain `Index` instead
-// of an `Operation`.
+// (`src/engine/operation/DistinctGraphs.cpp`), but starting from a plain
+// `Index` instead of an `Operation`.
 ad_utility::HashSetWithMemoryLimit<Id::T> computeUniqueGraphIdsForIndex(
     const Index& index,
     ad_utility::SharedCancellationHandle cancellationHandle =
@@ -422,6 +422,37 @@ void testCompressedRelations(const Inputs& inputsOriginalBeforeCopy,
                     cancellationHandle, locatedTriples, executor());
     const auto& col1And2 = inputs[i].col1And2_;
     checkThatTablesAreEqual(col1And2, table);
+
+    // A scan with a `columnSubset` (no columns, a single column, all but the
+    // first column) yields the subset of the full result, both materialized
+    // and lazily.
+    std::vector<std::vector<ColumnIndex>> subsets{{}};
+    for (ColumnIndex col = 0; col < table.numColumns(); ++col) {
+      subsets.push_back({col});
+    }
+    if (table.numColumns() > 2) {
+      subsets.push_back(::ranges::to<std::vector>(
+          ql::views::iota(ColumnIndex{1}, table.numColumns())));
+    }
+    for (const auto& subset : subsets) {
+      IdTable expected = table.clone();
+      expected.setColumnSubset(subset);
+      EXPECT_THAT(reader.scan(ScanSpecAndBlocks{scanSpec, blocks},
+                              additionalColumns, cancellationHandle,
+                              locatedTriples, executor(), {}, subset),
+                  matchesIdTable(expected));
+      IdTable lazyResult{subset.size(), ad_utility::testing::makeAllocator()};
+      for (const auto& block : reader.lazyScan(
+               scanSpec,
+               CompressedRelationReader::convertBlockMetadataRangesToVector(
+                   CompressedRelationReader::getRelevantBlocks(scanSpec,
+                                                               blocks)),
+               additionalColumns, cancellationHandle, locatedTriples,
+               executor(), {}, subset)) {
+        lazyResult.insertAtEnd(block);
+      }
+      EXPECT_THAT(lazyResult, matchesIdTable(expected));
+    }
     table.clear();
     // Check that the scans also work with various values for LIMIT and OFFSET.
     std::vector<LimitOffsetClause> limitOffsetClauses{
@@ -831,7 +862,7 @@ TEST(CompressedRelationReader, getBlocksForJoinWithColumn) {
                        {{V(42), V(3), V(0), g}, {V(42), V(6), V(9), g}}});
 
   auto test = [&metadataAndBlocks](
-                  const std::vector<Id>& joinColumn,
+                  const IdColumn& joinColumn,
                   const std::vector<CompressedBlockMetadata>& expectedBlocks,
                   size_t numHandledBlocksExpected,
                   source_location l = AD_CURRENT_SOURCE_LOC()) {
@@ -869,10 +900,11 @@ TEST(CompressedRelationReader, getBlocksForJoinWithColumn) {
   // skips the entries smaller than the next block then has many entries to
   // search, and the result must be the same as for the short columns above.
   auto longColumn = [](const std::vector<int64_t>& excluded) {
-    std::vector<Id> column;
+    IdColumn column;
     for (int64_t i = 0; i < 100; ++i) {
       if (!ad_utility::contains(excluded, i)) {
-        column.insert(column.end(), {V(i), V(i)});
+        column.push_back(V(i));
+        column.push_back(V(i));
       }
     }
     return column;
@@ -1232,7 +1264,7 @@ TEST(CompressedRelationReader, getDistinctCol0IdsWithGraphFilter) {
       [&blocks](ScanSpecification::GraphFilter filter) {
         return CompressedRelationReader::ScanSpecAndBlocks{
             ScanSpecification{std::nullopt, std::nullopt, std::nullopt,
-                              LocalVocab{}, std::move(filter)},
+                              makeLocalVocab(), std::move(filter)},
             getBlockMetadataRangesfromVec(blocks)};
       };
 
@@ -1300,7 +1332,7 @@ TEST(CompressedRelationReader, getDistinctCol0IdsWithUnknownGraphsInBlock) {
       [&blocks](ScanSpecification::GraphFilter filter) {
         return CompressedRelationReader::ScanSpecAndBlocks{
             ScanSpecification{std::nullopt, std::nullopt, std::nullopt,
-                              LocalVocab{}, std::move(filter)},
+                              makeLocalVocab(), std::move(filter)},
             getBlockMetadataRangesfromVec(blocks)};
       };
 
@@ -1360,7 +1392,7 @@ TEST(CompressedRelationReader, getDistinctCol0IdsWithSeveralGraphsInBlock) {
       [&blocks](ScanSpecification::GraphFilter filter) {
         return CompressedRelationReader::ScanSpecAndBlocks{
             ScanSpecification{std::nullopt, std::nullopt, std::nullopt,
-                              LocalVocab{}, std::move(filter)},
+                              makeLocalVocab(), std::move(filter)},
             getBlockMetadataRangesfromVec(blocks)};
       };
 
@@ -1436,7 +1468,7 @@ TEST(CompressedRelationReader, getDistinctCol0IdsWithDeltaTriples) {
                               ScanSpecification::GraphFilter::All()) {
     CompressedRelationReader::ScanSpecAndBlocks scanSpecAndBlocks{
         ScanSpecification{std::nullopt, std::nullopt, std::nullopt,
-                          LocalVocab{}, std::move(graphFilter)},
+                          makeLocalVocab(), std::move(graphFilter)},
         getBlockMetadataRangesfromVec(locatedTriples.getAugmentedMetadata())};
     return getDistinctCol0Ids(*reader, scanSpecAndBlocks, addGraphColumn,
                               std::nullopt, locatedTriples);
@@ -1838,7 +1870,8 @@ TEST(CompressedRelationReader, ensureDummyBlockWith6ColumnsDoesntCauseIssues) {
       [cancellationHandle, &index](DeltaTriples& deltaTriples) {
         LocalVocabEntry entry = ad_utility::testing::iriLocalVocabEntry(
             "<zzz>", index.getLocalVocabContext());
-        Id id = Id::makeFromLocalVocabIndex(&entry);
+        auto getLocalVocabId = ad_utility::testing::makeGetLocalVocabId();
+        Id id = getLocalVocabId(entry);
         // Insert a single triple at the end.
         deltaTriples.insertTriples(cancellationHandle,
                                    {IdTriple{{id, id, id, id}}});
@@ -2197,6 +2230,26 @@ TEST(CompressedRelationWriter, scanWithGraphs) {
                          {{3, 4}, {7, 4}, {8, 4}, {8, 5}, {9, 4}, {9, 5}}))
         << "Failed with rowsPerBlock " << rowsPerBlock;
 
+    // With a `columnSubset`, the deduplication still considers all columns.
+    res = reader->scan(
+        ScanSpecAndBlocks{spec, getBlockMetadataRangesfromVec(blocks)}, {},
+        handle, emptyLocatedTriples, executor(), {},
+        std::vector<ColumnIndex>{1});
+    EXPECT_THAT(res, matchesIdTableFromVector({{4}, {4}, {4}, {5}, {4}, {5}}))
+        << "Failed with rowsPerBlock " << rowsPerBlock;
+
+    // A `columnSubset` that is not strictly increasing or contains an index
+    // that is not a result column is rejected.
+    for (std::vector<ColumnIndex> subset :
+         {std::vector<ColumnIndex>{1, 0}, std::vector<ColumnIndex>{1, 1},
+          std::vector<ColumnIndex>{2}}) {
+      AD_EXPECT_THROW_WITH_MESSAGE(
+          reader->scan(
+              ScanSpecAndBlocks{spec, getBlockMetadataRangesfromVec(blocks)},
+              {}, handle, emptyLocatedTriples, executor(), {}, subset),
+          ::testing::HasSubstr("strictly increasing"));
+    }
+
     // std::nullopt matches all graphs, but the default graph ('0' in this test)
     // should be filtered out.
     spec = ScanSpecification{
@@ -2206,6 +2259,15 @@ TEST(CompressedRelationWriter, scanWithGraphs) {
         additionalColumns, handle, emptyLocatedTriples, executor());
     EXPECT_THAT(res, matchesIdTableFromVector(
                          {{3, 4, 1}, {8, 5, 1}, {9, 4, 1}, {9, 5, 1}}))
+        << "Failed with rowsPerBlock " << rowsPerBlock;
+
+    // With a `columnSubset` that drops the graph column, the graph filter is
+    // still applied.
+    res = reader->scan(
+        ScanSpecAndBlocks{spec, getBlockMetadataRangesfromVec(blocks)},
+        additionalColumns, handle, emptyLocatedTriples, executor(), {},
+        std::vector<ColumnIndex>{0});
+    EXPECT_THAT(res, matchesIdTableFromVector({{3}, {8}, {9}, {9}}))
         << "Failed with rowsPerBlock " << rowsPerBlock;
   }
 }
@@ -2431,22 +2493,9 @@ PermutationBuildResult buildPermutation(std::vector<RelationInput> inputs,
   result.blocks_ = std::move(permutationResult.blockMetadata_);
 
   // Scan each of the relations completely.
-  CompressedRelationReader reader{ad_utility::makeUnlimitedAllocator<Id>(),
-                                  ad_utility::File{filename, "r"}};
-  BlockMetadataSpan blockSpan{result.blocks_};
-  BlockMetadataRanges blockRanges{{blockSpan.begin(), blockSpan.end()}};
-  std::vector<ColumnIndex> additionalColumns;
-  for (size_t i = 3; i < numColumns; ++i) {
-    additionalColumns.push_back(i);
-  }
-  auto cancellationHandle =
-      std::make_shared<ad_utility::CancellationHandle<>>();
   for (const auto& input : inputs) {
-    ScanSpecification scanSpec{V(input.col0_), std::nullopt, std::nullopt};
-    result.scanResults_.push_back(reader.scan(
-        CompressedRelationReader::ScanSpecAndBlocks{scanSpec, blockRanges},
-        additionalColumns, cancellationHandle, emptyLocatedTriples,
-        executor()));
+    result.scanResults_.push_back(
+        scanRelation(filename, result.blocks_, V(input.col0_), numColumns));
   }
   return result;
 }
@@ -2760,9 +2809,7 @@ TEST(CompressedRelationWriter, distinctCol1CountAcrossBlockBoundaries) {
 // _____________________________________________________________________________
 TEST(CountDistinctIds, countAndBoundaryIds) {
   using compressedRelationHelpers::countDistinctIds;
-  auto count = [](const std::vector<Id>& ids) {
-    return countDistinctIds(ql::span<const Id>{ids});
-  };
+  auto count = [](const IdColumn& ids) { return countDistinctIds(ids); };
 
   {
     auto result = count({V(1)});
@@ -2788,9 +2835,7 @@ TEST(CountDistinctIds, countAndBoundaryIds) {
 // _____________________________________________________________________________
 TEST(DistinctIdCounter, blocksAndReset) {
   compressedRelationHelpers::DistinctIdCounter counter;
-  auto addBlock = [&counter](const std::vector<Id>& ids) {
-    counter.addBlock(ql::span<const Id>{ids});
-  };
+  auto addBlock = [&counter](const IdColumn& ids) { counter.addBlock(ids); };
   // A fresh counter has counted nothing.
   EXPECT_EQ(counter.getAndReset(), 0);
 
@@ -2848,16 +2893,7 @@ IdTable makeBlockOfLargeRelation(int col0, size_t numRows, size_t runBegin,
 IdTable scanLargeRelation(const std::string& filename,
                           const std::vector<CompressedBlockMetadata>& blocks,
                           Id col0Id) {
-  CompressedRelationReader reader{ad_utility::makeUnlimitedAllocator<Id>(),
-                                  ad_utility::File{filename, "r"}};
-  BlockMetadataSpan blockSpan{blocks};
-  BlockMetadataRanges blockRanges{{blockSpan.begin(), blockSpan.end()}};
-  ScanSpecification scanSpec{col0Id, std::nullopt, std::nullopt};
-  std::vector<ColumnIndex> additionalColumns{ADDITIONAL_COLUMN_GRAPH_ID};
-  return reader.scan(
-      CompressedRelationReader::ScanSpecAndBlocks{scanSpec, blockRanges},
-      additionalColumns, std::make_shared<ad_utility::CancellationHandle<>>(),
-      emptyLocatedTriples, executor());
+  return scanRelation(filename, blocks, col0Id, 4);
 }
 }  // namespace
 

@@ -5,11 +5,11 @@
 #include <gmock/gmock.h>
 
 #include "./PrefilterExpressionTestHelpers.h"
-#include "engine/ExistsJoin.h"
-#include "engine/Filter.h"
-#include "engine/IndexScan.h"
-#include "engine/StripColumns.h"
 #include "engine/ValuesForTesting.h"
+#include "engine/operation/ExistsJoin.h"
+#include "engine/operation/Filter.h"
+#include "engine/operation/IndexScan.h"
+#include "engine/operation/StripColumns.h"
 #include "engine/sparqlExpressions/BlankNodeExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
@@ -21,6 +21,7 @@
 #include "util/OperationTestHelpers.h"
 #include "util/RuntimeParametersTestHelpers.h"
 
+using ad_utility::testing::colIndices;
 using ::testing::ElementsAre;
 using ::testing::Eq;
 using V = Variable;
@@ -147,8 +148,14 @@ TEST(Filter, verifyPredicateIsAppliedCorrectlyOnNonLazyEvaluation) {
                                            {true}},
                                           asBool);
 
-  ValuesForTesting values{qec, std::move(idTable), {Variable{"?x"}}, false,
-                          {},  LocalVocab{},       std::nullopt,     true};
+  ValuesForTesting values{qec,
+                          std::move(idTable),
+                          {Variable{"?x"}},
+                          false,
+                          colIndices({}),
+                          ad_utility::testing::makeLocalVocab(),
+                          std::nullopt,
+                          true};
   QueryExecutionTree subTree{
       qec, std::make_shared<ValuesForTesting>(std::move(values))};
   Filter filter{

@@ -6,7 +6,6 @@
 #define QLEVER_SRC_ENGINE_SPARQLEXPRESSIONS_RELATIONALEXPRESSIONS_H
 
 #include "engine/sparqlExpressions/NaryExpression.h"
-#include "engine/sparqlExpressions/QueryRewriteExpressionHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "global/ValueIdComparators.h"
 
@@ -128,18 +127,6 @@ using InExpression = relational::InExpression;
 // otherwise.
 std::optional<valueIdComparators::Comparison> getComparison(
     const SparqlExpression& expression);
-
-// This function is a helper for the query planner. It allows unpacking a
-// `SparqlExpression` of any of these forms
-// * `geof:distance(?variable1, ?variable2) <= constant`
-// * `geof:distance(?variable1, ?variable2, unit-constant) <= constant`
-// * `geof:metricDistance(?variable1, ?variable2) <= constant`
-// for rewriting filters to spatial joins. Each form may also use `<` instead
-// of `<=`. The returned maximum distance (in meters) is then the largest
-// `double` below the constant, because a spatial join includes the maximum
-// distance. A filter with a negative maximum distance is not rewritten.
-std::optional<std::pair<sparqlExpression::GeoFunctionCall, double>>
-getGeoDistanceFilter(const SparqlExpression& expr);
 
 }  // namespace sparqlExpression
 
