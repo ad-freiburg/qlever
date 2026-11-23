@@ -439,13 +439,15 @@ TEST(TripleComponent, toIdOrLocalVocabEntry) {
       LiteralOrIri{Literal::literalWithoutQuotes("<http://example.org/69>")});
 }
 
-// _____________________________________________________________________________
+// Test the construction, access, copy, move, equality, hashing and string
+// output of a `TripleComponent` that holds a nested triple term.
 TEST(TripleComponent, recursiveTripleTerm) {
   auto makeTerm = [](int64_t value) -> TripleComponent {
     return TripleComponent::TripleTerm{
         iri("<s>"), iri("<p>"),
         TripleComponent::TripleTerm{iri("<inner>"), iri("<q>"), value}};
   };
+  // The components of the nested term are accessible.
   auto term = makeTerm(42);
   ASSERT_TRUE(term.isTripleTerm());
   const auto& outer = term.getTripleTerm();
@@ -453,6 +455,9 @@ TEST(TripleComponent, recursiveTripleTerm) {
   EXPECT_EQ(outer.predicate(), iri("<p>"));
   ASSERT_TRUE(outer.object().isTripleTerm());
   EXPECT_EQ(outer.object().getTripleTerm().object(), int64_t{42});
+
+  // Copies and moves keep the contents, equality and hashing compare the
+  // contents and not the allocation.
   auto copy = term;
   auto moved = std::move(term);
   term = false;
@@ -462,10 +467,15 @@ TEST(TripleComponent, recursiveTripleTerm) {
   EXPECT_NE(copy, makeTerm(43));
   EXPECT_EQ(absl::Hash<TripleComponent>{}(copy),
             absl::Hash<TripleComponent>{}(independentlyAllocated));
+
+  // Overwriting one holder leaves the other intact, the string output is the
+  // Turtle syntax, and a triple term is not a number.
   copy = true;
   EXPECT_EQ(moved, independentlyAllocated);
   EXPECT_EQ(moved.toString(), "<<( <s> <p> <<( <inner> <q> 42 )>> )>>");
   EXPECT_FALSE(moved.getNumber().has_value());
+
+  // Assignment of a `TripleComponent` that holds a triple term.
   TripleComponent assigned;
   assigned = moved;
   EXPECT_EQ(assigned, moved);
@@ -473,11 +483,13 @@ TEST(TripleComponent, recursiveTripleTerm) {
   EXPECT_EQ(assigned, makeTerm(43));
 }
 
-// _____________________________________________________________________________
+// Test that moved-from `ParsedTripleTerm`s compare equal to each other and
+// unequal to valid terms, and that they can be assigned again.
 TEST(TripleComponent, tripleTermEqualityAfterMove) {
   using Term = TripleComponent::TripleTerm;
   Term first{iri("<s>"), iri("<p>"), iri("<o>")};
   Term second{iri("<s>"), iri("<p>"), iri("<o>")};
+  // Two moved-from terms are equal, a moved-from and a valid term are not.
   auto valid = std::move(first);
   auto otherValid = std::move(second);
   EXPECT_EQ(first, second);
@@ -486,6 +498,7 @@ TEST(TripleComponent, tripleTermEqualityAfterMove) {
   EXPECT_NE(second, otherValid);
   EXPECT_EQ(valid, otherValid);
 
+  // A moved-from term can be assigned again, and moving from it again works.
   first = valid;
   EXPECT_EQ(first, valid);
   EXPECT_NE(first, second);
@@ -494,7 +507,8 @@ TEST(TripleComponent, tripleTermEqualityAfterMove) {
   EXPECT_NE(first, second);
 }
 
-// _____________________________________________________________________________
+// Test that every conversion of a triple term to an `Id` or to RDF output
+// throws.
 TEST(TripleComponent, tripleTermConversionsAreUnsupported) {
   TripleComponent term =
       TripleComponent::TripleTerm{iri("<s>"), iri("<p>"), lit("object")};

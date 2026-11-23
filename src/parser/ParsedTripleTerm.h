@@ -33,8 +33,8 @@ class ParsedTripleTerm {
  public:
   ParsedTripleTerm(TripleComponent subject, TripleComponent predicate,
                    TripleComponent object);
-  // Access requires a non-moved-from term. Copies share immutable contents;
-  // moves transfer ownership, and a moved-from term can be assigned again.
+  // The accessors require a term that was not moved from (a moved-from term
+  // can be assigned again).
   const TripleComponent& subject() const;
   const TripleComponent& predicate() const;
   const TripleComponent& object() const;

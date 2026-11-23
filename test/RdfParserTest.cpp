@@ -2914,7 +2914,9 @@ TEST(RdfParserTest, findEndOfLastStatementIgnoresComments) {
   expectIsCompleteStatement("<s> <p> 'unclosed .\n");
 }
 
-// _____________________________________________________________________________
+// Test that all four parsers turn a nested triple term with blank nodes and
+// literals into nested `ParsedTripleTerm`s and do not assert the embedded
+// triples.
 TEST(RdfParserTest, recursiveTripleTermContents) {
   auto run = [](auto parser,
                 ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
@@ -2941,7 +2943,8 @@ TEST(RdfParserTest, recursiveTripleTermContents) {
   run(NQuadCtreParser{encodedIriManager()});
 }
 
-// _____________________________________________________________________________
+// Test the Turtle-only syntax inside a triple term (`[]`, `a`, prefixed and
+// relative IRIs, numeric and boolean literals, object lists).
 TEST(RdfParserTest, turtleTripleTermContents) {
   auto run = [](auto parser,
                 ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
@@ -2977,18 +2980,22 @@ TEST(RdfParserTest, turtleTripleTermContents) {
   run(CtreParser{encodedIriManager()});
 }
 
-// _____________________________________________________________________________
+// Test that the `predicate` rule sets the active predicate, fails on a
+// non-IRI, and rejects a triple term.
 TEST(RdfParserTest, predicate) {
   auto run = [](auto parser) {
+    // An IRI is a predicate and becomes the active predicate.
     parser.setInputStream("<p>");
     ASSERT_TRUE(parser.predicate());
     EXPECT_EQ(parser.activePredicate_, iri("<p>"));
     EXPECT_EQ(parser.getLastParseResult(), iri("<p>"));
 
+    // A number is not a predicate, the active predicate stays unchanged.
     parser.setInputStream("42");
     EXPECT_FALSE(parser.predicate());
     EXPECT_EQ(parser.activePredicate_, iri("<p>"));
 
+    // A triple term is not allowed as a predicate.
     parser.setInputStream("<<( <s> <p> <o> )>>");
     AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
         parser.predicate(),
@@ -3000,7 +3007,8 @@ TEST(RdfParserTest, predicate) {
   run(CtreParser{encodedIriManager()});
 }
 
-// _____________________________________________________________________________
+// Test the error messages for malformed triple terms and for triple terms
+// outside the object position.
 TEST(RdfParserTest, tripleTermErrors) {
   auto run = [](auto parser,
                 ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
@@ -3044,7 +3052,8 @@ TEST(RdfParserTest, tripleTermErrors) {
   run(NQuadCtreParser{encodedIriManager()});
 }
 
-// _____________________________________________________________________________
+// Test that `MAX_TRIPLE_TERM_NESTING_DEPTH` nested triple terms are parsed,
+// one more is rejected, and the parser works again afterwards.
 TEST(RdfParserTest, tripleTermNestingLimit) {
   auto makeInput = [](size_t depth) {
     std::string input = "<s> <p> ";
@@ -3088,7 +3097,8 @@ TEST(RdfParserTest, tripleTermNestingLimit) {
   run(NQuadCtreParser{encodedIriManager()});
 }
 
-// _____________________________________________________________________________
+// Test that the N-Quads parser rejects the Turtle-only syntax inside a triple
+// term and parses a graph label after a triple term.
 TEST(RdfParserTest, nQuadTripleTermRestrictions) {
   auto run = [](auto parser,
                 ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
@@ -3120,7 +3130,8 @@ TEST(RdfParserTest, nQuadTripleTermRestrictions) {
   run(NQuadCtreParser{encodedIriManager()});
 }
 
-// _____________________________________________________________________________
+// Test that encoded IRIs and typed literals inside a triple term are converted
+// like those outside one (the N-Quads parser does not encode IRIs).
 TEST(RdfParserTest, tripleTermEncodedIrisAndTypedLiterals) {
   EncodedIriManager manager{std::vector<std::string>{"http://example.org/"}};
   ASSERT_TRUE(manager.encode("<http://example.org/1>").has_value());
@@ -3156,7 +3167,8 @@ TEST(RdfParserTest, tripleTermEncodedIrisAndTypedLiterals) {
   run(NQuadCtreParser{&manager}, iri);
 }
 
-// _____________________________________________________________________________
+// Test that all parsers, including the parallel ones with small batches, parse
+// triple terms from a file.
 TEST(RdfParserTest, tripleTermsFromFile) {
   std::string filename = "recursiveTripleTerms.ttl";
   absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
