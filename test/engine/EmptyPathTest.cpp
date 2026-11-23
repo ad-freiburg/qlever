@@ -17,10 +17,10 @@
 #include "../util/LocalVocabTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
 #include "./ValuesForTesting.h"
-#include "engine/EmptyPath.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/operation/EmptyPath.h"
 #include "index/DeltaTriples.h"
 #include "util/Tie.h"
 

@@ -17,7 +17,7 @@
 #include "../util/OperationTestHelpers.h"
 #include "./ValuesForTesting.h"
 #include "engine/QueryExecutionTree.h"
-#include "engine/StripColumns.h"
+#include "engine/operation/StripColumns.h"
 
 namespace {
 using Vars = std::vector<std::optional<Variable>>;
