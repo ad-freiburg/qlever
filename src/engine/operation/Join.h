@@ -52,7 +52,7 @@ class Join : public Operation {
   qlm::vector<QueryExecutionTree*> getChildrenImpl() const override;
 
  public:
-  bool columnOriginatesFromGraphOrUndef(
+  bool columnContainsOnlyKnowledgeGraphNodes(
       const Variable& variable) const override;
   qlm::string getCacheKeyImpl() const override;
   std::unique_ptr<Operation> cloneImpl() const override;

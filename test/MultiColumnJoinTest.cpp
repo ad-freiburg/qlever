@@ -224,7 +224,7 @@ TEST(MultiColumnJoin, clone) {
 }
 
 // _____________________________________________________________________________
-TEST(MultiColumnJoin, columnOriginatesFromGraphOrUndef) {
+TEST(MultiColumnJoin, columnContainsOnlyKnowledgeGraphNodes) {
   using ad_utility::triple_component::Iri;
   auto* qec = ad_utility::testing::getQec();
   // Not in graph no undef
@@ -262,34 +262,35 @@ TEST(MultiColumnJoin, columnOriginatesFromGraphOrUndef) {
                SparqlTripleSimple{Variable{"?a"}, Iri::fromIriref("<b>"),
                                   Variable{"?b"}}));
 
-  auto testWithTrees =
-      [qec](std::shared_ptr<QueryExecutionTree> left,
-            std::shared_ptr<QueryExecutionTree> right, bool a, bool b, bool c,
-            ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) {
-        auto trace = generateLocationTrace(location);
+  auto testWithTrees = [qec](std::shared_ptr<QueryExecutionTree> left,
+                             std::shared_ptr<QueryExecutionTree> right, bool a,
+                             bool b, bool c,
+                             ad_utility::source_location location =
+                                 AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(location);
 
-        MultiColumnJoin join{qec, std::move(left), std::move(right), false};
-        EXPECT_EQ(join.columnOriginatesFromGraphOrUndef(Variable{"?a"}), a);
-        EXPECT_EQ(join.columnOriginatesFromGraphOrUndef(Variable{"?b"}), b);
-        EXPECT_EQ(join.columnOriginatesFromGraphOrUndef(Variable{"?c"}), c);
-        EXPECT_THROW(
-            join.columnOriginatesFromGraphOrUndef(Variable{"?notExisting"}),
-            ad_utility::Exception);
-      };
+    MultiColumnJoin join{qec, std::move(left), std::move(right), false};
+    EXPECT_EQ(join.columnContainsOnlyKnowledgeGraphNodes(Variable{"?a"}), a);
+    EXPECT_EQ(join.columnContainsOnlyKnowledgeGraphNodes(Variable{"?b"}), b);
+    EXPECT_EQ(join.columnContainsOnlyKnowledgeGraphNodes(Variable{"?c"}), c);
+    EXPECT_THROW(
+        join.columnContainsOnlyKnowledgeGraphNodes(Variable{"?notExisting"}),
+        ad_utility::Exception);
+  };
 
-  testWithTrees(index3, index4, true, true, true);
-  testWithTrees(index3, index2, true, true, true);
-  testWithTrees(index3, values4, false, false, true);
-  testWithTrees(index3, values2, false, false, true);
-  testWithTrees(index1, index4, true, true, true);
+  testWithTrees(index3, index4, false, false, false);
+  testWithTrees(index3, index2, true, true, false);
+  testWithTrees(index3, values4, false, false, false);
+  testWithTrees(index3, values2, false, false, false);
+  testWithTrees(index1, index4, true, false, true);
   testWithTrees(index1, index2, true, true, true);
   testWithTrees(index1, values4, true, false, true);
   testWithTrees(index1, values2, true, false, true);
-  testWithTrees(values4, index3, false, false, true);
+  testWithTrees(values4, index3, false, false, false);
   testWithTrees(values4, index1, true, false, true);
   testWithTrees(values4, values3, false, false, false);
   testWithTrees(values4, values1, false, false, false);
-  testWithTrees(values2, index3, false, false, true);
+  testWithTrees(values2, index3, false, false, false);
   testWithTrees(values2, index1, true, false, true);
   testWithTrees(values2, values3, false, false, false);
   testWithTrees(values2, values1, false, false, false);
