@@ -252,9 +252,13 @@ void writeFileAtomically(const fs::path& path, ql::span<const char> bytes) {
     while (numBytesLeft > 0) {
       ssize_t numBytesWritten = ::write(fd, data, numBytesLeft);
       if (numBytesWritten < 0) {
+        // A `write` to a regular file is practically never interrupted by a
+        // signal, so this case cannot be provoked reliably in a unit test.
+        // LCOV_EXCL_START
         if (errno == EINTR) {
           continue;
         }
+        // LCOV_EXCL_STOP
         throwFileError("write", temporary, errno);
       }
       data += numBytesWritten;
@@ -262,7 +266,10 @@ void writeFileAtomically(const fs::path& path, ql::span<const char> bytes) {
     }
     std::move(closeOnError).Cancel();
     if (::close(fd) != 0) {
-      throwFileError("close", temporary, errno);
+      // `close` only fails on rare errors of the file system (e.g. a deferred
+      // write error of a network file system), which cannot be provoked in a
+      // unit test without mocking the POSIX functions.
+      throwFileError("close", temporary, errno);  // LCOV_EXCL_LINE
     }
   });
 }

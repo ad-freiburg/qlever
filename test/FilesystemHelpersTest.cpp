@@ -11,6 +11,7 @@
 #include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 #include <sys/resource.h>
+#include <unistd.h>
 
 #include <algorithm>
 #include <cerrno>
@@ -549,6 +550,29 @@ TEST(FilesystemHelpers, writeFileAtomicallyWriteFailure) {
   std::move(restore).Invoke();
 
   EXPECT_TRUE(entryNames(dir.path()).empty());
+}
+
+// Test that `writeFileAtomically` throws if the temporary file cannot be
+// opened (here because the directory is not writable), with the reason in the
+// message, and that it leaves no file behind. (When the test runs as `root`,
+// the directory is writable anyway, so the test is skipped.)
+TEST(FilesystemHelpers, writeFileAtomicallyOpenFailure) {
+  if (geteuid() == 0) {
+    GTEST_SKIP() << "`root` can write to a read-only directory";
+  }
+  TempDir dir;
+  auto subdir = dir.path() / "subdir";
+  fs::create_directory(subdir);
+  fs::permissions(subdir, fs::perms::owner_read | fs::perms::owner_exec);
+  absl::Cleanup restorePermissions = [&subdir] {
+    fs::permissions(subdir, fs::perms::owner_all);
+  };
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      writeFileAtomically(subdir / "file", std::string{"x"}),
+      ::testing::AllOf(HasSubstr("Could not open the file"),
+                       HasSubstr(std::strerror(EACCES))));
+  std::move(restorePermissions).Invoke();
+  EXPECT_TRUE(entryNames(subdir).empty());
 }
 
 // Test that `writeFileAtomically` works for a file name of the maximal length,
