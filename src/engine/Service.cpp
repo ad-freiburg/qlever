@@ -9,6 +9,8 @@
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
 
+#include <cmath>
+
 #include "backports/StartsWithAndEndsWith.h"
 #include "engine/CallFixedSize.h"
 #include "engine/ExportQueryExecutionTrees.h"
@@ -46,15 +48,15 @@ bool Service::isDeterministicImpl() const {
 }
 
 // ____________________________________________________________________________
-std::string Service::getCacheKeyImpl() const {
+qlm::string Service::getCacheKeyImpl() const {
   if (getRuntimeParameter<&RuntimeParameters::cacheServiceResults_>()) {
-    return absl::StrCat(
-        "SERVICE ", parsedServiceClause_.silent_ ? "SILENT " : "",
+    return qlm::StrCat(
+        allocator(), "SERVICE ", parsedServiceClause_.silent_ ? "SILENT " : "",
         parsedServiceClause_.serviceIri_.toStringRepresentation(), " {\n",
         parsedServiceClause_.prologue_, "\n",
         parsedServiceClause_.graphPatternAsString_, "\n}");
   }
-  return absl::StrCat("SERVICE ", cacheBreaker_);
+  return qlm::StrCat(allocator(), "SERVICE ", cacheBreaker_);
 }
 
 // ____________________________________________________________________________
@@ -605,9 +607,14 @@ std::optional<std::string> Service::idToValueForValuesClause(
       // them.
       return std::nullopt;
     case Int:
-    case Double:
     case Bool:
       return value;
+    case Double:
+      // `NaN`, `INF` and `-INF` are only valid as typed literals.
+      if (std::isfinite(id.getDouble())) {
+        return value;
+      }
+      return absl::StrCat("\"", value, "\"^^<", xsdType, ">");
     default:
       if (xsdType) {
         return absl::StrCat("\"", value, "\"^^<", xsdType, ">");
@@ -727,7 +734,7 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
         getRuntimeParameter<&RuntimeParameters::serviceMaxValueRows_>();
     if (resultIsSmall) {
       service->siblingInfo_.emplace(siblingResult, std::move(siblingVariables),
-                                    sibling->getCacheKey());
+                                    std::string{sibling->getCacheKey()});
     }
     sibling->precomputedResultBecauseSiblingOfService() =
         std::move(siblingResult);
@@ -785,7 +792,7 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
   service->siblingInfo_.emplace(
       service->makeShared<Result>(std::move(siblingPair),
                                   siblingResult->sortedBy()),
-      std::move(siblingVariables), sibling->getCacheKey());
+      std::move(siblingVariables), std::string{sibling->getCacheKey()});
 
   sibling->precomputedResultBecauseSiblingOfService() =
       service->siblingInfo_->precomputedResult_;

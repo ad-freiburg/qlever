@@ -80,14 +80,12 @@ inline const EncodedIriManager* encodedIriManager() {
 // tests (like polygon testing in Spatial Joins).
 Index makeIndexWithTestSettings(ad_utility::MemorySize parserBufferSize = 1_kB);
 
-// Get names of all index files for a given basename. Needed for cleaning up
-// after tests using a test index.
-//
-// TODO: A better approach would be if the `Index` class itself kept track of
-// the files it creates and provides a member function to obtain all their
-// names. But for now this is good enough (and better then what we had before
-// when the files were not deleted after the test).
-std::vector<std::string> getAllIndexFilenames(const std::string& indexBasename);
+// Delete all files of the test index with the given `indexBasename` in the
+// current directory, by their common prefix `<indexBasename>.` (the input file
+// and the settings file of the index included). Failures are not logged,
+// because this also runs at process exit, when the logging may already be
+// destroyed.
+void deleteTestIndexFiles(const std::string& indexBasename);
 
 // A struct, that defines the configuration of an index, and after that,
 // a function that takes this struct and creates an index from it.

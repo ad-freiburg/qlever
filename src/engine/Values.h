@@ -30,7 +30,7 @@ class Values : virtual public Operation {
   Values(QueryExecutionContext* qec, SparqlValues parsedValues);
 
  protected:
-  std::string getCacheKeyImpl() const override;
+  qlm::string getCacheKeyImpl() const override;
 
  public:
   virtual std::string getDescriptor() const override;

@@ -27,9 +27,11 @@
 
 namespace ad_utility {
 
-// Check that the constant `crsTypeUnsupported` of `GeometryInfo.h` (which only
-// forward-declares `CRSType`) is the enum value it stands for.
+// Check that the constants `crsTypeUnsupported` and `crsTypeCrs84` of
+// `GeometryInfo.h` (which only forward-declares `CRSType`) are the enum values
+// they stand for.
 static_assert(crsTypeUnsupported == ::util::geo::CRSType::UNSUPPORTED);
+static_assert(crsTypeCrs84 == ::util::geo::CRSType::CRS84);
 
 // ____________________________________________________________________________
 GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
@@ -92,7 +94,7 @@ std::optional<GeometryInfo> GeometryInfo::fromWktLiteral(std::string_view wkt) {
   }
 
   auto boundingBox = boundingBoxAsGeoPoints(parsed.value());
-  auto centroid = centroidAsGeoPoint(parsed.value());
+  auto centroid = centroidAsGeoPoint(parsed.value(), sourceCrs);
   auto numGeom = countChildGeometries(parsed.value());
   auto metricLength = computeMetricLength(parsed.value());
   if (!boundingBox.has_value() || !centroid.has_value()) {
@@ -239,7 +241,8 @@ std::optional<Centroid> GeometryInfo::getCentroid(std::string_view wkt) {
   if (!parseResult.parsedWkt_.has_value()) {
     return std::nullopt;
   }
-  return detail::centroidAsGeoPoint(parseResult.parsedWkt_.value());
+  return detail::centroidAsGeoPoint(parseResult.parsedWkt_.value(),
+                                    parseResult.sourceCrs_);
 }
 
 // ____________________________________________________________________________
@@ -287,6 +290,19 @@ std::optional<MetricArea> GeometryInfo::getMetricArea(std::string_view wkt) {
 // ____________________________________________________________________________
 std::string BoundingBox::asWkt() const {
   return detail::boundingBoxAsWkt(lowerLeft_, upperRight_);
+}
+
+// ____________________________________________________________________________
+std::string BoundingBox::asWkt(SourceCrsType crs) const {
+  return detail::boundingBoxAsWkt(lowerLeft_, upperRight_,
+                                  static_cast<util::geo::CRSType>(crs.type()));
+}
+
+// ____________________________________________________________________________
+std::string Centroid::asWkt(SourceCrsType crs) const {
+  return util::geo::getWKT(detail::geoPointToUtilPoint(centroid_),
+                           detail::defaultCrs,
+                           static_cast<util::geo::CRSType>(crs.type()));
 }
 
 // ____________________________________________________________________________

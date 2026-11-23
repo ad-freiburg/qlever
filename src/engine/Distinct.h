@@ -74,7 +74,7 @@ class Distinct : public Operation {
   }
 
  protected:
-  [[nodiscard]] std::string getCacheKeyImpl() const override;
+  [[nodiscard]] qlm::string getCacheKeyImpl() const override;
 
  private:
   [[nodiscard]] bool isDeterministicImpl() const override { return true; }

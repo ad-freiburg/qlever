@@ -14,7 +14,7 @@
 
 #include <fstream>
 #include <future>
-#include <iterator>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -26,6 +26,7 @@
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "rdfTypes/GeoCellGrid.h"
+#include "util/File.h"
 
 using ad_utility::GeoCellGrid;
 using ad_utility::VocabularyType;
@@ -53,9 +54,12 @@ std::vector<std::pair<std::string, bool>> makeWords(size_t numWords) {
 
 // Read a whole file.
 std::string readFile(const std::string& filename) {
-  std::ifstream file{filename, std::ios::binary};
-  EXPECT_TRUE(file.is_open()) << filename;
-  return std::string{std::istreambuf_iterator<char>{file}, {}};
+  auto file = ad_utility::makeIfstream(filename, std::ios::binary);
+  // Copy the whole buffer at once (reading char by char via
+  // `std::istreambuf_iterator` is very slow in Debug builds).
+  std::ostringstream contents;
+  contents << file.rdbuf();
+  return std::move(contents).str();
 }
 
 // Write the `words` with the word-by-word writer of a vocabulary of the given
