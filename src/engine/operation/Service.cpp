@@ -436,11 +436,13 @@ std::optional<std::string> Service::getSiblingValuesClause() const {
   checkCancellation();
 
   const auto& idTable = siblingResult->idTableView();
-  // A column that contains `UNDEF` is not pushed down: a row with `UNDEF`
-  // matches the same remote rows as a row with a value in that column, so the
-  // remote endpoint would return these rows more than once. This is
-  // conservative: only rows that can match the same remote row cause
-  // duplicates, so this can be refined if there is a concrete need for it.
+  // Columns that contain `UNDEF` are not pushed down (see the loop below).
+  //
+  // NOTE: A row with `UNDEF` matches the same remote rows as a row with a value
+  // in that column, so the remote endpoint would return these rows more than
+  // once (see #4010). This is conservative, only rows that can match the same
+  // remote row cause duplicates, and can be refined if there is a concrete
+  // need for it.
   auto containsUndef = [&idTable](ColumnIndex columnIdx) {
     return ql::ranges::any_of(idTable.getColumn(columnIdx), Id::isUndefinedL);
   };

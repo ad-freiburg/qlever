@@ -580,8 +580,8 @@ TEST_F(ServiceTest, pushDownValuesPlacesValuesAtEnd) {
       "{\n BIND (1 AS ?x) \nVALUES (?x) { (1) } \n}");
 }
 
-// Columns of the sibling that contain `UNDEF` are not pushed down, as their
-// rows would match overlapping sets of remote rows (see #4010).
+// Test that columns of the sibling that contain `UNDEF` are not pushed down,
+// as their rows would match overlapping sets of remote rows (see #4010).
 TEST_F(ServiceTest, siblingValuesClauseSkipsColumnsWithUndef) {
   auto iri = ad_utility::testing::iri;
   using TC = TripleComponent;
@@ -611,8 +611,8 @@ TEST_F(ServiceTest, siblingValuesClauseSkipsColumnsWithUndef) {
     return result;
   };
 
-  // Only `?y` contains `UNDEF`, so only `?x` is pushed down, and the then
-  // duplicate rows are removed.
+  // Only `?y` contains `UNDEF`, so only `?x` is pushed down, and the rows that
+  // are then duplicates are removed.
   EXPECT_EQ(valuesClause({{Variable{"?x"}, Variable{"?y"}},
                           {{TC(iri("<x>")), TC::UNDEF()},
                            {TC(iri("<x>")), TC(iri("<y>"))},
