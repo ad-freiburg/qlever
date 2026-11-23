@@ -604,7 +604,11 @@ TEST_F(ServiceTest, siblingValuesClauseSkipsColumnsWithUndef) {
       }
     }
     service.siblingInfo_.emplace(std::move(siblingInfo));
-    return service.getSiblingValuesClause();
+    service.runtimeInfo().addDetail("optimized-with-sibling-result", "yes");
+    auto result = service.getSiblingValuesClause();
+    EXPECT_EQ(service.runtimeInfo().details_["optimized-with-sibling-result"],
+              result.has_value() ? "yes" : "no");
+    return result;
   };
 
   // Only `?y` contains `UNDEF`, so only `?x` is pushed down, and the then

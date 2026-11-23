@@ -462,6 +462,7 @@ std::optional<std::string> Service::getSiblingValuesClause() const {
     checkCancellation();
   }
   if (commonColumnIndices.empty()) {
+    runtimeInfo().addDetail("optimized-with-sibling-result", "no");
     return std::nullopt;
   }
   vars.back() = ')';
