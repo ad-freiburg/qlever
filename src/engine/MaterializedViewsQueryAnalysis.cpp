@@ -14,10 +14,10 @@
 #include <variant>
 
 #include "backports/algorithm.h"
-#include "engine/IndexScan.h"
 #include "engine/MaterializedViews.h"
 #include "engine/MaterializedViewsPatternMatcher.h"
 #include "engine/VariableToColumnMap.h"
+#include "engine/operation/IndexScan.h"
 #include "global/Constants.h"
 #include "global/RuntimeParameters.h"
 #include "parser/GraphPatternOperation.h"
