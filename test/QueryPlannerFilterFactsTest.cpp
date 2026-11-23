@@ -205,8 +205,7 @@ std::vector<std::string> run(const std::string& q, std::string_view kg) {
   qec->clearCacheUnpinnedOnly();
   auto cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
-  auto parsedQuery =
-      SparqlParser::parseQuery(ad_utility::testing::encodedIriManager(), q);
+  auto parsedQuery = ad_utility::testing::parseQuery(q);
   QueryPlanner qp{qec, cancellationHandle};
   auto qet = qp.createExecutionTree(parsedQuery);
   ad_utility::Timer timer{ad_utility::Timer::Started};
