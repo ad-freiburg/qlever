@@ -993,3 +993,23 @@ TEST(JoinAlgorithms, SpecialOptionalJoinComplexCombination) {
   };
   testSpecialOptionalJoinWithSplits(leftTable, rightTable, expectedResult);
 }
+
+// Test that a left row is not added with UNDEF when its partner is in a right
+// block after the `FETCH_BLOCKS` (3) blocks that are fetched at once for the
+// current value of the first join column.
+TEST(JoinAlgorithms, SpecialOptionalJoinPartnerAfterThirdFetchedBlock) {
+  // One left row [1, 4] and the right blocks [1, 0] [1, 1] [1, 2] [1, 3]
+  // [1, 4]. The join compares only the first column, so it reads the first
+  // right block and then fetches three more, which all contain 1. The left row
+  // has no partner in these four blocks, but in the fifth. Without the fifth
+  // block, all blocks are read at once.
+  auto left = makeVec(makeTable({{I(1), I(4), I(10)}}));
+  auto right = makeVec(
+      makeTable({{I(1), I(0), I(20)}}), makeTable({{I(1), I(1), I(21)}}),
+      makeTable({{I(1), I(2), I(22)}}), makeTable({{I(1), I(3), I(23)}}),
+      makeTable({{I(1), I(4), I(24)}}));
+
+  // The left row is joined with its partner and nothing else.
+  testSpecialOptionalJoin(std::move(left), std::move(right),
+                          {{I(1), I(4), I(10), I(24)}});
+}

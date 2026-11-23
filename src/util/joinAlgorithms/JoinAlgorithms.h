@@ -983,6 +983,8 @@ struct BlockZipperJoinImplCRTP {
   // elements `<= currentEl`. The returned `BlockStatus` reports which of the
   // sides contain all the relevant blocks. Only filling one side is used for
   // the optimization for the Cartesian product described in the documentation.
+  // If `Derived::requiresAllRightBlocksOfCurrentEl` is true, the right side
+  // always contains all the relevant blocks.
   enum struct BlockStatus { leftMissing, rightMissing, allFilled };
   BlockStatus fillEqualToCurrentElBothSides(const ProjectedEl& currentEl) {
     bool allBlocksFromLeft = false;
@@ -990,6 +992,11 @@ struct BlockZipperJoinImplCRTP {
     while (!(allBlocksFromLeft || allBlocksFromRight)) {
       allBlocksFromLeft = fillEqualToCurrentEl(leftSide_, currentEl);
       allBlocksFromRight = fillEqualToCurrentEl(rightSide_, currentEl);
+    }
+    if constexpr (Derived::requiresAllRightBlocksOfCurrentEl) {
+      while (!allBlocksFromRight) {
+        allBlocksFromRight = fillEqualToCurrentEl(rightSide_, currentEl);
+      }
     }
     if (!allBlocksFromRight) {
       return BlockStatus::rightMissing;
@@ -1624,6 +1631,9 @@ struct BlockZipperJoinImpl
   // Inherit constructors from the base class.
   using Base::Base;
 
+  // See `BlockZipperJoinImplCRTP::fillEqualToCurrentElBothSides`.
+  static constexpr bool requiresAllRightBlocksOfCurrentEl = false;
+
   // Implement the `addCartesianProduct` customization point with the default
   // behavior. If `reversed` is false, we assume that the Cartesian product is
   // added not by matching iterating over the right side for every row of the
@@ -1712,6 +1722,12 @@ struct BlockZipperJoinImplForSpecialOptionalJoin
 
   template <typename NewIsUndef>
   using Rebind = BlockZipperJoinImplForSpecialOptionalJoin;
+
+  // The `addCartesianProductImpl` below decides which rows from the left have
+  // no match in the right blocks that it is given. This is only correct if
+  // these are all the right blocks with the same values in all but the last
+  // join column, so the right blocks may not be passed in several parts.
+  static constexpr bool requiresAllRightBlocksOfCurrentEl = true;
 
   // Store the number of join columns.
   NumJoinColumnsT numJoinColumns_;
