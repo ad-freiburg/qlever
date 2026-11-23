@@ -30,7 +30,7 @@ if (APPLE)
         # NOTE 2: `-idirafter` directories are searched after the SDK's
         # `/usr/include`, so for headers that ship both in the SDK and in
         # Homebrew, the SDK headers win.
-        foreach(lang C CXX)
+        foreach (lang C CXX)
             list(APPEND CMAKE_${lang}_IMPLICIT_INCLUDE_DIRECTORIES "${HOMEBREW_PREFIX}/include")
         endforeach ()
         add_compile_options(-idirafter "${HOMEBREW_PREFIX}/include")
