@@ -186,4 +186,162 @@ TEST(GeoSparqlHelpers, WktTypeIri) {
   EXPECT_EQ(WktCrsType{}(SourceCrsType{4}), undef);
 }
 
+// Test that a `GeoPoint` or a WKT literal is projected to the CRS specified by
+// an IRI and returned as a new WKT literal with the transformed coordinates.
+// Also test that an unsupported CRS IRI yields `UNDEF`.
+TEST(GeoSparqlHelpers, WktTransform) {
+  using namespace ad_utility::triple_component;
+  using ad_utility::GeoPointOrWkt;
+  using ad_utility::WktTransform;
+  auto anyWkt = [](std::string_view wkt) {
+    auto lit = Literal::literalWithoutQuotes(wkt);
+    lit.addDatatype(ad_utility::detail::wktLiteralIri);
+    return sparqlExpression::IdOrLiteralOrIri{LiteralOrIri{std::move(lit)}};
+  };
+  // From `GeoPoint` to other CRS.
+  GeoPoint examplePoint{2, 1};
+  EXPECT_EQ(
+      WktTransform{}(GeoPointOrWkt{examplePoint}, util::geo::CRSType::CRS84),
+      anyWkt("POINT(1 2)"));
+  EXPECT_EQ(
+      WktTransform{}(GeoPointOrWkt{examplePoint}, util::geo::CRSType::WGS84),
+      anyWkt("<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(2 1)"));
+  EXPECT_EQ(WktTransform{}(GeoPointOrWkt{examplePoint},
+                           util::geo::CRSType::WEB_MERCATOR),
+            anyWkt("<http://www.opengis.net/def/crs/EPSG/0/3857> "
+                   "POINT(111319.490793 222684.208506)"));
+
+  // From `std::string` to other CRS.
+  // CRS84:
+  std::string exampleWkt{
+      "\"POINT(1 2)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"};
+  EXPECT_EQ(
+      WktTransform{}(GeoPointOrWkt{exampleWkt}, util::geo::CRSType::CRS84),
+      anyWkt("POINT(1 2)"));
+  EXPECT_EQ(
+      WktTransform{}(GeoPointOrWkt{exampleWkt}, util::geo::CRSType::WGS84),
+      anyWkt("<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(2 1)"));
+  EXPECT_EQ(WktTransform{}(GeoPointOrWkt{exampleWkt},
+                           util::geo::CRSType::WEB_MERCATOR),
+            anyWkt("<http://www.opengis.net/def/crs/EPSG/0/3857> "
+                   "POINT(111319.490793 222684.208506)"));
+  // WGS84:
+  std::string exampleWktWgs84{
+      "\"<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(2 "
+      "1)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"};
+  EXPECT_EQ(
+      WktTransform{}(GeoPointOrWkt{exampleWktWgs84}, util::geo::CRSType::CRS84),
+      anyWkt("POINT(1 2)"));
+  EXPECT_EQ(
+      WktTransform{}(GeoPointOrWkt{exampleWktWgs84}, util::geo::CRSType::WGS84),
+      anyWkt("<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(2 1)"));
+  EXPECT_EQ(WktTransform{}(GeoPointOrWkt{exampleWktWgs84},
+                           util::geo::CRSType::WEB_MERCATOR),
+            anyWkt("<http://www.opengis.net/def/crs/EPSG/0/3857> "
+                   "POINT(111319.490793 222684.208506)"));
+  // WEB_MERCATOR:
+  std::string exampleWktWebMerc{
+      "\"<http://www.opengis.net/def/crs/EPSG/0/3857> POINT(111319.490793 "
+      "222684.208506)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"};
+  EXPECT_EQ(WktTransform{}(GeoPointOrWkt{exampleWktWebMerc},
+                           util::geo::CRSType::CRS84),
+            anyWkt("POINT(1 2)"));
+  EXPECT_EQ(WktTransform{}(GeoPointOrWkt{exampleWktWebMerc},
+                           util::geo::CRSType::WGS84),
+            anyWkt("<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(2 1)"));
+  EXPECT_EQ(WktTransform{}(GeoPointOrWkt{exampleWktWebMerc},
+                           util::geo::CRSType::WEB_MERCATOR),
+            anyWkt("<http://www.opengis.net/def/crs/EPSG/0/3857> "
+                   "POINT(111319.490793 222684.208506)"));
+
+  sparqlExpression::IdOrLiteralOrIri undef = ValueId::makeUndefined();
+  // Test invalid WKT.
+  std::string invalidWkt{
+      "\"BLABLIBLU(xyz)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"};
+  EXPECT_EQ(
+      WktTransform{}(GeoPointOrWkt{invalidWkt}, util::geo::CRSType::WGS84),
+      undef);
+
+  // Test unsupported target CRS.
+  EXPECT_EQ(WktTransform{}(GeoPointOrWkt{examplePoint},
+                           util::geo::CRSType::UNSUPPORTED),
+            undef);
+
+  // Test unsupported source CRS (the projection fails during parsing).
+  std::string unsupportedSourceCrs{
+      "\"<http://www.opengis.net/def/crs/EPSG/0/25832> POINT(500000 "
+      "5000000)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"};
+  EXPECT_EQ(WktTransform{}(GeoPointOrWkt{unsupportedSourceCrs},
+                           util::geo::CRSType::WGS84),
+            undef);
+
+  // Test that a geometry beyond the latitude range of Web Mercator (about
+  // 85.05 degrees) cannot be projected to Web Mercator, but to WGS84.
+  GeoPoint northPole{90, 0};
+  std::string polygonBeyondRange{
+      "\"POLYGON((0 80, 10 80, 10 -86, 0 80))\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>"};
+  EXPECT_EQ(WktTransform{}(GeoPointOrWkt{northPole},
+                           util::geo::CRSType::WEB_MERCATOR),
+            undef);
+  EXPECT_EQ(WktTransform{}(GeoPointOrWkt{polygonBeyondRange},
+                           util::geo::CRSType::WEB_MERCATOR),
+            undef);
+  EXPECT_EQ(WktTransform{}(GeoPointOrWkt{northPole}, util::geo::CRSType::WGS84),
+            anyWkt("<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(90 0)"));
+  EXPECT_NE(WktTransform{}(GeoPointOrWkt{GeoPoint{85, 0}},
+                           util::geo::CRSType::WEB_MERCATOR),
+            undef);
+
+  // Test UNDEF from `wkt` without value.
+  EXPECT_EQ(WktTransform{}(std::nullopt, util::geo::CRSType::WGS84), undef);
+}
+
+// Test that the centroid and the envelope of a geometry are returned in the
+// CRS of the geometry: for CRS84 as a `GeoPoint` (the centroid) or a plain WKT
+// literal (the envelope), otherwise as a WKT literal with the CRS IRI.
+TEST(GeoSparqlHelpers, WktCentroidAndEnvelopeInSourceCrs) {
+  using namespace ad_utility::triple_component;
+  using ad_utility::BoundingBox;
+  using ad_utility::Centroid;
+  using ad_utility::SourceCrsType;
+  using ad_utility::WithSourceCrs;
+  using ad_utility::WktCentroid;
+  using ad_utility::WktEnvelope;
+  using util::geo::CRSType;
+  auto wktLit = [](std::string_view wkt) {
+    auto lit = Literal::literalWithoutQuotes(wkt);
+    lit.addDatatype(Iri::fromIrirefWithoutBrackets(GEO_WKT_LITERAL));
+    return sparqlExpression::IdOrLiteralOrIri{LiteralOrIri{std::move(lit)}};
+  };
+  sparqlExpression::IdOrLiteralOrIri undef = ValueId::makeUndefined();
+  Centroid centroid{50, 60};
+  BoundingBox box{{1, 2}, {3, 4}};
+
+  // The centroid (latitude 50, longitude 60) in each supported CRS.
+  EXPECT_EQ(WktCentroid{}(WithSourceCrs<Centroid>{
+                centroid, SourceCrsType{CRSType::CRS84}}),
+            sparqlExpression::IdOrLiteralOrIri{
+                ValueId::makeFromGeoPoint(GeoPoint{50, 60})});
+  EXPECT_EQ(
+      WktCentroid{}(
+          WithSourceCrs<Centroid>{centroid, SourceCrsType{CRSType::WGS84}}),
+      wktLit("<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(50 60)"));
+  EXPECT_EQ(WktCentroid{}(WithSourceCrs<Centroid>{
+                centroid, SourceCrsType{CRSType::WEB_MERCATOR}}),
+            wktLit("<http://www.opengis.net/def/crs/EPSG/0/3857> "
+                   "POINT(6679169.447596 6446275.841017)"));
+  EXPECT_EQ(WktCentroid{}(std::nullopt), undef);
+
+  // The envelope (latitudes 1 to 3, longitudes 2 to 4) in CRS84 and WGS84.
+  EXPECT_EQ(WktEnvelope{}(
+                WithSourceCrs<BoundingBox>{box, SourceCrsType{CRSType::CRS84}}),
+            wktLit("POLYGON((2 1,4 1,4 3,2 3,2 1))"));
+  EXPECT_EQ(WktEnvelope{}(
+                WithSourceCrs<BoundingBox>{box, SourceCrsType{CRSType::WGS84}}),
+            wktLit("<http://www.opengis.net/def/crs/EPSG/0/4326> "
+                   "POLYGON((1 2,1 4,3 4,3 2,1 2))"));
+  EXPECT_EQ(WktEnvelope{}(std::nullopt), undef);
+}
+
 }  // namespace

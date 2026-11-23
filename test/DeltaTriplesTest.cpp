@@ -16,6 +16,7 @@
 #include "./ValueIdTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IndexTestHelpers.h"
+#include "./util/LocalVocabTestHelpers.h"
 #include "./util/ParsedQueryTestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
@@ -32,6 +33,8 @@
 #include "parser/RdfParser.h"
 #include "parser/Tokenizer.h"
 #include "util/LocalVocabEntryTestHelpers.h"
+
+using ad_utility::testing::makeLocalVocab;
 
 using ad_utility::testing::iriLocalVocabEntry;
 using ad_utility::testing::localVocabEntry;
@@ -709,8 +712,9 @@ TEST_F(DeltaTriplesTest, hasWordTriplesForUpdatedLiterals) {
   // Run the `update` via the `DeltaTriplesManager` of the index.
   auto runUpdate = [&](const std::string& update) {
     ad_utility::BlankNodeManager blankNodeManager;
-    auto parsedUpdates = SparqlParser::parseUpdate(&blankNodeManager,
-                                                   encodedIriManager(), update);
+    auto parsedUpdates =
+        SparqlParser::parseUpdate(&blankNodeManager, encodedIriManager(),
+                                  ad_utility::testing::makeAllocator(), update);
     index->deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
       qec.setLocatedTriplesForEvaluation(
           deltaTriples.getLocatedTriplesSharedStateReference());
@@ -761,7 +765,7 @@ TEST_F(DeltaTriplesTest, rewriteLocalVocabEntriesAndBlankNodes) {
   // node.
   DeltaTriples deltaTriples(testQec->getIndex());
   auto& index = testQec->getIndex();
-  LocalVocab localVocabOutside;
+  LocalVocab localVocabOutside = makeLocalVocab();
   auto triples =
       makeIdTriples(index, localVocabOutside, {"<A> <notInVocab> <B>"});
   AD_CORRECTNESS_CHECK(triples.size() == 1);
@@ -836,7 +840,7 @@ TEST_F(DeltaTriplesTest, rewriteLocalVocabEntriesAndBlankNodes) {
 TEST_F(DeltaTriplesTest, rewriteRemovesLocalVocabEntriesInVocab) {
   DeltaTriples deltaTriples(testQec->getIndex());
   const IndexImpl& index = testQec->getIndex().getImpl();
-  LocalVocab localVocabOutside;
+  LocalVocab localVocabOutside = makeLocalVocab();
   auto triples = makeIdTriples(index, localVocabOutside, {"<a> <upp> <A>"});
   ASSERT_EQ(triples.size(), 1);
   auto expectedSubject = triples[0].ids()[0];
@@ -859,7 +863,7 @@ TEST_F(DeltaTriplesTest, rewriteRemovesLocalVocabEntriesInVocab) {
   // The same through the public update path, with a batch that mixes an
   // ordinary triple with the local-vocab spelling of an indexed word.
   DeltaTriples deltaTriples2(testQec->getIndex());
-  LocalVocab localVocabOutside2;
+  LocalVocab localVocabOutside2 = makeLocalVocab();
   auto triples2 = makeIdTriples(index, localVocabOutside2,
                                 {"<b> <upp> <B>", "<a> <upp> <A>"});
   triples2[1].ids()[0] = Id::makeFromLocalVocabIndex(
@@ -893,7 +897,7 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
   // dependent on the thread index. Check that the snapshot before in the
   // middle of these updates is as expected.
   auto insertAndDelete = [&](size_t threadIdx) {
-    LocalVocab localVocab;
+    LocalVocab localVocab = makeLocalVocab();
     LocatedTriplesSharedState beforeUpdate =
         deltaTriplesManager.getCurrentLocatedTriplesSharedState();
     for (size_t i = 0; i < numIterations; ++i) {
@@ -1013,7 +1017,7 @@ TEST_F(DeltaTriplesTest, LocatedTriplesSharedState) {
   EXPECT_THAT(copiedSnapshotBeforeUpdate2, Snapshot(0, 0));
 
   // Modifying the delta triples increases the index_.
-  LocalVocab localVocab;
+  LocalVocab localVocab = makeLocalVocab();
   auto triplesToInsert = makeIdTriples(index, localVocab, {"<A> <B> <C>"});
   deltaTriples.insertTriples(cancellationHandle, std::move(triplesToInsert));
 
@@ -1160,17 +1164,18 @@ TEST_F(DeltaTriplesTest, storeAndRestoreData) {
 
     auto cancellationHandle =
         std::make_shared<ad_utility::CancellationHandle<>>();
+    auto getLocalVocabId = ad_utility::testing::makeGetLocalVocabId();
     LocalVocabEntry entry1 =
         localVocabEntryFromStringRepresentation("<test>", localVocabContext);
     deltaTriples.insertTriples(
         cancellationHandle,
-        {IdTriple<>{{Id::makeFromInt(1), Id::makeFromLocalVocabIndex(&entry1),
+        {IdTriple<>{{Id::makeFromInt(1), getLocalVocabId(entry1),
                      Id::makeFromBool(true), defaultGraph}}});
     LocalVocabEntry entry2 =
         localVocabEntryFromStringRepresentation("<other>", localVocabContext);
     deltaTriples.deleteTriples(
         cancellationHandle,
-        {IdTriple<>{{Id::makeFromInt(2), Id::makeFromLocalVocabIndex(&entry2),
+        {IdTriple<>{{Id::makeFromInt(2), getLocalVocabId(entry2),
                      Id::makeFromBool(false), defaultGraph}}});
 
     deltaTriples.writeToDisk();
@@ -1238,31 +1243,33 @@ TEST_F(DeltaTriplesTest, copyLocalVocab) {
 
   auto cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
+  auto getLocalVocabId = ad_utility::testing::makeGetLocalVocabId();
   LocalVocabEntry entry1 =
       localVocabEntryFromStringRepresentation(iri1, localVocabContext);
   deltaTriples.insertTriples(
       cancellationHandle,
-      {IdTriple<>{{Id::makeFromInt(1), Id::makeFromLocalVocabIndex(&entry1),
+      {IdTriple<>{{Id::makeFromInt(1), getLocalVocabId(entry1),
                    Id::makeFromBlankNodeIndex(BlankNodeIndex::make(1337))}}});
   LocalVocabEntry entry2 =
       localVocabEntryFromStringRepresentation(iri2, localVocabContext);
   deltaTriples.deleteTriples(
       cancellationHandle,
-      {IdTriple<>{{Id::makeFromInt(2), Id::makeFromLocalVocabIndex(&entry2),
+      {IdTriple<>{{Id::makeFromInt(2), getLocalVocabId(entry2),
                    Id::makeFromBool(false)}}});
 
   auto [indices, ownedBlocks] = deltaTriples.copyLocalVocab();
 
   using namespace ::testing;
 
-  EXPECT_THAT(indices,
-              UnorderedElementsAre(
-                  Pointee(AD_PROPERTY(LocalVocabEntry, toStringRepresentation,
-                                      Eq(iri1))),
-                  Pointee(AD_PROPERTY(LocalVocabEntry, toStringRepresentation,
-                                      Eq(iri2))),
-                  Pointee(AD_PROPERTY(LocalVocabEntry, toStringRepresentation,
-                                      Eq(LANGUAGE_PREDICATE)))));
+  EXPECT_THAT(
+      indices,
+      UnorderedElementsAre(
+          Pointee(AD_PROPERTY(LocalVocabEntryView, toStringRepresentation,
+                              Eq(iri1))),
+          Pointee(AD_PROPERTY(LocalVocabEntryView, toStringRepresentation,
+                              Eq(iri2))),
+          Pointee(AD_PROPERTY(LocalVocabEntryView, toStringRepresentation,
+                              Eq(LANGUAGE_PREDICATE)))));
 
   using OBE =
       ad_utility::BlankNodeManager::LocalBlankNodeManager::OwnedBlocksEntry;
@@ -1279,16 +1286,17 @@ TEST_F(DeltaTriplesTest, getCurrentLocatedTriplesSharedStateWithVocab) {
   const auto& index = testQec->getIndex();
   DeltaTriplesManager deltaTriplesManager(index);
 
+  auto getLocalVocabId = ad_utility::testing::makeGetLocalVocabId();
   std::string iri1 = "<test>";
   LocalVocabEntry entry1 = localVocabEntryFromStringRepresentation(
       iri1, index.getLocalVocabContext());
-  IdTriple<> triple1{{Id::makeFromInt(1), Id::makeFromLocalVocabIndex(&entry1),
-                      Id::makeFromBool(true)}};
+  IdTriple<> triple1{
+      {Id::makeFromInt(1), getLocalVocabId(entry1), Id::makeFromBool(true)}};
   std::string iri2 = "<other>";
   LocalVocabEntry entry2 = localVocabEntryFromStringRepresentation(
       iri2, index.getLocalVocabContext());
-  IdTriple<> triple2{{Id::makeFromInt(2), Id::makeFromLocalVocabIndex(&entry2),
-                      Id::makeFromBool(false)}};
+  IdTriple<> triple2{
+      {Id::makeFromInt(2), getLocalVocabId(entry2), Id::makeFromBool(false)}};
   deltaTriplesManager.modify<void>(
       [&triple1, &triple2](DeltaTriples& deltaTriples) {
         auto cancellationHandle =
@@ -1307,14 +1315,15 @@ TEST_F(DeltaTriplesTest, getCurrentLocatedTriplesSharedStateWithVocab) {
   EXPECT_TRUE(locatedSPO.isLocatedTriple(triple1, true));
   EXPECT_TRUE(locatedSPO.isLocatedTriple(triple2, false));
 
-  EXPECT_THAT(indices,
-              UnorderedElementsAre(
-                  Pointee(AD_PROPERTY(LocalVocabEntry, toStringRepresentation,
-                                      Eq(iri1))),
-                  Pointee(AD_PROPERTY(LocalVocabEntry, toStringRepresentation,
-                                      Eq(iri2))),
-                  Pointee(AD_PROPERTY(LocalVocabEntry, toStringRepresentation,
-                                      Eq(LANGUAGE_PREDICATE)))));
+  EXPECT_THAT(
+      indices,
+      UnorderedElementsAre(
+          Pointee(AD_PROPERTY(LocalVocabEntryView, toStringRepresentation,
+                              Eq(iri1))),
+          Pointee(AD_PROPERTY(LocalVocabEntryView, toStringRepresentation,
+                              Eq(iri2))),
+          Pointee(AD_PROPERTY(LocalVocabEntryView, toStringRepresentation,
+                              Eq(LANGUAGE_PREDICATE)))));
 
   EXPECT_THAT(ownedBlocks, ElementsAre());
 }
@@ -1325,7 +1334,7 @@ TEST_F(DeltaTriplesTest, vacuum) {
       std::make_shared<ad_utility::CancellationHandle<>>();
   DeltaTriples deltaTriples(testQec->getIndex());
   auto& index = testQec->getIndex().getImpl();
-  LocalVocab localVocab;
+  LocalVocab localVocab = makeLocalVocab();
 
   // Insertions of triples in the index.
   deltaTriples.insertTriples(
@@ -1363,15 +1372,16 @@ TEST_F(DeltaTriplesTest, vacuum) {
 // _____________________________________________________________________________
 TEST_F(DeltaTriplesTest, remapId) {
   auto I = &Id::makeFromInt;
-  auto V = &makeVocabId;
-  auto B = &makeBlankNodeId;
+  auto V = &makeVocabId<>;
+  auto B = &makeBlankNodeId<>;
   const IndexImpl& index = testQec->getIndex().getImpl();
   qlever::indexRebuilder::IndexRebuildMapping idMapping;
-  LocalVocab localVocab;
+  LocalVocab localVocab = makeLocalVocab();
 
+  auto getLocalVocabId = ad_utility::testing::makeGetLocalVocabId();
   LocalVocabEntry sourceEntry = localVocabEntryFromStringRepresentation(
       "<entry>", index.getLocalVocabContext());
-  Id entryId = Id::makeFromLocalVocabIndex(&sourceEntry);
+  Id entryId = getLocalVocabId(sourceEntry);
 
   auto remap = [&idMapping, &localVocab, &index](Id id) {
     DeltaTriples::remapId(idMapping, id, localVocab, index);
@@ -1452,7 +1462,7 @@ TEST_F(DeltaTriplesTest, addFromSnapshotDiff) {
   DeltaTriples deltaTriples(testQec->getIndex());
   auto& index = testQec->getIndex();
   auto getId = ad_utility::testing::makeGetId(index);
-  LocalVocab localVocab;
+  LocalVocab localVocab = makeLocalVocab();
 
   Id x = getId("<x>");
   Id anon = getId("<anon>");
@@ -1581,7 +1591,7 @@ TEST_F(DeltaTriplesTest, addFromSnapshotDiffReanchorsLocalVocabEntries) {
   {
     Index oldIndex = makeTestIndex(prefix + "-old", "<x> <y> <z> .");
     DeltaTriples oldDeltaTriples(oldIndex);
-    LocalVocab localVocab;
+    LocalVocab localVocab = makeLocalVocab();
 
     // The snapshot is taken BEFORE the update, so the rebuild mapping is
     // empty and the word below is carried over as a local vocab entry.
@@ -1609,7 +1619,7 @@ TEST_F(DeltaTriplesTest, addFromSnapshotDiffReanchorsLocalVocabEntries) {
   // Find the carried local vocab entry among the located triples.
   auto [entries, blocks] = newDeltaTriples.copyLocalVocab();
   ASSERT_THAT(entries, ::testing::SizeIs(1));
-  const LocalVocabEntry* carried = entries.at(0);
+  LocalVocabIndex carried = entries.at(0);
   ASSERT_NE(carried, nullptr);
   EXPECT_EQ(&carried->getContextForTesting(), &newIndex.getLocalVocabContext());
   EXPECT_EQ(carried->asLiteralOrIri().toStringRepresentation(), "\"zzz\"");
@@ -1619,8 +1629,9 @@ TEST_F(DeltaTriplesTest, addFromSnapshotDiffReanchorsLocalVocabEntries) {
   // would have kept the stale position cached against the old vocabulary),
   // and comparing must not access the old index (checked by the ASAN build,
   // since the old index no longer exists at this point).
-  LocalVocabEntry fresh = localVocabEntry(
-      carried->asLiteralOrIri(), newIndex.getImpl().getLocalVocabContext());
+  LocalVocabEntry fresh =
+      localVocabEntry(carried->asLiteralOrIri().toOwned(),
+                      newIndex.getImpl().getLocalVocabContext());
   EXPECT_EQ(carried->positionInVocab(), fresh.positionInVocab());
   EXPECT_EQ(*carried, fresh);
 }

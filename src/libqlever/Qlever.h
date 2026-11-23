@@ -44,12 +44,13 @@
 #include "util/Allocator.h"
 #include "util/Executor.h"
 #include "util/GlobalExecutor.h"
-#include "util/MemorySize/MemorySize.h"
+#include "util/NoCopyNoMove.h"
 #include "util/Synchronized.h"
 #include "util/TimeTracer.h"
 #include "util/TransparentFunctors.h"
 #include "util/http/MediaTypes.h"
 #include "util/json.h"
+#include "util/memorySize/MemorySize.h"
 
 namespace qlever {
 
@@ -322,14 +323,20 @@ struct EngineConfig : CommonConfig {
 // `src/engine/LibQleverExample.cpp` for an example use. If you extend the
 // interface of this class, consider also adding bindings to
 // `QleverEmscriptenBindings.cpp` so it can be used by JS code.
-class Qlever {
+//
+// NOTE: Neither copyable nor movable, because the constructors register
+// callbacks (on the allocator and the global runtime parameters) that refer to
+// this instance.
+class Qlever : public ad_utility::NoCopyNoMove {
  public:
   using PlannedQuery = qlever::PlannedQuery;
 
   // Bundle the `Index` and the `MaterializedViewsManager` under a single mutex
   // so that an index rebuild can atomically swap both in, while other threads
   // continue to read the previous instances via the `shared_ptr`s they hold.
-  struct IndexAndViews {
+  // Not copyable or movable, so it is only passed around as a `shared_ptr` or
+  // reference.
+  struct IndexAndViews : public ad_utility::NoCopyNoMove {
     Index index_;
     MaterializedViewsManager materializedViewsManager_;
 
@@ -338,12 +345,6 @@ class Qlever {
                   MaterializedViewsManager materializedViewsManager)
         : index_{std::move(index)},
           materializedViewsManager_{std::move(materializedViewsManager)} {}
-
-    // Make sue this is only passed around as a shared pointer or reference.
-    IndexAndViews(IndexAndViews&&) noexcept = delete;
-    IndexAndViews& operator=(IndexAndViews&&) noexcept = delete;
-    IndexAndViews(const IndexAndViews&) noexcept = delete;
-    IndexAndViews& operator=(const IndexAndViews&) noexcept = delete;
 
     // Helper function to decompose `self` into a pair of two shared pointers
     // pointing to the individual members via aliasing semantics.
@@ -370,7 +371,8 @@ class Qlever {
   // allocators are copied very often (e.g. with every string).
   qlever::Allocator<Id> allocator_;
   // The executor on which the queries and index rebuilds of this instance run
-  // their parallel work, see `executor()`.
+  // their parallel work, see `executor()`. It is the default client of this
+  // instance's own `FairScheduler`.
   qlever::Executor executor_;
   mutable NamedResultCache namedResultCache_;
   ad_utility::Synchronized<std::shared_ptr<IndexAndViews>> indexAndViews_;
@@ -403,7 +405,10 @@ class Qlever {
   // Create a QLever instance for querying using an `EngineConfig` as
   // explained above. The memory limit from `config` is enforced and cache
   // eviction is wired into the allocator. The queries and index rebuilds of
-  // this instance run their parallel work on the `executor`.
+  // this instance run their parallel work on the global thread pool (see
+  // `util/GlobalExecutor.h`), fairly scheduled between the foreground work
+  // (e.g. the queries) and the background work (e.g. an index rebuild), see
+  // `util/FairShareExecutor.h`.
   //
   // If `skipLoading` is true, no index is loaded from disk (in particular,
   // none of the on-disk index files, not even the vocabulary or the
@@ -414,16 +419,35 @@ class Qlever {
   // index, independent of `skipLoading`.
   //
   // NOTE: Neither this constructor nor the computation of a query must be
-  // called from a thread of the `executor`, because they block while waiting
-  // for work on the `executor` (e.g. the sorts of `IdTableUtils::sort`).
-  explicit Qlever(const EngineConfig& config, bool skipLoading = false,
-                  qlever::Executor executor = ad_utility::globalExecutor());
+  // called from a thread of the executor on which the parallel work runs,
+  // because they block while waiting for work on that executor (e.g. the sorts
+  // of `IdTableUtils::sort`).
+  explicit Qlever(const EngineConfig& config, bool skipLoading = false);
 
-  // Same as above, but with a caller-provided allocator (e.g. a
-  // platform-injected memory pool). The allocator is used as-is; the memory
-  // limit from `config` is *not* applied on top of it.
+  // Same as above, but the parallel work runs on the `executor`, which must
+  // have `executorNumThreads` threads (an executor can't be asked for its
+  // number of threads). At most that many tasks of this instance are handed
+  // to the `executor` at the same time. With a smaller number, threads of the
+  // `executor` stay idle while tasks are queued. With a larger one, tasks wait
+  // in the FIFO queue of the `executor`, so they no longer run in the fair
+  // order (see `ad_utility::makeFairShareExecutor`).
+  Qlever(const EngineConfig& config, bool skipLoading,
+         qlever::Executor executor, size_t executorNumThreads);
+
+  // Same as the two constructors above, but with a caller-provided allocator
+  // (e.g. a platform-injected memory pool). The allocator is used as-is; the
+  // memory limit from `config` is *not* applied on top of it.
+  Qlever(const EngineConfig& config, bool skipLoading, Allocator<Id> allocator);
   Qlever(const EngineConfig& config, bool skipLoading, Allocator<Id> allocator,
-         qlever::Executor executor = ad_utility::globalExecutor());
+         qlever::Executor executor, size_t executorNumThreads);
+
+  // Remove the actions that the constructors registered on the global runtime
+  // parameters, as they refer to this instance.
+  //
+  // NOTE: The parameters are global, so only the most recently constructed
+  // instance is bound to them, and destroying any instance unbinds all of
+  // them.
+  ~Qlever();
 
   // The executor on which the queries and index rebuilds of this instance run
   // their parallel work (unless a different one is passed to

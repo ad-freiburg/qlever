@@ -6,8 +6,10 @@
 #define QLEVER_OPERATIONTESTHELPERS_H
 
 #include <chrono>
+#include <initializer_list>
 #include <vector>
 
+#include "./AllocatorTestHelpers.h"
 #include "./GTestHelpers.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
@@ -15,12 +17,23 @@
 
 using namespace std::chrono_literals;
 
+namespace ad_utility::testing {
+// Create a `qlm::vector<ColumnIndex>` with the given `columns`, for the sort
+// and distinct columns of an operation. The allocator is unimportant in the
+// tests, so it defaults to the unlimited test allocator.
+inline constexpr auto colIndices =
+    [](std::initializer_list<ColumnIndex> columns,
+       const qlever::Allocator<ColumnIndex>& allocator = makeAllocator()) {
+      return qlm::vector<ColumnIndex>{columns, allocator};
+    };
+}  // namespace ad_utility::testing
+
 class StallForeverOperation : public Operation {
   qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
     return qlm::vector<QueryExecutionTree*>{allocator()};
   }
-  std::string getCacheKeyImpl() const override {
-    return "StallForeverOperation";
+  qlm::string getCacheKeyImpl() const override {
+    return qlm::string{"StallForeverOperation", allocator()};
   }
   std::string getDescriptor() const override {
     return "StallForeverOperationDescriptor";
@@ -63,7 +76,9 @@ class ShallowParentOperation : public Operation {
   explicit ShallowParentOperation(std::shared_ptr<QueryExecutionTree> child)
       : Operation{child->getRootOperation()->getExecutionContext()},
         child_{std::move(child)} {}
-  std::string getCacheKeyImpl() const override { return "ParentOperation"; }
+  qlm::string getCacheKeyImpl() const override {
+    return qlm::string{"ParentOperation", allocator()};
+  }
   std::string getDescriptor() const override {
     return "ParentOperationDescriptor";
   }
@@ -108,9 +123,9 @@ class AlwaysFailOperation : public Operation {
   qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
     return qlm::vector<QueryExecutionTree*>{allocator()};
   }
-  std::string getCacheKeyImpl() const override {
+  qlm::string getCacheKeyImpl() const override {
     // Because this operation always fails, it should never be cached.
-    return "AlwaysFailOperationCacheKey";
+    return qlm::string{"AlwaysFailOperationCacheKey", allocator()};
   }
   std::string getDescriptor() const override {
     return "AlwaysFailOperationDescriptor";
@@ -163,7 +178,7 @@ class CustomGeneratorOperation : public Operation {
   qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
     return qlm::vector<QueryExecutionTree*>{allocator()};
   }
-  std::string getCacheKeyImpl() const override { AD_FAIL(); }
+  qlm::string getCacheKeyImpl() const override { AD_FAIL(); }
   std::string getDescriptor() const override {
     return "CustomGeneratorOperationDescriptor";
   }

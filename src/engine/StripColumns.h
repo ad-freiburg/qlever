@@ -42,7 +42,7 @@ class StripColumns : public Operation {
 
   // Member functions inherited from `Operation` that have to be implemented by
   // each child class.
-  std::string getCacheKeyImpl() const override;
+  qlm::string getCacheKeyImpl() const override;
   std::string getDescriptor() const override;
   size_t getResultWidth() const override;
 

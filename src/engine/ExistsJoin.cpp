@@ -13,9 +13,9 @@
 #include "engine/sparqlExpressions/ExistsExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/ChunkedForLoop.h"
-#include "util/JoinAlgorithms/IndexNestedLoopJoin.h"
-#include "util/JoinAlgorithms/JoinAlgorithms.h"
 #include "util/VectorWithMemoryLimit.h"
+#include "util/joinAlgorithms/IndexNestedLoopJoin.h"
+#include "util/joinAlgorithms/JoinAlgorithms.h"
 
 // _____________________________________________________________________________
 ExistsJoin::ExistsJoin(QueryExecutionContext* qec,
@@ -44,15 +44,15 @@ ExistsJoin::ExistsJoin(QueryExecutionContext* qec,
 }
 
 // _____________________________________________________________________________
-std::string ExistsJoin::getCacheKeyImpl() const {
-  return absl::StrCat("EXISTS JOIN left: ", left_->getCacheKey(),
-                      " right: ", right_->getCacheKey(), " join columns: [",
-                      absl::StrJoin(joinColumns_, " ",
-                                    [](std::string* out, const auto& array) {
-                                      absl::StrAppend(out, "(", array[0], ",",
-                                                      array[1], ")");
-                                    }),
-                      "]");
+qlm::string ExistsJoin::getCacheKeyImpl() const {
+  return qlm::StrCat(allocator(), "EXISTS JOIN left: ", left_->getCacheKey(),
+                     " right: ", right_->getCacheKey(), " join columns: [",
+                     qlm::StrJoin(allocator(), joinColumns_, " ",
+                                  [](std::string* out, const auto& array) {
+                                    absl::StrAppend(out, "(", array[0], ",",
+                                                    array[1], ")");
+                                  }),
+                     "]");
 }
 
 // _____________________________________________________________________________
@@ -88,12 +88,12 @@ std::optional<std::shared_ptr<QueryExecutionTree>>
 ExistsJoin::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
   // The `BIND` can only be pushed into the left child, as only its columns are
   // part of the result.
-  return pushDownBindToChild(bind, {left_, right_}, 0);
+  return pushDownBindToChild(bind, {{left_, right_}, allocator()}, 0);
 }
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> ExistsJoin::cloneWithNewChildren(
-    std::vector<std::shared_ptr<QueryExecutionTree>> children) const {
+    qlm::vector<std::shared_ptr<QueryExecutionTree>> children) const {
   return std::make_unique<ExistsJoin>(
       _executionContext, std::move(children.at(0)), std::move(children.at(1)),
       existsVariable_);
@@ -283,7 +283,7 @@ std::shared_ptr<QueryExecutionTree> ExistsJoin::addExistsJoinsToSubtree(
                   ql::views::transform([](const Variable& variable) {
                     return VariableOrderKey{variable};
                   }) |
-                  ::ranges::to<std::vector>;
+                  ::ranges::to<qlm::vector>(qec->getAllocator());
     // Ensure we have the same ordering `QueryExecutionTree::getJoinColumns`
     // would produce.
     ql::ranges::sort(pq._orderBy, {},
@@ -297,8 +297,11 @@ std::shared_ptr<QueryExecutionTree> ExistsJoin::addExistsJoinsToSubtree(
     // place, but since we're creating our own instance of `QueryPlanner` we
     // can't prevent them without refactoring the code. This workaround has the
     // downside that it might look confusing
+    // TODO<vrbommireddy> Pass the `qlm::vector` directly when
+    // `setSelectedVariablesForSubquery` takes a `ql::span`.
+    const auto& visibleVariables = pq.getVisibleVariables();
     tree->getRootOperation()->setSelectedVariablesForSubquery(
-        pq.getVisibleVariables());
+        {visibleVariables.begin(), visibleVariables.end()});
     subtree = ad_utility::makeExecutionTree<ExistsJoin>(
         qec, std::move(subtree), std::move(tree), exists.variable());
   }
