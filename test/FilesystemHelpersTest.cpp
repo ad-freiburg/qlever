@@ -563,7 +563,8 @@ TEST(FilesystemHelpers, writeFileAtomicallyOpenFailure) {
   TempDir dir;
   auto subdir = dir.path() / "subdir";
   fs::create_directory(subdir);
-  fs::permissions(subdir, fs::perms::owner_read | fs::perms::owner_exec);
+  fs::permissions(subdir,
+                  fs::perms::owner_read | ql::filesystem_perms_owner_exec);
   absl::Cleanup restorePermissions = [&subdir] {
     fs::permissions(subdir, fs::perms::owner_all);
   };
@@ -663,8 +664,9 @@ TEST(FilesystemHelpers, writeFileAtomicallyFailingRemovalOfTemporaryFile) {
       writeFileAtomically(subdir / "file",
                           [&subdir](const fs::path& temporaryPath) {
                             ad_utility::makeOfstream(temporaryPath) << "x";
-                            fs::permissions(subdir, fs::perms::owner_read |
-                                                        fs::perms::owner_exec);
+                            fs::permissions(
+                                subdir, fs::perms::owner_read |
+                                            ql::filesystem_perms_owner_exec);
                             throw std::runtime_error{"callback failed"};
                           }),
       HasSubstr("callback failed"));

@@ -276,8 +276,12 @@ void writeFileAtomically(const fs::path& path, ql::span<const char> bytes) {
 
 // _____________________________________________________________________________
 void copyFileAtomically(const fs::path& from, const fs::path& to) {
+  // The temporary file has a fresh random name and therefore does not exist
+  // yet, so no option to overwrite an existing file is needed (the spelling of
+  // that option differs between `std::filesystem` and older versions of
+  // `boost::filesystem`).
   writeFileAtomically(to, [&from](const fs::path& temporary) {
-    fs::copy_file(from, temporary, fs::copy_options::overwrite_existing);
+    fs::copy_file(from, temporary);
   });
 }
 
