@@ -950,6 +950,26 @@ TEST(GeometryInfoTest, FromSerializedInvalidInput) {
       ::testing::HasSubstr("geometryInfoSize"));
 }
 
+// Test that the ID in the geometry store is set and returned, and that the
+// largest `uint64_t` is rejected (it cannot be stored as `id + 1`).
+TEST(GeometryInfoTest, GeometryStoreId) {
+  // A record of zeros has no ID.
+  std::array<uint8_t, sizeof(GeometryInfo)> bytes{};
+  auto info = GeometryInfo::fromSerialized(bytes, GEOMETRY_INFO_VERSION);
+  EXPECT_EQ(info.getGeometryStoreId(), std::nullopt);
+
+  // The smallest and the largest valid ID.
+  info.setGeometryStoreId(0);
+  EXPECT_EQ(info.getGeometryStoreId(), 0);
+  constexpr auto max = std::numeric_limits<uint64_t>::max();
+  info.setGeometryStoreId(max - 1);
+  EXPECT_EQ(info.getGeometryStoreId(), max - 1);
+
+  // The largest `uint64_t` is rejected.
+  AD_EXPECT_THROW_WITH_MESSAGE(info.setGeometryStoreId(max),
+                               ::testing::HasSubstr("max"));
+}
+
 // _____________________________________________________________________________
 TEST(GeometryInfoTest, ParseGeoPointOrWktVisitor) {
   using namespace ad_utility::detail;

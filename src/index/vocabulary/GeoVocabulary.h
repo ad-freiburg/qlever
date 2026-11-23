@@ -165,7 +165,10 @@ class GeoVocabulary {
   // of each of them to its record.
   //
   // NOTE: The store assigns the IDs in the order of the calls, so the writers
-  // call this in the order of the positions, for a deterministic index.
+  // call this in the order of the positions, for a deterministic index. Within
+  // one call, the store numbers the members of multi geometries after the
+  // other geometries, so the IDs also depend on how a writer splits the words
+  // into batches (they are still consistent with the records).
   static void addToGeometryStore(sj::GeometryStore& store,
                                  ComputedBatch& batch);
 

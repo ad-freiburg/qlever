@@ -361,9 +361,12 @@ TEST(GeoBlockWriter, sameFilesAndIndicesWithGrid) {
 }
 
 // Test that with the geometry store, the `BlockWriter` of a `GeoVocabulary`
-// writes the same files as its `WordWriter` (the geometries are added to the
-// store in the order of their positions, although the blocks are prepared
-// concurrently).
+// writes the same files as its `WordWriter` for geometries that are not multi
+// geometries (these are added to the store in the order of their positions,
+// although the blocks are prepared concurrently).
+//
+// NOTE: The IDs of multi geometries also depend on the batches of a writer,
+// see `GeoVocabulary::addToGeometryStore`.
 TEST(GeoBlockWriter, sameGeometryStoreAsWordWriter) {
   using GV = GeoVocabulary<VocabularyInMemory>;
   const std::string filenameA =
@@ -409,18 +412,10 @@ TEST(GeoBlockWriter, sameGeometryStoreAsWordWriter) {
   }
 
   // Both writers write the same files.
-  //
-  // TODO<ullingerc>: Also compare the contents of the files of the geometry
-  // store, once `libspatialjoin` no longer writes the padding bytes of its
-  // `BoxId`s (`std::pair<int32_t, uint8_t>`) uninitialized to them.
   for (const auto& suffix : GV::fileSuffixes()) {
-    auto fileA = readFile(absl::StrCat(filenameA, suffix));
-    auto fileB = readFile(absl::StrCat(filenameB, suffix));
-    if (ql::starts_with(suffix, ".geostore.")) {
-      EXPECT_EQ(fileA.size(), fileB.size()) << suffix;
-    } else {
-      EXPECT_EQ(fileA, fileB) << suffix;
-    }
+    EXPECT_EQ(readFile(absl::StrCat(filenameA, suffix)),
+              readFile(absl::StrCat(filenameB, suffix)))
+        << suffix;
   }
 
   // The geometries are actually stored.
