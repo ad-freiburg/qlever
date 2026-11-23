@@ -14,10 +14,14 @@
 #include <string>
 
 #include "../../util/GTestHelpers.h"
+#include "../../util/IndexTestHelpers.h"
+#include "../../util/TripleComponentTestHelpers.h"
 #include "../QleverTestHelpers.h"
 #include "libqlever/Qlever.h"
 #include "libqlever/blobDiff/TurtleDelta.h"
 #include "parser/BlankNodeAdder.h"
+#include "parser/RdfParser.h"
+#include "parser/Tokenizer.h"
 #include "util/File.h"
 #include "util/FilesystemHelpers.h"
 
@@ -32,7 +36,76 @@ constexpr std::string_view oldData =
     "<a> <r> <b> .\n";
 }  // namespace
 
-// _____________________________________________________________________________
+// Test `detail::parseTurtleFile`: the triples of the file are returned, and the
+// message of a parse error names the file.
+TEST(TurtleDelta, parseTurtleFile) {
+  const Index& index =
+      ad_utility::testing::getQec(std::string{oldData})->getIndex();
+  std::string filename = absl::StrCat(gtestCurrentTestName(), ".ttl");
+  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
+  ad_utility::makeOfstream(filename) << oldData;
+  auto triples = blobDiff::detail::parseTurtleFile(filename, index);
+  ASSERT_EQ(triples.size(), 3u);
+  EXPECT_EQ(triples[2].subject_, ad_utility::testing::iri("<a>"));
+  EXPECT_EQ(triples[2].predicate_, ad_utility::testing::iri("<r>"));
+  EXPECT_EQ(triples[2].object_, ad_utility::testing::iri("<b>"));
+
+  ad_utility::makeOfstream(filename) << "<a> <p> .\n";
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      blobDiff::detail::parseTurtleFile(filename, index),
+      HasSubstr(absl::StrCat("Parse error in \"", filename, "\"")));
+}
+
+// Test `detail::toIdTriples`: the result is sorted and free of duplicates, all
+// triples are in the same (default) graph, equal values with a different
+// lexical form get the same `Id`, a word that is not in the vocabulary becomes
+// a `LocalVocabIndex`, and equal blank node labels get the same `Id`.
+TEST(TurtleDelta, toIdTriples) {
+  const Index& index =
+      ad_utility::testing::getQec(std::string{oldData})->getIndex();
+  BlankNodeAdder adder{index.getBlankNodeManager()};
+  auto triples =
+      RdfStringParser<TurtleParser<Tokenizer>>::parseTriplesFromString(
+          "<a> <p> \"1\"^^<http://www.w3.org/2001/XMLSchema#int> .\n"
+          "<a> <p> \"01\"^^<http://www.w3.org/2001/XMLSchema#int> .\n"
+          "<a> <q> \"x\" .\n"
+          "<a> <q> \"x\" .\n"
+          "_:b <p> \"brand new\" .\n"
+          "_:b <q> _:c .\n",
+          &index.encodedIriManager());
+  auto idTriples =
+      blobDiff::detail::toIdTriples(std::move(triples), index, adder);
+  ASSERT_EQ(idTriples.size(), 4u);
+  EXPECT_TRUE(ql::ranges::is_sorted(idTriples));
+  for (const auto& triple : idTriples) {
+    EXPECT_EQ(triple.ids()[3], idTriples[0].ids()[3]);
+  }
+
+  auto getId = ad_utility::testing::makeGetId(index);
+  auto hasSubject = [](Id subject) {
+    return [subject](const auto& triple) { return triple.ids()[0] == subject; };
+  };
+  auto fromA = ql::ranges::count_if(idTriples, hasSubject(getId("<a>")));
+  EXPECT_EQ(fromA, 2);
+
+  // The two triples with the blank node `_:b` as subject.
+  std::vector<IdTriple<0>> fromB;
+  ql::ranges::copy_if(
+      idTriples, std::back_inserter(fromB), [](const auto& triple) {
+        return triple.ids()[0].getDatatype() == Datatype::BlankNodeIndex;
+      });
+  ASSERT_EQ(fromB.size(), 2u);
+  EXPECT_EQ(fromB[0].ids()[0], fromB[1].ids()[0]);
+  auto objectTypes = std::vector{fromB[0].ids()[2].getDatatype(),
+                                 fromB[1].ids()[2].getDatatype()};
+  EXPECT_THAT(objectTypes, UnorderedElementsAre(Datatype::LocalVocabIndex,
+                                                Datatype::BlankNodeIndex));
+  auto objectOfBq =
+      fromB[0].ids()[1] == getId("<q>") ? fromB[0].ids()[2] : fromB[1].ids()[2];
+  EXPECT_NE(objectOfBq, fromB[0].ids()[0]);
+}
+
+// Test `computeTripleDelta` and `applyTripleDelta` end to end on a small index.
 TEST(TurtleDelta, computeAndApplyTripleDelta) {
   auto indexConfig = ad_utility::testing::buildTestIndex(oldData);
   absl::Cleanup cleanupIndex = [baseName = indexConfig.baseName_] {

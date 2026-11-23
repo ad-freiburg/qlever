@@ -17,6 +17,9 @@
 #include "index/Index.h"
 #include "parser/BlankNodeAdder.h"
 
+// Forward declaration to not include the heavy `parser/RdfParser.h`.
+struct TurtleTriple;
+
 namespace qlever::blobDiff {
 
 // The difference between two versions of the data, as the triples to insert
@@ -36,8 +39,8 @@ struct TripleDelta {
 // string representations of the parsed triples would get both cases wrong. The
 // `adder` gives the same `Id` to equal words (also to those that are not in the
 // vocabulary of the `index`, which become `LocalVocabIndex` `Id`s), and to
-// equal blank node labels. The `adder` keeps these words alive, so it has to
-// outlive the use of the result.
+// equal blank node labels. The `adder` (which contains a `LocalVocab`) keeps
+// these words alive, so it has to outlive the use of the result.
 TripleDelta computeTripleDelta(const ql::filesystem::path& oldTurtleFile,
                                const ql::filesystem::path& newTurtleFile,
                                const Index& index, BlankNodeAdder& adder);
@@ -45,6 +48,18 @@ TripleDelta computeTripleDelta(const ql::filesystem::path& oldTurtleFile,
 // Apply the `delta` to the delta triples of the `index`, in a single
 // modification.
 void applyTripleDelta(Index& index, TripleDelta delta);
+
+namespace detail {
+// Parse the Turtle file `path` using the settings of `index`.
+std::vector<TurtleTriple> parseTurtleFile(const ql::filesystem::path& path,
+                                          const Index& index);
+
+// Convert the `triples` into sorted and deduplicated `IdTriple`s in the default
+// graph. Words that are not in the vocabulary of the `index` become
+// `LocalVocabIndex` `Id`s that are kept alive by the `adder`.
+std::vector<IdTriple<0>> toIdTriples(std::vector<TurtleTriple> triples,
+                                     const Index& index, BlankNodeAdder& adder);
+}  // namespace detail
 
 }  // namespace qlever::blobDiff
 

@@ -1754,6 +1754,30 @@ TEST(RdfParserTest, parseErrorOfStringParserHasNoInputName) {
                        ::testing::Not(::testing::HasSubstr("Parse error in"))));
 }
 
+// Test the static `parseTriplesFromString`, with and without an input name for
+// the error messages.
+TEST(RdfParserTest, parseTriplesFromString) {
+  auto triples = Re2Parser::parseTriplesFromString(
+      "<s> <p> <o> . <s> <p> \"lit\" .", encodedIriManager());
+  ASSERT_EQ(triples.size(), 2u);
+  EXPECT_EQ(triples[0].subject_, ad_utility::testing::iri("<s>"));
+  EXPECT_EQ(triples[0].object_, ad_utility::testing::iri("<o>"));
+  EXPECT_EQ(triples[1].object_,
+            ad_utility::testing::tripleComponentLiteral("\"lit\""));
+
+  EXPECT_TRUE(
+      Re2Parser::parseTriplesFromString("", encodedIriManager()).empty());
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      Re2Parser::parseTriplesFromString("<s> <p> .", encodedIriManager(),
+                                        "someInput"),
+      ::testing::HasSubstr("Parse error in \"someInput\""));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      Re2Parser::parseTriplesFromString("<s> <p> .", encodedIriManager()),
+      ::testing::AllOf(::testing::HasSubstr("Parse error at byte position"),
+                       ::testing::Not(::testing::HasSubstr("Parse error in"))));
+}
+
 // Test that a parse error of a parallel parser reports a byte position that is
 // relative to the beginning of the input file, and not to the beginning of the
 // block in which the error occurred. The offset of a block is tracked by
