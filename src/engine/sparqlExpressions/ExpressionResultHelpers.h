@@ -12,6 +12,7 @@
 
 #include <type_traits>
 
+#include "engine/idTable/splitLayout/IdRef.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
@@ -68,7 +69,17 @@ auto makeIndexedValueGetter(Operand&& operand, EvaluationContext* context) {
     // getter as lvalues. This is irrelevant for the currently used value
     // getters, but should be revisited for move-sensitive value types.
     return [&operand, context](size_t i) {
-      return ValueGetter{}(operand[i], context);
+      if constexpr (ad_utility::SimilarToAny<
+                        decltype(operand[i]),
+                        columnBasedIdTable::splitLayout::ConstIdRef::Base,
+                        columnBasedIdTable::splitLayout::IdRef::Base>) {
+        // An element of a split column converts to both `ValueId` and
+        // `IdOrLocalVocabEntry`, which makes a call of a value getter
+        // ambiguous, so it is passed on as the `Id` it refers to.
+        return ValueGetter{}(Id{operand[i]}, context);
+      } else {
+        return ValueGetter{}(operand[i], context);
+      }
     };
   } else {
     // The converted constant is returned as a const rvalue reference, so that

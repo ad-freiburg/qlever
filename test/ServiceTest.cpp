@@ -132,7 +132,7 @@ class ServiceTest : public ::testing::Test {
   static Service::SiblingInfo siblingInfoFromOp(std::shared_ptr<Operation> op) {
     return Service::SiblingInfo{op->getResult(),
                                 op->getExternallyVisibleVariableColumns(),
-                                op->getCacheKey()};
+                                std::string{op->getCacheKey()}};
   };
 };
 
@@ -904,6 +904,15 @@ TEST_F(ServiceTest, idToValueForValuesClause) {
   EXPECT_EQ(idToVc(index, Id::makeFromDouble(3.14), localVocab), "3.14");
   EXPECT_EQ(idToVc(index, Id::makeFromBool(true), localVocab), "true");
 
+  // Non-finite doubles have no bare SPARQL syntax -> typed literal.
+  auto xsdDouble = absl::StrCat("\"^^<", XSD_DOUBLE_TYPE, ">");
+  EXPECT_EQ(idToVc(index, Id::makeFromDouble(INFINITY), localVocab),
+            absl::StrCat("\"INF", xsdDouble));
+  EXPECT_EQ(idToVc(index, Id::makeFromDouble(-INFINITY), localVocab),
+            absl::StrCat("\"-INF", xsdDouble));
+  EXPECT_EQ(idToVc(index, Id::makeFromDouble(NAN), localVocab),
+            absl::StrCat("\"NaN", xsdDouble));
+
   // Escape Quotes within literals.
   auto getLocalVocabId = ad_utility::testing::makeGetLocalVocabId();
   auto str = LocalVocabEntry::literalWithoutQuotes(
@@ -1412,8 +1421,10 @@ TEST_F(ServiceTest, binaryFormat) {
             testQec, makeIdTableFromVector({{1, 2}, {3, 4}}, &Id::makeFromInt),
             std::vector<std::optional<Variable>>{Variable{"?y"},
                                                  Variable{"?x"}})};
-    parsedQuery::SelectClause selectClause;
-    selectClause.setSelected(std::vector{Variable{"?y"}, Variable{"?x"}});
+    auto allocator = ad_utility::testing::makeAllocator();
+    parsedQuery::SelectClause selectClause{allocator};
+    selectClause.setSelected(
+        qlm::vector<Variable>{{Variable{"?y"}, Variable{"?x"}}, allocator});
     std::string bytes;
     for (std::string_view chunk : qlever::binary_export::exportAsQLeverBinary(
              qet, selectClause, {},

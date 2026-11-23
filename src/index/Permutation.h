@@ -115,15 +115,16 @@ class Permutation {
 
   // For a given ID for the col0, retrieve all IDs of the col1 and col2.
   // If `col1Id` is specified, only the col2 is returned for triples that
-  // additionally have the specified col1. .This is just a thin wrapper around
-  // `CompressedRelationMetaData::scan`, which reads the blocks on the
-  // `executor`.
+  // additionally have the specified col1. This is just a thin wrapper around
+  // `CompressedRelationReader::scan`, which reads the blocks on the
+  // `executor` (see there, also for the `columnSubset`).
   IdTable scan(const ScanSpecAndBlocks& scanSpecAndBlocks,
                ColumnIndicesRef additionalColumns,
                const CancellationHandle& cancellationHandle,
                const LocatedTriplesState& locatedTriplesState,
                qlever::Executor executor,
-               const LimitOffsetClause& limitOffset = {}) const;
+               const LimitOffsetClause& limitOffset = {},
+               std::optional<ColumnIndices> columnSubset = std::nullopt) const;
 
   // For a given relation, determine the `col1Id`s and their counts. This is
   // used for `computeGroupByObjectWithCount`. The `col0Id` must have metadata
@@ -185,7 +186,8 @@ class Permutation {
       ColumnIndicesRef additionalColumns,
       const CancellationHandle& cancellationHandle,
       const LocatedTriplesState& locatedTriplesState, qlever::Executor executor,
-      const LimitOffsetClause& limitOffset = {}) const;
+      const LimitOffsetClause& limitOffset = {},
+      std::optional<ColumnIndices> columnSubset = std::nullopt) const;
 
   // A lazy scan together with the independent `CompressedRelationReader` it
   // reads from. The `reader_` owns the file handle and allocator that `blocks_`
@@ -323,7 +325,8 @@ class Permutation {
       ColumnIndicesRef additionalColumns,
       const CancellationHandle& cancellationHandle,
       const LocatedTriplesState& locatedTriplesState, qlever::Executor executor,
-      const LimitOffsetClause& limitOffset) const;
+      const LimitOffsetClause& limitOffset,
+      std::optional<ColumnIndices> columnSubset) const;
 
   // The base filename of the permutation without the suffix below
   std::string onDiskBase_;

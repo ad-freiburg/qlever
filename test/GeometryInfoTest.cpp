@@ -37,8 +37,8 @@ constexpr std::string_view litPointWGS84 =
     "\"<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(4 "
     "3)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 constexpr std::string_view litPointWebMerc =
-    "\"<http://www.opengis.net/def/crs/EPSG/0/3857> POINT(333958.4723798207 "
-    "445640.10965602624)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+    "\"<http://www.opengis.net/def/crs/EPSG/0/3857> POINT(333958.47238 "
+    "445640.109656)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 const DPoint expectedPoint{3, 4};
 constexpr std::string_view litLineString =
     "\"LINESTRING(2 2,4 4)\""
@@ -407,6 +407,16 @@ TEST(GeometryInfoTest, FromWktLiteral) {
                      MetricLength{0},
                      MetricArea{0}};
   EXPECT_THAT(g10, geoInfoMatcher(exp10));
+
+  // The centroid of a Web Mercator polygon is computed in Web Mercator (the
+  // center of this square is `POINT(5000000 5000000)`) and stored in CRS84.
+  auto g11 = GeometryInfo::fromWktLiteral(
+      "\"<http://www.opengis.net/def/crs/EPSG/0/3857> POLYGON((0 0,10000000 "
+      "0,10000000 10000000,0 10000000,0 0))\"^^<http://www.opengis.net/ont/"
+      "geosparql#wktLiteral>");
+  ASSERT_TRUE(g11.has_value());
+  EXPECT_THAT(g11.value().getCentroid(),
+              centroidNear(Centroid{40.916274, 44.915764}));
 }
 
 // Test that `isValidWktStrict` accepts well-formed literals and rejects
@@ -504,8 +514,9 @@ TEST(GeometryInfoTest, RequestedInfoLiteral) {
   }
 }
 
-// Test the WKT representation of a `BoundingBox`.
-TEST(GeometryInfoTest, BoundingBoxAsWKT) {
+// Test the WKT representation of a `BoundingBox` and a `Centroid`, in CRS84
+// and projected to another CRS.
+TEST(GeometryInfoTest, BoundingBoxAndCentroidAsWKT) {
   BoundingBox bb1{{0, 0}, {1, 1}};
   ASSERT_EQ(bb1.asWkt(), "POLYGON((0 0,1 0,1 1,0 1,0 0))");
   BoundingBox bb2{{0, 0}, {0, 0}};
@@ -513,8 +524,21 @@ TEST(GeometryInfoTest, BoundingBoxAsWKT) {
   auto bb3 = GeometryInfo::getBoundingBox(
       "\"LINESTRING(2 4,8 8)\""
       "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
-  EXPECT_THAT(bb3, Optional(Property(&BoundingBox::asWkt,
-                                     "POLYGON((2 4,8 4,8 8,2 8,2 4))")));
+  ASSERT_TRUE(bb3.has_value());
+  EXPECT_EQ(bb3.value().asWkt(), "POLYGON((2 4,8 4,8 8,2 8,2 4))");
+
+  // Projected to another CRS (with its IRI, swapped axes for WGS84).
+  using util::geo::CRSType;
+  EXPECT_EQ(bb3.value().asWkt(SourceCrsType{CRSType::WGS84}),
+            "<http://www.opengis.net/def/crs/EPSG/0/4326> "
+            "POLYGON((4 2,4 8,8 8,8 2,4 2))");
+  EXPECT_EQ(bb1.asWkt(SourceCrsType{CRSType::CRS84}),
+            "POLYGON((0 0,1 0,1 1,0 1,0 0))");
+  Centroid centroid{2, 1};
+  EXPECT_EQ(centroid.asWkt(SourceCrsType{CRSType::CRS84}), "POINT(1 2)");
+  EXPECT_EQ(centroid.asWkt(SourceCrsType{CRSType::WEB_MERCATOR}),
+            "<http://www.opengis.net/def/crs/EPSG/0/3857> "
+            "POINT(111319.490793 222684.208506)");
 }
 
 // ____________________________________________________________________________
@@ -607,7 +631,7 @@ TEST(GeometryInfoTest, GeometryInfoHelpers) {
   ASSERT_TRUE(parseRes1.parsedWkt_.has_value());
   auto parsed1 = parseRes1.parsedWkt_.value();
 
-  auto centroid1 = centroidAsGeoPoint(parsed1);
+  auto centroid1 = centroidAsGeoPoint(parsed1, parseRes1.sourceCrs_);
   Centroid centroidExp1{{4, 3}};
   EXPECT_THAT(centroid1, centroidNear(centroidExp1));
 
@@ -961,27 +985,22 @@ TEST(GeometryInfoTest, UtilGeomToWktVisitor) {
   ASSERT_EQ(literals.size(), geometries.size());
 
   for (size_t i = 0; i < literals.size(); ++i) {
-    // TODO<yarox-1> `utilGeomToWkt` cannot reconstruct the CRS IRI yet, so
-    // skip the literals that have one.
-    if (literals[i] == litPointWGS84 || literals[i] == litPointWebMerc) {
-      continue;
-    }
-
     auto parsedWkt = geometries[i].parsedWkt_;
+    auto sourceCrs = geometries[i].sourceCrs_;
     auto expected = removeDatatype(literals[i]);
     ASSERT_TRUE(parsedWkt.has_value());
 
     // Test with `ParsedWKT` input.
-    EXPECT_EQ(utilGeomToWkt(parsedWkt.value()), expected);
+    EXPECT_EQ(utilGeomToWkt(parsedWkt.value(), sourceCrs), expected);
 
     // Test with optional input.
-    EXPECT_EQ(utilGeomToWkt(parsedWkt), expected);
+    EXPECT_EQ(utilGeomToWkt(parsedWkt, sourceCrs), expected);
 
     // Test with individual geometry type as input.
     std::visit(
         [&](const auto& geom) -> void {
-          EXPECT_EQ(utilGeomToWkt(geom), expected);
-          EXPECT_EQ(utilGeomToWkt(DAnyGeometry{geom}), expected);
+          EXPECT_EQ(utilGeomToWkt(geom, sourceCrs), expected);
+          EXPECT_EQ(utilGeomToWkt(DAnyGeometry{geom}, sourceCrs), expected);
         },
         parsedWkt.value());
   }

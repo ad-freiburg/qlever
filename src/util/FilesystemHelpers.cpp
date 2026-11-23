@@ -87,7 +87,7 @@ bool doesDirectoryContainFileWithBasename(const std::string& baseName) {
 // _____________________________________________________________________________
 size_t deleteFilesInDirectory(
     const fs::path& directory,
-    absl::FunctionRef<bool(const fs::path&)> shouldDelete) {
+    absl::FunctionRef<bool(const fs::path&)> shouldDelete, bool warnOnFailure) {
   if (!fs::exists(directory) || !fs::is_directory(directory)) {
     return 0;
   }
@@ -102,7 +102,7 @@ size_t deleteFilesInDirectory(
     }
   }
   for (const auto& path : toDelete) {
-    ad_utility::deleteFile(path);
+    ad_utility::deleteFile(path, warnOnFailure);
   }
   return toDelete.size();
 }

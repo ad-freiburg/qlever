@@ -120,8 +120,8 @@ std::shared_ptr<SpatialJoin> rewriteFilterToSpatialJoin(
 }
 
 // _____________________________________________________________________________
-void splitFiltersWithFacts(std::vector<SparqlFilter>& filters) {
-  std::vector<SparqlFilter> result;
+void splitFiltersWithFacts(qlm::vector<SparqlFilter>& filters) {
+  qlm::vector<SparqlFilter> result{filters.get_allocator()};
   for (auto& filter : filters) {
     auto conjuncts = filterFacts::canonicalize(filter.expression_);
     bool hasFact = ql::ranges::any_of(conjuncts, [](const auto& conjunct) {

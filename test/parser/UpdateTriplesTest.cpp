@@ -13,9 +13,10 @@
 using namespace updateClause;
 using V = Variable;
 
-// _____________________________________________________________________________
-TEST(UpdateTriples, DefaultConstructor) {
-  UpdateTriples tr{};
+// Test that the constructor that only takes an allocator creates empty
+// `UpdateTriples`.
+TEST(UpdateTriples, ConstructorWithAllocator) {
+  UpdateTriples tr{ad_utility::testing::makeAllocator()};
   EXPECT_TRUE(tr.triples_.empty());
   EXPECT_TRUE(tr.localVocab_.empty());
 }
@@ -23,11 +24,12 @@ TEST(UpdateTriples, DefaultConstructor) {
 // _____________________________________________________________________________
 TEST(UpdateTriples, ConstructorsAndAssignments) {
   auto* qec = ad_utility::testing::getQec();
-  LocalVocab l{ad_utility::testing::makeAllocator()};
+  auto allocator = ad_utility::testing::makeAllocator();
+  LocalVocab l{allocator};
   auto iri = ad_utility::testing::iriLocalVocabEntry(
       "<hallo>", qec->getLocalVocabContext());
   l.getIndexAndAddIfNotContained(iri);
-  std::vector<SparqlTripleSimpleWithGraph> triples;
+  qlm::vector<SparqlTripleSimpleWithGraph> triples{allocator};
 
   SparqlTripleSimpleWithGraph triple{V{"?x"}, V{"?y"}, V{"?z"},
                                      std::monostate{}};
@@ -65,7 +67,7 @@ TEST(UpdateTriples, ConstructorsAndAssignments) {
   testTriples(tr);
 
   // Move assignment
-  UpdateTriples tr3;
+  UpdateTriples tr3{allocator};
   tr3 = std::move(tr);
   testTriples(tr3);
   EXPECT_TRUE(tr.triples_.empty());
