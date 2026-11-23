@@ -1657,6 +1657,78 @@ TEST(QueryPlanner, PathSearchBothBoundIndividually) {
       qec);
 }
 
+// A sibling with columns other than the source or target is not bound, because
+// the path search does not output these columns.
+TEST(QueryPlanner, PathSearchSourceNotBoundToSiblingWithOtherColumns) {
+  auto scan = h::IndexScanFromStrings;
+  auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+
+  PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
+                                 Variable{"?source"},
+                                 IdColumn{getId("<z>")},
+                                 Variable("?start"),
+                                 Variable("?end"),
+                                 Variable("?path"),
+                                 Variable("?edge"),
+                                 {}};
+  h::expect(
+      "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
+      "SELECT * WHERE {"
+      "?source <p> ?o ."
+      "SERVICE pathSearch: {"
+      "_:path pathSearch:algorithm pathSearch:allPaths ;"
+      "pathSearch:source ?source ;"
+      "pathSearch:target <z> ;"
+      "pathSearch:pathColumn ?path ;"
+      "pathSearch:edgeColumn ?edge ;"
+      "pathSearch:start ?start;"
+      "pathSearch:end ?end;"
+      "{SELECT * WHERE {"
+      "?start <p> ?end."
+      "}}}}",
+      h::UnorderedJoins(
+          h::pathSearch(config, false, true, scan("?start", "<p>", "?end")),
+          scan("?source", "<p>", "?o")),
+      qec);
+}
+
+// A possibly undefined sibling column is not bound, because an undefined value
+// matches paths from any source.
+TEST(QueryPlanner, PathSearchSourceNotBoundToUndefinedColumn) {
+  auto scan = h::IndexScanFromStrings;
+  auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+
+  PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
+                                 Variable{"?source"},
+                                 IdColumn{getId("<z>")},
+                                 Variable("?start"),
+                                 Variable("?end"),
+                                 Variable("?path"),
+                                 Variable("?edge"),
+                                 {}};
+  h::expect(
+      "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
+      "SELECT * WHERE {"
+      "VALUES ?source {<x> UNDEF}"
+      "SERVICE pathSearch: {"
+      "_:path pathSearch:algorithm pathSearch:allPaths ;"
+      "pathSearch:source ?source ;"
+      "pathSearch:target <z> ;"
+      "pathSearch:pathColumn ?path ;"
+      "pathSearch:edgeColumn ?edge ;"
+      "pathSearch:start ?start;"
+      "pathSearch:end ?end;"
+      "{SELECT * WHERE {"
+      "?start <p> ?end."
+      "}}}}",
+      h::UnorderedJoins(
+          h::pathSearch(config, false, true, scan("?start", "<p>", "?end")),
+          h::ValuesClause("VALUES (?source) { (<x>) (UNDEF) }")),
+      qec);
+}
+
 // __________________________________________________________________________
 TEST(QueryPlanner, PathSearchMissingStart) {
   auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");

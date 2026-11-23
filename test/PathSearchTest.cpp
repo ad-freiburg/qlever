@@ -842,6 +842,80 @@ TEST(PathSearchTest, sourceAndTargetBound) {
               ::testing::UnorderedElementsAreArray(expected));
 }
 
+// Sources and targets from the same tree are pairs, even for a cartesian
+// search, and duplicate pairs yield duplicate paths.
+TEST(PathSearchTest, sourceAndTargetBoundArePairs) {
+  auto sub = makeIdTableFromVector({{0, 1}, {1, 2}, {3, 2}});
+  auto sideTable = makeIdTableFromVector({{0, 1}, {3, 2}, {3, 2}});
+  auto expected = makeIdTableFromVector({
+      {V(0), V(1), I(0), I(0), V(0), V(1)},
+      {V(3), V(2), I(1), I(0), V(3), V(2)},
+      {V(3), V(2), I(2), I(0), V(3), V(2)},
+  });
+
+  Vars vars = {Variable{"?start"}, Variable{"?end"}};
+  PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
+                                 Var{"?source"},
+                                 Var{"?target"},
+                                 Var{"?start"},
+                                 Var{"?end"},
+                                 Var{"?edgeIndex"},
+                                 Var{"?pathIndex"},
+                                 {}};
+
+  auto qec = getQec();
+  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(sub), vars);
+  auto pathSearch = PathSearch(qec, std::move(subtree), std::move(config));
+
+  Vars sideTreeVars = {Var{"?source"}, Var{"?target"}};
+  auto sideTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(sideTable), sideTreeVars);
+  pathSearch.bindSourceAndTargetSide(sideTree, 0, 1);
+
+  auto resultTable = pathSearch.computeResult(false);
+  ASSERT_THAT(resultTable.idTableView(),
+              ::testing::UnorderedElementsAreArray(expected));
+}
+
+// A side that is bound to an empty result matches no paths.
+TEST(PathSearchTest, boundSideIsEmpty) {
+  Vars vars = {Variable{"?start"}, Variable{"?end"}};
+  PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
+                                 Var{"?source"},
+                                 Var{"?target"},
+                                 Var{"?start"},
+                                 Var{"?end"},
+                                 Var{"?edgeIndex"},
+                                 Var{"?pathIndex"},
+                                 {}};
+  auto qec = getQec();
+
+  auto makePathSearch = [&qec, &config, &vars]() {
+    auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, makeIdTableFromVector({{0, 1}, {1, 2}}), vars);
+    return PathSearch{qec, std::move(subtree), config};
+  };
+  auto makeEmptySide = [&qec](size_t numCols) {
+    Vars sideVars = {Var{"?source"}, Var{"?target"}};
+    sideVars.resize(numCols);
+    return ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, IdTable{numCols, ad_utility::testing::makeAllocator()}, sideVars);
+  };
+
+  auto sourceBound = makePathSearch();
+  sourceBound.bindSourceSide(makeEmptySide(1), 0);
+  EXPECT_EQ(sourceBound.computeResult(false).idTableView().numRows(), 0);
+
+  auto targetBound = makePathSearch();
+  targetBound.bindTargetSide(makeEmptySide(1), 0);
+  EXPECT_EQ(targetBound.computeResult(false).idTableView().numRows(), 0);
+
+  auto bothBound = makePathSearch();
+  bothBound.bindSourceAndTargetSide(makeEmptySide(2), 0, 1);
+  EXPECT_EQ(bothBound.computeResult(false).idTableView().numRows(), 0);
+}
+
 // _____________________________________________________________________________
 TEST(PathSearchTest, clone) {
   auto sub = makeIdTableFromVector({{0, 1}});
