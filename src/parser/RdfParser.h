@@ -493,6 +493,7 @@ class TurtleParser : public RdfParserBase {
   FRIEND_TEST(RdfParserTest, prefixID);
   FRIEND_TEST(RdfParserTest, stringParse);
   FRIEND_TEST(RdfParserTest, rdfLiteral);
+  FRIEND_TEST(RdfParserTest, predicate);
   FRIEND_TEST(RdfParserTest, predicateObjectList);
   FRIEND_TEST(RdfParserTest, objectList);
   FRIEND_TEST(RdfParserTest, object);

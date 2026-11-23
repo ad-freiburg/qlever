@@ -2978,6 +2978,29 @@ TEST(RdfParserTest, turtleTripleTermContents) {
 }
 
 // _____________________________________________________________________________
+TEST(RdfParserTest, predicate) {
+  auto run = [](auto parser) {
+    parser.setInputStream("<p>");
+    ASSERT_TRUE(parser.predicate());
+    EXPECT_EQ(parser.activePredicate_, iri("<p>"));
+    EXPECT_EQ(parser.getLastParseResult(), iri("<p>"));
+
+    parser.setInputStream("42");
+    EXPECT_FALSE(parser.predicate());
+    EXPECT_EQ(parser.activePredicate_, iri("<p>"));
+
+    parser.setInputStream("<<( <s> <p> <o> )>>");
+    AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+        parser.predicate(),
+        ::testing::HasSubstr(
+            "Triple terms are only allowed as the object of a triple or quad"),
+        ParseException);
+  };
+  run(Re2Parser{encodedIriManager()});
+  run(CtreParser{encodedIriManager()});
+}
+
+// _____________________________________________________________________________
 TEST(RdfParserTest, tripleTermErrors) {
   auto run = [](auto parser,
                 ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
@@ -3082,6 +3105,13 @@ TEST(RdfParserTest, nQuadTripleTermRestrictions) {
         ::testing::ElementsAre(IsRdfTriple(
             iri("<s>"), iri("<p>"),
             IsTripleTerm(iri("<s>"), iri("<p>"), iri("<o>")), iri("<graph>"))));
+    expectParseFailure(parser, "42 <p> <<( <s> <p> <o> )>> .",
+                       "Parsing failed before end of input");
+    parser.setBlankNodePrefixOnlyForTesting(42);
+    EXPECT_THAT(parseAllTriples(parser, "_:subject <p> <<( <s> <p> <o> )>> ."),
+                ::testing::ElementsAre(IsRdfTriple(
+                    "_:u_42_subject", iri("<p>"),
+                    IsTripleTerm(iri("<s>"), iri("<p>"), iri("<o>")))));
     expectParseFailure(
         parser, "<s> <p> <o> <<( <s> <p> <o> )>> .",
         "Triple terms are only allowed as the object of a triple or quad");

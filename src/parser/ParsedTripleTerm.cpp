@@ -15,7 +15,15 @@
 
 // ____________________________________________________________________________
 struct ParsedTripleTerm::Components {
-  TripleComponent subject_, predicate_, object_;
+  TripleComponent subject_;
+  TripleComponent predicate_;
+  TripleComponent object_;
+
+  Components(TripleComponent subject, TripleComponent predicate,
+             TripleComponent object)
+      : subject_{std::move(subject)},
+        predicate_{std::move(predicate)},
+        object_{std::move(object)} {}
 
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(Components, subject_, predicate_,
                                               object_)
@@ -25,8 +33,8 @@ struct ParsedTripleTerm::Components {
 ParsedTripleTerm::ParsedTripleTerm(TripleComponent subject,
                                    TripleComponent predicate,
                                    TripleComponent object)
-    : components_{std::make_shared<const Components>(Components{
-          std::move(subject), std::move(predicate), std::move(object)})} {}
+    : components_{std::make_shared<const Components>(
+          std::move(subject), std::move(predicate), std::move(object))} {}
 
 // ____________________________________________________________________________
 const TripleComponent& ParsedTripleTerm::subject() const {
@@ -47,10 +55,10 @@ const TripleComponent& ParsedTripleTerm::object() const {
 }
 
 // ____________________________________________________________________________
-bool operator==(const ParsedTripleTerm& a, const ParsedTripleTerm& b) {
+bool ParsedTripleTerm::isEqual(const ParsedTripleTerm& other) const {
   // Moved-from terms compare equal only to other moved-from terms.
-  if (!a.components_ || !b.components_) {
-    return a.components_ == b.components_;
+  if (!components_ || !other.components_) {
+    return components_ == other.components_;
   }
-  return *a.components_ == *b.components_;
+  return *components_ == *other.components_;
 }

@@ -28,6 +28,7 @@ class TripleComponent;
 class ParsedTripleTerm {
   struct Components;
   std::shared_ptr<const Components> components_;
+  bool isEqual(const ParsedTripleTerm& other) const;
 
  public:
   ParsedTripleTerm(TripleComponent subject, TripleComponent predicate,
@@ -37,7 +38,9 @@ class ParsedTripleTerm {
   const TripleComponent& subject() const;
   const TripleComponent& predicate() const;
   const TripleComponent& object() const;
-  friend bool operator==(const ParsedTripleTerm& a, const ParsedTripleTerm& b);
+  friend bool operator==(const ParsedTripleTerm& a, const ParsedTripleTerm& b) {
+    return a.isEqual(b);
+  }
 #ifdef QLEVER_CPP_17
   friend bool operator!=(const ParsedTripleTerm& a, const ParsedTripleTerm& b) {
     return !(a == b);
