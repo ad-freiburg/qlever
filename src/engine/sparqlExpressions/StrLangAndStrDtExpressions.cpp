@@ -20,6 +20,7 @@
 #include "index/TripleComponentConversions.h"
 #include "index/vocabulary/EncodedIriManager.h"
 #include "parser/RdfParser.h"
+#include "parser/TokenizerCtre.h"
 #include "util/StringUtils.h"
 
 namespace sparqlExpression {

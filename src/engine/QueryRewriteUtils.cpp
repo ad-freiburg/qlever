@@ -157,7 +157,7 @@ SparqlFilter distanceBoundToFilter(const filterFacts::DistanceBound& bound) {
 // _____________________________________________________________________________
 void rewriteFiltersWithFacts(parsedQuery::GraphPattern& group) {
   auto defs = filterFacts::collectDefinitions(group._graphPatterns);
-  std::vector<SparqlFilter> result;
+  qlm::vector<SparqlFilter> result{group._filters.get_allocator()};
   for (auto& filter : group._filters) {
     // Recognize the `DistanceBound` of each conjunct of `filter`.
     auto conjuncts = filterFacts::canonicalize(filter.expression_, defs);

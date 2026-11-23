@@ -11,6 +11,7 @@
 
 #include "parser/data/SparqlFilter.h"
 #include "rdfTypes/Variable.h"
+#include "util/ContainersWithAllocator.h"
 
 class QueryExecutionContext;
 class SpatialJoin;

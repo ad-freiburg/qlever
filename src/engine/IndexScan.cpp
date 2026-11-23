@@ -21,6 +21,7 @@
 #include "util/Exception.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
+#include "util/StringUtils.h"
 
 using std::string;
 using LazyScanMetadata = CompressedRelationReader::LazyScanMetadata;
@@ -135,8 +136,8 @@ IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
 }
 
 // _____________________________________________________________________________
-string IndexScan::getCacheKeyImpl() const {
-  std::ostringstream os;
+qlm::string IndexScan::getCacheKeyImpl() const {
+  qlm::ostringstream os{allocator()};
   // This string only represents the type of permutation, like "SPO".
   auto permutationString = Permutation::toString(permutation().permutation());
 
@@ -159,11 +160,12 @@ string IndexScan::getCacheKeyImpl() const {
   os << " on index " << permutation().onDiskBase();
   if (!additionalColumns_.empty()) {
     os << " Additional Columns: ";
-    os << absl::StrJoin(additionalColumns(), " ");
+    ad_utility::lazyStrJoin(&os, additionalColumns(), " ");
   }
   if (!constantColumns_.empty()) {
     os << " Constant Columns: ";
-    os << absl::StrJoin(
+    ad_utility::lazyStrJoin(
+        &os,
         constantColumns_ | ql::views::keys | ql::views::transform(&Id::getBits),
         " ");
   }
@@ -172,8 +174,8 @@ string IndexScan::getCacheKeyImpl() const {
   graphsToFilter_.format(os, &toRdfLiteral);
 
   if (varsToKeep_.has_value()) {
-    os << " column subset "
-       << absl::StrJoin(getSubsetForStrippedColumns(), ",");
+    os << " column subset ";
+    ad_utility::lazyStrJoin(&os, getSubsetForStrippedColumns(), ",");
   }
   return std::move(os).str();
 }
@@ -450,10 +452,11 @@ Result::LazyResult IndexScan::chunkedIndexScan() const {
 IdTable IndexScan::materializedIndexScan() const {
   IdTable idTable = permutation().scan(
       scanSpecAndBlocks_, additionalColumns(), cancellationHandle(),
-      locatedTriplesState(), executor(), getLimitOffset());
+      locatedTriplesState(), executor(), getLimitOffset(),
+      getSubsetOfPermutationColumns());
   AD_LOG_DEBUG << "IndexScan result computation done.\n";
   checkCancellation();
-  idTable = makeApplyColumnSubset()(std::move(idTable));
+  idTable = makeAppendConstantColumns()(std::move(idTable));
   AD_CORRECTNESS_CHECK(idTable.numColumns() == getResultWidth());
   return idTable;
 }
@@ -708,14 +711,14 @@ CompressedRelationReader::IdTableGeneratorInputRange IndexScan::getLazyScan(
   // into the prefiltering (`std::nullopt` means `scan all blocks`).
   auto filteredBlocks =
       getLimitOffset().isUnconstrained() ? std::move(blocks) : std::nullopt;
-  auto lazyScanAllCols = permutation().lazyScan(
+  auto lazyScanOfPermutation = permutation().lazyScan(
       scanSpecAndBlocks_, filteredBlocks, additionalColumns(),
-      cancellationHandle(), locatedTriplesState(), executor(),
-      getLimitOffset());
+      cancellationHandle(), locatedTriplesState(), executor(), getLimitOffset(),
+      getSubsetOfPermutationColumns());
 
   return CompressedRelationReader::IdTableGeneratorInputRange{
       ad_utility::CachingTransformInputRange{
-          std::move(lazyScanAllCols), makeApplyColumnSubset(),
+          std::move(lazyScanOfPermutation), makeAppendConstantColumns(),
           ql::type_identity<LazyScanMetadata>{}}};
 }
 
@@ -1386,6 +1389,21 @@ std::vector<ColumnIndex> IndexScan::getSubsetForStrippedColumns() const {
     ++idx;
   }
   return result;
+}
+
+// _____________________________________________________________________________
+std::optional<std::vector<ColumnIndex>>
+IndexScan::getSubsetOfPermutationColumns() const {
+  if (!varsToKeep_.has_value()) {
+    return std::nullopt;
+  }
+  // The subset for the full result is sorted and the constant columns come
+  // last, so drop the columns from the first constant column on.
+  auto subset = getSubsetForStrippedColumns();
+  size_t numPermutationColumns = numVariables_ + additionalColumns_.size();
+  subset.erase(ql::ranges::lower_bound(subset, numPermutationColumns),
+               subset.end());
+  return subset;
 }
 
 // _____________________________________________________________________________

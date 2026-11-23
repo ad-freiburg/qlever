@@ -331,7 +331,7 @@ class IndexScan final : public Operation {
   // is not a lot of redundant triples in different graphs in the data set.
   std::pair<bool, size_t> computeSizeEstimate() const;
 
-  std::string getCacheKeyImpl() const override;
+  qlm::string getCacheKeyImpl() const override;
 
   // If `ScanSpecAndBlocks` contains prefiltered `BlockMetadataRanges`, the
   // result of this `IndexScan` is only a subset of the result associated with
@@ -405,28 +405,22 @@ class IndexScan final : public Operation {
   std::optional<std::shared_ptr<QueryExecutionTree>>
   makeTreeWithConstantBindColumn(const parsedQuery::Bind& bind) const;
 
-  // Return a lambda that takes an `idTable` as read from the permutation (no
-  // columns stripped), appends the `constantColumns_` and applies the column
-  // subset that strips the columns not in `varsToKeep_`. This function can also
-  // be used if no columns are stripped and hence `varsToKeep_` is `nullopt`.
-  //
-  // NOTE: In theory, we could inform the underlying `CompressedRelationReader`
-  // of the required columns to not read the stripped columns at all. But in
-  // practice the effect would be limited, because the reader has to read all
-  // columns in many cases anyway (e.g. because of UPDATEs or GRAPH duplicate
-  // filtering etc.)
-  auto makeApplyColumnSubset() const {
-    bool hasSubset = varsToKeep_.has_value();
-    auto cols =
-        hasSubset ? std::optional{getSubsetForStrippedColumns()} : std::nullopt;
-    return [cols = std::move(cols),
-            constantColumns = constantColumns_](auto&& table) {
-      for (Id id : constantColumns | ql::views::keys) {
+  // Return the subset of the columns read from the permutation (the variables
+  // of the permuted triple followed by the additional columns) that are not
+  // stripped, or `std::nullopt` if `varsToKeep_` is `nullopt`. This subset is
+  // passed to the `CompressedRelationReader`, so that the stripped columns are
+  // not read at all for the blocks that need no postprocessing (see there).
+  std::optional<std::vector<ColumnIndex>> getSubsetOfPermutationColumns() const;
+
+  // Return a lambda that takes an `idTable` as read from the permutation (with
+  // `getSubsetOfPermutationColumns()` already applied) and appends the
+  // `constantColumns_` (which are never stripped, see there).
+  auto makeAppendConstantColumns() const {
+    auto ids = ::ranges::to<std::vector>(constantColumns_ | ql::views::keys);
+    return [ids = std::move(ids)](auto&& table) {
+      for (Id id : ids) {
         table.addEmptyColumn();
         ql::ranges::fill(table.getColumn(table.numColumns() - 1), id);
-      }
-      if (cols.has_value()) {
-        table.setColumnSubset(cols.value());
       }
       return std::move(table);
     };

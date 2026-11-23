@@ -42,9 +42,11 @@
 #include "util/QueryEventLog.h"
 #include "util/ResourceMonitor.h"
 #include "util/TimeTracer.h"
+#include "util/TransparentFunctors.h"
 #include "util/TypeTraits.h"
 #include "util/http/HttpServer.h"
 #include "util/http/HttpUtils.h"
+#include "util/http/ResponseMiddleware.h"
 #include "util/http/UrlParser.h"
 #include "util/http/websocket/MessageSender.h"
 #include "util/memorySize/MemorySize.h"
@@ -893,11 +895,13 @@ Awaitable<void> Server::processSparqlOperation(
       throw;
     }
   };
-  auto visitQuery = [&index, &visitOperation](Query query) -> Awaitable<void> {
+  auto visitQuery = [this, &index,
+                     &visitOperation](Query query) -> Awaitable<void> {
     // We need to copy the query string because `visitOperation` below also
     // needs it.
-    auto parsedQuery = SparqlParser::parseQuery(
-        &index.encodedIriManager(), query.query_, query.datasetClauses_);
+    auto parsedQuery =
+        SparqlParser::parseQuery(&index.encodedIriManager(), allocator(),
+                                 query.query_, query.datasetClauses_);
     if (parsedQuery.hasUpdateClause()) {
       throw std::runtime_error(absl::StrCat(
           "SPARQL QUERY was requested via the HTTP request, but the "
@@ -907,7 +911,7 @@ Awaitable<void> Server::processSparqlOperation(
     return visitOperation({std::move(parsedQuery)}, "SPARQL query",
                           std::move(query.query_));
   };
-  auto visitUpdate = [&index, &visitOperation, &requireValidAccessToken](
+  auto visitUpdate = [this, &index, &visitOperation, &requireValidAccessToken](
                          Update update) -> Awaitable<void> {
     requireValidAccessToken("SPARQL Update");
     // We need to copy the update string because `visitOperation` below also
@@ -915,8 +919,8 @@ Awaitable<void> Server::processSparqlOperation(
     auto tracer = std::make_shared<ad_utility::timer::TimeTracer>("update");
     tracer->beginTrace("parsing");
     auto parsedUpdates = SparqlParser::parseUpdate(
-        index.getBlankNodeManager(), &index.encodedIriManager(), update.update_,
-        update.datasetClauses_);
+        index.getBlankNodeManager(), &index.encodedIriManager(), allocator(),
+        update.update_, update.datasetClauses_);
     tracer->endTrace("parsing");
     if (!ql::ranges::all_of(parsedUpdates, &ParsedQuery::hasUpdateClause)) {
       throw std::runtime_error(absl::StrCat(
@@ -928,13 +932,13 @@ Awaitable<void> Server::processSparqlOperation(
                           std::move(update.update_), tracer);
   };
   auto visitGraphStore =
-      [&request, &visitOperation, &requireValidAccessToken,
+      [this, &request, &visitOperation, &requireValidAccessToken,
        &index](GraphStoreOperation operation) -> Awaitable<void> {
     auto tracer = std::make_shared<ad_utility::timer::TimeTracer>("update");
     tracer->beginTrace("parsing");
     std::vector<ParsedQuery> parsedOperations =
-        GraphStoreProtocol::transformGraphStoreProtocol(std::move(operation),
-                                                        request, index);
+        GraphStoreProtocol::transformGraphStoreProtocol(
+            std::move(operation), request, index, allocator());
     tracer->endTrace("parsing");
 
     if (ql::ranges::any_of(parsedOperations, &ParsedQuery::hasUpdateClause)) {
@@ -1159,10 +1163,8 @@ Awaitable<void> Server::sendStreamableResponse(
 
   auto response = ad_utility::httpUtils::createOkResponse(
       std::move(responseGenerator), request, mediaType);
-  if (plannedQuery.parsedQuery().responseMiddleware_.has_value()) {
-    response =
-        plannedQuery.parsedQuery().responseMiddleware_.value().applyQuery(
-            std::move(response));
+  if (const auto& middleware = plannedQuery.parsedQuery().responseMiddleware_) {
+    response = middleware->applyQuery(std::move(response));
   }
   try {
     // The result of the query is computed lazily while the response is being
@@ -1406,11 +1408,8 @@ Awaitable<void> Server::processUpdate(
       updates, [](const ParsedQuery& p) { return p.hasUpdateClause(); }));
 
   auto responseMiddlewares =
-      ad_utility::RvalueView(
-          updates | ql::views::transform(&ParsedQuery::responseMiddleware_) |
-          ql::views::filter(ad_utility::hasValue) |
-          ql::views::transform(ad_utility::value)) |
-      ::ranges::to<std::vector>();
+      updates | ql::views::transform(&ParsedQuery::responseMiddleware_) |
+      ql::views::filter(ad_utility::toBool) | ::ranges::to<std::vector>();
 
   std::vector<UpdateMetadata> metadatas;
 
@@ -1506,7 +1505,7 @@ Awaitable<void> Server::processUpdate(
   auto response = ad_utility::httpUtils::createJsonResponse(
       std::move(responseJson), request);
   for (auto& middleware : responseMiddlewares) {
-    response = middleware.applyUpdate(std::move(response), metadatas);
+    response = middleware->applyUpdate(std::move(response), metadatas);
   }
   // The body of the response is a single string, so it can be serialized on
   // the executor of this coroutine.
