@@ -86,8 +86,8 @@ HasPredicateScan::HasPredicateScan(QueryExecutionContext* qec,
       object_{triple.o_} {}
 
 // ___________________________________________________________________________
-std::string HasPredicateScan::getCacheKeyImpl() const {
-  std::ostringstream os;
+qlm::string HasPredicateScan::getCacheKeyImpl() const {
+  qlm::ostringstream os{allocator()};
   checkType(type_);
   switch (type_) {
     case ScanType::FREE_S:

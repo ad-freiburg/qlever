@@ -132,7 +132,7 @@ class ServiceTest : public ::testing::Test {
   static Service::SiblingInfo siblingInfoFromOp(std::shared_ptr<Operation> op) {
     return Service::SiblingInfo{op->getResult(),
                                 op->getExternallyVisibleVariableColumns(),
-                                op->getCacheKey()};
+                                std::string{op->getCacheKey()}};
   };
 };
 
@@ -1421,8 +1421,10 @@ TEST_F(ServiceTest, binaryFormat) {
             testQec, makeIdTableFromVector({{1, 2}, {3, 4}}, &Id::makeFromInt),
             std::vector<std::optional<Variable>>{Variable{"?y"},
                                                  Variable{"?x"}})};
-    parsedQuery::SelectClause selectClause;
-    selectClause.setSelected(std::vector{Variable{"?y"}, Variable{"?x"}});
+    auto allocator = ad_utility::testing::makeAllocator();
+    parsedQuery::SelectClause selectClause{allocator};
+    selectClause.setSelected(
+        qlm::vector<Variable>{{Variable{"?y"}, Variable{"?x"}}, allocator});
     std::string bytes;
     for (std::string_view chunk : qlever::binary_export::exportAsQLeverBinary(
              qet, selectClause, {},

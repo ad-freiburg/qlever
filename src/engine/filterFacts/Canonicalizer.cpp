@@ -122,7 +122,7 @@ void addBind(const parsedQuery::Bind& bind, Definitions& defs,
 
 // _____________________________________________________________________________
 Definitions collectDefinitions(
-    const std::vector<parsedQuery::GraphPatternOperation>& group) {
+    ql::span<const parsedQuery::GraphPatternOperation> group) {
   Definitions defs;
   // The variables that are always bound by the patterns so far. Only triples,
   // `VALUES` and `BIND`s of constants count (ignoring nested groups etc. is

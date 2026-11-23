@@ -29,8 +29,8 @@ Minus::Minus(QueryExecutionContext* qec,
 }
 
 // _____________________________________________________________________________
-string Minus::getCacheKeyImpl() const {
-  std::ostringstream os;
+qlm::string Minus::getCacheKeyImpl() const {
+  qlm::ostringstream os{allocator()};
   os << "MINUS\n" << _left->getCacheKey() << "\n";
   os << _right->getCacheKey() << " ";
   return std::move(os).str();
