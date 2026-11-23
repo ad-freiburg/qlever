@@ -9,8 +9,8 @@
 
 #include "DeltaTriplesTestHelpers.h"
 #include "engine/ExecuteUpdate.h"
-#include "engine/Load.h"
 #include "engine/QueryPlanner.h"
+#include "engine/operation/Load.h"
 #include "index/TripleComponentConversions.h"
 #include "parser/SparqlParser.h"
 #include "util/GTestHelpers.h"
@@ -356,7 +356,7 @@ TEST_F(LoadTest, clone) {
 TEST_F(LoadTest, Integration) {
   auto parsedUpdate = SparqlParser::parseUpdate(
       &blankNodeManager_, &testQec->getIndex().encodedIriManager(),
-      "LOAD <https://mundhahs.dev>");
+      testQec->getAllocator(), "LOAD <https://mundhahs.dev>");
   ASSERT_THAT(parsedUpdate, testing::SizeIs(1));
   auto qec =
       ad_utility::testing::getQec(ad_utility::testing::TestIndexConfig{});
@@ -381,7 +381,7 @@ TEST_F(LoadTest, Integration) {
 TEST_F(LoadTest, IntegrationWithBlankNodes) {
   auto parsedUpdate = SparqlParser::parseUpdate(
       &blankNodeManager_, &testQec->getIndex().encodedIriManager(),
-      "LOAD <https://mundhahs.dev>");
+      testQec->getAllocator(), "LOAD <https://mundhahs.dev>");
   ASSERT_THAT(parsedUpdate, testing::SizeIs(1));
   auto qec =
       ad_utility::testing::getQec(ad_utility::testing::TestIndexConfig{});

@@ -8,9 +8,9 @@
 
 #include "../util/AllocatorTestHelpers.h"
 #include "../util/LocalVocabTestHelpers.h"
-#include "engine/Operation.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/Result.h"
+#include "engine/operation/Operation.h"
 #include "util/Algorithm.h"
 #include "util/ContainersWithAllocator.h"
 #include "util/Random.h"
@@ -184,8 +184,8 @@ class ValuesForTesting : public Operation {
 
  private:
   // ___________________________________________________________________________
-  std::string getCacheKeyImpl() const override {
-    std::stringstream str;
+  qlm::string getCacheKeyImpl() const override {
+    qlm::ostringstream str{allocator()};
     auto numRowsView = tables() | ql::views::transform(&IdTable::numRows);
     auto totalNumRows = ::ranges::accumulate(numRowsView, 0ULL);
     auto numCols = tables_.empty() ? 0 : tables()[0].numColumns();

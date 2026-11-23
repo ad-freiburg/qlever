@@ -15,8 +15,8 @@
 #include "../util/LocalVocabEntryTestHelpers.h"
 #include "../util/LocalVocabTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
-#include "engine/ExplicitIdTableOperation.h"
 #include "engine/QueryExecutionContext.h"
+#include "engine/operation/ExplicitIdTableOperation.h"
 #include "global/Id.h"
 #include "parser/TripleComponent.h"
 
