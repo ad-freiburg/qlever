@@ -537,8 +537,9 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name,
     }
   }
 
-  // Views written by older versions of QLever are only sorted by their first
-  // four columns.
+  // Restore whether the view is stored sorted by all its columns. Views written
+  // by older versions of QLever have no such entry and are only sorted by their
+  // first four columns.
   isSortedOnAllColumns_ = viewInfoJson.value("sorted_on_all_columns", false);
 
   // Restore original query string and parse it for query analysis.
