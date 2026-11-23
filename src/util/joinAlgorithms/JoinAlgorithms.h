@@ -1752,17 +1752,19 @@ struct BlockZipperJoinImplForSpecialOptionalJoin
 
     AD_CORRECTNESS_CHECK(!blocksLeft.empty() && !blocksRight.empty());
 
+    // Concatenate all rows of the given blocks into a single `IdTable` and
+    // merge their local vocabs. The allocator and the number of columns are
+    // taken from the first block.
+    //
+    // NOTE: It is crucial to go through the `asStaticView` interface of
+    // `IdTableAndFirstCols`, because ALL columns have to be copied, not only
+    // the join columns (the result adder needs them).
+    //
     // TODO<joka921> This can be much more efficient, in particular it could use
     // zero copying.
-    // Concatenate all rows from blocksLeft into a single IdTable.
-
     auto materializeBlocksAsTable = [](const auto& blocks) {
-      // Note: It is crucial that we go through the `asStaticView` interface of
-      // the `IdTableAndFirstCols` interface, because we need to copy ALL the
-      // columns, not only the join columns, because the resultAdder needs them.
       const auto& firstView =
           blocks.front().fullBlock().template asStaticView<0>();
-      // Get allocator and number of columns from the first block.
       IdTable table(firstView.numColumns(), firstView.getAllocator());
       LocalVocab vocab{firstView.getAllocator()};
       // TODO<joka921> preallocate the sum of the index-range sizes.
