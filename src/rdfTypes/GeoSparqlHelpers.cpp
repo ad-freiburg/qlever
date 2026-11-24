@@ -54,14 +54,7 @@ namespace detail {
 // projecting it to Web Mercator.
 static constexpr double webMercatorMaxLatitude = 85.05112878;
 
-static constexpr auto wktPointRegex = ctll::fixed_string(
-    "^\\s*[Pp][Oo][Ii][Nn][Tt]\\s*\\(\\s*"
-    "(-?[0-9]+|-?[0-9]+\\.[0-9]+)"
-    "\\s+"
-    "(-?[0-9]+|-?[0-9]+\\.[0-9]+)"
-    "\\s*\\)\\s*$");
-
-// Parse a single WKT point and returns a pair of longitude and latitude. If
+// Parse a single WKT point and return a pair of longitude and latitude. If
 // the given string does not parse as a WKT point, a pair of `invalidCoordinate`
 // is returned.
 std::pair<double, double> parseWktPoint(const std::string_view point) {
@@ -76,10 +69,15 @@ std::pair<double, double> parseWktPoint(const std::string_view point) {
     return projectToCRS(p, sourceCrs, defaultCrs);
   };
   if (wktType == ::util::geo::WKTType::POINT) {
-    auto utilPoint =
-        ::util::geo::pointFromWKTProj<double>(c, &c, projFunc, sourceCrs);
-    lng = utilPoint.getX();
-    lat = utilPoint.getY();
+    try {
+      auto utilPoint = ::util::geo::pointFromWKTProj<double>(c, &c, projFunc,
+                                                             sourceCrs, true);
+      lng = utilPoint.getX();
+      lat = utilPoint.getY();
+    } catch (const ::util::geo::WKTParseException&) {
+      // Strict `util` parsing in `pointFromWKTProj` will cause an exception for
+      // invalid WKTs. In that case return `invalidCoordinate`.
+    }
   }
   return std::pair(lng, lat);
 }

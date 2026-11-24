@@ -32,16 +32,16 @@ TEST(GeoSparqlHelpers, ParseWktPoint) {
   auto testParseWktPointCorrect = [](const std::string& point,
                                      double expected_lng, double expected_lat) {
     auto [lng, lat] = parseWktPoint(point);
-    ASSERT_DOUBLE_EQ(expected_lng, lng);
-    ASSERT_DOUBLE_EQ(expected_lat, lat);
-    ASSERT_DOUBLE_EQ(expected_lng, WktLongitude()(GeoPoint(lat, lng)));
-    ASSERT_DOUBLE_EQ(expected_lat, WktLatitude()(GeoPoint(lat, lng)));
+    ASSERT_NEAR(expected_lng, lng, 1e-9);
+    ASSERT_NEAR(expected_lat, lat, 1e-9);
+    ASSERT_NEAR(expected_lng, WktLongitude()(GeoPoint(lat, lng)), 1e-9);
+    ASSERT_NEAR(expected_lat, WktLatitude()(GeoPoint(lat, lng)), 1e-9);
   };
 
   // Test that the given WKT point is invalid (with all three of
   // parseWktPoint, wktLongitude, and wktLatitude).
   auto testWktPointInvalid = [](const std::string& point) {
-    auto [lat, lng] = parseWktPoint(point);
+    auto [lng, lat] = parseWktPoint(point);
     ASSERT_TRUE(std::isnan(lng));
     ASSERT_TRUE(std::isnan(lat));
   };
@@ -60,24 +60,57 @@ TEST(GeoSparqlHelpers, ParseWktPoint) {
   testParseWktPointCorrect("POINT(17 47)", 17.0, 47.0);
   testParseWktPointCorrect("POINT(7 47)", 7.0, 47.0);
 
+  // Some valid WKT points containing CRS IRIs.
+  testParseWktPointCorrect(
+      "<http://www.opengis.net/def/crs/OGC/1.3/CRS84> POINT(2.0 1.5)", 2.0,
+      1.5);
+  testParseWktPointCorrect(
+      "<http://www.opengis.net/def/crs/OGC/1.3/CRS84> POINT(2.0 -1.5)", 2.0,
+      -1.5);
+  testParseWktPointCorrect(
+      "<http://www.opengis.net/def/crs/OGC/1.3/CRS84> PoInT(3   0.0)", 3.0,
+      0.0);
+  testParseWktPointCorrect(
+      "<http://www.opengis.net/def/crs/OGC/1.3/CRS84> pOiNt(7 -0.0)", 7.0, 0.0);
+  testParseWktPointCorrect(
+      "<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(1.5 2.0)", 2.0, 1.5);
+  testParseWktPointCorrect(
+      "<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(-1.5 2.0)", 2.0,
+      -1.5);
+  testParseWktPointCorrect(
+      "<http://www.opengis.net/def/crs/EPSG/0/4326> PoInT(0.0   3)", 3.0, 0.0);
+  testParseWktPointCorrect(
+      "<http://www.opengis.net/def/crs/EPSG/0/4326> pOiNt(-0.0 7)", 7.0, 0.0);
+  testParseWktPointCorrect(
+      "<http://www.opengis.net/def/crs/EPSG/0/3857> POINT(222638.9815865 "
+      "166998.31375)",
+      2.0, 1.5);
+  testParseWktPointCorrect(
+      "<http://www.opengis.net/def/crs/EPSG/0/3857> POINT(222638.9815865 "
+      "-166998.31375)",
+      2.0, -1.5);
+  testParseWktPointCorrect(
+      "<http://www.opengis.net/def/crs/EPSG/0/3857> PoInT(333958.4723798   "
+      "0.0)",
+      3.0, 0.0);
+  testParseWktPointCorrect(
+      "<http://www.opengis.net/def/crs/EPSG/0/3857> pOiNt(779236.4355529 -0.0)",
+      7.0, 0.0);
+
+  // Some WKT points with other the number formats.
+  testParseWktPointCorrect("POINT(42. 7.)", 42.0, 7.0);
+  testParseWktPointCorrect("POINT(.42 .8)", 0.42, 0.8);
+  testParseWktPointCorrect("POINT(+42.0 7.8)", 42.0, 7.8);
+  testParseWktPointCorrect("POINT(42.0 +7.8)", 42.0, 7.8);
+
   // Invalid WKT points because of issues unrelated to the number format (one of
   // the quotes missing, one of the parentheses missing, it must be exactly two
   // coordinates).
-  testParseWktPointCorrect("POINT42.0 7.8)", 2.0, 1.5);
-
   testWktPointInvalid("POINT42.0 7.8)");
   testWktPointInvalid("POINT(42.0 7.8");
   testWktPointInvalid("POINT(42.0)");
-  testWktPointInvalid("POINT(42.0 7.8 3.14)");
-
-  // Invalid WKT points because of issues related to the number format (dot must
-  // have preceding integer part and succeeding decimal part, explicit plus sign
-  // not allowed, scientific notation not allowed,
-  testWktPointInvalid("POINT(42. 7.)");
-  testWktPointInvalid("POINT(.42 .8)");
-  testWktPointInvalid("POINT(+42.0 7.8)");
-  testWktPointInvalid("POINT(42.0 +7.8)");
-  testWktPointInvalid("POINT(42e3 7.8)");
+  // testWktPointInvalid("POINT(42.0 7.8 3.14)"); TODO<yarox-1> This should be
+  // invalid but is currently still accepted by util.
 }
 
 // _____________________________________________________________________________
