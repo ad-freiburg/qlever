@@ -265,6 +265,30 @@ void ResultBuilder::addId(Id id, const GraphSet& graphs) {
 }
 
 // _____________________________________________________________________________
+void ResultBuilder::addSortedIds(ql::span<const Id> ids) {
+  AD_CORRECTNESS_CHECK(!addGraphColumn_);
+  // Skip the IDs that are equal to the last one from the previous call.
+  if (lastSortedId_.has_value()) {
+    ids = ids.subspan(
+        ql::ranges::find_if(
+            ids, [last = lastSortedId_.value()](Id id) { return id != last; }) -
+        ids.begin());
+  }
+  if (ids.empty()) {
+    return;
+  }
+  lastSortedId_ = ids.back();
+  // Make room for all the IDs, copy the distinct ones, and remove the room
+  // that was not needed.
+  size_t numRows = currentChunk_.numRows();
+  currentChunk_.resize(numRows + ids.size());
+  auto column = currentChunk_.getColumn(idColumn);
+  auto end = std::unique_copy(ids.begin(), ids.end(),
+                              column.begin() + static_cast<ptrdiff_t>(numRows));
+  currentChunk_.resize(end - column.begin());
+}
+
+// _____________________________________________________________________________
 bool ResultBuilder::chunkIsFull() const {
   return currentChunk_.numRows() >= chunkSize;
 }

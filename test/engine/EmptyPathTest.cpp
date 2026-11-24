@@ -596,6 +596,35 @@ TEST(EmptyPath, objectsThatPrecedeAllSubjectsAreMergedCorrectly) {
               ElementsAreArray(expected));
 }
 
+// Test that the subjects and the objects are merged correctly when they
+// alternate, with and without the graph column.
+TEST(EmptyPath, alternatingSubjectsAndObjectsAreMergedCorrectly) {
+  // The subjects are `<a>`, `<c>`, and `<e>`, the objects are `<a>`, `<b>`,
+  // `<d>`, and `<f>`, where `<a>` is a subject in `<g2>` and an object in
+  // `<g1>`.
+  auto* qec = makeQec(
+      "<a> <p> <b> <g2> . <c> <p> <d> <g1> . <e> <p> <f> <g1> . "
+      "<c> <p> <a> <g1> .",
+      true);
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  auto a = getId("<a>"), b = getId("<b>"), c = getId("<c>"), d = getId("<d>");
+  auto e = getId("<e>"), f = getId("<f>");
+  auto g1 = getId("<g1>"), g2 = getId("<g2>");
+
+  // Without the graph column, each entity is returned once.
+  EmptyPath withoutGraphs{qec, Variable{"?x"}, Graphs::All(), std::nullopt};
+  EXPECT_THAT(computeResult(withoutGraphs).getColumn(0),
+              ElementsAreArray({a, b, c, d, e, f}));
+
+  // With the graph column, each entity is returned once for each of its
+  // graphs, sorted by entity and then by graph.
+  EmptyPath withGraphs{qec, Variable{"?x"}, Graphs::All(), Variable{"?g"}};
+  auto result = computeResult(withGraphs);
+  EXPECT_THAT(result.getColumn(0), ElementsAreArray({a, a, b, c, d, e, f}));
+  EXPECT_THAT(result.getColumn(1),
+              ElementsAreArray({g1, g2, g2, g1, g1, g1, g1}));
+}
+
 // _____________________________________________________________________________
 TEST(EmptyPath, estimatesAndMultiplicities) {
   auto* qec = makeQec(kg);

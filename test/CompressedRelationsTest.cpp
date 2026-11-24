@@ -1248,6 +1248,38 @@ TEST(CompressedRelationReader, getDistinctCol0Ids) {
   }
 }
 
+// Test that `getDistinctCol0Ids` merges the `col0Id`s from the block metadata
+// and those from the blocks that are read in the right order.
+TEST(CompressedRelationReader, getDistinctCol0IdsMergesMetadataAndBlocks) {
+  // Two times two small relations (which share a block that has to be read),
+  // followed by a large relation with several blocks that are known from their
+  // metadata.
+  std::vector<RelationInput> inputs{{1, {{0, 0}}}, {2, {{0, 0}}}, {3, {}},
+                                    {4, {{0, 0}}}, {5, {{0, 0}}}, {6, {}}};
+  for (int i = 0; i < 100; ++i) {
+    inputs.at(2).col1And2_.push_back({0, i});
+    inputs.at(5).col1And2_.push_back({0, i});
+  }
+  addGraphColumnIfNecessary(inputs);
+  auto [filename, cleanup] = testFilenameWithCleanup();
+  auto [blocks, metaData, reader] = writeAndOpenRelations(inputs, filename, 8);
+  LocatedTriplesPerBlock locatedTriples{};
+  locatedTriples.setOriginalMetadata(blocks);
+  locatedTriples.updateAugmentedMetadata();
+  CompressedRelationReader::ScanSpecAndBlocks scanSpecAndBlocks{
+      ScanSpecification{std::nullopt, std::nullopt, std::nullopt},
+      getBlockMetadataRangesfromVec(blocks)};
+
+  // Each `col0Id` is returned exactly once, and some blocks are read and some
+  // are not.
+  auto [result, numBlocksRead, numBlocksAll] = getDistinctCol0Ids(
+      *reader, scanSpecAndBlocks, false, std::nullopt, locatedTriples);
+  checkThatTablesAreEqual(std::vector<RowInput>{{1}, {2}, {3}, {4}, {5}, {6}},
+                          result);
+  EXPECT_GT(numBlocksRead, 0);
+  EXPECT_LT(numBlocksRead, numBlocksAll);
+}
+
 // _____________________________________________________________________________
 TEST(CompressedRelationReader, getDistinctCol0IdsWithGraphFilter) {
   // Each of the relations consists of a single triple, and the blocks are so
@@ -1555,8 +1587,9 @@ TEST(CompressedRelationReader, getDistinctCol0IdsWithDeltaTriples) {
 
 // _____________________________________________________________________________
 TEST(CompressedRelationReader, getDistinctCol0IdsYieldsSeveralChunks) {
-  // More `col0Id`s than fit into a single chunk of the result.
-  constexpr int numRelations = 100'001;
+  // More `col0Id`s than fit into a single chunk of the result, in three blocks
+  // (the `col0Id`s of a block always end up in the same chunk).
+  constexpr int numRelations = 250'001;
   std::vector<RelationInput> inputs;
   inputs.reserve(numRelations);
   for (int i = 0; i < numRelations; ++i) {

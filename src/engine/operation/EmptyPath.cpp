@@ -24,9 +24,7 @@
 namespace {
 // One entity of the knowledge graph and the graph it occurs in. Without a graph
 // column an undefined ID stands in for the graph (as in `graphsOf` below),
-// which affects neither the order nor the deduplication. The merge in
-// `scanIndex` needs such values because copying an `IdTable` row reference is
-// deliberately forbidden (see `RowReference`).
+// which affects neither the order nor the deduplication.
 using EntityAndGraph = std::array<Id, 2>;
 
 // Build an `EntityAndGraph` from a row that has `numColumns` (1 or 2) columns.
@@ -60,6 +58,80 @@ ConstIdColumnRef graphsOf(const IdTable& matches, Id id) {
   }
   return matches.getColumn(1).subspan(matching.begin() - ids.begin(),
                                       numMatches);
+}
+
+// A cursor over the rows of the tables of one of the two scans that
+// `EmptyPath::scanIndex` merges. The next row is row `row_` of `table_`, but
+// only after `hasRow` has returned `true`.
+struct RowCursor {
+  ad_utility::InputRangeTypeErased<IdTable> tables_;
+  std::optional<IdTable> table_ = std::nullopt;
+  size_t row_ = 0;
+  bool isExhausted_ = false;
+
+  // Return true iff there is a next row. Fetch the next table if all rows of
+  // the current one have been consumed.
+  bool hasRow() {
+    while (!isExhausted_ &&
+           (!table_.has_value() || row_ == table_.value().numRows())) {
+      table_ = tables_.get();
+      row_ = 0;
+      isExhausted_ = !table_.has_value();
+    }
+    return !isExhausted_;
+  }
+};
+
+// Merge the rows of the current tables of `first` and `second` and append them
+// to `result`, until one of the two tables is consumed or `result` has
+// `maxNumRows` rows. Both cursors must have a next row, and all three tables
+// have the same number of columns (1 or 2).
+//
+// NOTE: The rows of each of the two cursors are sorted and free of duplicates,
+// so the same holds for the appended rows, where a row that occurs in both
+// tables is appended only once. The loop works on the columns directly, because
+// it is executed once for each entity of the knowledge graph when no ID filter
+// is given.
+void mergeRows(RowCursor& first, RowCursor& second, IdTable& result,
+               size_t maxNumRows) {
+  const IdTable& table1 = first.table_.value();
+  const IdTable& table2 = second.table_.value();
+  size_t numRows1 = table1.numRows();
+  size_t numRows2 = table2.numRows();
+  size_t& row1 = first.row_;
+  size_t& row2 = second.row_;
+  size_t resultRow = result.numRows();
+  bool hasGraphColumn = result.numColumns() == 2;
+
+  // Make room for the maximal number of rows that can be appended.
+  maxNumRows = std::max(maxNumRows, resultRow);
+  result.resize(
+      std::min(maxNumRows, resultRow + numRows1 - row1 + numRows2 - row2));
+  size_t resultEnd = result.numRows();
+
+  // Merge the columns with the entities and remember from which table each row
+  // was taken (needed for the graph column).
+  auto ids1 = table1.getColumn(0);
+  auto ids2 = table2.getColumn(0);
+  auto resultIds = result.getColumn(0);
+  auto graphs1 = hasGraphColumn ? table1.getColumn(1) : ids1;
+  auto graphs2 = hasGraphColumn ? table2.getColumn(1) : ids2;
+  auto resultGraphs = hasGraphColumn ? result.getColumn(1) : resultIds;
+  while (row1 < numRows1 && row2 < numRows2 && resultRow < resultEnd) {
+    auto order = ql::compareThreeWay(ids1[row1], ids2[row2]);
+    if (order == 0 && hasGraphColumn) {
+      order = ql::compareThreeWay(graphs1[row1], graphs2[row2]);
+    }
+    bool takeFirst = order <= 0;
+    resultIds[resultRow] = takeFirst ? ids1[row1] : ids2[row2];
+    if (hasGraphColumn) {
+      resultGraphs[resultRow] = takeFirst ? graphs1[row1] : graphs2[row2];
+    }
+    row1 += takeFirst;
+    row2 += order >= 0;
+    ++resultRow;
+  }
+  result.resize(resultRow);
 }
 
 // The rows of a `table` from `EmptyPath::scanIndex` as a range of
@@ -304,41 +376,39 @@ cppcoro::generator<IdTable> EmptyPath::scanIndex(
                                 cancellationHandle(), locatedTriplesState(),
                                 executor())};
   };
-  // The rows of one of the scans above, as a flat range of `EntityAndGraph`.
-  auto rows = [numColumns = numKgColumns()](
-                  ad_utility::InputRangeTypeErased<IdTable> range) {
-    return ql::views::transform(ql::views::join(std::move(range)),
-                                [numColumns](const auto& row) {
-                                  return entityAndGraph(row, numColumns);
-                                });
-  };
   // Separate statements, because the second scan moves out of `idFilter` and
   // argument evaluation order is unspecified.
-  auto subjectRows = rows(scan(Permutation::SPO, idFilter));
-  auto objectRows = rows(scan(Permutation::OPS, std::move(idFilter)));
-  // Merge the distinct subjects and the distinct objects. Both ranges are
-  // sorted and free of duplicates, so `set_union` yields each row exactly once.
-  auto merged =
-      ::ranges::views::set_union(std::move(subjectRows), std::move(objectRows),
-                                 ql::ranges::lexicographical_compare);
+  RowCursor subjects{scan(Permutation::SPO, idFilter)};
+  RowCursor objects{scan(Permutation::OPS, std::move(idFilter))};
 
+  // Hand out `result` and continue with an empty table.
   IdTable result{numKgColumns(), allocator()};
-  result.reserve(chunkSize_);
-  // NOTE: `set_union` hands out single rows, so the result is built row by row.
-  // Appending runs from a single scan in bulk would be faster, but the merge is
-  // never the bottleneck: either the `idFilter` makes the result tiny, or the
-  // whole knowledge graph is scanned and decompressing its blocks dominates.
-  for (const EntityAndGraph& row : merged) {
-    result.push_back(ql::span<const Id>{row.data(), numKgColumns()});
+  auto extractResult = [this, &result]() {
+    checkCancellation();
+    return std::exchange(result, IdTable{numKgColumns(), allocator()});
+  };
+
+  // Merge the distinct subjects and the distinct objects as long as there are
+  // rows from both scans.
+  while (subjects.hasRow() && objects.hasRow()) {
+    mergeRows(subjects, objects, result, chunkSize_);
     if (result.numRows() >= chunkSize_) {
-      checkCancellation();
-      co_yield std::move(result);
-      result = IdTable{numKgColumns(), allocator()};
-      result.reserve(chunkSize_);
+      co_yield extractResult();
+    }
+  }
+
+  // Append the remaining rows of the scan that is not exhausted yet.
+  for (RowCursor* cursor : {&subjects, &objects}) {
+    while (cursor->hasRow()) {
+      result.insertAtEnd(cursor->table_.value(), cursor->row_);
+      cursor->row_ = cursor->table_.value().numRows();
+      if (result.numRows() >= chunkSize_) {
+        co_yield extractResult();
+      }
     }
   }
   if (!result.empty()) {
-    co_yield std::move(result);
+    co_yield extractResult();
   }
 }
 

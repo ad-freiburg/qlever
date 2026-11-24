@@ -586,13 +586,54 @@ CompressedRelationReader::getDistinctCol0Ids(
 
   // Let the inner scan write its statistics (most importantly the number of
   // blocks it actually read) directly into our own details, such that the
-  // consumer of this generator sees them.
+  // consumer of this generator sees them. Without graph IDs, only the column
+  // with the `col0Id`s is needed from the blocks.
   auto& details = co_await cppcoro::getDetails;
   details.numBlocksAll_ = scanSpecAndBlocks.sizeBlockMetadata_;
-  auto scan = lazyScan(scanSpecAndBlocks.scanSpec_, std::move(blocksToRead),
-                       std::move(additionalColumns), cancellationHandle,
-                       locatedTriplesPerBlock, std::move(executor));
+  auto scan = lazyScan(
+      scanSpecAndBlocks.scanSpec_, std::move(blocksToRead),
+      std::move(additionalColumns), cancellationHandle, locatedTriplesPerBlock,
+      std::move(executor), {},
+      addGraphColumn ? std::nullopt : std::optional{ColumnIndices{idColumn}});
   scan.setDetailsPointer(&details);
+  ResultBuilder result{addGraphColumn, idFilter, allocator_};
+
+  // Without graph IDs and without an `idFilter`, process each block as a whole
+  // (which is much faster than the loop over the single IDs below): merge its
+  // IDs with the IDs from the metadata that are not larger, and append the
+  // distinct IDs to the result.
+  if (!addGraphColumn && !idFilter.has_value()) {
+    ql::span<const Id> idsFromMetadata = fromMetadata.getColumn(idColumn);
+    ad_utility::VectorWithMemoryLimit<Id> mergedIds{allocator_};
+    for (const IdTable& block : scan) {
+      cancellationHandle->throwIfCancelled();
+      if (block.empty()) {
+        continue;
+      }
+      ql::span<const Id> idsFromBlock = block.getColumn(idColumn);
+      size_t numFromMetadata =
+          ql::ranges::upper_bound(idsFromMetadata, idsFromBlock.back()) -
+          idsFromMetadata.begin();
+      if (numFromMetadata == 0) {
+        result.addSortedIds(idsFromBlock);
+      } else {
+        mergedIds.resize(numFromMetadata + idsFromBlock.size());
+        auto smallIdsFromMetadata = idsFromMetadata.first(numFromMetadata);
+        std::merge(smallIdsFromMetadata.begin(), smallIdsFromMetadata.end(),
+                   idsFromBlock.begin(), idsFromBlock.end(), mergedIds.begin());
+        result.addSortedIds(mergedIds);
+        idsFromMetadata = idsFromMetadata.subspan(numFromMetadata);
+      }
+      if (result.chunkIsFull()) {
+        co_yield result.extractChunk();
+      }
+    }
+    result.addSortedIds(idsFromMetadata);
+    if (!result.chunkIsEmpty()) {
+      co_yield result.extractChunk();
+    }
+    co_return;
+  }
 
   // The IDs are computed by merging two ascending sources: the IDs that are
   // known from the block metadata alone, and the IDs from the blocks that had
@@ -607,7 +648,6 @@ CompressedRelationReader::getDistinctCol0Ids(
   RequestedIdsCursor requestedIds{idFilter};
 
   GraphSet graphs{allocator_};
-  ResultBuilder result{addGraphColumn, idFilter, allocator_};
   for (;;) {
     cancellationHandle->throwIfCancelled();
     auto id = smallerId(fromMetadataCursor.peek(), fromBlocksCursor.peek());
