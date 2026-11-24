@@ -11,13 +11,13 @@
 
 #include "./util/LocalVocabTestHelpers.h"
 #include "backports/StartsWithAndEndsWith.h"
-#include "engine/Join.h"
-#include "engine/Service.h"
-#include "engine/Sort.h"
-#include "engine/StripColumns.h"
-#include "engine/Values.h"
 #include "engine/ValuesForTesting.h"
 #include "engine/binaryExport/BinaryExport.h"
+#include "engine/operation/Join.h"
+#include "engine/operation/Service.h"
+#include "engine/operation/Sort.h"
+#include "engine/operation/StripColumns.h"
+#include "engine/operation/Values.h"
 #include "global/Constants.h"
 #include "global/IndexTypes.h"
 #include "global/RuntimeParameters.h"
@@ -132,7 +132,7 @@ class ServiceTest : public ::testing::Test {
   static Service::SiblingInfo siblingInfoFromOp(std::shared_ptr<Operation> op) {
     return Service::SiblingInfo{op->getResult(),
                                 op->getExternallyVisibleVariableColumns(),
-                                op->getCacheKey()};
+                                std::string{op->getCacheKey()}};
   };
 };
 
@@ -580,6 +580,63 @@ TEST_F(ServiceTest, pushDownValuesPlacesValuesAtEnd) {
       "{\n BIND (1 AS ?x) \nVALUES (?x) { (1) } \n}");
 }
 
+// Test that columns of the sibling that contain `UNDEF` are not pushed down,
+// as their rows would match overlapping sets of remote rows (see #4010).
+TEST_F(ServiceTest, siblingValuesClauseSkipsColumnsWithUndef) {
+  auto iri = ad_utility::testing::iri;
+  using TC = TripleComponent;
+  auto valuesClause = [&](parsedQuery::SparqlValues siblingValues,
+                          bool markAllPossiblyUndefined = false) {
+    Service service{
+        testQec,
+        parsedQuery::Service{
+            {Variable{"?x"}, Variable{"?y"}},
+            TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
+            "",
+            "{ ?x <p> ?y }",
+            false},
+        getResultFunctionFactory("http://localhorst:80/api", "", "")};
+    auto siblingInfo = siblingInfoFromOp(
+        std::make_shared<Values>(testQec, std::move(siblingValues)));
+    if (markAllPossiblyUndefined) {
+      for (auto& [var, info] : siblingInfo.variables_) {
+        info.mightContainUndef_ = ColumnIndexAndTypeInfo::PossiblyUndefined;
+      }
+    }
+    service.siblingInfo_.emplace(std::move(siblingInfo));
+    service.runtimeInfo().addDetail("optimized-with-sibling-result", "yes");
+    auto result = service.getSiblingValuesClause();
+    EXPECT_EQ(service.runtimeInfo().details_["optimized-with-sibling-result"],
+              result.has_value() ? "yes" : "no");
+    return result;
+  };
+
+  // Only `?y` contains `UNDEF`, so only `?x` is pushed down, and the rows that
+  // are then duplicates are removed.
+  EXPECT_EQ(valuesClause({{Variable{"?x"}, Variable{"?y"}},
+                          {{TC(iri("<x>")), TC::UNDEF()},
+                           {TC(iri("<x>")), TC(iri("<y>"))},
+                           {TC(iri("<x2>")), TC(iri("<y>"))}}}),
+            "VALUES (?x) { (<x>) (<x2>) } ");
+
+  // If every common column contains `UNDEF`, no `VALUES` clause is sent.
+  EXPECT_EQ(valuesClause({{Variable{"?x"}, Variable{"?z"}},
+                          {{TC::UNDEF(), TC(iri("<z>"))},
+                           {TC(iri("<x>")), TC(iri("<z>"))}}}),
+            std::nullopt);
+
+  // Without `UNDEF`, all common columns are pushed down.
+  EXPECT_EQ(valuesClause({{Variable{"?x"}, Variable{"?y"}},
+                          {{TC(iri("<x>")), TC(iri("<y>"))}}}),
+            "VALUES (?x ?y) { (<x> <y>) } ");
+
+  // A column that is only marked as possibly undefined is still pushed down.
+  EXPECT_EQ(valuesClause({{Variable{"?x"}, Variable{"?y"}},
+                          {{TC(iri("<x>")), TC(iri("<y>"))}}},
+                         true),
+            "VALUES (?x ?y) { (<x> <y>) } ");
+}
+
 // _____________________________________________________________________________
 TEST_F(ServiceTest, computeResultNoVariables) {
   parsedQuery::Service parsedServiceClause{
@@ -716,8 +773,8 @@ TEST_F(ServiceTest, bindingToTripleComponent) {
       bTTC({{"type", "literal"}, {"value", "Hallo Welt"}, {"xml:lang", "de"}}),
       TripleComponent::Literal::literalWithoutQuotes("Hallo Welt", "@de"));
 
-  // See the comment in `src/engine/Service.cpp` regarding the support of the
-  // deprecated `typed-literal` type.
+  // See the comment in `src/engine/operation/Service.cpp` regarding the support
+  // of the deprecated `typed-literal` type.
   EXPECT_EQ(
       bTTC({{"type", "typed-literal"},
             {"value", "Hallo Welt"},
@@ -1421,8 +1478,10 @@ TEST_F(ServiceTest, binaryFormat) {
             testQec, makeIdTableFromVector({{1, 2}, {3, 4}}, &Id::makeFromInt),
             std::vector<std::optional<Variable>>{Variable{"?y"},
                                                  Variable{"?x"}})};
-    parsedQuery::SelectClause selectClause;
-    selectClause.setSelected(std::vector{Variable{"?y"}, Variable{"?x"}});
+    auto allocator = ad_utility::testing::makeAllocator();
+    parsedQuery::SelectClause selectClause{allocator};
+    selectClause.setSelected(
+        qlm::vector<Variable>{{Variable{"?y"}, Variable{"?x"}}, allocator});
     std::string bytes;
     for (std::string_view chunk : qlever::binary_export::exportAsQLeverBinary(
              qet, selectClause, {},

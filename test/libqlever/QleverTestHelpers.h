@@ -59,7 +59,8 @@ inline UpdateMetadata applyUpdateToEngine(qlever::Qlever& engine,
                                           const std::string& update) {
   ad_utility::BlankNodeManager blankNodeManager;
   auto parsedUpdates = SparqlParser::parseUpdate(
-      &blankNodeManager, ad_utility::testing::encodedIriManager(), update);
+      &blankNodeManager, ad_utility::testing::encodedIriManager(),
+      engine.allocator(), update);
   AD_CORRECTNESS_CHECK(parsedUpdates.size() == 1);
   auto plannedUpdate =
       engine.planQuery(engine.bindParsedQuery(std::move(parsedUpdates[0])));

@@ -15,7 +15,7 @@
 #include "backports/asio.h"
 #include "backports/three_way_comparison.h"
 #include "engine/Result.h"
-#include "engine/RuntimeInformation.h"
+#include "engine/operation/RuntimeInformation.h"
 #include "global/Id.h"
 #include "index/DeltaTriples.h"
 #include "index/Index.h"
@@ -77,6 +77,11 @@ class CacheValue {
 // That way, two identical trees with different snapshot indices will have a
 // different cache key. This has the (desired!) effect that UPDATE requests
 // correctly invalidate preexisting cache results.
+//
+// TODO<RobinTF> Support heterogeneous lookup in the `QueryResultCache` (e.g.
+// with a key that holds a `std::string_view`), s.t. the lookups (e.g. in
+// `QueryExecutionTree::readFromCache`) don't have to copy the cache key of
+// the operation (which is a `qlm::string`) into a `std::string`.
 struct QueryCacheKey {
   std::string key_;
   size_t locatedTriplesSnapshotIndex_;

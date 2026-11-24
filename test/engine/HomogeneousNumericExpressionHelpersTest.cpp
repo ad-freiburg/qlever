@@ -19,6 +19,7 @@
 #include "../util/IdTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "backports/concepts.h"
+#include "engine/idTable/splitLayout/IdColumnVector.h"
 #include "engine/sparqlExpressions/HomogeneousNumericExpressionHelpers.h"
 
 namespace sparqlExpression::detail {
@@ -206,23 +207,25 @@ TEST_F(HomogeneousNumericExpressionHelpersTest, ClassifySingleValueId) {
 
 // _____________________________________________________________________________
 TEST_F(HomogeneousNumericExpressionHelpersTest, ClassifySpan) {
-  std::array<ValueId, 4> ints{I(1), I(2), I(3), I(4)};
-  std::array<ValueId, 4> doubles{D(1.0), D(2.0), D(3.0), D(4.0)};
-  std::array<ValueId, 4> mostlyInts{I(1), I(2), I(3), D(4.0)};
-  std::array<ValueId, 4> mostlyDoubles{I(1), D(2.0), D(3.0), D(4.0)};
-  std::array<ValueId, 4> tied{I(1), I(2), D(3.0), D(4.0)};
-  std::array<ValueId, 0> empty{};
-  std::array<ValueId, 4> withNonNumeric{I(1), I(2), Id::makeFromBool(true),
-                                        D(4.0)};
-  std::array<ValueId, 4> withUndefined{I(1), I(2), Id::makeUndefined(), I(4)};
-  std::vector<ValueId> mostlyNonNumeric(200, Id::makeFromBool(true));
+  IdColumn ints{I(1), I(2), I(3), I(4)};
+  IdColumn doubles{D(1.0), D(2.0), D(3.0), D(4.0)};
+  IdColumn mostlyInts{I(1), I(2), I(3), D(4.0)};
+  IdColumn mostlyDoubles{I(1), D(2.0), D(3.0), D(4.0)};
+  IdColumn tied{I(1), I(2), D(3.0), D(4.0)};
+  IdColumn empty{};
+  IdColumn withNonNumeric{I(1), I(2), Id::makeFromBool(true), D(4.0)};
+  IdColumn withUndefined{I(1), I(2), Id::makeUndefined(), I(4)};
+  IdColumn mostlyNonNumeric;
+  for (size_t i = 0; i < 200; ++i) {
+    mostlyNonNumeric.push_back(Id::makeFromBool(true));
+  }
   mostlyNonNumeric.push_back(D(1.0));
   mostlyNonNumeric.push_back(D(2.0));
   mostlyNonNumeric.push_back(D(3.0));
   mostlyNonNumeric.push_back(I(1));
   mostlyNonNumeric.push_back(I(2));
-  std::array<ValueId, 5> tiedWithNonNumeric{
-      I(1), I(2), D(3.0), Id::makeFromBool(true), Id::makeFromBool(false)};
+  IdColumn tiedWithNonNumeric{I(1), I(2), D(3.0), Id::makeFromBool(true),
+                              Id::makeFromBool(false)};
 
   auto classification =
       classifyNumericOperand(ConstIdColumnRef{ints}, &context_);
@@ -272,10 +275,45 @@ TEST_F(HomogeneousNumericExpressionHelpersTest, ClassifySpan) {
   EXPECT_EQ(classification.majorityType_, NumericType::Other);
 }
 
+// Test that a column of the split layout is classified like the same `Id`s in
+// a span, for more than one block of 32 `Id`s plus a rest, and for blocks with
+// one, two, and more datatypes.
+TEST_F(HomogeneousNumericExpressionHelpersTest, ClassifySplitColumn) {
+  // Classify `ids` once as a split column and once as a span of `ValueId`,
+  // and expect the same result.
+  auto expectSameClassification = [this](const std::vector<ValueId>& ids) {
+    const columnBasedIdTable::splitLayout::IdColumnVector<std::allocator<Id>>
+        column{ids.begin(), ids.end(), std::allocator<Id>{}};
+    const auto fromColumn =
+        classifyNumericValues(column.asConstView(), &context_);
+    const auto fromSpan =
+        classifyNumericValues(ql::span<const ValueId>{ids}, &context_);
+    EXPECT_EQ(fromColumn.homogeneousType_, fromSpan.homogeneousType_);
+    EXPECT_EQ(fromColumn.majorityType_, fromSpan.majorityType_);
+    EXPECT_EQ(fromColumn.containsValueRejectedByGetter_,
+              fromSpan.containsValueRejectedByGetter_);
+  };
+
+  // Three columns of 70 `Id`s each: only integers, integers and doubles, and
+  // integers, doubles and booleans.
+  std::vector<ValueId> ints(70, I(1));
+  std::vector<ValueId> intsAndDoubles;
+  std::vector<ValueId> threeDatatypes;
+  for (int64_t i = 0; i < 70; ++i) {
+    intsAndDoubles.push_back(i % 3 == 0 ? D(1.0) : I(i));
+    threeDatatypes.push_back(i % 3 == 0   ? D(1.0)
+                             : i % 3 == 1 ? I(i)
+                                          : Id::makeFromBool(true));
+  }
+  for (const auto& ids : {ints, intsAndDoubles, threeDatatypes}) {
+    expectSameClassification(ids);
+  }
+}
+
 // _____________________________________________________________________________
 TEST_F(HomogeneousNumericExpressionHelpersTest, ClassifyOperands) {
-  std::array<ValueId, 3> mostlyInts{I(1), I(2), D(3.0)};
-  std::array<ValueId, 3> mostlyDoubles{I(1), D(2.0), D(3.0)};
+  IdColumn mostlyInts{I(1), I(2), D(3.0)};
+  IdColumn mostlyDoubles{I(1), D(2.0), D(3.0)};
 
   auto intsSpan = ConstIdColumnRef{mostlyInts};
   auto doublesSpan = ConstIdColumnRef{mostlyDoubles};
@@ -301,7 +339,7 @@ TEST_F(HomogeneousNumericExpressionHelpersTest, GetHomogeneousNumericValue) {
 
 // _____________________________________________________________________________
 TEST_F(HomogeneousNumericExpressionHelpersTest, MakeHomogeneousNumericGetter) {
-  std::array<ValueId, 3> ints{I(4), I(5), I(6)};
+  IdColumn ints{I(4), I(5), I(6)};
   ConstIdColumnRef span{ints};
 
   auto vectorGetter = makeHomogeneousNumericGetter<int64_t>(span);
@@ -319,8 +357,8 @@ TEST_F(HomogeneousNumericExpressionHelpersTest, MakeHomogeneousNumericGetter) {
 // _____________________________________________________________________________
 TEST_F(HomogeneousNumericExpressionHelpersTest,
        EvaluateHomogeneousNumericOperation) {
-  std::array<ValueId, 3> left{I(1), I(2), I(3)};
-  std::array<ValueId, 3> right{I(4), I(5), I(6)};
+  IdColumn left{I(1), I(2), I(3)};
+  IdColumn right{I(4), I(5), I(6)};
 
   auto leftSpan = ConstIdColumnRef{left};
   auto rightSpan = ConstIdColumnRef{right};
@@ -347,8 +385,8 @@ TEST_F(HomogeneousNumericExpressionHelpersTest, DatatypeForNumericType) {
 // _____________________________________________________________________________
 TEST_F(HomogeneousNumericExpressionHelpersTest,
        EvaluateSpeculativeNumericOperationVectorVector) {
-  std::array<ValueId, 3> left{I(1), D(2.5), I(3)};
-  std::array<ValueId, 3> right{I(4), I(5), D(6.5)};
+  IdColumn left{I(1), D(2.5), I(3)};
+  IdColumn right{I(4), I(5), D(6.5)};
 
   auto leftSpan = ConstIdColumnRef{left};
   auto rightSpan = ConstIdColumnRef{right};
@@ -370,7 +408,7 @@ TEST_F(HomogeneousNumericExpressionHelpersTest,
 // _____________________________________________________________________________
 TEST_F(HomogeneousNumericExpressionHelpersTest,
        EvaluateSpeculativeNumericOperationVectorConstant) {
-  std::array<ValueId, 3> left{I(1), D(2.5), I(3)};
+  IdColumn left{I(1), D(2.5), I(3)};
   auto leftSpan = ConstIdColumnRef{left};
 
   auto result = evaluateSpeculativeNumericOperation<
@@ -390,7 +428,7 @@ TEST_F(HomogeneousNumericExpressionHelpersTest,
 // _____________________________________________________________________________
 TEST_F(HomogeneousNumericExpressionHelpersTest,
        EvaluateSpeculativeNumericOperationConstantVector) {
-  std::array<ValueId, 3> right{I(1), D(2.5), I(3)};
+  IdColumn right{I(1), D(2.5), I(3)};
   auto rightSpan = ConstIdColumnRef{right};
 
   auto result = evaluateSpeculativeNumericOperation<
@@ -410,8 +448,8 @@ TEST_F(HomogeneousNumericExpressionHelpersTest,
 // _____________________________________________________________________________
 TEST_F(HomogeneousNumericExpressionHelpersTest,
        EvaluateSpeculativeNumericOperationWithPreferredDouble) {
-  std::array<ValueId, 3> left{D(1.5), D(2.5), I(3)};
-  std::array<ValueId, 3> right{D(4.0), D(5.0), D(6.5)};
+  IdColumn left{D(1.5), D(2.5), I(3)};
+  IdColumn right{D(4.0), D(5.0), D(6.5)};
 
   auto leftSpan = ConstIdColumnRef{left};
   auto rightSpan = ConstIdColumnRef{right};
@@ -433,8 +471,8 @@ TEST_F(HomogeneousNumericExpressionHelpersTest,
 // _____________________________________________________________________________
 TEST_F(HomogeneousNumericExpressionHelpersTest,
        EvaluateSpeculativeNumericOperationSlowPathNumericCombinations) {
-  std::array<ValueId, 3> left{I(1), D(2.5), D(3.5)};
-  std::array<ValueId, 3> right{I(4), I(5), D(6.5)};
+  IdColumn left{I(1), D(2.5), D(3.5)};
+  IdColumn right{I(4), I(5), D(6.5)};
 
   auto leftSpan = ConstIdColumnRef{left};
   auto rightSpan = ConstIdColumnRef{right};
@@ -471,8 +509,8 @@ TEST_F(HomogeneousNumericExpressionHelpersTest, DispatchNumericTypes) {
 // _____________________________________________________________________________
 TEST_F(HomogeneousNumericExpressionHelpersTest,
        EvaluateHomogeneousNumericOperationWithThreeOperands) {
-  std::array<ValueId, 3> first{I(1), I(2), I(3)};
-  std::array<ValueId, 3> second{D(0.5), D(1.5), D(2.5)};
+  IdColumn first{I(1), I(2), I(3)};
+  IdColumn second{D(0.5), D(1.5), D(2.5)};
 
   auto firstSpan = ConstIdColumnRef{first};
   auto secondSpan = ConstIdColumnRef{second};
@@ -554,7 +592,7 @@ TEST_F(HomogeneousNumericExpressionHelpersTest, DateClassification) {
   EXPECT_EQ(classifyNumericOperand(date).homogeneousType_, NumericType::Other);
   EXPECT_EQ(classifyNumericOperand<true>(date).homogeneousType_,
             NumericType::Date);
-  auto check = [&](std::vector<Id> values, NumericType homogeneous,
+  auto check = [&](IdColumn values, NumericType homogeneous,
                    NumericType majority) {
     auto result =
         classifyNumericOperand<true>(ConstIdColumnRef{values}, &context_);
@@ -571,9 +609,9 @@ TEST_F(HomogeneousNumericExpressionHelpersTest, DateClassification) {
         NumericType::Other);
   check({I(1), I(2), date}, NumericType::Other, NumericType::Int);
   check({D(1), D(2), date}, NumericType::Other, NumericType::Double);
-  check({}, NumericType::Other, NumericType::Other);
+  check(IdColumn{}, NumericType::Other, NumericType::Other);
   // Numeric-only classification still counts dates as competing values.
-  std::vector<Id> values{I(1), I(2), date, date};
+  IdColumn values{I(1), I(2), date, date};
   EXPECT_EQ(
       classifyNumericOperand(ConstIdColumnRef{values}, &context_).majorityType_,
       NumericType::Other);
@@ -595,7 +633,7 @@ TEST_F(HomogeneousNumericExpressionHelpersTest, ClassificationBlockBoundaries) {
                          Id::makeUndefined(),
                          Id::makeFromBool(true),
                          Id::makeFromVocabIndex(VocabIndex::make(4))};
-  auto check = [&]<bool IncludeDates>(const std::vector<Id>& values) {
+  auto check = [&]<bool IncludeDates>(const IdColumn& values) {
     std::map<Datatype, size_t> frequencies;
     for (auto value : values) {
       ++frequencies[value.getDatatype()];
@@ -639,7 +677,10 @@ TEST_F(HomogeneousNumericExpressionHelpersTest, ClassificationBlockBoundaries) {
   for (size_t size :
        {0, 1, 7, 8, 9, 15, 16, 17, 31, 32, 33, 63, 64, 65, 100001}) {
     SCOPED_TRACE(size);
-    std::vector<Id> values(size, I(1));
+    IdColumn values;
+    for (size_t i = 0; i < size; ++i) {
+      values.push_back(I(1));
+    }
     check.template operator()<false>(values);
     check.template operator()<true>(values);
     // Exercise the aggregated two-type branch as well as arbitrary mixtures.
@@ -661,7 +702,7 @@ TEST_F(HomogeneousNumericExpressionHelpersTest, ClassificationBlockBoundaries) {
 TEST_F(HomogeneousNumericExpressionHelpersTest, SupportedMixedOperands) {
   const auto date =
       Id::makeFromDate(DateYearOrDuration::parseXsdDate("2020-01-01"));
-  std::vector<Id> values{I(1), D(2), Id::makeFromBool(true), date};
+  IdColumn values{I(1), D(2), Id::makeFromBool(true), date};
   EXPECT_FALSE(classifyNumericOperand<true>(ConstIdColumnRef{values}, &context_)
                    .containsValueRejectedByGetter_);
   EXPECT_TRUE(classifyNumericOperand(ConstIdColumnRef{values}, &context_)

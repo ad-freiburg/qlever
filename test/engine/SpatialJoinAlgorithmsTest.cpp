@@ -24,10 +24,10 @@
 #include "absl/strings/str_join.h"
 #include "backports/filesystem.h"
 #include "backports/span.h"
-#include "engine/IndexScan.h"
 #include "engine/QueryExecutionTree.h"
-#include "engine/SpatialJoin.h"
 #include "engine/SpatialJoinConfig.h"
+#include "engine/operation/IndexScan.h"
+#include "engine/operation/SpatialJoin.h"
 #include "engine/spatialJoinAlgorithms/BoundingBoxAlgorithm.h"
 #include "index/vocabulary/VocabularyType.h"
 #include "parser/SpatialQuery.h"
@@ -1918,7 +1918,7 @@ TEST(SpatialJoin, DistanceUnit) {
       dists.push_back(row[col].getDouble());
     }
     ql::ranges::sort(dists);
-    return std::pair{dists, spatialJoinTree->getCacheKey()};
+    return std::pair{dists, std::string{spatialJoinTree->getCacheKey()}};
   };
 
   for (auto algorithm :
