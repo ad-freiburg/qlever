@@ -1019,17 +1019,21 @@ std::optional<IdTable> GroupByImpl::computeGroupByObjectWithCount() const {
   }
 
   // Compute the result and update the runtime information (we don't actually
-  // do the index scan, but something smarter).
+  // do the index scan, but something smarter). Evaluate the GROUP BY normally
+  // if too few blocks are known from their metadata (see the runtime parameter
+  // `group-by-index-scan-min-percent-known-blocks`).
   //
   // NOTE: Use the `LocatedTriplesState` of the `IndexScan` (see
   // `computeGroupByForSingleIndexScan` for details).
   const auto& permutation = indexScan->permutation();
   auto result = permutation.getDistinctCol1IdsAndCounts(
       col0Id.value(), cancellationHandle(), indexScan->locatedTriplesState(),
-      indexScan->getLimitOffset());
-
-  indexScan->updateRuntimeInformationWhenOptimizedOut({});
-
+      indexScan->getLimitOffset(),
+      getRuntimeParameter<
+          &RuntimeParameters::groupByIndexScanMinPercentKnownBlocks_>());
+  if (result.has_value()) {
+    indexScan->updateRuntimeInformationWhenOptimizedOut({});
+  }
   return result;
 }
 
@@ -1077,17 +1081,24 @@ std::optional<IdTable> GroupByImpl::computeGroupByForFullIndexScan() const {
         "not supported."};
   }
 
-  const auto& operation = _subtree->getRootOperation();
-  operation->updateRuntimeInformationWhenOptimizedOut();
-
   // Compute the distinct values of the first column and their counts directly
-  // from the blocks of the permutation.
+  // from the blocks of the permutation. Evaluate the GROUP BY normally if too
+  // few blocks are known from their metadata (see the runtime parameter
+  // `group-by-index-scan-min-percent-known-blocks`).
   //
   // NOTE: Use the `LocatedTriplesState` of the `IndexScan` (see
   // `computeGroupByForSingleIndexScan` for details).
-  auto table = permutation.value().getDistinctCol0IdsAndCounts(
+  const auto& operation = _subtree->getRootOperation();
+  auto optionalTable = permutation.value().getDistinctCol0IdsAndCounts(
       cancellationHandle(), operation->locatedTriplesState(),
-      operation->getLimitOffset());
+      operation->getLimitOffset(),
+      getRuntimeParameter<
+          &RuntimeParameters::groupByIndexScanMinPercentKnownBlocks_>());
+  if (!optionalTable.has_value()) {
+    return std::nullopt;
+  }
+  auto& table = optionalTable.value();
+  operation->updateRuntimeInformationWhenOptimizedOut();
   if (numCounts == 0) {
     table.setColumnSubset(std::array{ColumnIndex{0}});
   } else if (!variableIsBoundInSubtree) {
@@ -1099,7 +1110,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByForFullIndexScan() const {
   // TODO<joka921> This optimization should probably also apply if
   // the query is `SELECT DISTINCT ?s WHERE {?s ?p ?o} ` without a
   // GROUP BY, but that needs to be implemented in the `DISTINCT` operation.
-  return table;
+  return optionalTable;
 }
 
 // ____________________________________________________________________________

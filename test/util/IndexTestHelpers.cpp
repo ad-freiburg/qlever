@@ -159,13 +159,19 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
         col0IdTag);
   };
 
-  auto predicates = index.getImpl().PSO().getDistinctCol0IdsAndCounts(
-      cancellationDummy, locatedTriplesSnapshot, {});
+  auto predicates = index.getImpl()
+                        .PSO()
+                        .getDistinctCol0IdsAndCounts(
+                            cancellationDummy, locatedTriplesSnapshot, {}, 0)
+                        .value();
   for (const auto& predicate : predicates.getColumn(0)) {
     checkConsistencyForPredicate(predicate);
   }
-  auto objects = index.getImpl().OSP().getDistinctCol0IdsAndCounts(
-      cancellationDummy, locatedTriplesSnapshot, {});
+  auto objects = index.getImpl()
+                     .OSP()
+                     .getDistinctCol0IdsAndCounts(cancellationDummy,
+                                                  locatedTriplesSnapshot, {}, 0)
+                     .value();
   for (const auto& object : objects.getColumn(0)) {
     checkConsistencyForObject(object);
   }

@@ -676,11 +676,11 @@ bool CompressedRelationReader::contentsAreKnownFromMetadata(
 }
 
 // ____________________________________________________________________________
-IdTable CompressedRelationReader::getDistinctColIdsAndCounts(
+std::optional<IdTable> CompressedRelationReader::getDistinctColIdsAndCounts(
     ColumnIndex columnIndex, const ScanSpecAndBlocks& scanSpecAndBlocks,
     const CancellationHandle& cancellationHandle,
     const LocatedTriplesPerBlock& locatedTriplesPerBlock,
-    const LimitOffsetClause& limitOffset) const {
+    const LimitOffsetClause& limitOffset, double minPercentKnownBlocks) const {
   AD_CORRECTNESS_CHECK(columnIndex <= 1, "Only column 0 and 1 are supported");
   // The result has two columns: one for the distinct `Id`s and one for their
   // counts.
@@ -734,6 +734,18 @@ IdTable CompressedRelationReader::getDistinctColIdsAndCounts(
 
   const auto& scanSpec = scanSpecAndBlocks.scanSpec_;
   const auto& blocks = scanSpecAndBlocks.getBlockMetadataView();
+
+  // Return `std::nullopt` if too few blocks have contents that are known from
+  // their metadata (the caller then has to evaluate the GROUP BY normally).
+  auto numKnownBlocks = ql::ranges::count_if(blocks, [&](const auto& block) {
+    return contentsAreKnownFromMetadata(block, columnIndex + 1,
+                                        locatedTriplesPerBlock);
+  });
+  if (100.0 * static_cast<double>(numKnownBlocks) <
+      minPercentKnownBlocks *
+          static_cast<double>(scanSpecAndBlocks.sizeBlockMetadata_)) {
+    return std::nullopt;
+  }
 
   // TODO<joka921> We have to read the other columns for the merging of the
   // located triples. We could skip this for blocks with no updates, but that

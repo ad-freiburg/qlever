@@ -477,12 +477,19 @@ class CompressedRelationReader {
       const LocatedTriplesPerBlock& locatedTriples);
 
   // Determine the distinct values and their counts for the column at
-  // `columnIndex` (must be 0 or 1). Used for GROUP BY optimizations.
-  IdTable getDistinctColIdsAndCounts(
+  // `columnIndex` (must be 0 or 1). Used for GROUP BY optimizations. Return
+  // `std::nullopt` if less than `minPercentKnownBlocks` percent of the blocks
+  // of the scan have contents that are known from their metadata (see
+  // `contentsAreKnownFromMetadata`).
+  //
+  // NOTE: The counts of these blocks are taken from their metadata, the other
+  // blocks are read. For many such blocks, the normal evaluation of the GROUP
+  // BY is faster, because it groups the rows in parallel to the scan.
+  std::optional<IdTable> getDistinctColIdsAndCounts(
       ColumnIndex columnIndex, const ScanSpecAndBlocks& scanSpecAndBlocks,
       const CancellationHandle& cancellationHandle,
       const LocatedTriplesPerBlock& locatedTriplesPerBlock,
-      const LimitOffsetClause& limitOffset) const;
+      const LimitOffsetClause& limitOffset, double minPercentKnownBlocks) const;
 
   std::optional<CompressedRelationMetadata> getMetadataForSmallRelation(
       const ScanSpecAndBlocks& scanSpecAndBlocks, Id col0Id,

@@ -136,9 +136,19 @@ std::shared_ptr<QueryExecutionTree> makeExecutionTree(
       qec, std::make_shared<Operation>(qec, AD_FWD(args)...));
 }
 
+// Use the optimizations of `GroupBy` for index scans with a COUNT regardless of
+// how many blocks are known from their metadata (for the tiny test indexes,
+// this depends on their block layout).
+auto alwaysUseIndexScanOptimizations() {
+  return setRuntimeParameterForTest<
+      &RuntimeParameters::groupByIndexScanMinPercentKnownBlocks_>(0.0);
+}
+
 using namespace sparqlExpression;
 struct GroupByOptimizations : ::testing::Test {
   using Tree = std::shared_ptr<QueryExecutionTree>;
+  decltype(alwaysUseIndexScanOptimizations()) cleanup_ =
+      alwaysUseIndexScanOptimizations();
   Variable varX{"?x"};
   Variable varY{"?y"};
   Variable varZ{"?z"};
@@ -1999,6 +2009,7 @@ TEST(GroupByOptimizationsRegression,
       "<s5> <p> <o5> ."};
   config.rowsPerBlock = 125;
   auto* qec = getQec(std::move(config));
+  auto cleanup = alwaysUseIndexScanOptimizations();
 
   auto scan = makeExecutionTree<IndexScan>(
       qec, Permutation::Enum::OPS,
@@ -2112,6 +2123,7 @@ TEST(GroupByOptimizationsDeltaTriples,
 TEST(GroupByOptimizationsDeltaTriples, objectWithCountInsertInUniformBlock) {
   QecWrapper ctx{std::make_shared<Index>(
       makeTestIndex("<x> <label3> <a> . <x> <label3> <b> ."))};
+  auto cleanup = alwaysUseIndexScanOptimizations();
   auto getId = makeGetId(*ctx.index_);
   auto g = getId(std::string(DEFAULT_GRAPH_IRI));
   auto x = getId("<x>");
@@ -2145,6 +2157,7 @@ TEST(GroupByOptimizationsDeltaTriples,
      fullIndexScanCountAfterInsertInUniformBlock) {
   QecWrapper ctx{
       std::make_shared<Index>(makeTestIndex("<x> <p4> <a> . <x> <p4> <b> ."))};
+  auto cleanup = alwaysUseIndexScanOptimizations();
   auto getId = makeGetId(*ctx.index_);
   auto g = getId(std::string(DEFAULT_GRAPH_IRI));
   auto x = getId("<x>");
@@ -2171,6 +2184,62 @@ TEST(GroupByOptimizationsDeltaTriples,
   // After the insert, <x> has 3 triples, not 2.
   EXPECT_THAT(groupBy.computeGroupByForFullIndexScan(),
               optionalHasTable({{getId("<x>"), I(3)}}));
+}
+
+// Test that `computeGroupByForFullIndexScan` and
+// `computeGroupByObjectWithCount` are only used if at least
+// `group-by-index-scan-min-percent-known-blocks` percent of the blocks have a
+// single value in the grouped column.
+TEST(GroupByIndexScan, minPercentKnownBlocks) {
+  // The subject `<s0>` has 8 triples and `<s1>` to `<s4>` have one each, all
+  // with the predicate `<p>`. This makes two blocks with only `<s0>` and one
+  // block with four subjects.
+  std::string turtle;
+  for (int i = 0; i < 8; ++i) {
+    turtle += "<s0> <p> <o" + std::to_string(i) + "> . ";
+  }
+  for (int s = 1; s <= 4; ++s) {
+    turtle += "<s" + std::to_string(s) + "> <p> <o0> . ";
+  }
+  TestIndexConfig config{std::move(turtle)};
+  config.rowsPerBlock = 4;
+  QecWrapper ctx{std::make_shared<Index>(makeTestIndex(std::move(config)))};
+  auto qec = ctx.makeQec();
+
+  // SELECT ?x WHERE { ?x ?y ?z } GROUP BY ?x, and
+  // SELECT ?x (COUNT(?x) AS ?count) WHERE { ?x <p> ?z } GROUP BY ?x.
+  Variable varX{"?x"};
+  auto computeGroupBy = [&](double minPercentKnownBlocks, bool fullScan) {
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::groupByIndexScanMinPercentKnownBlocks_>(
+        minPercentKnownBlocks);
+    if (fullScan) {
+      auto scan = makeExecutionTree<IndexScan>(
+          &qec, Permutation::Enum::SPO,
+          SparqlTripleSimple{varX, Variable{"?y"}, Variable{"?z"}});
+      return GroupByImpl{&qec, {varX}, {}, std::move(scan)}
+          .computeGroupByForFullIndexScan();
+    }
+    auto scan = makeExecutionTree<IndexScan>(
+        &qec, Permutation::Enum::PSO,
+        SparqlTripleSimple{varX, iri("<p>"), Variable{"?z"}});
+    auto countXPimpl = SparqlExpressionPimpl{
+        std::make_unique<CountExpression>(
+            false, std::make_unique<VariableExpression>(varX)),
+        "COUNT(?x)"};
+    std::vector<Alias> aliases{
+        Alias{std::move(countXPimpl), Variable{"?count"}}};
+    return GroupByImpl{&qec, {varX}, aliases, std::move(scan)}
+        .computeGroupByObjectWithCount();
+  };
+
+  // Two thirds of the blocks have a single subject.
+  for (bool fullScan : {true, false}) {
+    EXPECT_TRUE(computeGroupBy(0, fullScan).has_value());
+    EXPECT_TRUE(computeGroupBy(66, fullScan).has_value());
+    EXPECT_FALSE(computeGroupBy(67, fullScan).has_value());
+    EXPECT_FALSE(computeGroupBy(100, fullScan).has_value());
+  }
 }
 
 // _____________________________________________________________________________

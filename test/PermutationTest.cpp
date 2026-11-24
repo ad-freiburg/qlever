@@ -96,7 +96,8 @@ TEST(Permutation, getDistinctCol0Ids) {
   // `getDistinctCol0IdsAndCounts`, whose first column also holds the distinct
   // `col0Id`s.
   IdTable expected = pso.getDistinctCol0IdsAndCounts(cancellationHandle,
-                                                     locatedTriplesState, {});
+                                                     locatedTriplesState, {}, 0)
+                         .value();
   auto getId = ad_utility::testing::makeGetId(index);
   EXPECT_THAT(getDistinctCol0Ids(std::nullopt).getColumn(0),
               ::testing::ElementsAreArray(expected.getColumn(0)));

@@ -37,6 +37,7 @@ RuntimeParameters::RuntimeParameters() {
   add(useBinsearchTransitivePath_);
   add(groupByHashMapEnabled_);
   add(groupByDisableIndexScanOptimizations_);
+  add(groupByIndexScanMinPercentKnownBlocks_);
   add(serviceMaxValueRows_);
   add(serviceMaxRedirects_);
   add(queryPlanningBudget_);
@@ -134,6 +135,15 @@ RuntimeParameters::RuntimeParameters() {
           throw std::runtime_error{
               absl::StrCat("Parameter ", parameterName,
                            " must be strictly between 0 and 100, was ", value)};
+        }
+      });
+  groupByIndexScanMinPercentKnownBlocks_.setParameterConstraint(
+      [](double value, std::string_view parameterName) {
+        // NOTE: The negated form also rejects NaN.
+        if (!(value >= 0 && value <= 100)) {
+          throw std::runtime_error{
+              absl::StrCat("Parameter ", parameterName,
+                           " must be between 0 and 100, was ", value)};
         }
       });
 }

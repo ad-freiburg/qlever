@@ -132,29 +132,29 @@ std::pair<size_t, size_t> Permutation::getSizeEstimateForScan(
 }
 
 // ____________________________________________________________________________
-IdTable Permutation::getDistinctCol1IdsAndCounts(
+std::optional<IdTable> Permutation::getDistinctCol1IdsAndCounts(
     Id col0Id, const CancellationHandle& cancellationHandle,
     const LocatedTriplesState& locatedTriplesState,
-    const LimitOffsetClause& limitOffset) const {
+    const LimitOffsetClause& limitOffset, double minPercentKnownBlocks) const {
   return reader().getDistinctColIdsAndCounts(
       1,
       getScanSpecAndBlocks(
           ScanSpecification{col0Id, std::nullopt, std::nullopt},
           locatedTriplesState),
       cancellationHandle, getLocatedTriplesForPermutation(locatedTriplesState),
-      limitOffset);
+      limitOffset, minPercentKnownBlocks);
 }
 
 // ____________________________________________________________________________
-IdTable Permutation::getDistinctCol0IdsAndCounts(
+std::optional<IdTable> Permutation::getDistinctCol0IdsAndCounts(
     const CancellationHandle& cancellationHandle,
     const LocatedTriplesState& locatedTriplesState,
-    const LimitOffsetClause& limitOffset) const {
+    const LimitOffsetClause& limitOffset, double minPercentKnownBlocks) const {
   ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
   return reader().getDistinctColIdsAndCounts(
       0, getScanSpecAndBlocks(scanSpec, locatedTriplesState),
       cancellationHandle, getLocatedTriplesForPermutation(locatedTriplesState),
-      limitOffset);
+      limitOffset, minPercentKnownBlocks);
 }
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
