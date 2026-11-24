@@ -849,6 +849,14 @@ Service::makeTreeWithStrippedColumns(
     return std::nullopt;
   }
 
+  // If the parent requests none of the variables, keep the `Service` as is and
+  // let the caller add a `StripColumns` on top (a `Service` without visible
+  // variables sends `SELECT *` and then rejects the response, because it
+  // contains variables that the `Service` does not expect).
+  if (visibleVariables.empty()) {
+    return std::nullopt;
+  }
+
   // The new `Service` requests only the remaining variables from the remote
   // endpoint.
   parsedQuery::Service parsedServiceClause = parsedServiceClause_;

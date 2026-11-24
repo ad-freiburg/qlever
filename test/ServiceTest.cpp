@@ -1642,6 +1642,11 @@ TEST_F(ServiceTest, makeTreeWithStrippedColumns) {
   EXPECT_EQ(strip({V{"?x"}, V{"?y"}, V{"?z"}, V{"?notIncluded"}}),
             std::nullopt);
 
+  // None of the variables requested: the `Service` is kept, since a `SELECT`
+  // without variables cannot be sent to the remote endpoint.
+  EXPECT_EQ(strip({}), std::nullopt);
+  EXPECT_EQ(strip({V{"?notIncluded"}}), std::nullopt);
+
   // The stripped `Service` requests only the remaining variables from the
   // remote endpoint.
   {
