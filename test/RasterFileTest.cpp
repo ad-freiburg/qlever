@@ -101,11 +101,9 @@ void writePixelValues(const std::string& path, int bandNumber,
             CE_None);
 }
 
-// These points were computed with GDAL for a raster with `NORTH_UP` in
-// `UTM_ZONE_32N`. The first one is the center of pixel (1, 0), and the second
-// one lies 1 m to the left of the grid. `GeoPoint` takes the latitude first.
+// This point is the center of pixel (1, 0) of a raster with `NORTH_UP` in
+// `UTM_ZONE_32N`, computed with GDAL. `GeoPoint` takes the latitude first.
 const GeoPoint CENTER_OF_PIXEL_1_0{47.845518612, 7.663610613};
-const GeoPoint LEFT_OF_GRID{47.845516123, 7.663396819};
 
 // Match a `GeoPoint` whose latitude and longitude differ from those of
 // `expected` by at most 1e-6 degrees (about 10 cm). That is much less than the
@@ -120,7 +118,7 @@ auto pixelCenterNear(const GeoPoint& expected) {
 // Match a `PixelTable` without pixels, which still has one empty column for
 // each of its `numBands` bands.
 auto isEmptyPixelTable(size_t numBands) {
-  return AllOf(AD_FIELD(PixelTable, centers_, IsEmpty()),
+  return AllOf(AD_PROPERTY(PixelTable, numPixels, 0),
                AD_FIELD(PixelTable, valuesPerBand_,
                         AllOf(SizeIs(numBands), Each(IsEmpty()))));
 }
@@ -194,11 +192,48 @@ TEST(RasterFile, throwsForCrsWithoutTransformationToCrs84) {
 }
 
 // _____________________________________________________________________________
+// Test that a raster whose CRS can be transformed from CRS84, but not back, is
+// rejected.
+TEST(RasterFile, throwsForCrsWithoutTransformationFromCrs84) {
+  // PROJ can compute the Airy projection, but not its inverse.
+  constexpr std::string_view airy =
+      "+proj=airy +datum=WGS84 +units=m +type=crs";
+  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
+  // GeoTIFF cannot store this CRS itself, so GDAL writes it to a second file.
+  absl::Cleanup removeAuxFile{[auxPath = path.string() + ".aux.xml"] {
+    ql::filesystem::remove(auxPath);
+  }};
+  writeTestRaster(path.string(), NORTH_UP, airy);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      RasterFile{path.string()},
+      HasSubstr("Could not transform between CRS84 and the CRS"));
+}
+
+// _____________________________________________________________________________
 // Test that `numBands` returns the number of bands of the file.
 TEST(RasterFile, numBandsCountsAllBands) {
   auto [path, cleanup] = ad_utility::testing::filenameForTesting();
   writeTestRaster(path.string(), NORTH_UP, UTM_ZONE_32N, /*numBands=*/3);
   EXPECT_EQ(RasterFile{path.string()}.numBands(), 3);
+}
+
+// _____________________________________________________________________________
+// Test that a `RasterFile` that is moved into, by construction or assignment,
+// holds the file of the one it was moved from.
+TEST(RasterFile, movesKeepTheFile) {
+  auto [twoBandsPath, cleanup1] = ad_utility::testing::filenameForTesting();
+  auto [oneBandPath, cleanup2] = ad_utility::testing::filenameForTesting();
+  writeTestRaster(twoBandsPath.string(), NORTH_UP, UTM_ZONE_32N,
+                  /*numBands=*/2);
+  writeTestRaster(oneBandPath.string());
+
+  RasterFile original{twoBandsPath.string()};
+  RasterFile moved{std::move(original)};
+  EXPECT_EQ(moved.numBands(), 2);
+
+  RasterFile assigned{oneBandPath.string()};
+  assigned = std::move(moved);
+  EXPECT_EQ(assigned.numBands(), 2);
 }
 
 // _____________________________________________________________________________
@@ -316,17 +351,26 @@ TEST(RasterFile, returnsBandsInTheRequestedOrder) {
 }
 
 // _____________________________________________________________________________
-// Test that `lookupPoint` returns no pixel for a point that lies just outside
-// the grid. A cast to `int` instead of `floor` would turn the column -0.1 of
-// that point into 0, and return pixel (0, 0) with the value 1.
+// Test that `lookupPoint` returns no pixel for points just outside each side of
+// the grid.
 TEST(RasterFile, returnsNothingOutsideTheGrid) {
+  // These points lie 1 m outside each side of the grid. They were computed
+  // with GDAL, like `CENTER_OF_PIXEL_1_0`.
+  const GeoPoint leftOfGrid{47.845516123, 7.663396819};
+  const GeoPoint rightOfGrid{47.845519546, 7.663690786};
+  const GeoPoint aboveGrid{47.845571026, 7.663475605};
+  const GeoPoint belowGrid{47.845373137, 7.663480689};
   auto [path, cleanup] = ad_utility::testing::filenameForTesting();
   writeTestRaster(path.string());
   writePixelValues(path.string(), /*bandNumber=*/1, {1, 2, 3, 4});
   auto allocator = qlever::makeUnlimitedAllocator<char>();
   RasterFile file{path.string()};
-  EXPECT_THAT(file.lookupPoint(LEFT_OF_GRID, std::vector{1}, allocator),
-              isEmptyPixelTable(/*numBands=*/1));
+  for (const GeoPoint& point :
+       {leftOfGrid, rightOfGrid, aboveGrid, belowGrid}) {
+    SCOPED_TRACE(point.toStringRepresentation());
+    EXPECT_THAT(file.lookupPoint(point, std::vector{1}, allocator),
+                isEmptyPixelTable(/*numBands=*/1));
+  }
 }
 
 // _____________________________________________________________________________
@@ -403,6 +447,30 @@ TEST(RasterFile, readsFloatBandsWithNaNAsNoData) {
     auto dataset = openRasterForUpdate(path.string());
     ASSERT_EQ(dataset->GetRasterBand(1)->SetNoDataValue(nan), CE_None);
     ASSERT_EQ(dataset->GetRasterBand(2)->SetNoDataValue(nan), CE_None);
+  }
+  auto allocator = qlever::makeUnlimitedAllocator<char>();
+  RasterFile file{path.string()};
+  EXPECT_THAT(
+      file.lookupPoint(CENTER_OF_PIXEL_1_0, std::vector{1, 2}, allocator),
+      AD_FIELD(PixelTable, valuesPerBand_,
+               ElementsAre(ElementsAre(std::nullopt),
+                           ElementsAre(Optional(VariantWith<double>(0.5))))));
+}
+
+// _____________________________________________________________________________
+// Test that a pixel of a floating point band is NoData if it equals a NoData
+// value that is not NaN.
+TEST(RasterFile, readsFloatBandsWithNumericNoData) {
+  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
+  writeTestRaster(path.string(), NORTH_UP, UTM_ZONE_32N, /*numBands=*/2,
+                  GDT_Float32);
+  writePixelValues(path.string(), /*bandNumber=*/1, {1.5, 2.5, 3.5, 4.5});
+  writePixelValues(path.string(), /*bandNumber=*/2, {0.25, 0.5, 0.75, 1.0});
+  {
+    // GeoTIFF stores one NoData value for all bands.
+    auto dataset = openRasterForUpdate(path.string());
+    ASSERT_EQ(dataset->GetRasterBand(1)->SetNoDataValue(2.5), CE_None);
+    ASSERT_EQ(dataset->GetRasterBand(2)->SetNoDataValue(2.5), CE_None);
   }
   auto allocator = qlever::makeUnlimitedAllocator<char>();
   RasterFile file{path.string()};
