@@ -960,10 +960,10 @@ TEST(GeometryInfoTest, GeometryStoreId) {
 
   // The smallest and the largest valid ID.
   info.setGeometryStoreId(0);
-  EXPECT_EQ(info.getGeometryStoreId(), 0);
+  EXPECT_EQ(info.getGeometryStoreId(), GeometryStoreId{0});
   constexpr auto max = std::numeric_limits<uint64_t>::max();
   info.setGeometryStoreId(max - 1);
-  EXPECT_EQ(info.getGeometryStoreId(), max - 1);
+  EXPECT_EQ(info.getGeometryStoreId(), GeometryStoreId{max - 1});
 
   // The largest `uint64_t` is rejected.
   AD_EXPECT_THROW_WITH_MESSAGE(info.setGeometryStoreId(max),
@@ -971,7 +971,7 @@ TEST(GeometryInfoTest, GeometryStoreId) {
 
   // The ID is also the requested info `GeometryStoreId`, which a WKT literal
   // without a `GeometryInfo` does not have.
-  EXPECT_EQ(info.getRequestedInfo<GeometryStoreId>().value().id_, max - 1);
+  EXPECT_EQ(info.getRequestedInfo<GeometryStoreId>(), GeometryStoreId{max - 1});
   info = GeometryInfo::fromSerialized(bytes, GEOMETRY_INFO_VERSION);
   EXPECT_EQ(info.getRequestedInfo<GeometryStoreId>(), std::nullopt);
   EXPECT_EQ(GeometryInfo::getRequestedInfo<GeometryStoreId>("POINT(1 2)"),
