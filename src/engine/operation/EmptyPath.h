@@ -103,7 +103,7 @@ class EmptyPath : public Operation {
   // comment for this class above). If it is `std::nullopt`, all entities of
   // the knowledge graph are returned.
   std::optional<CheckedChild> checkedChild_;
-  VariableToColumnMap variableColumns_;
+  VariableToColumnMap variableColumns_{allocator()};
   size_t resultWidth_;
 
  public:

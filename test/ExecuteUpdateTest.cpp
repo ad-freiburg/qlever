@@ -17,6 +17,7 @@
 #include "util/IndexTestHelpers.h"
 #include "util/LocalVocabEntryTestHelpers.h"
 #include "util/ParsedQueryTestHelpers.h"
+#include "util/VariableToColumnMapTestHelpers.h"
 
 using ad_utility::testing::iriLocalVocabEntry;
 using ad_utility::testing::localVocabEntry;
@@ -507,46 +508,48 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
       };
   // Transforming an empty vector of template results in no `TransformedTriple`s
   // and leaves the `LocalVocab` empty.
-  expectTransformTriplesTemplate({}, {}, {});
+  expectTransformTriplesTemplate(makeVariableToColumnMap(), {}, {});
   // Resolve a `SparqlTripleSimpleWithGraph` without variables.
   expectTransformTriplesTemplate(
-      {},
+      makeVariableToColumnMap(),
       {SparqlTripleSimpleWithGraph{Literal("\"foo\""), Iri("<bar>"),
                                    Literal("\"foo\""), Graph{}}},
       {{Id("\"foo\""), Id("<bar>"), Id("\"foo\""), defaultGraphId}});
   // Literals in the template that are not in the index are added to the
   // `LocalVocab`.
   expectTransformTriplesTemplate(
-      {},
+      makeVariableToColumnMap(),
       {SparqlTripleSimpleWithGraph{Literal("\"foo\""), Iri("<bar>"),
                                    Literal("\"foo\""), Graph{Iri("<baz>")}}},
       {{Id("\"foo\""), Id("<bar>"), Id("\"foo\""), LocalVocab(Iri("<baz>"))}});
   // A variable in the template (`?f`) is not mapped in the
   // `VariableToColumnMap`.
   expectTransformTriplesTemplateFails(
-      {},
+      makeVariableToColumnMap(),
       {SparqlTripleSimpleWithGraph{Literal("\"foo\""), Iri("<bar>"),
                                    Variable("?f"), Graph{}}},
       HasSubstr("Assertion `variableColumns.contains(tc.getVariable())` "
                 "failed."));
   expectTransformTriplesTemplateFails(
-      {},
+      makeVariableToColumnMap(),
       {SparqlTripleSimpleWithGraph{Literal("\"foo\""), Iri("<bar>"),
                                    Literal("\"foo\""), Graph{Variable("?f")}}},
       HasSubstr("Assertion `variableColumns.contains(var)` failed."));
   // Variables in the template are mapped to their column index.
   expectTransformTriplesTemplate(
-      {{Variable("?f"), {0, ColumnIndexAndTypeInfo::PossiblyUndefined}}},
+      makeVariableToColumnMap(
+          {{Variable("?f"), {0, ColumnIndexAndTypeInfo::PossiblyUndefined}}}),
       {SparqlTripleSimpleWithGraph{Literal("\"foo\""), Iri("<bar>"),
                                    Variable("?f"), Graph{}}},
       {{Id("\"foo\""), Id("<bar>"), uint64_t{0}, defaultGraphId}});
   expectTransformTriplesTemplate(
-      {{Variable("?f"), {0, ColumnIndexAndTypeInfo::PossiblyUndefined}}},
+      makeVariableToColumnMap(
+          {{Variable("?f"), {0, ColumnIndexAndTypeInfo::PossiblyUndefined}}}),
       {SparqlTripleSimpleWithGraph{Literal("\"foo\""), Iri("<bar>"),
                                    Literal("\"foo\""), Graph{Variable("?f")}}},
       {{Id("\"foo\""), Id("<bar>"), Id("\"foo\""), uint64_t{0}}});
   expectTransformTriplesTemplate(
-      {},
+      makeVariableToColumnMap(),
       {SparqlTripleSimpleWithGraph{Iri("<http://example.org/123>"),
                                    Iri("<http://qlever.dev/1>"),
                                    Literal("\"baz\""), Graph{}}},

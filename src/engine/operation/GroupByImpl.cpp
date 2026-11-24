@@ -447,7 +447,7 @@ std::vector<ColumnIndex> GroupByImpl::computeSortColumns(
 
 // ____________________________________________________________________
 VariableToColumnMap GroupByImpl::computeVariableToColumnMap() const {
-  VariableToColumnMap result;
+  VariableToColumnMap result{allocator()};
   // The returned columns are all groupByVariables followed by aggregates.
   const auto& subtreeVars = _subtree->getVariableColumns();
   size_t colIndex = 0;

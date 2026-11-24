@@ -456,7 +456,7 @@ VariableToColumnMap SpatialJoin::getVarColMapPayloadVars() const {
                     "column map can be computed.");
 
   const auto& varColMap = childRight_->getVariableColumns();
-  VariableToColumnMap newVarColMap;
+  VariableToColumnMap newVarColMap{allocator()};
 
   if (config_.payloadVariables_.isAll()) {
     newVarColMap = VariableToColumnMap{varColMap};
@@ -589,7 +589,7 @@ Result SpatialJoin::computeResult([[maybe_unused]] bool requestLaziness) {
 
 // ____________________________________________________________________________
 VariableToColumnMap SpatialJoin::computeVariableToColumnMap() const {
-  VariableToColumnMap variableToColumnMap;
+  VariableToColumnMap variableToColumnMap{allocator()};
   auto makeUndefCol = makePossiblyUndefinedColumn;
 
   if (!(childLeft_ || childRight_)) {

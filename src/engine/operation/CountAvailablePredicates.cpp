@@ -57,7 +57,7 @@ qlm::vector<ColumnIndex> CountAvailablePredicates::resultSortedOn() const {
 // _____________________________________________________________________________
 VariableToColumnMap CountAvailablePredicates::computeVariableToColumnMap()
     const {
-  VariableToColumnMap varCols;
+  VariableToColumnMap varCols{allocator()};
   auto col = makeAlwaysDefinedColumn;
   varCols[predicateVariable_] = col(0);
   varCols[countVariable_] = col(1);

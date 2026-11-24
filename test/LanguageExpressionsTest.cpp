@@ -13,6 +13,7 @@
 #include "index/ConstantsIndexBuilding.h"
 #include "util/IndexTestHelpers.h"
 #include "util/LocalVocabEntryTestHelpers.h"
+#include "util/VariableToColumnMapTestHelpers.h"
 
 using namespace sparqlExpression;
 using ad_utility::source_location;
@@ -48,7 +49,7 @@ struct TestContext {
       "<s8> <city_name> \"düsseldorf\"@de-AT";
 
   QueryExecutionContext* qec = ad_utility::testing::getQec(turtleInput);
-  VariableToColumnMap varToColMap;
+  VariableToColumnMap varToColMap{qec->getAllocator()};
   LocalVocab localVocab{ad_utility::testing::makeAllocator()};
   IdTable table{qec->getAllocator()};
   sparqlExpression::EvaluationContext context{

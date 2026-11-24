@@ -163,7 +163,7 @@ qlm::vector<ColumnIndex> Union::resultSortedOn() const { return targetOrder_; }
 VariableToColumnMap Union::computeVariableToColumnMap() const {
   using VarAndTypeInfo = std::pair<Variable, ColumnIndexAndTypeInfo>;
 
-  VariableToColumnMap variableColumns;
+  VariableToColumnMap variableColumns{allocator()};
 
   // A variable is only guaranteed to always be bound if it exists in all the
   // subtrees and if it is guaranteed to be bound in all the subtrees.

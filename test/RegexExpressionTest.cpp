@@ -14,6 +14,7 @@
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/RegexExpression.h"
 #include "engine/sparqlExpressions/SampleExpression.h"
+#include "util/VariableToColumnMapTestHelpers.h"
 
 using namespace sparqlExpression;
 using ad_utility::source_location;
@@ -543,7 +544,7 @@ TEST(RegexExpression, getCacheKey) {
   auto exp1 = makeRegexExpression("?first", "alp");
   auto exp2 = makeRegexExpression("?first", "alp");
 
-  VariableToColumnMap map;
+  VariableToColumnMap map = makeVariableToColumnMap();
   map[Variable{"?first"}] = makeAlwaysDefinedColumn(0);
   map[Variable{"?second"}] = makeAlwaysDefinedColumn(1);
   EXPECT_TRUE(isPrefixExpression(exp0));

@@ -12,6 +12,7 @@
 
 #include "./util/AllocatorTestHelpers.h"
 #include "./util/LocalVocabTestHelpers.h"
+#include "./util/VariableToColumnMapTestHelpers.h"
 #include "engine/ConstructBatchEvaluator.h"
 #include "engine/ConstructTemplatePreprocessor.h"
 #include "engine/ConstructTripleInstantiator.h"
@@ -40,7 +41,7 @@ struct ContextWrapper {
       qlm::vector<ColumnIndex>{ad_utility::testing::makeAllocator()},
       makeLocalVocab()};
   // TODO<joka921> `VariableToColumnMap`
-  VariableToColumnMap _hashMap;
+  VariableToColumnMap _hashMap = makeVariableToColumnMap();
 
   ConstructQueryExportContext createContextForRow(size_t row,
                                                   size_t rowOffset = 0) const {

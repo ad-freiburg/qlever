@@ -18,6 +18,7 @@
 
 #include "../util/IdTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/VariableToColumnMapTestHelpers.h"
 #include "backports/concepts.h"
 #include "engine/idTable/splitLayout/IdColumnVector.h"
 #include "engine/sparqlExpressions/HomogeneousNumericExpressionHelpers.h"
@@ -100,7 +101,7 @@ struct TestAddThree {
 class HomogeneousNumericExpressionHelpersTest : public ::testing::Test {
  protected:
   QueryExecutionContext* qec_ = ad_utility::testing::getQec();
-  VariableToColumnMap variableToColumnMap_;
+  VariableToColumnMap variableToColumnMap_{qec_->getAllocator()};
   LocalVocab localVocab_{ad_utility::testing::makeAllocator()};
   IdTable table_{qec_->getAllocator()};
 

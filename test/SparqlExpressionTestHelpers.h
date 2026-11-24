@@ -11,6 +11,7 @@
 #include "util/AllocatorTestHelpers.h"
 #include "util/IndexTestHelpers.h"
 #include "util/LocalVocabEntryTestHelpers.h"
+#include "util/VariableToColumnMapTestHelpers.h"
 
 namespace sparqlExpression {
 
@@ -41,7 +42,7 @@ struct TestContext {
       "<z> <is-a> _:blank . "
       "<z> <label> \"zz\"@en";
   QueryExecutionContext* qec = ad_utility::testing::getQec(turtleInput);
-  VariableToColumnMap varToColMap;
+  VariableToColumnMap varToColMap{qec->getAllocator()};
   LocalVocab localVocab{ad_utility::testing::makeAllocator()};
   IdTable table{qec->getAllocator()};
   sparqlExpression::EvaluationContext context{

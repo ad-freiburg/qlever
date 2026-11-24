@@ -15,6 +15,7 @@
 #include "backports/three_way_comparison.h"
 #include "global/Id.h"
 #include "rdfTypes/Variable.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/HashMap.h"
 #include "util/TypeTraits.h"
 #include "util/serializer/Serializer.h"
@@ -77,7 +78,7 @@ inline auto makePossiblyUndefinedColumn =
 // Similar to `VariableToColumnMap` but stores additional information together
 // with the column index.
 using VariableToColumnMap =
-    ad_utility::HashMap<Variable, ColumnIndexAndTypeInfo>;
+    qlm::flat_hash_map<Variable, ColumnIndexAndTypeInfo>;
 
 // Write the `map` to the `serializer`, or read it from the `serializer`,
 // depending on the direction of the `serializer`.

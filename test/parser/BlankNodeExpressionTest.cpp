@@ -7,6 +7,7 @@
 #include "../SparqlExpressionTestHelpers.h"
 #include "../util/GTestHelpers.h"
 #include "../util/LocalVocabEntryTestHelpers.h"
+#include "../util/VariableToColumnMapTestHelpers.h"
 #include "engine/sparqlExpressions/BlankNodeExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/SampleExpression.h"
@@ -107,17 +108,21 @@ TEST(BlankNodeExpression, labelsAreCorrectlyEscaped) {
 TEST(BlankNodeExpression, uniqueCacheKey) {
   auto expression0 = makeUniqueBlankNodeExpression();
   auto expression1 = makeUniqueBlankNodeExpression();
-  EXPECT_EQ(expression0->getCacheKey({}), expression1->getCacheKey({}));
-  EXPECT_NE(expression1->getCacheKey({}), expression1->getCacheKey({}));
+  EXPECT_EQ(expression0->getCacheKey(makeVariableToColumnMap()),
+            expression1->getCacheKey(makeVariableToColumnMap()));
+  EXPECT_NE(expression1->getCacheKey(makeVariableToColumnMap()),
+            expression1->getCacheKey(makeVariableToColumnMap()));
 
   auto expression2 =
       makeBlankNodeExpression(std::make_unique<StringLiteralExpression>(
           Literal::literalWithoutQuotes("Test")));
-  EXPECT_THAT(
-      expression2->getCacheKey({}),
-      ::testing::HasSubstr(expression2->children()[0]->getCacheKey({})));
-  EXPECT_NE(expression1->getCacheKey({}), expression2->getCacheKey({}));
-  EXPECT_NE(expression2->getCacheKey({}), expression2->getCacheKey({}));
+  EXPECT_THAT(expression2->getCacheKey(makeVariableToColumnMap()),
+              ::testing::HasSubstr(expression2->children()[0]->getCacheKey(
+                  makeVariableToColumnMap())));
+  EXPECT_NE(expression1->getCacheKey(makeVariableToColumnMap()),
+            expression2->getCacheKey(makeVariableToColumnMap()));
+  EXPECT_NE(expression2->getCacheKey(makeVariableToColumnMap()),
+            expression2->getCacheKey(makeVariableToColumnMap()));
 }
 
 // _____________________________________________________________________________
@@ -246,7 +251,8 @@ TEST(BlankNodeExpression, insideAggregateReturnsOnePerRow) {
 TEST(BlankNodeExpression, isResultAlwaysDefined) {
   EXPECT_FALSE(makeBlankNodeExpression(
                    std::make_unique<IdExpression>(Id::makeFromInt(42)))
-                   ->isResultAlwaysDefined({}));
+                   ->isResultAlwaysDefined(makeVariableToColumnMap()));
 
-  EXPECT_TRUE(makeUniqueBlankNodeExpression()->isResultAlwaysDefined({}));
+  EXPECT_TRUE(makeUniqueBlankNodeExpression()->isResultAlwaysDefined(
+      makeVariableToColumnMap()));
 }
