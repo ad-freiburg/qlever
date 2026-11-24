@@ -215,28 +215,32 @@ void writeFileAtomically(
     absl::FunctionRef<void(const fs::path& temporaryPath)> writeTemporaryFile) {
   // Replace the file a symbolic link points to, not the link itself.
   fs::path target = resolveSymlinks(path);
-  // The temporary file is written inside a fresh directory that only the owner
-  // can access (mode `0700`). The temporary file itself is created by
-  // `writeTemporaryFile` with the default permissions (typically readable by
-  // everyone), and the permissions of a replaced file can only be applied to
-  // it after it has been written. Without the private directory, the new
-  // contents of a file that is readable only by its owner would therefore be
-  // readable by everyone while they are being written. The directory is in the
-  // same directory as the target, so that the final `rename` stays on the same
-  // file system and is atomic. The random component of its name makes it
-  // unique, so that two concurrent writers of the same `path` never collide.
+  // Create a fresh directory with a random name next to the target that only
+  // the owner can access (mode `0700`), and write the temporary file inside it.
+  //
+  // NOTE 1: `writeTemporaryFile` creates the temporary file with the default
+  // permissions (typically readable by everyone), and the permissions of a
+  // replaced file can only be applied to it after it has been written. Without
+  // the private directory, the new contents of a file that is readable only by
+  // its owner would therefore be readable by everyone while they are written.
+  //
+  // NOTE 2: The directory is next to the target, so that the final `rename`
+  // stays on the same file system and is atomic. The random component of its
+  // name makes it unique, so that two concurrent writers of the same `path`
+  // never collide.
   fs::path temporaryDirectory = temporaryPathFor(target);
   if (::mkdir(temporaryDirectory.string().c_str(), 0700) != 0) {
     throwFileError("create a temporary directory for", target, errno);
   }
   fs::path temporary = temporaryDirectory / target.filename();
-  // Remove the temporary directory (with the temporary file, if writing or
-  // renaming it failed) in the end. The file and the directory are removed
-  // directly, which (unlike `remove_all`) works without a free file
-  // descriptor; `remove_all` is only the fallback for other files that
-  // `writeTemporaryFile` might have created. This also runs while an
-  // exception is propagated, so it must not throw itself; a leftover temporary
-  // directory is harmless.
+  // Remove the temporary directory in the end (with the temporary file, if
+  // writing or renaming it failed). This also runs while an exception is
+  // propagated, so it must not throw itself; a leftover temporary directory is
+  // harmless.
+  //
+  // NOTE: The file and the directory are removed directly, which (unlike
+  // `remove_all`) works without a free file descriptor; `remove_all` is only
+  // the fallback for other files that `writeTemporaryFile` might have created.
   absl::Cleanup removeTemporaryDirectory = [&temporaryDirectory, &temporary] {
     ql::error_code ignored;
     fs::remove(temporary, ignored);

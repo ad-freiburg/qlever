@@ -106,26 +106,28 @@ Container readBinaryFile(const ql::filesystem::path& path,
 
 // Create the file `path` atomically: call `writeTemporaryFile` with the path of
 // a temporary file, which has to create that file, and then rename the
-// temporary file to `path`. The temporary file is located in a fresh temporary
-// directory that only the owner can access (so that the new contents are never
-// readable by others while they are written) and that is in the same directory
-// as `path`. The name of that directory consists of the file name of `path`
-// (shortened if necessary, so that the name does not exceed the maximal length
-// of a file name), a random component (so that concurrent writers of the same
-// `path` do not collide), and the suffix `.tmp`; it is removed in the end. If
-// `path` is a symbolic link, the file it (finally) points to is written
-// instead, so that the link is kept. An existing file is replaced (see the NOTE
-// below for which of its properties are kept). If `writeTemporaryFile` or the
-// renaming throws, the temporary file is removed, the file is left unchanged,
-// and the exception is propagated.
+// temporary file to `path`. An existing file is replaced (see NOTE 2 for which
+// of its properties are kept). If `path` is a symbolic link, the file it
+// (finally) points to is written instead, so that the link is kept. If
+// `writeTemporaryFile` or the renaming throws, the temporary file is removed,
+// the file is left unchanged, and the exception is propagated.
 //
-// NOTE: The replacement creates a new file. Its permission bits are copied from
-// the replaced file, but its owner and group are those of the writing process
-// (only a privileged process could keep the original owner), and other hard
-// links to the replaced file keep referring to the old contents. Creating the
-// new file requires write permission on the directory of the file. The data is
-// not explicitly synced to disk (no `fsync`), so the replacement is atomic with
-// respect to other processes and to crashes of this process, but not
+// NOTE 1: The temporary file is located in a fresh temporary directory that
+// only the owner can access (so that the new contents are never readable by
+// others while they are written) and that is in the same directory as `path`
+// (so that the renaming is atomic). The name of that directory consists of the
+// file name of `path` (shortened if necessary, so that the name does not exceed
+// the maximal length of a file name), a random component (so that concurrent
+// writers of the same `path` do not collide), and the suffix `.tmp`. The
+// directory is removed in the end.
+//
+// NOTE 2: The replacement creates a new file. Its permission bits are copied
+// from the replaced file, but its owner and group are those of the writing
+// process (only a privileged process could keep the original owner), and other
+// hard links to the replaced file keep referring to the old contents. Creating
+// the new file requires write permission on the directory of the file. The data
+// is not explicitly synced to disk (no `fsync`), so the replacement is atomic
+// with respect to other processes and to crashes of this process, but not
 // necessarily with respect to a crash of the operating system.
 void writeFileAtomically(
     const ql::filesystem::path& path,
