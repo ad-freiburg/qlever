@@ -440,14 +440,18 @@ TEST(FilesystemHelpers, writeFileAtomicallyWithCallback) {
   TempDir dir;
   auto file = dir.path() / "file";
 
-  // The callback writes to a temporary file in the same directory, whose name
-  // starts with the name of the target and ends with `.tmp`, and which is
+  // The callback writes to a temporary file in a fresh directory that only the
+  // owner can access. That directory is in the same directory as the target,
+  // its name starts with the name of the target and ends with `.tmp`, and it is
   // different for each call.
   std::vector<fs::path> temporaryPaths;
   auto write = [&temporaryPaths](std::string content) {
     return [&temporaryPaths, content](const fs::path& temporaryPath) {
       temporaryPaths.push_back(temporaryPath);
       EXPECT_FALSE(fs::exists(temporaryPath));
+      EXPECT_EQ(fs::status(temporaryPath.parent_path()).permissions(),
+                fs::perms::owner_all);
+      EXPECT_TRUE(fs::is_empty(temporaryPath.parent_path()));
       ad_utility::makeOfstream(temporaryPath) << content;
     };
   };
@@ -457,14 +461,16 @@ TEST(FilesystemHelpers, writeFileAtomicallyWithCallback) {
   ASSERT_EQ(temporaryPaths.size(), 2u);
   EXPECT_NE(temporaryPaths.at(0), temporaryPaths.at(1));
   for (const auto& temporaryPath : temporaryPaths) {
-    EXPECT_EQ(temporaryPath.parent_path(), dir.path());
-    EXPECT_THAT(temporaryPath.filename().string(),
+    auto temporaryDirectory = temporaryPath.parent_path();
+    EXPECT_EQ(temporaryDirectory.parent_path(), dir.path());
+    EXPECT_THAT(temporaryDirectory.filename().string(),
                 ::testing::AllOf(::testing::StartsWith("file."),
                                  ::testing::EndsWith(".tmp")));
   }
   EXPECT_THAT(entryNames(dir.path()), ::testing::ElementsAre("file"));
 
-  // If the callback throws, the temporary file is removed, the target is left
+  // If the callback throws, the temporary directory (with the temporary file)
+  // is removed, the target is left
   // unchanged, and the exception is propagated.
   AD_EXPECT_THROW_WITH_MESSAGE(
       writeFileAtomically(file,
@@ -477,7 +483,7 @@ TEST(FilesystemHelpers, writeFileAtomicallyWithCallback) {
   EXPECT_THAT(entryNames(dir.path()), ::testing::ElementsAre("file"));
 
   // If the renaming fails (here because the target is a non-empty directory),
-  // the temporary file is removed as well.
+  // the temporary directory is removed as well.
   auto directory = dir.path() / "directory";
   fs::create_directory(directory);
   touch(directory / "entry");
@@ -552,11 +558,11 @@ TEST(FilesystemHelpers, writeFileAtomicallyWriteFailure) {
   EXPECT_TRUE(entryNames(dir.path()).empty());
 }
 
-// Test that `writeFileAtomically` throws if the temporary file cannot be
-// opened (here because the directory is not writable), with the reason in the
-// message, and that it leaves no file behind. (When the test runs as `root`,
-// the directory is writable anyway, so the test is skipped.)
-TEST(FilesystemHelpers, writeFileAtomicallyOpenFailure) {
+// Test that `writeFileAtomically` throws if the temporary directory cannot be
+// created (here because the directory of the target is not writable), with the
+// reason in the message, and that it leaves nothing behind. (When the test runs
+// as `root`, the directory is writable anyway, so the test is skipped.)
+TEST(FilesystemHelpers, writeFileAtomicallyDirectoryNotWritable) {
   if (geteuid() == 0) {
     GTEST_SKIP() << "`root` can write to a read-only directory";
   }
@@ -570,21 +576,50 @@ TEST(FilesystemHelpers, writeFileAtomicallyOpenFailure) {
   };
   AD_EXPECT_THROW_WITH_MESSAGE(
       writeFileAtomically(subdir / "file", std::string{"x"}),
-      ::testing::AllOf(HasSubstr("Could not open the file"),
-                       HasSubstr(std::strerror(EACCES))));
+      ::testing::AllOf(
+          HasSubstr("Could not create a temporary directory for the file"),
+          HasSubstr(std::strerror(EACCES))));
   std::move(restorePermissions).Invoke();
   EXPECT_TRUE(entryNames(subdir).empty());
 }
 
+// Test that `writeFileAtomically` throws if the temporary file cannot be
+// opened, with the reason in the message, and that it leaves nothing behind.
+// The failure is provoked by lowering the limit of open file descriptors
+// (`RLIMIT_NOFILE`) of this process to zero, so that `open` fails with
+// `EMFILE`. The limit is restored immediately afterwards.
+TEST(FilesystemHelpers, writeFileAtomicallyOpenFailure) {
+  TempDir dir;
+  struct rlimit oldLimit {};
+  ASSERT_EQ(getrlimit(RLIMIT_NOFILE, &oldLimit), 0);
+  absl::Cleanup restoreLimit = [&oldLimit] {
+    setrlimit(RLIMIT_NOFILE, &oldLimit);
+  };
+  struct rlimit newLimit = oldLimit;
+  newLimit.rlim_cur = 0;
+  ASSERT_EQ(setrlimit(RLIMIT_NOFILE, &newLimit), 0);
+  std::string message;
+  try {
+    writeFileAtomically(dir.path() / "file", std::string{"x"});
+  } catch (const std::exception& e) {
+    message = e.what();
+  }
+  std::move(restoreLimit).Invoke();
+  EXPECT_THAT(message, ::testing::AllOf(HasSubstr("Could not open the file"),
+                                        HasSubstr(std::strerror(EMFILE))));
+  EXPECT_TRUE(entryNames(dir.path()).empty());
+}
+
 // Test that `writeFileAtomically` works for a file name of the maximal length,
-// for which the name of the temporary file has to be shortened.
+// for which the name of the temporary directory has to be shortened.
 TEST(FilesystemHelpers, writeFileAtomicallyLongFilename) {
   TempDir dir;
   std::string filename(255, 'a');
   auto file = dir.path() / filename;
   writeFileAtomically(file, [](const fs::path& temporaryPath) {
-    EXPECT_LE(temporaryPath.filename().string().size(), 255u);
-    EXPECT_THAT(temporaryPath.filename().string(), ::testing::EndsWith(".tmp"));
+    auto temporaryDirectory = temporaryPath.parent_path().filename().string();
+    EXPECT_LE(temporaryDirectory.size(), 255u);
+    EXPECT_THAT(temporaryDirectory, ::testing::EndsWith(".tmp"));
     ad_utility::makeOfstream(temporaryPath) << "content";
   });
   EXPECT_EQ(readBinaryFile<std::string>(file), "content");
