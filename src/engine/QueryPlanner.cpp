@@ -2841,9 +2841,6 @@ auto QueryPlanner::createJoinWithPathSearch(
       return std::nullopt;
     }
   }
-  if (!siblingSourceCol.has_value() && !siblingTargetCol.has_value()) {
-    return std::nullopt;
-  }
 
   // The path search might be shared with other plans, so bind a copy.
   auto boundPathSearch = std::dynamic_pointer_cast<PathSearch>(
@@ -2854,6 +2851,7 @@ auto QueryPlanner::createJoinWithPathSearch(
   } else if (siblingSourceCol.has_value()) {
     boundPathSearch->bindSourceSide(sibling._qet, siblingSourceCol.value());
   } else {
+    // `jcs` is never empty, so at least one side is bound.
     boundPathSearch->bindTargetSide(sibling._qet, siblingTargetCol.value());
   }
 

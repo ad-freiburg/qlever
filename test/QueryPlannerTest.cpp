@@ -1530,23 +1530,34 @@ TEST(QueryPlanner, PathSearchSourceBound) {
                                  Variable("?path"),
                                  Variable("?edge"),
                                  {}};
+  auto query = [](std::string_view values) {
+    return absl::StrCat(
+        "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
+        "SELECT ?start ?end ?path ?edge WHERE {",
+        values,
+        "SERVICE pathSearch: {"
+        "_:path pathSearch:algorithm pathSearch:allPaths ;"
+        "pathSearch:source ?source ;"
+        "pathSearch:target <z> ;"
+        "pathSearch:pathColumn ?path ;"
+        "pathSearch:edgeColumn ?edge ;"
+        "pathSearch:start ?start;"
+        "pathSearch:end ?end;"
+        "{SELECT * WHERE {"
+        "?start <p> ?end."
+        "}}}}");
+  };
+  h::expect(query("VALUES ?source {<x>}"),
+            h::pathSearch(config, true, true, scan("?start", "<p>", "?end"),
+                          h::ValuesClause("VALUES (?source) { (<x>) }")),
+            qec);
+  // A source that is already bound is not bound again.
   h::expect(
-      "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
-      "SELECT ?start ?end ?path ?edge WHERE {"
-      "VALUES ?source {<x>}"
-      "SERVICE pathSearch: {"
-      "_:path pathSearch:algorithm pathSearch:allPaths ;"
-      "pathSearch:source ?source ;"
-      "pathSearch:target <z> ;"
-      "pathSearch:pathColumn ?path ;"
-      "pathSearch:edgeColumn ?edge ;"
-      "pathSearch:start ?start;"
-      "pathSearch:end ?end;"
-      "{SELECT * WHERE {"
-      "?start <p> ?end."
-      "}}}}",
+      query("VALUES ?source {<x>} VALUES ?source {<x> <y>}"),
       h::pathSearch(config, true, true, scan("?start", "<p>", "?end"),
-                    h::ValuesClause("VALUES (?source) { (<x>) }")),
+                    h::UnorderedJoins(
+                        h::ValuesClause("VALUES (?source) { (<x>) }"),
+                        h::ValuesClause("VALUES (?source) { (<x>) (<y>) }"))),
       qec);
 }
 
@@ -1565,23 +1576,34 @@ TEST(QueryPlanner, PathSearchTargetBound) {
                                  Variable("?path"),
                                  Variable("?edge"),
                                  {}};
+  auto query = [](std::string_view values) {
+    return absl::StrCat(
+        "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
+        "SELECT ?start ?end ?path ?edge WHERE {",
+        values,
+        "SERVICE pathSearch: {"
+        "_:path pathSearch:algorithm pathSearch:allPaths ;"
+        "pathSearch:source <x> ;"
+        "pathSearch:target ?target ;"
+        "pathSearch:pathColumn ?path ;"
+        "pathSearch:edgeColumn ?edge ;"
+        "pathSearch:start ?start;"
+        "pathSearch:end ?end;"
+        "{SELECT * WHERE {"
+        "?start <p> ?end."
+        "}}}}");
+  };
+  h::expect(query("VALUES ?target {<z>}"),
+            h::pathSearch(config, true, true, scan("?start", "<p>", "?end"),
+                          h::ValuesClause("VALUES (?target) { (<z>) }")),
+            qec);
+  // A target that is already bound is not bound again.
   h::expect(
-      "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
-      "SELECT ?start ?end ?path ?edge WHERE {"
-      "VALUES ?target {<z>}"
-      "SERVICE pathSearch: {"
-      "_:path pathSearch:algorithm pathSearch:allPaths ;"
-      "pathSearch:source <x> ;"
-      "pathSearch:target ?target ;"
-      "pathSearch:pathColumn ?path ;"
-      "pathSearch:edgeColumn ?edge ;"
-      "pathSearch:start ?start;"
-      "pathSearch:end ?end;"
-      "{SELECT * WHERE {"
-      "?start <p> ?end."
-      "}}}}",
+      query("VALUES ?target {<z>} VALUES ?target {<y> <z>}"),
       h::pathSearch(config, true, true, scan("?start", "<p>", "?end"),
-                    h::ValuesClause("VALUES (?target) { (<z>) }")),
+                    h::UnorderedJoins(
+                        h::ValuesClause("VALUES (?target) { (<z>) }"),
+                        h::ValuesClause("VALUES (?target) { (<y>) (<z>) }"))),
       qec);
 }
 
