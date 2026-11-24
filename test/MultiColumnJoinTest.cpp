@@ -307,25 +307,24 @@ TEST(MultiColumnJoin, makeTreeWithStrippedColumns) {
   using ::testing::UnorderedElementsAre;
   using V = Variable;
   auto qec = ad_utility::testing::getQec();
+  auto makeValuesForTesting =
+      [qec](const VectorTable& content, std::vector<std::optional<V>> variables) {
+        return ad_utility::makeExecutionTree<ValuesForTesting>(
+            qec, makeIdTableFromVector(content, &Id::makeFromInt), variables);
+      };
   // The left subtree with the variables `?a`, `?b` and `?c`.
-  auto leftSubtree = ad_utility::makeExecutionTree<ValuesForTesting>(
-      qec,
-      makeIdTableFromVector({{1, 2, 3}, {1, 2, 5}, {10, 20, 3}, {1, 6, 3}},
-                            &Id::makeFromInt),
-      std::vector<std::optional<V>>{V{"?a"}, V{"?b"}, V{"?c"}});
+  auto leftSubtree =
+      makeValuesForTesting({{1, 2, 3}, {1, 2, 5}, {10, 20, 3}, {1, 6, 3}},
+                           {V{"?a"}, V{"?b"}, V{"?c"}});
   // The right subtree with the variables `?d`, `?a` and `?b`.
-  auto rightSubtree = ad_utility::makeExecutionTree<ValuesForTesting>(
-      qec,
-      makeIdTableFromVector({{4, 1, 2}, {5, 10, 20}, {4, 4, 5}, {4, 6, 5}},
-                            &Id::makeFromInt),
-      std::vector<std::optional<V>>{V{"?d"}, V{"?a"}, V{"?b"}});
+  auto rightSubtree =
+      makeValuesForTesting({{4, 1, 2}, {5, 10, 20}, {4, 4, 5}, {4, 6, 5}},
+                           {V{"?d"}, V{"?a"}, V{"?b"}});
   // Alternative right subtree whose join values do not match any row of
   // leftSubtree
-  auto alternativeSubtree = ad_utility::makeExecutionTree<ValuesForTesting>(
-      qec,
-      makeIdTableFromVector({{4, 8, 2}, {5, 11, 20}, {4, 4, 5}, {4, 6, 5}},
-                            &Id::makeFromInt),
-      std::vector<std::optional<V>>{V{"?d"}, V{"?a"}, V{"?b"}});
+  auto alternativeSubtree =
+      makeValuesForTesting({{4, 8, 2}, {5, 11, 20}, {4, 4, 5}, {4, 6, 5}},
+                           {V{"?d"}, V{"?a"}, V{"?b"}});
   auto strip = [&](std::set<V> requestedVariables,
                    std::shared_ptr<QueryExecutionTree> rSubtree) {
     MultiColumnJoin multiColumnJoin{qec, leftSubtree, rSubtree};
@@ -385,8 +384,8 @@ TEST(MultiColumnJoin, makeTreeWithStrippedColumns) {
   // returned.
   {
     auto tree = strip({V{"?a"}, V{"?b"}, V{"?c"}}, alternativeSubtree);
-    EXPECT_THAT(tree.get(), isStrippedColumns<MultiColumnJoin>(
-                                {V{"?a"}, V{"?b"}, V{"?c"}},
-                                matchesIdTableFromVector({})));
+    EXPECT_THAT(tree.get(),
+                isStrippedColumns<MultiColumnJoin>(
+                    {V{"?a"}, V{"?b"}, V{"?c"}}, matchesIdTableFromVector({})));
   }
 }
