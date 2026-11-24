@@ -2002,11 +2002,13 @@ TEST_P(TransitivePathTest,
   }
 }
 
-// _____________________________________________________________________________
+// Test that an UNDEF value on the bound side of a `*` path matches every node
+// of the knowledge graph via the empty path, as in
+// `SELECT * { OPTIONAL { ?start <r> ?other } ?start <b>* ?target }`, also the
+// nodes `<c>`, `<x>` and `<y>` without an outgoing `<b>` edge.
 TEST_P(TransitivePathTest, undefFromKnowledgeGraphColumnMatchesEveryNode) {
-  // `SELECT * { OPTIONAL { ?start <r> ?other } ?start <b>* ?target }`: `?start`
-  // is UNDEF and matches every node of the knowledge graph via the empty path,
-  // also <x> and <y>, which have no outgoing <b> edge.
+  // A knowledge graph with the nodes `<a>`, `<c>`, `<x>` and `<y>`, of which
+  // only `<a>` has an outgoing `<b>` edge.
   std::string turtle = "<a> <b> <c> . <x> <q> <y> .";
   ad_utility::testing::TestIndexConfig config;
   config.turtleInput = turtle;
@@ -2017,6 +2019,9 @@ TEST_P(TransitivePathTest, undefFromKnowledgeGraphColumnMatchesEveryNode) {
   Id x = getId("<x>");
   Id y = getId("<y>");
 
+  // The path `?start <b>* ?target`, bound on the left to `?start` of
+  // `OPTIONAL { ?start <r> ?other }`, which is a single UNDEF row because `<r>`
+  // does not occur in the knowledge graph.
   TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
   TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
   auto [T, qec] =
@@ -2031,6 +2036,7 @@ TEST_P(TransitivePathTest, undefFromKnowledgeGraphColumnMatchesEveryNode) {
   auto boundPath = T->bindSides(
       optional, optional->getVariableColumn(Variable{"?start"}), std::nullopt);
 
+  // Every node matches itself via the empty path, and `<a>` also reaches `<c>`.
   auto expected = makeIdTableFromVector(
       {{a, a, U}, {a, c, U}, {c, c, U}, {x, x, U}, {y, y, U}});
   auto resultTable = boundPath->computeResultOnlyForTesting(requestLaziness());
