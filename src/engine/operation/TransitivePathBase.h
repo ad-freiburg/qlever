@@ -209,9 +209,6 @@ class TransitivePathBase : public Operation {
  protected:
   qlm::string getCacheKeyImpl() const override;
 
-  void addPayloadColumns(const std::shared_ptr<QueryExecutionTree>& startTree,
-                         ColumnIndex joinColumn);
-
   /**
    * @brief Decide on which transitive path side the hull computation should
    * start and where it should end. The start and target side are chosen by
@@ -280,46 +277,6 @@ class TransitivePathBase : public Operation {
   std::optional<std::shared_ptr<QueryExecutionTree>>
   makeTreeWithStrippedColumns(
       const std::set<Variable>& requestedVariables) const override;
-
- protected:
-  virtual std::optional<std::shared_ptr<QueryExecutionTree>>
-  createWithStrippedColumns(const std::set<Variable>& requestedVariables,
-                            std::shared_ptr<QueryExecutionTree> subtree,
-                            const TransitivePathSide& lhs,
-                            const TransitivePathSide& rhs) const = 0;
-
-  template <typename TransitivePathOperation>
-  std::optional<std::shared_ptr<QueryExecutionTree>>
-  createWithStrippedColumnsImpl(const std::set<Variable>& requestedVariables,
-                                std::shared_ptr<QueryExecutionTree> subtree,
-                                const TransitivePathSide& lhs,
-                                const TransitivePathSide& rhs) const {
-    auto* qec = getExecutionContext();
-
-  // First create the operation, without wrapping it in a QueryExecutionTree.
-  auto operation = qec->makeShared<TransitivePathOperation>(
-      qec, subtree, lhs, rhs, minDist_, maxDist_, activeGraphs_,
-      graphVariable_);
-
-  // Add the payload columns of the start side before creating the tree.
-  auto& startSide = operation->decideDirection().first;
-  if (startSide.isBoundVariable()) {
-    const auto& [startTree, joinColumn] = startSide.treeAndCol_.value();
-    operation->addPayloadColumns(startTree, joinColumn);
-  }
-
-  // Only now create the QueryExecutionTree, so its variable map is complete.
-  auto tree = qec->makeShared<QueryExecutionTree>(
-      qec, std::move(operation));
-
-  if (columnStrippingHelpers::allVariablesAreRequired(
-          *tree, requestedVariables)) {
-    return tree;
-  }
-
-  return ad_utility::makeExecutionTree<StripColumns>(
-    qec, std::move(tree), requestedVariables);
-}
 
  private:
   uint64_t getSizeEstimateBeforeLimit() override;

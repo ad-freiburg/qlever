@@ -766,108 +766,66 @@ const Variable TransitivePathBase::internalGraphHelper_{
 std::optional<std::shared_ptr<QueryExecutionTree>>
 TransitivePathBase::makeTreeWithStrippedColumns(
     const std::set<Variable>& requestedVariables) const {
-  // The subtree and the trees of the transitive path sides have to provide the
-  // requested variables, the `graphVariable_` and the bound variables (if
-  // available).
-  columnStrippingHelpers::VarsRequiredFromSubtree varsRequiredFromSubtree(
-      &requestedVariables);
-  if (lhs_.isVariable()) {
-    varsRequiredFromSubtree.add(lhs_.value_.getVariable());
-    varsRequiredFromSubtree.add(
-        subtree_->getVariableAndInfoByColumnIndex(lhs_.subCol_).first);
-  }
-  if (rhs_.isVariable()) {
-    varsRequiredFromSubtree.add(rhs_.value_.getVariable());
-    varsRequiredFromSubtree.add(
-        subtree_->getVariableAndInfoByColumnIndex(rhs_.subCol_).first);
-  }
-  if (graphVariable_) {
-    varsRequiredFromSubtree.add(*graphVariable_);
+  auto* qec = getExecutionContext();
+  auto subVar = [this](ColumnIndex c) {
+    return subtree_->getVariableAndInfoByColumnIndex(c).first;
+  };
+
+  // Strip the `subtree_`
+  std::set<Variable> subtreeVars{subVar(lhs_.subCol_), subVar(rhs_.subCol_)};
+  if (graphVariable_) subtreeVars.insert(*graphVariable_);
+  auto subtree =
+      QueryExecutionTree::makeTreeWithStrippedColumns(subtree_, subtreeVars);
+
+  // Create a new `TransitivePath` operation with the stripped subtree and unbound sideTrees.
+  // The `subCol_` gets updated after stripping the `subtree_`.
+  auto unbind = [&](const TransitivePathSide& side) {
+    auto copy = side;
+    copy.treeAndCol_.reset();
+    copy.subCol_ = subtree->getVariableColumn(subVar(side.subCol_));
+    return copy;
+  };
+  bool useBinSearch = dynamic_cast<const TransitivePathBinSearch*>(this);
+  std::shared_ptr<TransitivePathBase> path = makeTransitivePath(
+      qec, subtree, unbind(lhs_), unbind(rhs_), minDist_, maxDist_,
+      useBinSearch, activeGraphs_, graphVariable_);
+
+  // The stripped sideTree has to provide the `requestedVariables`, the join variables and the graph variables.
+  auto isRealBinding = [this](const TransitivePathSide& s) {
+    return s.isVariable() && s.isBoundVariable() &&
+           !boundVariableIsForEmptyPath_;
+  };
+  bool lb = isRealBinding(lhs_), rb = isRealBinding(rhs_);
+  if (lb || rb) {
+    columnStrippingHelpers::VarsRequiredFromSubtree varsRequiredFromSubtree{&requestedVariables};
+    auto joinVar = [](const TransitivePathSide& s) {
+      return s.treeAndCol_->first->getVariableAndInfoByColumnIndex(
+          s.treeAndCol_->second).first;
+    };
+    if (lb) varsRequiredFromSubtree.add(joinVar(lhs_));
+    if (rb) varsRequiredFromSubtree.add(joinVar(rhs_));
+    if (graphVariable_) {
+      varsRequiredFromSubtree.add(*graphVariable_);
+      varsRequiredFromSubtree.add(internalGraphHelper_);
+    }
+    // Strip the sideTree.
+    const auto& [sideTree, _] = lb ? *lhs_.treeAndCol_ : *rhs_.treeAndCol_;
+    auto strippedSideTree = varsRequiredFromSubtree.stripSubtree(sideTree);
+    // Update the column of the join variable after stripping the sideTree.
+    auto updateJoinVarCol = [&](bool bound, const TransitivePathSide& s) {
+      return bound ? std::optional{strippedSideTree->getVariableColumn(joinVar(s))}
+                   : std::nullopt;
+    };
+    // Bind the `strippedSideTree` to the new `TransitivePath` operation.
+    path = path->bindSides(strippedSideTree, updateJoinVarCol(lb, lhs_), updateJoinVarCol(rb, rhs_));
   }
 
-  // Strip the subtree and the trees of the transitive path sides if available
-  // and update all column indices.
-  auto strippedSubtree = varsRequiredFromSubtree.stripSubtree(subtree_);
-  auto getSubCol = [&](const TransitivePathSide& pathSide) {
-    auto subtreeVar =
-        subtree_->getVariableAndInfoByColumnIndex(pathSide.subCol_).first;
-    return strippedSubtree->getVariableColumn(subtreeVar);
-  };
-  auto updateTransitivePathSide = [&](const TransitivePathSide& pathSide) {
-    const auto& tree = pathSide.treeAndCol_.value().first;
-    auto newTree = varsRequiredFromSubtree.stripSubtree(tree);
-    size_t newJoinCol = (newTree->getVariableColumns())
-                            .at(pathSide.value_.getVariable())
-                            .columnIndex_;
-    return TransitivePathSide{std::make_pair(std::move(newTree), newJoinCol),
-                              getSubCol(pathSide), pathSide.value_,
-                              pathSide.outputCol_};
-  };
-  TransitivePathSide strippedLhsSide;
-  if (lhs_.isBoundVariable()) {
-    strippedLhsSide = updateTransitivePathSide(lhs_);
-  } else {
-    strippedLhsSide = lhs_;
-    strippedLhsSide.subCol_ = getSubCol(lhs_);
-  }
-  TransitivePathSide strippedRhsSide;
-  if (rhs_.isBoundVariable()) {
-    strippedRhsSide = updateTransitivePathSide(rhs_);
-  } else {
-    strippedRhsSide = rhs_;
-    strippedRhsSide.subCol_ = getSubCol(rhs_);
-  }
-
-  // The new `TransitivePathBase` also exports evaluated variables that the
-  // parent did not request, the helper adds a `StripColumns` operation for
-  // them.
-  return createWithStrippedColumns(requestedVariables, strippedSubtree,
-                                   std::move(strippedLhsSide),
-                                   std::move(strippedRhsSide));
+  // The new `TransitivePath` also exports variables that the parent did
+  // not request, therefore a `StripColumns` operation is added for them.
+  auto tree = std::make_shared<QueryExecutionTree>(qec, std::move(path));
+  if (columnStrippingHelpers::allVariablesAreRequired(*tree, requestedVariables))
+    return tree;
+  return ad_utility::makeExecutionTree<StripColumns>(qec, std::move(tree),
+                                                     requestedVariables);
 }
 
-// _____________________________________________________________________________
-void TransitivePathBase::addPayloadColumns(
-    const std::shared_ptr<QueryExecutionTree>& startTree,
-    ColumnIndex joinColumn) {
-  std::optional<ColumnIndex> leftCol;
-  std::optional<ColumnIndex> rightCol;
-
-  if (lhs_.isBoundVariable() && lhs_.treeAndCol_->first == startTree) {
-    leftCol = lhs_.treeAndCol_->second;
-  }
-  if (rhs_.isBoundVariable() && rhs_.treeAndCol_->first == startTree) {
-    rightCol = rhs_.treeAndCol_->second;
-  }
-
-  AD_CORRECTNESS_CHECK(leftCol == joinColumn || rightCol == joinColumn);
-
-  auto payloadCols = computePayloadColumns(startTree, leftCol, rightCol);
-
-  for (auto [variable, columnIndexWithType] : startTree->getVariableColumns()) {
-    ColumnIndex columnIndex = columnIndexWithType.columnIndex_;
-    auto payloadPosition = ql::ranges::find(payloadCols, columnIndex);
-
-    if (payloadPosition == payloadCols.end()) {
-      continue;
-    }
-
-    columnIndexWithType.columnIndex_ =
-        firstGraphOrPayloadColumnIndex() +
-        ql::ranges::distance(payloadCols.begin(), payloadPosition);
-
-    AD_CORRECTNESS_CHECK(!variableColumns_.contains(variable));
-    variableColumns_[variable] = columnIndexWithType;
-  }
-
-  resultWidth_ += payloadCols.size();
-
-  // Make sure mapping actually points to the last column if it's not one of the
-  // regular variables.
-  if (graphVariable_.has_value()) {
-    auto& graphIndex = variableColumns_[*graphVariable_].columnIndex_;
-    if (graphIndex == firstGraphOrPayloadColumnIndex()) {
-      graphIndex = resultWidth_ - 1;
-    }
-  }
-}
