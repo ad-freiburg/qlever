@@ -37,6 +37,7 @@
 #include "util/Exception.h"
 #include "util/GeoConverters.h"
 #include "util/Log.h"
+#include "util/OverloadCallOperator.h"
 #include "util/TypeTraits.h"
 #include "util/Views.h"
 #include "util/json.h"
@@ -222,20 +223,6 @@ inline GeoPoint utilPointToGeoPoint(const Point<CoordType>& point) {
   return {point.getY(), point.getX()};
 }
 
-// Compute the centroid of a parsed geometry and return it as a `GeoPoint`
-// wrapped inside a `Centroid` struct.
-inline std::optional<Centroid> centroidAsGeoPoint(const ParsedWkt& geometry) {
-  auto uPoint = std::visit([](auto& val) { return centroid(val); }, geometry);
-  try {
-    return Centroid{utilPointToGeoPoint(uPoint)};
-  } catch (const CoordinateOutOfRangeException& ex) {
-    AD_LOG_DEBUG << "Cannot compute centroid due to invalid "
-                    "coordinates. Error: "
-                 << ex.what() << std::endl;
-    return std::nullopt;
-  }
-}
-
 // Compute the bounding box of a parsed geometry and return it as a pair of two
 // `GeoPoint`s wrapped inside a `BoundingBox` struct.
 inline std::optional<BoundingBox> boundingBoxAsGeoPoints(
@@ -264,10 +251,11 @@ inline Point<CoordType> geoPointToUtilPoint(const GeoPoint& point,
 // Serialize a bounding box given by a pair of `GeoPoint`s to a WKT literal
 // (without quotes or datatype).
 inline std::string boundingBoxAsWkt(const GeoPoint& lowerLeft,
-                                    const GeoPoint& upperRight) {
+                                    const GeoPoint& upperRight,
+                                    CRSType projCrs = defaultCrs) {
   Box<CoordType> box{geoPointToUtilPoint(lowerLeft),
                      geoPointToUtilPoint(upperRight)};
-  return getWKT(box);
+  return getWKT(box, defaultCrs, projCrs);
 }
 
 // Convert a `BoundingBox` struct holding two `GeoPoint`s to a `Box` struct as
@@ -275,43 +263,6 @@ inline std::string boundingBoxAsWkt(const GeoPoint& lowerLeft,
 inline Box<CoordType> boundingBoxToUtilBox(const BoundingBox& boundingBox) {
   return {geoPointToUtilPoint(boundingBox.lowerLeft()),
           geoPointToUtilPoint(boundingBox.upperRight())};
-}
-
-// Combine `info` (a `Centroid` or `BoundingBox`) and `crs` into a
-// `WithSourceCrs<T>`. Empty iff one of them is empty, in particular for a
-// `GeometryInfo` read from an index that predates the stored source CRS (see
-// `GeometryInfo::getSourceCrsType`).
-template <typename T>
-inline std::optional<WithSourceCrs<T>> getWithSourceCrs(
-    std::optional<T> info, std::optional<SourceCrsType> crs) {
-  if (!info.has_value() || !crs.has_value()) {
-    return std::nullopt;
-  }
-  return WithSourceCrs<T>{info.value(), crs.value()};
-}
-
-// Parse the WKT literal `wkt` and compute its `T` (a `Centroid` or
-// `BoundingBox`) together with its source CRS. Empty iff the literal cannot be
-// parsed or has an unsupported CRS.
-template <typename T>
-inline std::optional<WithSourceCrs<T>> getWithSourceCrsFromWkt(
-    std::string_view wkt) {
-  auto parseResult = detail::parseWkt(wkt);
-  if (!parseResult.parsedWkt_.has_value()) {
-    return std::nullopt;
-  }
-
-  // A literal with an unsupported CRS has no parsed geometry, see `parseWkt`.
-  AD_CORRECTNESS_CHECK(parseResult.sourceCrs_ != CRSType::UNSUPPORTED);
-  std::optional<T> info;
-  if constexpr (std::is_same_v<T, Centroid>) {
-    info = centroidAsGeoPoint(parseResult.parsedWkt_.value());
-  } else if constexpr (std::is_same_v<T, BoundingBox>) {
-    info = boundingBoxAsGeoPoints(parseResult.parsedWkt_.value());
-  } else {
-    static_assert(ad_utility::alwaysFalse<T>);
-  }
-  return getWithSourceCrs(info, SourceCrsType{parseResult.sourceCrs_});
 }
 
 // Constexpr helper to add the required suffixes to the OGC simple features IRI
@@ -613,36 +564,76 @@ struct ParseGeoPointOrWktVisitor {
 
 static constexpr ParseGeoPointOrWktVisitor parseGeoPointOrWkt;
 
-// Helper to convert a geometry from `pb_util` to a WKT string.
+// Helper to get the CRS of a `GeoPointOrWkt` variant. A `GeoPoint` is always
+// in the default CRS. For a WKT literal (with quotation marks and datatype),
+// the CRS is given by the IRI at its start, or it is the default CRS if there
+// is none (`getCRSType` skips the opening quotation mark).
+inline CRSType sourceCrsFromGeoPointOrWkt(const GeoPointOrWkt& geoPointOrWkt) {
+  return std::visit(ad_utility::OverloadCallOperator{
+                        [](const GeoPoint&) { return defaultCrs; },
+                        [](const std::string& wkt) { return getCRSType(wkt); }},
+                    geoPointOrWkt);
+}
+
+// Helper to convert a geometry from `pb_util` (in CRS84) to a WKT string,
+// projected to `projCrs` (with the IRI of `projCrs` unless it is CRS84).
 struct UtilGeomToWktVisitor {
   // Visitor for `std::optional` inputs.
   template <typename T>
-  std::optional<std::string> operator()(const std::optional<T>& opt) const {
+  std::optional<std::string> operator()(const std::optional<T>& opt,
+                                        CRSType projCrs = defaultCrs) const {
     if (!opt.has_value()) {
       return std::nullopt;
     }
-    return UtilGeomToWktVisitor{}(opt.value());
+    return UtilGeomToWktVisitor{}(opt.value(), projCrs);
   }
 
   // Visitor for the `ParsedWkt` variant.
-  std::optional<std::string> operator()(const ParsedWkt& variant) const {
-    return std::visit(UtilGeomToWktVisitor{}, variant);
+  std::optional<std::string> operator()(const ParsedWkt& variant,
+                                        CRSType projCrs = defaultCrs) const {
+    return std::visit(
+        [projCrs](const auto& var) {
+          return UtilGeomToWktVisitor{}(var, projCrs);
+        },
+        variant);
   }
 
   // Visitor for each of the `pb_util` geometry types.
   CPP_template(typename T)(requires SimilarToAnyTypeIn<T, ParsedWkt>)
-  std::optional<std::string> operator()(const T& geom) const {
-    return getWKT(geom);
+  std::optional<std::string> operator()(const T& geom,
+                                        CRSType projCrs = defaultCrs) const {
+    return getWKT(geom, defaultCrs, projCrs);
   }
 
   // Visitor for the custom container type `AnyGeometry`.
-  std::optional<std::string> operator()(
-      const AnyGeometry<CoordType>& geom) const {
-    return visitAnyGeometry(UtilGeomToWktVisitor{}, geom);
+  std::optional<std::string> operator()(const AnyGeometry<CoordType>& geom,
+                                        CRSType projCrs = defaultCrs) const {
+    return visitAnyGeometry(
+        [projCrs](const auto& var) {
+          return UtilGeomToWktVisitor{}(var, projCrs);
+        },
+        geom);
   }
 };
 
 static constexpr UtilGeomToWktVisitor utilGeomToWkt;
+
+// Helper to get the WKT string (without quotation marks and datatype) of a
+// `GeoPointOrWkt` variant. The `std::string` alternative holds the full
+// literal with quotation marks and datatype, as the `GeoPointOrWktValueGetter`
+// yields it.
+inline std::optional<std::string> wktFromGeoPointOrWkt(
+    const GeoPointOrWkt& geoPointOrWkt) {
+  return std::visit(
+      ad_utility::OverloadCallOperator{
+          [](const GeoPoint& point) -> std::optional<std::string> {
+            return utilGeomToWkt(geoPointToUtilPoint(point));
+          },
+          [](const std::string& wkt) -> std::optional<std::string> {
+            return removeDatatype(wkt);
+          }},
+      geoPointOrWkt);
+}
 
 // Helper to convert a geometry from `pb_util` to a GeoJSON geometry object (RFC
 // 7946). The input is expected to be in CRS84, as GeoJSON only supports this
@@ -891,6 +882,78 @@ struct UtilGeomProjectionVisitor {
 // geometry types.
 static constexpr UtilGeomProjectionVisitor projectWebMerc{
     CRSType::CRS84, CRSType::WEB_MERCATOR};
+
+// Compute the centroid of a parsed geometry (which is in CRS84) in the CRS
+// `sourceCrs` of its literal and return it as a `GeoPoint` (in CRS84) wrapped
+// inside a `Centroid` struct.
+//
+// NOTE: The centroid of the geometry projected to CRS84 is not the projection
+// of its centroid in the source CRS when the projection is not linear, as for
+// the y axis of Web Mercator (700 km apart for Canada).
+inline std::optional<Centroid> centroidAsGeoPoint(const ParsedWkt& geometry,
+                                                  CRSType sourceCrs) {
+  auto computeCentroid = [](const ParsedWkt& geom) {
+    return std::visit([](const auto& val) { return centroid(val); }, geom);
+  };
+
+  // Project the geometry back to `sourceCrs` unless that is CRS84, compute the
+  // centroid there and project it to CRS84.
+  Point<CoordType> resultCentroid;
+  if (sourceCrs == defaultCrs) {
+    resultCentroid = computeCentroid(geometry);
+  } else {
+    const UtilGeomProjectionVisitor projectToSourceCrs{defaultCrs, sourceCrs};
+    resultCentroid = projectToCRS(computeCentroid(projectToSourceCrs(geometry)),
+                                  sourceCrs, defaultCrs);
+  }
+
+  try {
+    return Centroid{utilPointToGeoPoint(resultCentroid)};
+  } catch (const CoordinateOutOfRangeException& ex) {
+    AD_LOG_DEBUG << "Cannot compute centroid due to invalid "
+                    "coordinates. Error: "
+                 << ex.what() << std::endl;
+    return std::nullopt;
+  }
+}
+
+// Combine `info` (a `Centroid` or `BoundingBox`) and `crs` into a
+// `WithSourceCrs<T>`. Empty iff one of them is empty, in particular for a
+// `GeometryInfo` read from an index that predates the stored source CRS (see
+// `GeometryInfo::getSourceCrsType`).
+template <typename T>
+inline std::optional<WithSourceCrs<T>> getWithSourceCrs(
+    std::optional<T> info, std::optional<SourceCrsType> crs) {
+  if (!info.has_value() || !crs.has_value()) {
+    return std::nullopt;
+  }
+  return WithSourceCrs<T>{info.value(), crs.value()};
+}
+
+// Parse the WKT literal `wkt` and compute its `T` (a `Centroid` or
+// `BoundingBox`) together with its source CRS. Empty iff the literal cannot be
+// parsed or has an unsupported CRS.
+template <typename T>
+inline std::optional<WithSourceCrs<T>> getWithSourceCrsFromWkt(
+    std::string_view wkt) {
+  auto parseResult = parseWkt(wkt);
+  if (!parseResult.parsedWkt_.has_value()) {
+    return std::nullopt;
+  }
+
+  // A literal with an unsupported CRS has no parsed geometry, see `parseWkt`.
+  AD_CORRECTNESS_CHECK(parseResult.sourceCrs_ != CRSType::UNSUPPORTED);
+  std::optional<T> info;
+  if constexpr (std::is_same_v<T, Centroid>) {
+    info = centroidAsGeoPoint(parseResult.parsedWkt_.value(),
+                              parseResult.sourceCrs_);
+  } else if constexpr (std::is_same_v<T, BoundingBox>) {
+    info = boundingBoxAsGeoPoints(parseResult.parsedWkt_.value());
+  } else {
+    static_assert(ad_utility::alwaysFalse<T>);
+  }
+  return getWithSourceCrs(info, SourceCrsType{parseResult.sourceCrs_});
+}
 
 // Helper for `MetricDistanceVisitor`.
 template <typename T, typename U>

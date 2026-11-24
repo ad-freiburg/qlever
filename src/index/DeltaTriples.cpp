@@ -26,6 +26,7 @@
 #include "index/LocatedTriples.h"
 #include "index/TripleComponentConversions.h"
 #include "util/ChunkedForLoop.h"
+#include "util/FilesystemHelpers.h"
 #include "util/serializer/TripleSerializer.h"
 
 // ____________________________________________________________________________
@@ -745,13 +746,14 @@ void DeltaTriples::writeToDisk() const {
                }) |
            ql::views::join;
   };
-  ql::filesystem::path tempPath = filenameForPersisting_.value();
-  tempPath += ".tmp";
-  ad_utility::serializeIds(
-      tempPath, localVocab_,
-      std::array{toRange(triplesSetsNormal_.triplesDeleted_),
-                 toRange(triplesSetsNormal_.triplesInserted_)});
-  ql::filesystem::rename(tempPath, filenameForPersisting_.value());
+  qlever::util::writeFileAtomically(
+      filenameForPersisting_.value(),
+      [this, &toRange](const ql::filesystem::path& temporaryPath) {
+        ad_utility::serializeIds(
+            temporaryPath, localVocab_,
+            std::array{toRange(triplesSetsNormal_.triplesDeleted_),
+                       toRange(triplesSetsNormal_.triplesInserted_)});
+      });
 }
 
 // _____________________________________________________________________________

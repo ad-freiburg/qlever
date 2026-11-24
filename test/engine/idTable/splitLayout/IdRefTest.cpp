@@ -11,8 +11,14 @@
 
 #include <sstream>
 #include <type_traits>
+#include <utility>
+#include <vector>
 
 #include "IdColumnTestHelpers.h"
+#include "backports/algorithm.h"
+#include "backports/concepts.h"
+#include "backports/type_traits.h"
+#include "engine/idTable/splitLayout/IdColumn.h"
 #include "engine/idTable/splitLayout/IdRef.h"
 
 using namespace columnBasedIdTable::splitLayout;
@@ -202,4 +208,112 @@ TEST(IdRefTest, restrictedReference) {
     EXPECT_EQ(payload, third.getPayloadBits());
     EXPECT_EQ(datatype, third.getDatatypeBits());
   }
+}
+
+// Test that the mutable restricted reference converts to the const one, like
+// `Id&` to `const Id&`, but not the other way round. Then the two have a common
+// reference and are totally ordered with each other, which for example a sort
+// with a const pivot row needs.
+TEST(IdRefTest, mutableRestrictedReferenceConvertsToConst) {
+  using Restricted = IdRef::Base;
+  using ConstRestricted = ConstIdRef::Base;
+  static_assert(std::is_convertible_v<Restricted, ConstRestricted>);
+  static_assert(!std::is_convertible_v<ConstRestricted, Restricted>);
+  static_assert(std::is_same_v<ql::remove_cvref_t<ql::common_reference_t<
+                                   const Restricted&, const ConstRestricted&>>,
+                               ConstRestricted>);
+  static_assert(
+      ql::concepts::totally_ordered_with<Restricted, ConstRestricted>);
+
+  for (const Id id : sampleIds()) {
+    auto [datatype, payload] = getBitsCompat(id);
+    const Restricted restricted{&payload, &datatype};
+    const ConstRestricted converted = restricted;
+    EXPECT_EQ(static_cast<Id>(converted), id);
+
+    // The converted reference refers to the same slot, it sees a later write.
+    const Id other = Id::makeFromInt(7);
+    Restricted{&payload, &datatype} = other;
+    EXPECT_EQ(static_cast<Id>(converted), other);
+
+    // The mutable and the const reference can be compared with each other.
+    EXPECT_TRUE(restricted == converted);
+    EXPECT_FALSE(ql::ranges::less{}(restricted, converted));
+    EXPECT_FALSE(ql::ranges::less{}(converted, restricted));
+  }
+}
+
+constexpr bool idIsSplitLayoutId = std::is_same_v<Id, SplitLayoutId>;
+
+// Test that with `USE_SPLIT_LAYOUT` an `IdRef` can be built from a
+// `SplitLayoutId&` and a `ConstIdRef` also from a `const SplitLayoutId&`, but
+// neither from a temporary, which would dangle. Without it, an `IdRef` refers
+// to a legacy `ValueId` and cannot be built from a `SplitLayoutId` at all.
+TEST(IdRefTest, conversionFromSplitLayoutId) {
+  static_assert(std::is_convertible_v<SplitLayoutId&, IdRef> ==
+                idIsSplitLayoutId);
+  static_assert(std::is_convertible_v<SplitLayoutId&, ConstIdRef> ==
+                idIsSplitLayoutId);
+  static_assert(std::is_convertible_v<const SplitLayoutId&, ConstIdRef> ==
+                idIsSplitLayoutId);
+  static_assert(!std::is_constructible_v<IdRef, const SplitLayoutId&>);
+  static_assert(!std::is_constructible_v<IdRef, SplitLayoutId&&>);
+  static_assert(!std::is_constructible_v<ConstIdRef, SplitLayoutId&&>);
+  static_assert(!std::is_constructible_v<ConstIdRef, const SplitLayoutId&&>);
+
+  // A range algorithm like `ql::ranges::for_each` accepts a function with an
+  // `IdRef` parameter only if it can also be called with an lvalue of the value
+  // type of the range (`std::indirectly_unary_invocable`), which is the
+  // `SplitLayoutId` with `USE_SPLIT_LAYOUT`.
+  auto setToTrue = [](IdRef id) { id = Id::makeFromBool(true); };
+  static_assert(ql::concepts::invocable<decltype(setToTrue)&, SplitLayoutId&> ==
+                idIsSplitLayoutId);
+
+  // A split column has to stay a range. With GCC it would not be one if the
+  // restricted reference that `*it` returns could also be built from an `Id&`,
+  // because then its common reference with `Id` is ambiguous.
+  static_assert(ql::ranges::random_access_range<IdColumnRef>);
+  static_assert(ql::ranges::random_access_range<ConstIdColumnRef>);
+}
+
+// The reference to an `Id` itself: the `IdRef` with `USE_SPLIT_LAYOUT`, where
+// the `Id` is the `SplitLayoutId`, and a plain `Id&` without it, because the
+// folded `Id` keeps its payload and its datatype in one word, to which no
+// `IdRef` can refer.
+using RefToId = std::conditional_t<idIsSplitLayoutId, IdRef, Id&>;
+using ConstRefToId =
+    std::conditional_t<idIsSplitLayoutId, ConstIdRef, const Id&>;
+
+// Test that a reference to an `Id` reads the current value of the `Id`, and
+// that assigning to it changes exactly this `Id`, with all its bits.
+TEST(IdRefTest, referenceToAnId) {
+  const auto ids = sampleIds();
+  for (const Id original : ids) {
+    for (const Id other : ids) {
+      Id id = original;
+      Id neighbour = Id::makeFromInt(-1);
+      RefToId ref = id;
+      ConstRefToId constRef = std::as_const(id);
+      EXPECT_EQ(getBitsCompat(ref), getBitsCompat(original));
+      EXPECT_EQ(getBitsCompat(constRef), getBitsCompat(original));
+
+      // Assigning to the reference changes the `Id`, and only this `Id`.
+      ref = other;
+      EXPECT_EQ(getBitsCompat(id), getBitsCompat(other));
+      EXPECT_EQ(neighbour, Id::makeFromInt(-1));
+
+      // The references see a later change of the `Id` (they are no copies).
+      id = original;
+      EXPECT_EQ(getBitsCompat(ref), getBitsCompat(original));
+      EXPECT_EQ(getBitsCompat(constRef), getBitsCompat(original));
+    }
+  }
+}
+
+// Test that a range algorithm accepts a function that takes a reference to an
+// `Id` for a `std::vector<Id>` and changes its `Id`s in place.
+TEST(IdRefTest, rangeAlgorithmOnAVectorWithIdRef) {
+  std::vector<Id> vector = sampleIds();
+  ql::ranges::for_each(vector, [](RefToId id) { id = Id::makeFromBool(true); });
+  EXPECT_EQ(vector, std::vector<Id>(vector.size(), Id::makeFromBool(true)));
 }

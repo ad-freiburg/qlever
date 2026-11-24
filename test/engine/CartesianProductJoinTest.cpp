@@ -170,18 +170,19 @@ TEST(CartesianProductJoin, computeResult) {
 // cartesian product join.
 TEST(CartesianProductJoin, outOfMemoryException) {
   std::vector<VectorTable> tables;
+  // The cross product of 10 tables with 10 rows each has 10^10 rows.
   VectorTable largeTable;
-  largeTable.emplace_back();
   for (size_t i = 0; i < 10; ++i) {
-    largeTable.back().push_back(0);
+    largeTable.push_back({0});
   }
   for (size_t i = 0; i < 10; ++i) {
     tables.push_back(largeTable);
   }
   auto largeJoin = makeJoin(tables);
   auto allocator = largeJoin.getExecutionContext()->getAllocator();
-  // Manually deplete the allocator.
-  auto left = allocator.amountMemoryLeft().getBytes() / sizeof(Id);
+  // Manually deplete the allocator, but leave some memory for the cache keys of
+  // the children.
+  auto left = (allocator.amountMemoryLeft().getBytes() - 100'000) / sizeof(Id);
   auto ptr = allocator.allocate(left);
   AD_EXPECT_THROW_WITH_MESSAGE(largeJoin.computeResultOnlyForTesting(),
                                ::testing::HasSubstr("cross-product"));
