@@ -37,7 +37,8 @@ constexpr std::string_view oldData =
 }  // namespace
 
 // Test `detail::parseTurtleFile`: the triples of the file are returned, and the
-// message of a parse error names the file.
+// messages of a parse error and of a blank node (labeled or anonymous, in any
+// position) name the file.
 TEST(TurtleDelta, parseTurtleFile) {
   const Index& index =
       ad_utility::testing::getQec(std::string{oldData})->getIndex();
@@ -54,12 +55,22 @@ TEST(TurtleDelta, parseTurtleFile) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       blobDiff::detail::parseTurtleFile(filename, index),
       HasSubstr(absl::StrCat("Parse error in \"", filename, "\"")));
+
+  for (std::string_view withBlankNode :
+       {"<a> <p> <b> .\n_:b <p> <c> .\n", "<a> <p> _:b .\n", "<a> <p> [] .\n",
+        "<a> <p> [ <q> <c> ] .\n"}) {
+    ad_utility::makeOfstream(filename) << withBlankNode;
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        blobDiff::detail::parseTurtleFile(filename, index),
+        AllOf(HasSubstr(absl::StrCat("of \"", filename, "\"")),
+              HasSubstr("contains a blank node")));
+  }
 }
 
 // Test `detail::toIdTriples`: the result is sorted and free of duplicates, all
 // triples are in the same (default) graph, equal values with a different
 // lexical form get the same `Id`, a word that is not in the vocabulary becomes
-// a `LocalVocabIndex`, and equal blank node labels get the same `Id`.
+// a `LocalVocabIndex`, and blank nodes are rejected.
 TEST(TurtleDelta, toIdTriples) {
   const Index& index =
       ad_utility::testing::getQec(std::string{oldData})->getIndex();
@@ -70,39 +81,34 @@ TEST(TurtleDelta, toIdTriples) {
           "<a> <p> \"01\"^^<http://www.w3.org/2001/XMLSchema#int> .\n"
           "<a> <q> \"x\" .\n"
           "<a> <q> \"x\" .\n"
-          "_:b <p> \"brand new\" .\n"
-          "_:b <q> _:c .\n",
+          "<c> <p> \"brand new\" .\n",
           &index.encodedIriManager());
   auto idTriples =
       blobDiff::detail::toIdTriples(std::move(triples), index, adder);
-  ASSERT_EQ(idTriples.size(), 4u);
+  ASSERT_EQ(idTriples.size(), 3u);
   EXPECT_TRUE(ql::ranges::is_sorted(idTriples));
   for (const auto& triple : idTriples) {
     EXPECT_EQ(triple.ids()[3], idTriples[0].ids()[3]);
   }
 
   auto getId = ad_utility::testing::makeGetId(index);
-  auto hasSubject = [](Id subject) {
-    return [subject](const auto& triple) { return triple.ids()[0] == subject; };
-  };
-  auto fromA = ql::ranges::count_if(idTriples, hasSubject(getId("<a>")));
+  auto fromA = ql::ranges::count_if(idTriples, [&getId](const auto& triple) {
+    return triple.ids()[0] == getId("<a>");
+  });
   EXPECT_EQ(fromA, 2);
+  // `<c>` and `"brand new"` are not in the vocabulary of the index.
+  auto fromC = ql::ranges::find_if(idTriples, [](const auto& triple) {
+    return triple.ids()[2].getDatatype() == Datatype::LocalVocabIndex;
+  });
+  ASSERT_NE(fromC, idTriples.end());
+  EXPECT_EQ(fromC->ids()[0].getDatatype(), Datatype::LocalVocabIndex);
 
-  // The two triples with the blank node `_:b` as subject.
-  std::vector<IdTriple<0>> fromB;
-  ql::ranges::copy_if(
-      idTriples, std::back_inserter(fromB), [](const auto& triple) {
-        return triple.ids()[0].getDatatype() == Datatype::BlankNodeIndex;
-      });
-  ASSERT_EQ(fromB.size(), 2u);
-  EXPECT_EQ(fromB[0].ids()[0], fromB[1].ids()[0]);
-  auto objectTypes = std::vector{fromB[0].ids()[2].getDatatype(),
-                                 fromB[1].ids()[2].getDatatype()};
-  EXPECT_THAT(objectTypes, UnorderedElementsAre(Datatype::LocalVocabIndex,
-                                                Datatype::BlankNodeIndex));
-  auto objectOfBq =
-      fromB[0].ids()[1] == getId("<q>") ? fromB[0].ids()[2] : fromB[1].ids()[2];
-  EXPECT_NE(objectOfBq, fromB[0].ids()[0]);
+  auto withBlankNode =
+      RdfStringParser<TurtleParser<Tokenizer>>::parseTriplesFromString(
+          "<a> <p> _:b .\n", &index.encodedIriManager());
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      blobDiff::detail::toIdTriples(std::move(withBlankNode), index, adder),
+      HasSubstr("Blank nodes are not supported"));
 }
 
 // Test `computeTripleDelta` and `applyTripleDelta` end to end on a small index.
@@ -136,10 +142,24 @@ TEST(TurtleDelta, computeAndApplyTripleDelta) {
               "<a> <s> 1.0 .\n";
   }
 
+  std::string blankFile = absl::StrCat(gtestCurrentTestName(), ".blank.ttl");
+  absl::Cleanup cleanupBlankFile = [&blankFile] {
+    ad_utility::deleteFile(blankFile);
+  };
+  ad_utility::makeOfstream(blankFile) << "<a> <p> _:b .\n";
+
   Qlever qlever{EngineConfig{indexConfig}};
   auto snapshot = qlever.indexAndViewsSnapshot();
   Index& index = snapshot->index_;
   BlankNodeAdder adder{index.getBlankNodeManager()};
+
+  // A blank node in either of the two files is rejected.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      computeTripleDelta(blankFile, newFile, index, adder),
+      HasSubstr("contains a blank node"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      computeTripleDelta(oldFile, blankFile, index, adder),
+      HasSubstr("contains a blank node"));
 
   // Without changes, the delta is empty.
   auto unchanged = computeTripleDelta(oldFile, oldFile, index, adder);

@@ -38,9 +38,15 @@ struct TripleDelta {
 // change of the type (for example from `1` to `1.0`) is. A comparison of the
 // string representations of the parsed triples would get both cases wrong. The
 // `adder` gives the same `Id` to equal words (also to those that are not in the
-// vocabulary of the `index`, which become `LocalVocabIndex` `Id`s), and to
-// equal blank node labels. The `adder` (which contains a `LocalVocab`) keeps
-// these words alive, so it has to outlive the use of the result.
+// vocabulary of the `index`, which become `LocalVocabIndex` `Id`s). The `adder`
+// (which contains a `LocalVocab`) keeps these words alive, so it has to outlive
+// the use of the result.
+//
+// Throw if one of the files contains a blank node. Blank nodes cannot be
+// diffed: the same label gets a different `Id` in each parsed file, and the
+// `Id`s that the blank nodes of the old file got when the `index` was built are
+// not stored anywhere. A delta with blank nodes would thus silently fail to
+// delete their triples and insert them a second time.
 TripleDelta computeTripleDelta(const ql::filesystem::path& oldTurtleFile,
                                const ql::filesystem::path& newTurtleFile,
                                const Index& index, BlankNodeAdder& adder);
@@ -50,13 +56,15 @@ TripleDelta computeTripleDelta(const ql::filesystem::path& oldTurtleFile,
 void applyTripleDelta(Index& index, TripleDelta delta);
 
 namespace detail {
-// Parse the Turtle file `path` using the settings of `index`.
+// Parse the Turtle file `path` using the settings of `index`. Throw if one of
+// the triples contains a blank node (see `computeTripleDelta` for the reason).
 std::vector<TurtleTriple> parseTurtleFile(const ql::filesystem::path& path,
                                           const Index& index);
 
 // Convert the `triples` into sorted and deduplicated `IdTriple`s in the default
 // graph. Words that are not in the vocabulary of the `index` become
-// `LocalVocabIndex` `Id`s that are kept alive by the `adder`.
+// `LocalVocabIndex` `Id`s that are kept alive by the `adder`. The `triples`
+// must not contain blank nodes, which is checked.
 std::vector<IdTriple<0>> toIdTriples(std::vector<TurtleTriple> triples,
                                      const Index& index, BlankNodeAdder& adder);
 }  // namespace detail

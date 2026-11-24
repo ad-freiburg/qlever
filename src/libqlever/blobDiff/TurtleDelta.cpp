@@ -9,10 +9,14 @@
 
 #include "libqlever/blobDiff/TurtleDelta.h"
 
+#include <absl/strings/str_cat.h>
+
 #include <algorithm>
 #include <iterator>
 #include <memory>
 #include <range/v3/range/conversion.hpp>
+#include <range/v3/view/enumerate.hpp>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 
@@ -32,8 +36,21 @@ std::vector<TurtleTriple> parseTurtleFile(const ql::filesystem::path& path,
                                           const Index& index) {
   auto bytes = util::readBinaryFile(path);
   std::string_view content{bytes.data(), bytes.size()};
-  return RdfStringParser<TurtleParser<Tokenizer>>::parseTriplesFromString(
-      content, &index.encodedIriManager(), path.string());
+  auto triples =
+      RdfStringParser<TurtleParser<Tokenizer>>::parseTriplesFromString(
+          content, &index.encodedIriManager(), path.string());
+  // The RDF parsers represent blank nodes (both labeled and anonymous ones) as
+  // plain strings, see `BlankNodeAdder::resolveParsedComponent`.
+  for (const auto& [i, triple] : ::ranges::views::enumerate(triples)) {
+    if (triple.subject_.isString() || triple.predicate_.isString() ||
+        triple.object_.isString()) {
+      throw std::runtime_error(absl::StrCat(
+          "The triple number ", i + 1, " of \"", path.string(),
+          "\" contains a blank node, which is not supported when computing "
+          "the difference between two Turtle files"));
+    }
+  }
+  return triples;
 }
 
 // _____________________________________________________________________________
@@ -41,8 +58,9 @@ std::vector<IdTriple<0>> toIdTriples(std::vector<TurtleTriple> triples,
                                      const Index& index,
                                      BlankNodeAdder& adder) {
   auto toId = [&index, &adder](TripleComponent&& component) {
-    return toValueId(adder.resolveParsedComponent(std::move(component)),
-                     index.getImpl(), adder.localVocab_);
+    AD_CONTRACT_CHECK(!component.isString(),
+                      "Blank nodes are not supported by `toIdTriples`");
+    return toValueId(std::move(component), index.getImpl(), adder.localVocab_);
   };
   // NOTE: The default graph of the triples in the index is the `Id` of the
   // default graph IRI in the vocabulary (as in `ExecuteUpdate`), which is not
