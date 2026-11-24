@@ -343,9 +343,9 @@ std::unique_ptr<Operation> MultiColumnJoin::cloneWithNewChildren(
 std::optional<std::shared_ptr<QueryExecutionTree>>
 MultiColumnJoin::makeTreeWithStrippedColumns(
     const std::set<Variable>& requestedVariables) const {
-  // The subtree has to provide the requested variables and the variables which
-  // appear in the left as well in the right subtree (therefore collecting the
-  // variablenames only from the left subtree is sufficient).
+  // The subtrees have to provide the requested variables plus the join
+  // variables (the variables that both subtrees have, so collecting them from
+  // the left subtree suffices).
   columnStrippingHelpers::VarsRequiredFromSubtree varsRequiredFromSubtree(
       &requestedVariables);
   for (const auto& joinColumn : _joinColumns) {
@@ -358,9 +358,8 @@ MultiColumnJoin::makeTreeWithStrippedColumns(
   auto left = varsRequiredFromSubtree.stripSubtree(_left);
   auto right = varsRequiredFromSubtree.stripSubtree(_right);
 
-  // The new `MultiColumnJoin` also exports the joined variables
-  // that the parent did not request. The helper adds a `StripColumns` operation
-  // for them.
+  // The new `MultiColumnJoin` also exports the join variables that the parent
+  // did not request, the helper adds a `StripColumns` operation for them.
   return columnStrippingHelpers::makeTreeWithOptionalStripOperation<
       MultiColumnJoin>(getExecutionContext(), requestedVariables,
                        std::move(left), std::move(right));

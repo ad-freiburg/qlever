@@ -143,6 +143,10 @@ class Service : public Operation {
   // an optional derived sibling.
   std::string getGraphPattern() const;
 
+  // Return the variables of the `SELECT` clause of the query sent to the
+  // remote endpoint (`*` if the SERVICE clause has no visible variables).
+  std::string getSelectClauseVariables() const;
+
   // Compute the result using `getResultFunction_` and `siblingInfo_`.
   Result computeResult(bool requestLaziness) override;
 
