@@ -2760,6 +2760,45 @@ TEST_P(TransitivePathTest, cloneActuallyClonesChildrenBothSidesBound) {
 }
 
 // _____________________________________________________________________________
+TEST_P(TransitivePathTest, setChild) {
+  auto sub = makeIdTableFromVector({{1, 2}, {2, 1}});
+  Variable s{"?s"}, t{"?t"};
+  TransitivePathSide left(std::nullopt, 0, s, 0);
+  TransitivePathSide right(std::nullopt, 1, t, 1);
+
+  auto unbound = makePathUnbound(sub.clone(), {s, t}, left, right, 0,
+                                 std::numeric_limits<size_t>::max());
+
+  auto sideTable = makeIdTableFromVector({{1}});
+  std::vector<std::optional<Variable>> sideTableVars{s};
+  auto original = ad_utility::makeExecutionTree<ValuesForTesting>(
+      getQec(), sideTable.clone(), sideTableVars);
+  // Bind the initial side tree without the testing helpers to make the setup as
+  // realistic as possible. This generates an `EmptyPath`, which we want to
+  // remove later in this test. The logic for determining when to remove it and
+  // when not is implemented in `QueryPlanner::createJoinWithTransitivePath` and
+  // not part of `TransitivePathBase` or its derivatives.
+  auto path = unbound->bindSides(original, 0);
+
+  // Ensure the left side is bound correctly initially.
+  ASSERT_TRUE(path->getLeft().isBoundVariable());
+  ASSERT_EQ(path->getLeft().value_.getVariable(), s);
+
+  auto replacement = ad_utility::makeExecutionTree<ValuesForTesting>(
+      getQec(), sideTable.clone(), sideTableVars);
+
+  // Replace the bound left side using the `setChild` method, which is the
+  // actual reason for/goal of this test.
+  path->setChild(Variable{"?s"}, replacement);
+
+  ASSERT_TRUE(path->getLeft().isBoundVariable());
+  EXPECT_THAT(path->getLeft().treeAndCol_->first, replacement);
+  EXPECT_THAT(
+      path->getLeft().treeAndCol_->second,
+      replacement->getVariableColumns().at(Variable{"?s"}).columnIndex_);
+}
+
+// _____________________________________________________________________________
 INSTANTIATE_TEST_SUITE_P(
     TransitivePathTestSuite, TransitivePathTest,
     ::testing::Combine(::testing::Bool(), ::testing::Bool()),

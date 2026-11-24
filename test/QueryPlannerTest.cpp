@@ -3982,18 +3982,13 @@ TEST(QueryPlanner, PropertyPathWithGraphVariable) {
     TransitivePathSide left2{std::nullopt, 0, Var{"?g"}, 0};
     h::expect(
         "SELECT * { ?g ?h ?i GRAPH ?g { ?g <label>* ?b } }",
-        h::transitivePath(
-            left2, right, 0, std::numeric_limits<size_t>::max(),
-            // We join on the graph variable itself, so an internal helper
-            // variable is used for the graph column.
-            h::EmptyPath(Variable{"?g"},
-                         Variable{"?_Qlever_internal_transitive_path_graph"},
-                         h::IndexScanFromStrings("?g", "?h", "?i")),
-            // Sort by ?g
-            h::Sort(h::IndexScanFromStrings(
-                "?_QLever_internal_variable_qp_0", "<label>",
-                "?_QLever_internal_variable_qp_1", {}, NamedTag{},
-                {Variable{"?g"}}, {3}))));
+        h::transitivePath(left2, right, 0, std::numeric_limits<size_t>::max(),
+                          h::IndexScanFromStrings("?g", "?h", "?i"),
+                          // Sort by ?g
+                          h::Sort(h::IndexScanFromStrings(
+                              "?_QLever_internal_variable_qp_0", "<label>",
+                              "?_QLever_internal_variable_qp_1", {}, NamedTag{},
+                              {Variable{"?g"}}, {3}))));
   }
 }
 
@@ -4359,8 +4354,7 @@ TEST(QueryPlanner, bindTransitivePathWithGraphTwice) {
                   left, right1, 0, std::numeric_limits<size_t>::max(),
                   // The graph variable is not bound by the child, so the
                   // `EmptyPath` has to add it.
-                  h::EmptyPath(Variable{"?s"}, Variable{"?g"},
-                               h::IndexScanFromStrings("?s", "<b>", "?s2")),
+                  h::IndexScanFromStrings("?s", "<b>", "?s2"),
                   // The sort is because of missing graph permutations.
                   h::Sort(h::IndexScanFromStrings(
                       "?_QLever_internal_variable_qp_0", "<a>",
@@ -4391,6 +4385,63 @@ TEST(QueryPlanner, bindTransitivePathWithGraphTwice) {
                             {Variable{"?g"}}, {3})))),
                     h::IndexScanFromStrings("?g", "<b>", "?g2")),
             qec);
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, emptyPathRemovalOptimization) {
+  {
+    // Negative case: We need to keep the `EmptyPath` in the plan for this
+    // query.
+    auto* qec = ad_utility::testing::getQec("");
+    TransitivePathSide left{std::nullopt, 0, Variable{"?x"}, 0};
+    TransitivePathSide right{std::nullopt, 1, Variable{"?y"}, 1};
+    h::expect(
+        "SELECT * { VALUES ?x { <notInTheIndex> } ?x <P1>* ?y }",
+        h::transitivePath(
+            left, right, 0, std::numeric_limits<size_t>::max(),
+            h::EmptyPath(Variable{"?x"}, {},
+                         h::ValuesClause("VALUES (?x) { (<notInTheIndex>) }")),
+            h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<P1>",
+                                    "?_QLever_internal_variable_qp_1")),
+        qec);
+  }
+  {
+    // TODO<schaetzr>: This still fails - is the optimization activated
+    // correctly?
+    //  Positive case: Here, the `matchWithKnowledgeGraph` method in
+    //  `TransitivePathBase` has added an `EmptyPath` to the plan. This is not
+    //  strictly needed as all its values are actually existing. Therefore, the
+    //  optimization tested in this test should remove the `EmptyPath`
+    //  afterwards. A plan without an `EmptyPath` will therefore be executed.
+    auto* qec = ad_utility::testing::getQec(
+        "<a> <P31> <C> . <a> <P131> <l1> . <a> <P159> <h1> . "
+        "<b> <P31> <C> . <b> <P131> <l2> . "
+        "<h1> <P1> <h2> . <l2> <P1> <l3> .");
+    auto query =
+        "SELECT * { ?org <P31> <C> ; <P131> ?loc . "
+        "OPTIONAL { ?org <P159> ?hq }"
+        "BIND(COALESCE(?hq, ?loc) AS ?place)"
+        "?place <P1>* ?admin .}";
+    TransitivePathSide left{std::nullopt, 0, Variable{"?place"}, 0};
+    TransitivePathSide right{std::nullopt, 1, Variable{"?admin"}, 1};
+
+    auto leftMatcher =
+        h::Bind(h::OptionalJoin(
+                    h::Join(h::IndexScanFromStrings("?org", "<P31>", "?C"),
+                            h::IndexScanFromStrings("?org", "<P131>", "?loc")),
+                    h::IndexScanFromStrings("?org", "<P159>", "?hq")),
+                "COALESCE(?hq, ?loc)", Variable{"?place"});
+
+    auto rightMatcher =
+        h::IndexScanFromStrings("?_QLever_internal_variable_qp_0", "<P1>",
+                                "?_QLever_internal_variable_qp_1");
+
+    h::expect(
+        query,
+        h::transitivePath(left, right, 0, std::numeric_limits<size_t>::max(),
+                          leftMatcher, rightMatcher),
+        qec);
+  }
 }
 
 // _____________________________________________________________________________

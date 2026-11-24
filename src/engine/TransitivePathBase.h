@@ -395,6 +395,11 @@ class TransitivePathBase : public Operation {
   // represents the first column of the payload. The graph follows after that
   // (if present).
   static size_t firstGraphOrPayloadColumnIndex() { return 2; }
+
+  // Set one bound side, given by its binding `Variable`, to a new child.
+  // Ensures that the side is bound to a `var`. Useful for optimizations where
+  // we want to e.g. skip an `EmptyPath`.
+  void setChild(Variable var, std::shared_ptr<QueryExecutionTree> newChild);
 };
 
 #endif  // QLEVER_SRC_ENGINE_TRANSITIVEPATHBASE_H

@@ -546,4 +546,10 @@ Result EmptyPath::computeResult(bool requestLaziness) {
   return {std::move(resultTable), resultSortedOn(), std::move(localVocab)};
 }
 
+// _____________________________________________________________________________
+std::shared_ptr<QueryExecutionTree> EmptyPath::extractChild() {
+  AD_CONTRACT_CHECK(checkedChild_.has_value());
+  return std::move(checkedChild_->child_);
+}
+
 #endif

@@ -32,6 +32,7 @@
 #include "engine/Describe.h"
 #include "engine/Distinct.h"
 #include "engine/DistinctGraphs.h"
+#include "engine/EmptyPath.h"
 #include "engine/ExternalValues.h"
 #include "engine/Filter.h"
 #include "engine/GroupBy.h"
@@ -2700,6 +2701,43 @@ auto QueryPlanner::createJoinWithTransitivePath(
   SubtreePlan plan = makeSubtreePlan(
       transPathOperation->bindSides(otherTree, leftCol, rightCol));
   mergeSubtreePlanIds(plan, a, b);
+
+  // Empty path specialization: In some special cases, we don't need the empty
+  // path check for a child of a transitive path as we can guarantee existence
+  // of values from the child operation.
+  auto transPathInPlan = std::dynamic_pointer_cast<TransitivePathBase>(
+      plan._qet->getRootOperation());
+  AD_CORRECTNESS_CHECK(transPathInPlan);
+  auto& lhs = transPathInPlan->getLeft();
+  auto& rhs = transPathInPlan->getRight();
+  for (auto& side : {lhs, rhs}) {
+    if (!side.isBoundVariable()) {
+      continue;
+    }
+    auto& child = side.treeAndCol_->first;
+    auto childAsEmptyPath =
+        std::dynamic_pointer_cast<EmptyPath>(child->getRootOperation());
+    // Condition 1: The child must be an empty path.
+    if (!childAsEmptyPath) {
+      continue;
+    }
+    const auto& var = childAsEmptyPath->variable();
+    // Ensure the empty path has in fact a child.
+    AD_CONTRACT_CHECK(childAsEmptyPath->getChildren().size() == 1);
+    AD_CONTRACT_CHECK(childAsEmptyPath->getChildren().at(0) != nullptr);
+    const auto& grandchild = childAsEmptyPath->getChildren().at(0);
+    // Condition 2: The other column that is being joined with (the
+    // `EmptyPath`s child) originates from a graph or undef.
+    const bool colOrigFromGraphOrUndef =
+        grandchild->getRootOperation()->columnOriginatesFromGraphOrUndef(var);
+    // Condition 3: The columns must have the `AlwaysDefined` info.
+    const bool colAlwaysDefined =
+        grandchild->getRootOperation()->isVariableAlwaysDefined(var);
+    if (colOrigFromGraphOrUndef && colAlwaysDefined) {
+      // Actual child replacing.
+      transPathInPlan->setChild(var, childAsEmptyPath->extractChild());
+    }
+  }
   return plan;
 #endif
 }

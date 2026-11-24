@@ -128,6 +128,9 @@ class EmptyPath : public Operation {
   bool columnOriginatesFromGraphOrUndef(
       const Variable& variable) const override;
 
+  // Destrutctive: Remove the child from this operation and return it.
+  std::shared_ptr<QueryExecutionTree> extractChild();
+
  protected:
   qlm::vector<ColumnIndex> resultSortedOn() const override;
 

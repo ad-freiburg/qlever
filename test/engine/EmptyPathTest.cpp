@@ -812,3 +812,20 @@ TEST(EmptyPath, allEntitiesAreYieldedInChunks) {
   EXPECT_EQ(numRows, numEntities + 4);
   EXPECT_GT(numTables, 1);
 }
+
+// _____________________________________________________________________________
+TEST(EmptyPath, extractChild) {
+  Variable a{"?a"};
+  std::vector<std::optional<Variable>> idTableVars{a};
+  auto sub = makeIdTableFromVector({{1}});
+  auto initialChild = ad_utility::makeExecutionTree<ValuesForTesting>(
+      getQec(), sub.clone(), idTableVars);
+  EmptyPath::CheckedChild initialChildChecked{initialChild, 0};
+
+  EmptyPath path{getQec(), a, Graphs::All(), std::nullopt, initialChildChecked};
+
+  auto extractedChild = path.extractChild();
+
+  EXPECT_EQ(path.getChildren().at(0), nullptr);
+  EXPECT_THAT(extractedChild, initialChild);
+}

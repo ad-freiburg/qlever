@@ -754,6 +754,25 @@ void TransitivePathBase::setTreeAndChildrenToClone(
 }
 
 // _____________________________________________________________________________
+void TransitivePathBase::setChild(
+    Variable var, std::shared_ptr<QueryExecutionTree> newChild) {
+  // Get the column index of `var` in `newChild`.
+  const auto& cols = newChild->getVariableColumns();
+  auto varColIt = cols.find(var);
+  AD_CONTRACT_CHECK(varColIt != cols.end());
+
+  // Get the side where `var` is the join variable.
+  for (auto* side : {&lhs_, &rhs_}) {
+    if (side->isBoundVariable() && side->value_.getVariable() == var) {
+      // Set the new child on that side.
+      side->treeAndCol_->first = std::move(newChild);
+      side->treeAndCol_->second = varColIt->second.columnIndex_;
+      return;
+    }
+  }
+}
+
+// _____________________________________________________________________________
 // Don't check the name because this leads to segfaults during static
 // initialization.
 const Variable TransitivePathBase::internalGraphHelper_{
