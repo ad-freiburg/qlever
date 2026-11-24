@@ -672,6 +672,7 @@ bool CompressedRelationReader::contentsAreKnownFromMetadata(
     const CompressedBlockMetadata& block, size_t numColumns,
     const LocatedTriplesPerBlock& locatedTriples) {
   return !block.containsInconsistentTriples(numColumns) &&
+         !block.containsDuplicatesWithDifferentGraphs_ &&
          !locatedTriples.containsTriples(block.blockIndex_);
 }
 

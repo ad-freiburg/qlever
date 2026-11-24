@@ -1633,6 +1633,30 @@ TEST(CompressedRelationReader, getDistinctCol0IdsChecksItsPreconditions) {
   }
 }
 
+// Test that `getDistinctColIdsAndCounts` counts a triple that occurs in several
+// graphs only once, like a scan without the graph column.
+TEST(CompressedRelationReader, getDistinctColIdsAndCountsDuplicatesInGraphs) {
+  // The triple `1 0 0` occurs in the graphs 0 and 1. All triples are in the
+  // same block, which has a single `col0Id` and a single `col1Id`.
+  std::vector<RelationInput> inputs{{1, {{0, 0, 0}, {0, 0, 1}, {0, 1, 0}}}};
+  auto [filename, cleanup] = testFilenameWithCleanup();
+  auto [blocks, metaData, reader] = writeAndOpenRelations(inputs, filename, 8);
+  auto locatedTriples = makeLocatedTriplesPerBlock(blocks, {}, true);
+  auto getCounts = [&](std::optional<Id> col0Id) {
+    return reader->getDistinctColIdsAndCounts(
+        col0Id.has_value() ? 1 : 0,
+        {ScanSpecification{col0Id, std::nullopt, std::nullopt},
+         getBlockMetadataRangesfromVec(blocks)},
+        std::make_shared<ad_utility::CancellationHandle<>>(), locatedTriples,
+        {});
+  };
+
+  // There are two distinct triples, both with `col0Id` 1 and `col1Id` 0.
+  EXPECT_THAT(getCounts(std::nullopt),
+              matchesIdTableFromVector({{V(1), I(2)}}));
+  EXPECT_THAT(getCounts(V(1)), matchesIdTableFromVector({{V(0), I(2)}}));
+}
+
 // Test that the `BlockSelector` of `getDistinctCol0Ids` requires a
 // cancellation handle that is not `nullptr`.
 TEST(CompressedRelationReader, blockSelectorRequiresCancellationHandle) {
