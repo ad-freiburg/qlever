@@ -739,7 +739,8 @@ TEST(IndexRebuilder, materializeToIndex) {
         EXPECT_EQ(newIndex.numDistinctObjects().normal, 4);
         EXPECT_EQ(newIndex.numDistinctObjects().internal, 0);
       }
-      // The patterns are copied from the old index, so are their statistics.
+      // The patterns are copied from the old index, and so are their
+      // statistics.
       if (usePatterns) {
         const auto& oldImpl = index.getImpl();
         EXPECT_EQ(newIndex.getNumDistinctSubjectPredicatePairs(),
