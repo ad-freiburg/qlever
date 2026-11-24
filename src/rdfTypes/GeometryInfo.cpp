@@ -375,11 +375,11 @@ SerializationType GeometryInfo::getSerializationType() const {
 }
 
 // ____________________________________________________________________________
-std::optional<uint64_t> GeometryInfo::getGeometryStoreId() const {
+std::optional<GeometryStoreId> GeometryInfo::getGeometryStoreId() const {
   if (geometryStoreId_ == 0) {
     return std::nullopt;
   }
-  return geometryStoreId_ - 1;
+  return GeometryStoreId{geometryStoreId_ - 1};
 }
 
 // ____________________________________________________________________________
@@ -419,11 +419,7 @@ std::optional<RequestedInfo> GeometryInfo::getRequestedInfo() const {
   } else if constexpr (std::is_same_v<RequestedInfo, SerializationType>) {
     return getSerializationType();
   } else if constexpr (std::is_same_v<RequestedInfo, GeometryStoreId>) {
-    auto id = getGeometryStoreId();
-    if (!id.has_value()) {
-      return std::nullopt;
-    }
-    return GeometryStoreId{id.value()};
+    return getGeometryStoreId();
   } else if constexpr (isInstantiation<RequestedInfo, WithSourceCrs>) {
     return detail::getWithSourceCrs(
         getRequestedInfo<typename RequestedInfo::InfoType>(),
@@ -483,8 +479,7 @@ std::optional<RequestedInfo> GeometryInfo::getRequestedInfo(
   } else if constexpr (std::is_same_v<RequestedInfo, SerializationType>) {
     return GeometryInfo::getSerializationType(wkt);
   } else if constexpr (std::is_same_v<RequestedInfo, GeometryStoreId>) {
-    // Only a literal of the `GeoVocabulary` can be in its geometry store.
-    return std::nullopt;
+    return GeometryInfo::getGeometryStoreId(wkt);
   } else if constexpr (isInstantiation<RequestedInfo, WithSourceCrs>) {
     return detail::getWithSourceCrsFromWkt<typename RequestedInfo::InfoType>(
         wkt);

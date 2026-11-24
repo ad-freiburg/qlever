@@ -206,6 +206,8 @@ struct MetricArea {
 // bits (the upper bits are the type of the geometry, see `sj::ID_TYPE_SHIFT`).
 struct GeometryStoreId {
   uint64_t id_;
+
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL_CONSTEXPR(GeometryStoreId, id_)
 };
 
 // The serialization format of a geometry literal. For now, only WKT literals
@@ -437,11 +439,18 @@ class GeometryInfo {
   // Get the ID of the parsed geometry in the `sj::GeometryStore` of the
   // `GeoVocabulary`. Empty iff the geometry is not stored there (for example
   // because the index predates the store).
-  std::optional<uint64_t> getGeometryStoreId() const;
+  std::optional<GeometryStoreId> getGeometryStoreId() const;
 
   // Set the ID of the parsed geometry in the `sj::GeometryStore`, see
   // `getGeometryStoreId`.
   void setGeometryStoreId(uint64_t id);
+
+  // Return the ID of an arbitrary WKT literal in the `sj::GeometryStore`, which
+  // is always empty (only a literal of the `GeoVocabulary` can be stored
+  // there).
+  static std::optional<GeometryStoreId> getGeometryStoreId(std::string_view) {
+    return std::nullopt;
+  }
 
   // Return the serialization format of an arbitrary WKT literal, which is
   // always `WKT`.
