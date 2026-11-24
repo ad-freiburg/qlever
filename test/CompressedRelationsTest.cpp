@@ -1726,9 +1726,39 @@ TEST(CompressedRelationReader, getResultSizeImpl) {
   expectResultSizes(Permutation::PSO, {I(1), I(5), std::nullopt}, 0, 1, 0);
 }
 
+// Test that the exact size of a scan counts a triple that occurs in several
+// graphs only once, also when it is in a block that is neither the first nor
+// the last block of the scan (the metadata of such a block cannot be used).
+TEST(CompressedRelationReader, getResultSizeOfScanDuplicatesInGraphs) {
+  // A relation that spans three blocks, where the triple `1 0 16` occurs in
+  // the graphs 42 and 43 and both occurrences are in the middle block.
+  std::vector<RelationInput> inputs{{1, {}}};
+  for (int i = 0; i < 20; ++i) {
+    inputs.at(0).col1And2_.push_back({0, 2 * i, 42});
+    if (i == 8) {
+      inputs.at(0).col1And2_.push_back({0, 2 * i, 43});
+    }
+  }
+  auto [filename, cleanup] = testFilenameWithCleanup();
+  auto [blocks, metaData, reader] = writeAndOpenRelations(inputs, filename, 8);
+  ASSERT_EQ(blocks.size(), 3);
+  ASSERT_TRUE(blocks.at(1).containsDuplicatesWithDifferentGraphs_);
+  auto locatedTriples = makeLocatedTriplesPerBlock(blocks, {}, true);
+  CompressedRelationReader::ScanSpecAndBlocks scanSpecAndBlocks{
+      ScanSpecification{V(1), std::nullopt, std::nullopt},
+      getBlockMetadataRangesfromVec(blocks)};
+
+  // The 21 rows are 20 distinct triples.
+  EXPECT_EQ(reader->getResultSizeOfScan(
+                scanSpecAndBlocks, locatedTriples,
+                std::make_shared<ad_utility::CancellationHandle<>>()),
+            20u);
+}
+
 // Test that the exact size computation of a scan checks the cancellation
 // handle before each block that it has to read (the first and the last block
-// of the scan, and the blocks in between that contain located triples).
+// of the scan, and the blocks in between that contain located triples or a
+// triple that occurs in several graphs).
 TEST(CompressedRelationReader, getResultSizeOfScanIsCancellable) {
   // A relation that spans three blocks, with a triple inserted into the middle
   // block, so that the exact size can only be computed by reading all three.
