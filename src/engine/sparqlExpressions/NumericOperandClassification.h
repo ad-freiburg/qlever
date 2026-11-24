@@ -113,9 +113,12 @@ constexpr NumericType numericTypeForDatatype(Datatype type) {
 //
 // Count all datatypes in one pass over the column. Blocks aggregate repeated
 // histogram updates; the individual steps and their motivation are below.
-template <bool IncludeDates = false>
-inline NumericOperandClassification classifyNumericOperand(
-    ConstIdColumnRef values, const EvaluationContext* context) {
+CPP_template(bool IncludeDates = false, typename IdRange)(
+    requires ql::ranges::random_access_range<IdRange> &&
+    ad_utility::isSimilar<ql::ranges::range_value_t<IdRange>, Id>)
+inline NumericOperandClassification
+    classifyNumericValues(const IdRange& values,
+                          const EvaluationContext* context) {
   if (values.empty()) {
     return {};
   }
@@ -222,7 +225,8 @@ inline NumericOperandClassification classifyNumericOperand(ValueId value) {
 }
 
 // Classify a supported operand representation. Constants are classified
-// directly, while vector-like operands are viewed as spans of `ValueId`.
+// directly, vectors and columns of `ValueId` are passed on to
+// `classifyNumericValues` unchanged.
 template <bool IncludeDates = false, typename Operand>
 inline NumericOperandClassification classifyNumericOperand(
     const Operand& operand, const EvaluationContext* context) {
@@ -235,8 +239,7 @@ inline NumericOperandClassification classifyNumericOperand(
   if constexpr (ad_utility::isSimilar<OperandType, ValueId>) {
     return classifyNumericOperand<IncludeDates>(operand);
   } else {
-    return classifyNumericOperand<IncludeDates>(
-        ConstIdColumnRef{operand.data(), operand.size()}, context);
+    return classifyNumericValues<IncludeDates>(operand, context);
   }
 }
 

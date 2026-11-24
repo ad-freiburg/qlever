@@ -14,8 +14,8 @@
 #include "../util/IndexTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
 #include "./TextIndexScanTestHelpers.h"
-#include "engine/IndexScan.h"
-#include "engine/TextIndexScanForWord.h"
+#include "engine/operation/IndexScan.h"
+#include "engine/operation/TextIndexScanForWord.h"
 #include "parser/ParsedQuery.h"
 
 using namespace ad_utility::testing;
