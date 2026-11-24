@@ -2277,8 +2277,8 @@ TEST(GroupByOptimizationsDeltaTriples, fullIndexScanManyDistinctPerBlock) {
   });
   auto qec = ctx.makeQec();
 
-  // SELECT ?x (COUNT(?x) AS ?count) WHERE { ?x ?y ?z } GROUP BY ?x, with the
-  // `limitOffset` applied to the index scan.
+  // `SELECT ?x (COUNT(?x) AS ?count) WHERE { ?x ?y ?z } GROUP BY ?x`, with
+  // the `limitOffset` applied to the index scan.
   Variable varX{"?x"};
   auto makeGroupBy = [&](LimitOffsetClause limitOffset) {
     auto scan = makeExecutionTree<IndexScan>(
