@@ -171,7 +171,91 @@ class TransitivePathImpl : public TransitivePathBase {
     }
   }
 
+  // Compute the result for the case that both sides are unbound variables and
+  // the path of length zero matches (`?x <p>* ?y`). The start nodes are then
+  // all the entities of the knowledge graph, given by `startSideResult` (the
+  // result of an `EmptyPath` without a child, which has no UNDEF values and no
+  // payload columns). The remaining arguments are those of
+  // `computeTransitivePathBound`.
+  //
+  // NOTE: For an entity without outgoing edges, the path of length zero is the
+  // only match, and this is the case for most entities of a typical knowledge
+  // graph (for all of them if `<p>` has no triples). For such an entity, we
+  // write the single row `(x, x)` directly, a graph search is only run for the
+  // other entities. The rows are written to large tables in the order of the
+  // start nodes, each pair exactly once. In contrast,
+  // `computeTransitivePathBound` runs a graph search for each start node and,
+  // if the result is lazy, yields a separate table for each of them, which is
+  // much slower (by a factor of 17 for a `<p>` without triples).
+  Result::Generator computeTransitivePathFromAllEntities(
+      std::shared_ptr<const Result> sub, const TransitivePathSide& startSide,
+      const TransitivePathSide& targetSide,
+      std::shared_ptr<const Result> startSideResult, bool yieldOnce) const {
+    using namespace qlever::graphSearch;
+    ad_utility::Timer timer{ad_utility::Timer::Started};
+    auto edges = setupEdgesMap(sub->idTableView(), startSide, targetSide);
+    auto nodes = setupNodes(startSide, targetSide, std::move(startSideResult));
+    runtimeInfo().addDetail("Initialization time", timer.msecs());
+
+    // Append the row `(startNode, targetNode)` to `table`, followed by the
+    // `graph` if there is a graph variable.
+    IdTable table{getResultWidth(), allocator()};
+    auto appendRow = [this, &table, startCol = startSide.outputCol_,
+                      targetCol = targetSide.outputCol_](
+                         Id startNode, Id targetNode, Id graph) {
+      table.emplace_back();
+      size_t row = table.numRows() - 1;
+      table(row, startCol) = startNode;
+      table(row, targetCol) = targetNode;
+      if (graphVariable_.has_value()) {
+        table(row, table.numColumns() - 1) = graph;
+      }
+    };
+
+    // The target nodes can stem from the local vocabulary of the edges, the
+    // start nodes from those of the tables of `nodes`.
+    LocalVocab localVocab = sub->getCopyOfLocalVocab();
+    bool sameVariableOnBothSides = lhs_.value_ == rhs_.value_;
+    for (auto&& tableColumn : nodes) {
+      localVocab.mergeWith(tableColumn.vocab_);
+      for (const auto& [startNode, graph] : tableColumn.startNodes_) {
+        checkCancellation();
+        edges.setGraphId(graph);
+
+        // With the same variable on both sides (`?x <p>* ?x`), the path of
+        // length zero is the only match for each entity, with or without
+        // outgoing edges.
+        if (sameVariableOnBothSides || edges.successors(startNode).empty()) {
+          appendRow(startNode, startNode, graph);
+        } else {
+          GraphSearchProblem<T> gsp(edges, startNode, std::nullopt, minDist_,
+                                    maxDist_);
+          GraphSearchExecutionParams ep(cancellationHandle(), allocator());
+          for (Id targetNode : runOptimalGraphSearch(gsp, ep)) {
+            appendRow(startNode, targetNode, graph);
+          }
+        }
+
+        // Yield the table when it is large enough.
+        if (!yieldOnce && table.numRows() >= numRowsPerLazyTable_) {
+          co_yield {std::move(table), localVocab.clone()};
+          table = IdTable{getResultWidth(), allocator()};
+        }
+      }
+    }
+
+    // Yield the remaining rows (if the result is not lazy, these are all the
+    // rows, and the table is yielded even if it is empty).
+    if (yieldOnce || !table.empty()) {
+      co_yield {std::move(table), std::move(localVocab)};
+    }
+  }
+
  protected:
+  // The number of rows after which `computeTransitivePathFromAllEntities`
+  // yields a table if the result is lazy.
+  static constexpr size_t numRowsPerLazyTable_ = 100'000;
+
   /**
    * @brief Compute the result for this TransitivePath operation
    * This function chooses the start and target side for the transitive
@@ -192,10 +276,22 @@ class TransitivePathImpl : public TransitivePathBase {
       std::shared_ptr<const Result> sideRes =
           startSide.treeAndCol_.value().first->getResult(true);
 
-      auto gen =
-          computeTransitivePathBound(std::move(subRes), startSide, targetSide,
-                                     std::move(sideRes), !requestLaziness);
-
+      // Use the variant without the overhead per start node if the start
+      // nodes are all the entities of the knowledge graph (it does not support
+      // the rare case that the graph variable is one of the two sides).
+      auto isGraphVariable = [this](const TransitivePathSide& side) {
+        return graphVariable_ == side.value_.getVariable();
+      };
+      bool startFromAllEntities = boundVariableIsForEmptyPath_ &&
+                                  !isGraphVariable(lhs_) &&
+                                  !isGraphVariable(rhs_);
+      auto gen = startFromAllEntities
+                     ? computeTransitivePathFromAllEntities(
+                           std::move(subRes), startSide, targetSide,
+                           std::move(sideRes), !requestLaziness)
+                     : computeTransitivePathBound(
+                           std::move(subRes), startSide, targetSide,
+                           std::move(sideRes), !requestLaziness);
       return requestLaziness ? Result{std::move(gen), resultSortedOn()}
                              : Result{cppcoro::getSingleElement(std::move(gen)),
                                       resultSortedOn()};

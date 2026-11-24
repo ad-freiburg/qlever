@@ -3,11 +3,13 @@
 // Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
 //         Johannes Herrmann (johannes.r.herrmann(at)gmail.com)
 
+#include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 
 #include <cstddef>
 #include <limits>
 #include <memory>
+#include <numeric>
 
 #include "./util/IdTestHelpers.h"
 #include "./util/IndexTestHelpers.h"
@@ -1413,6 +1415,96 @@ TEST_P(TransitivePathTest, zeroLength) {
 
   auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
   assertResultMatchesIdTable(resultTable, expected);
+}
+
+// Test that `?s <p>* ?o` yields each pair exactly once and sorted by `?s`, with
+// and without triples for `<p>`.
+TEST_P(TransitivePathTest, zeroLengthFromAllEntities) {
+  // An index with the entities `<a>`, `0`, `1`, `2`, `3`, and `4`. The function
+  // `compute` returns the result of the path from `?start` to `targetVariable`
+  // for the given edges, `expectedRows` adds the row for `<a>` to `rows`.
+  std::string index = "<a> a 0 , 1 , 2 , 3 , 4 .";
+  auto compute = [&index](IdTable edges, Variable targetVariable) {
+    TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+    TransitivePathSide right(std::nullopt, 1, std::move(targetVariable), 1);
+    auto T = makePathUnbound(
+        std::move(edges), {Variable{"?internal1"}, Variable{"?internal2"}},
+        left, right, 0, std::numeric_limits<size_t>::max(), index);
+    auto result = T->computeResultOnlyForTesting(requestLaziness());
+    return requestLaziness() ? aggregateTables(result.idTables(), 2).first
+                             : result.cloneIdTable();
+  };
+  auto expectedRows = [](const VectorTable& rows) {
+    auto expected = makeIdTableFromVector(rows, Id::makeFromInt);
+    Id a = Id::makeFromVocabIndex(VocabIndex::make(0));
+    expected.push_back({a, a});
+    return expected;
+  };
+  auto isSortedByStart = [](const IdTable& table) {
+    return ql::ranges::is_sorted(table.getColumn(0));
+  };
+  auto edgesWithCycle =
+      makeIdTableFromVector({{1, 2}, {2, 1}, {2, 3}}, Id::makeFromInt);
+  auto onlyEmptyPaths = expectedRows({{0, 0}, {1, 1}, {2, 2}, {3, 3}, {4, 4}});
+
+  // Without edges, the result is one row for each entity.
+  auto table = compute(IdTable{2, ad_utility::testing::makeAllocator()},
+                       Variable{"?target"});
+  EXPECT_THAT(table, UnorderedElementsAreArray(onlyEmptyPaths));
+  EXPECT_TRUE(isSortedByStart(table));
+
+  // With edges, the pairs `(1, 1)` and `(2, 2)` match the empty path and the
+  // cycle `1 -> 2 -> 1`, but are part of the result only once.
+  table = compute(edgesWithCycle.clone(), Variable{"?target"});
+  EXPECT_THAT(table, UnorderedElementsAreArray(expectedRows({{0, 0},
+                                                             {1, 1},
+                                                             {1, 2},
+                                                             {1, 3},
+                                                             {2, 1},
+                                                             {2, 2},
+                                                             {2, 3},
+                                                             {3, 3},
+                                                             {4, 4}})));
+  EXPECT_TRUE(isSortedByStart(table));
+
+  // With the same variable on both sides, the edges make no difference.
+  table = compute(edgesWithCycle.clone(), Variable{"?start"});
+  EXPECT_THAT(table, UnorderedElementsAreArray(onlyEmptyPaths));
+}
+
+// Test that the lazy result of `?s <p>* ?o` consists of few large tables (and
+// not of one table per entity).
+TEST_P(TransitivePathTest, zeroLengthFromAllEntitiesYieldsLargeTables) {
+  // An index with the entities `<a>`, `0`, ..., `499`, and the edges of the
+  // cycle `0 -> 1 -> ... -> 499 -> 0`.
+  size_t numNodes = 500;
+  std::string index;
+  IdTable edges{2, ad_utility::testing::makeAllocator()};
+  for (size_t i = 0; i < numNodes; ++i) {
+    absl::StrAppend(&index, "<a> a ", i, " .\n");
+    edges.push_back({Id::makeFromInt(i), Id::makeFromInt((i + 1) % numNodes)});
+  }
+  TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+  auto T = makePathUnbound(
+      std::move(edges), {Variable{"?internal1"}, Variable{"?internal2"}}, left,
+      right, 0, std::numeric_limits<size_t>::max(), std::move(index));
+  auto result = T->computeResultOnlyForTesting(requestLaziness());
+
+  // Each of the 500 nodes reaches all of them, and `<a>` only itself. A lazy
+  // result has a table for each 100'000 rows and one for the remaining rows.
+  size_t numRows = numNodes * numNodes + 1;
+  if (requestLaziness()) {
+    std::vector<size_t> tableSizes;
+    for (const auto& [table, localVocab] : result.idTables()) {
+      tableSizes.push_back(table.numRows());
+    }
+    EXPECT_EQ(tableSizes.size(), 3);
+    EXPECT_EQ(std::accumulate(tableSizes.begin(), tableSizes.end(), size_t{0}),
+              numRows);
+  } else {
+    EXPECT_EQ(result.idTableView().numRows(), numRows);
+  }
 }
 
 // _____________________________________________________________________________
