@@ -1450,14 +1450,12 @@ void QueryPlanner::applyFiltersIfPossible(
         }
       }
 
-      // In `SeedSubstitutesOnly` mode, only enforced substitutes may be
-      // applied, because they are complete as soon as `plan` is attached. A
-      // non-enforced substitute could stay incomplete forever (for example,
-      // when there are no joining rounds afterwards) and could still win the
-      // plan selection via its dummy cost estimate.
-      const bool allowSubstitutes = mode == FilterMode::KeepUnfiltered ||
-                                    (mode == FilterMode::SeedSubstitutesOnly &&
-                                     filterAndSubst.forceSubstitution_);
+      // Apply only enforced substitutes to a single plan, because they are
+      // complete as soon as `plan` is attached. The other substitutes connect
+      // two plans and are applied by `merge`, see `createJoinsWithSubstitutes`.
+      const bool allowSubstitutes = (mode == FilterMode::KeepUnfiltered ||
+                                     mode == FilterMode::SeedSubstitutesOnly) &&
+                                    filterAndSubst.forceSubstitution_;
       if (allowSubstitutes && filterAndSubst.hasSubstitute() &&
           (filterAndSubst.filter_.expression_.containedVariables().empty() ||
            ql::ranges::any_of(
@@ -1488,10 +1486,8 @@ void QueryPlanner::applyFiltersIfPossible(
           continue;
         }
 
-        // If we need to enforce substitution, replace `plan` with our first
-        // candidate. This is not done in all cases, because an incomplete
-        // `SpatialJoin` would not get a join partner if `plan` were removed.
-        if (!substPlans.empty() && filterAndSubst.forceSubstitution_) {
+        // Otherwise, replace `plan` with the first candidate.
+        if (!substPlans.empty()) {
           plan = std::move(substPlans.front());
           substPlans.erase(substPlans.begin());
         }
@@ -1762,14 +1758,7 @@ SubtreePlanVec QueryPlanner::runGreedyPlanningOnConnectedComponent(
     ReplacementPlans&& replacementPlans) const {
   const size_t numSeeds =
       findUniqueNodeIds(connectedComponent, !replacementPlans.empty());
-  // Apply the filters and text limits to the `plans` as early as possible. Of
-  // the filter substitutes, only the enforced ones are applied here, the others
-  // are completed with two plans at once by `merge`.
-  //
-  // NOTE: A partial `SpatialJoin` with only one child has a dummy size
-  // estimate of 1, so the greedy planner would choose it right away. Two such
-  // partial `SpatialJoin`s for the same filter, one on each side, could then
-  // never be merged (see #4015).
+  // Apply the filters and text limits to the `plans` as early as possible.
   auto applyFiltersAndTextLimits = [this, &filters,
                                     &textLimits](SubtreePlanVec& plans) {
     applyFiltersIfPossible<FilterMode::SeedSubstitutesOnly>(plans, filters);

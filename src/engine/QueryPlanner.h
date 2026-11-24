@@ -505,9 +505,11 @@ class QueryPlanner {
   // variable in `a` and the right variable in `b`. This is done only if `a` and
   // `b` share no variable, otherwise no candidate is returned.
   //
-  // NOTE: The greedy planner applies no non-enforced substitute to a single
-  // plan (which would give a partial `SpatialJoin` with one child), so it
-  // relies on this to join `a` and `b` with the substitute in one step.
+  // NOTE: This is the only way in which a non-enforced substitute is applied.
+  // Applied to a single plan, it would give a partial `SpatialJoin` with one
+  // child and a dummy size estimate of 1. The greedy planner would choose such
+  // a partial `SpatialJoin` right away, and two of them for the same filter,
+  // one on each side, could never be merged (see #4015).
   SubtreePlanVec createJoinsWithSubstitutes(
       const SubtreePlan& a, const SubtreePlan& b,
       const FiltersAndOptionalSubstitutes& filters) const;
@@ -560,7 +562,7 @@ class QueryPlanner {
     // already bind all the variables that are used in the filter. The plans
     // with the added filters are added to the candidate set. This mode is used
     // in the dynamic programming approach, where we don't apply the filters
-    // greedily. Applying filter substitutes is permitted in this mode.
+    // greedily. The enforced filter substitutes are applied in this mode, too.
     KeepUnfiltered,
     // Only apply matching filters (see above), but the plans with added filters
     // replace the plans without filters. Filter substitutes are not applied.
