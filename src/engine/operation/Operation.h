@@ -767,11 +767,12 @@ class Operation : public std::enable_shared_from_this<Operation> {
   // for its predicate or graph column, for `VALUES` clauses, or for expression
   // results. `TransitivePath` uses this to skip the check that the bound values
   // of the empty path are nodes of the knowledge graph.
-  // The default implementation returns true if the column is always defined
-  // and some children contain the `variable`, all of which return true for it.
-  // It assumes that newly created variables (e.g. by `BIND`) contain arbitrary
-  // values and that the values of all other variables are taken from the
-  // children. Operations that modify the values of their children have to
+  //
+  // NOTE: The default implementation returns true if the column is always
+  // defined and some children contain the `variable`, all of which return true
+  // for it. It assumes that newly created variables (e.g. by `BIND`) contain
+  // arbitrary values and that the values of all other variables are taken from
+  // the children. Operations that modify the values of their children have to
   // override this function, and operations that only pass on the values of
   // some of their children (e.g. the left side of a `MINUS`) should override it
   // to be less conservative.
