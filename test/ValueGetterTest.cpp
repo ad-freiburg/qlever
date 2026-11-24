@@ -470,6 +470,29 @@ TEST(GeometryInfoValueGetterTest, ValidWktWithGeometryInfo) {
               expectedBoundingBox);
 }
 
+// Test that a WKT literal has no geometry store ID, with and without a
+// `GeoVocabulary` and as a plain literal (nothing builds the geometry store
+// yet).
+TEST(GeometryInfoValueGetterTest, GeometryStoreId) {
+  static constexpr std::string_view lit =
+      "\"LINESTRING(2 3, 4 5)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
+  using ad_utility::GeometryStoreId;
+  EXPECT_EQ(
+      getGeoInfoFromIndex<GeometryStoreId>(
+          lit, ad_utility::VocabularyType::Enum::OnDiskCompressedGeoSplit),
+      std::nullopt);
+  EXPECT_EQ(getGeoInfoFromIndex<GeometryStoreId>(
+                lit, ad_utility::VocabularyType::Enum::OnDiskCompressed),
+            std::nullopt);
+  EXPECT_EQ(
+      sparqlExpression::detail::GeometryInfoValueGetter<GeometryStoreId>{}(
+          ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
+              std::string{lit}),
+          nullptr),
+      std::nullopt);
+}
+
 // _____________________________________________________________________________
 TEST(GeometryInfoValueGetterTest, OperatorWithIdGeoPoint) {
   GeoInfoTester t;

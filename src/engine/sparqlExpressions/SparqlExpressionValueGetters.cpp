@@ -664,6 +664,13 @@ std::optional<RequestedInfo> GeometryInfoValueGetter<CPP_sfinae_args(
           return info;
         }
       }
+      // Only the precomputed `GeometryInfo` can contain a geometry store ID,
+      // so there is no need to fetch the string.
+      if constexpr (std::is_same_v<RequestedInfo,
+                                   ad_utility::GeometryStoreId>) {
+        return std::nullopt;
+      }
+
       // No precomputed geometry info available: we have to fetch and parse
       // the string.
       auto lit = getLiteralOrIri(id, context);
@@ -715,6 +722,7 @@ template struct GeometryInfoValueGetter<ad_utility::NumGeometries>;
 template struct GeometryInfoValueGetter<ad_utility::MetricLength>;
 template struct GeometryInfoValueGetter<ad_utility::MetricArea>;
 template struct GeometryInfoValueGetter<ad_utility::SerializationType>;
+template struct GeometryInfoValueGetter<ad_utility::GeometryStoreId>;
 template struct GeometryInfoValueGetter<
     ad_utility::WithSourceCrs<ad_utility::Centroid>>;
 template struct GeometryInfoValueGetter<
@@ -801,6 +809,8 @@ template struct TypeErasedValueGetter<
     GeometryInfoValueGetter<ad_utility::MetricArea>>;
 template struct TypeErasedValueGetter<
     GeometryInfoValueGetter<ad_utility::SerializationType>>;
+template struct TypeErasedValueGetter<
+    GeometryInfoValueGetter<ad_utility::GeometryStoreId>>;
 template struct TypeErasedValueGetter<
     GeometryInfoValueGetter<ad_utility::WithSourceCrs<ad_utility::Centroid>>>;
 template struct TypeErasedValueGetter<GeometryInfoValueGetter<
