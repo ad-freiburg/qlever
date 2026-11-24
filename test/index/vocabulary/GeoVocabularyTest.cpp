@@ -586,7 +586,6 @@ TEST(GeoVocabularyTest, GeometryStore) {
   ql::ranges::sort(literals);
   {
     AnyGeoVocab writerVocab;
-    writerVocab.setBuildGeometryStore(true);
     auto ww = writerVocab.makeDiskWriterPtr(filename);
     for (const auto& lit : literals) {
       (*ww)(lit, true);

@@ -115,13 +115,10 @@ GeoVocabulary<V>::makeGeometryStoreForWriting(const std::string& filename) {
 template <typename V>
 template <typename Words>
 std::unique_ptr<sj::WriteBatch> GeoVocabulary<V>::parseGeometries(
-    bool buildGeometryStore, sj::GeometryStore& store, const Words& words,
-    uint64_t firstPosition, ql::span<const GeometryInfoBuffer> records) {
+    sj::GeometryStore& store, const Words& words, uint64_t firstPosition,
+    ql::span<const GeometryInfoBuffer> records) {
   AD_CONTRACT_CHECK(words.size() == records.size());
   auto geometries = std::make_unique<sj::WriteBatch>();
-  if (!buildGeometryStore) {
-    return geometries;
-  }
   GeometryStoreParser parser{&store};
   for (size_t i = 0; i < words.size(); ++i) {
     if (records[i] != invalidGeoInfoBuffer) {
@@ -217,11 +214,10 @@ VocabBatchLookupResult GeoVocabulary<V>::lookupBatch(
 template <typename V>
 GeoVocabulary<V>::WordWriter::WordWriter(
     const V& vocabulary, const std::string& filename,
-    std::optional<ad_utility::GeoCellGrid> grid, bool buildGeometryStore)
+    std::optional<ad_utility::GeoCellGrid> grid)
     : underlyingWordWriter_{vocabulary.makeDiskWriterPtr(filename)},
       geoInfoFile_{getGeoInfoFilename(filename), "w"},
       geometryStore_{makeGeometryStoreForWriting(filename)},
-      buildGeometryStore_{buildGeometryStore},
       grid_{grid} {
   // Initialize the geo info file with its header. Like the records (see
   // `flushBatch`), it is written with a positioned write, because positioned
@@ -326,8 +322,8 @@ void GeoVocabulary<V>::WordWriter::flushBatch() {
       records.push_back(computeGeoInfoRecord(word, numInvalidGeometries_,
                                              numInvalidPolygonArea_));
     }
-    auto geometries = parseGeometries(buildGeometryStore_, *geometryStore_,
-                                      words, firstPosition, records);
+    auto geometries =
+        parseGeometries(*geometryStore_, words, firstPosition, records);
     return ComputedBatch{firstPosition, std::move(records),
                          std::move(geometries)};
   };
@@ -393,11 +389,10 @@ GeoVocabulary<V>::WordWriter::~WordWriter() {
 template <typename V>
 GeoVocabulary<V>::BlockWriter::BlockWriter(
     const V& vocabulary, const std::string& filename,
-    std::optional<ad_utility::GeoCellGrid> grid, bool buildGeometryStore)
+    std::optional<ad_utility::GeoCellGrid> grid)
     : underlyingWriter_{vocabulary.makeBlockWriterPtr(filename)},
       geoInfoFile_{getGeoInfoFilename(filename), "w"},
       geometryStore_{makeGeometryStoreForWriting(filename)},
-      buildGeometryStore_{buildGeometryStore},
       grid_{grid} {
   // The header, with a positioned write, see `WordWriter::WordWriter`.
   geoInfoFile_.write(&ad_utility::GEOMETRY_INFO_VERSION, geoInfoHeader, 0);
@@ -474,8 +469,8 @@ AppendBlock GeoVocabulary<V>::BlockWriter::prepare(WordBlock block) {
   for (size_t i = 0; i < block.numWords(); ++i) {
     words.push_back(block.word(i));
   }
-  auto geometries = parseGeometries(buildGeometryStore_, *geometryStore_, words,
-                                    firstPosition, records);
+  auto geometries =
+      parseGeometries(*geometryStore_, words, firstPosition, records);
   return [this,
           batch = ComputedBatch{firstPosition, std::move(records),
                                 std::move(geometries)},

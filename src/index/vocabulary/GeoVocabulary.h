@@ -60,13 +60,12 @@ struct WriteBatch;
 // this class; the index configuration provides it before the vocabulary is
 // opened.
 //
-// If enabled (see `setBuildGeometryStore`), both writers also parse every
-// valid WKT literal into a persistent `sj::GeometryStore` of `libspatialjoin`
-// (files with the `geometryStoreInfix`), under a geometry ID (`gid`) derived
-// from its position (see `geometryStoreGid`), and store the ID of the parsed
-// geometry in its `GeometryInfo` (see
-// `GeometryInfo::getGeometryStoreId`). A spatial join can then use the parsed
-// geometries without parsing the literals again.
+// Both writers also parse every valid WKT literal into a persistent
+// `sj::GeometryStore` of `libspatialjoin` (files with the
+// `geometryStoreInfix`), under a geometry ID (`gid`) derived from its position
+// (see `geometryStoreGid`), and store the ID of the parsed geometry in its
+// `GeometryInfo` (see `GeometryInfo::getGeometryStoreId`). A spatial join can
+// then use the parsed geometries without parsing the literals again.
 template <typename UnderlyingVocabulary>
 class GeoVocabulary {
  private:
@@ -90,9 +89,6 @@ class GeoVocabulary {
 
   // The grid, or `std::nullopt` if the index of a word is its position.
   std::optional<GeoCellGrid> grid_;
-
-  // Whether the writers parse the geometries into the `sj::GeometryStore`.
-  bool buildGeometryStore_ = false;
 
   // See `endIndex`, computed once when the vocabulary is opened.
   uint64_t endIndex_ = 0;
@@ -153,13 +149,12 @@ class GeoVocabulary {
   // Parse the WKT literals `words` at the consecutive positions starting at
   // `firstPosition` for the `store`, each under its `geometryStoreGid`.
   // Skip the invalid geometries, whose `records` are the
-  // `invalidGeoInfoBuffer`, and all geometries if not `buildGeometryStore`.
-  // This is the expensive part of the work for the `store`, so it is
-  // thread-safe.
+  // `invalidGeoInfoBuffer`. This is thread-safe, so that this expensive part
+  // of the work for the `store` can run on the thread pool.
   template <typename Words>
   static std::unique_ptr<sj::WriteBatch> parseGeometries(
-      bool buildGeometryStore, sj::GeometryStore& store, const Words& words,
-      uint64_t firstPosition, ql::span<const GeometryInfoBuffer> records);
+      sj::GeometryStore& store, const Words& words, uint64_t firstPosition,
+      ql::span<const GeometryInfoBuffer> records);
 
   // Add the parsed geometries of the `batch` to the `store` and write the ID
   // of each of them to its record.
@@ -225,16 +220,6 @@ class GeoVocabulary {
 
   // The grid, or `std::nullopt` if the index of a word is its position.
   const std::optional<GeoCellGrid>& getGeoCellGrid() const { return grid_; }
-
-  // Let the writers created after this call parse the geometries into the
-  // `sj::GeometryStore` (see the class comment). Without this, the files of
-  // the store are empty.
-  //
-  // NOTE: This is opt-in, because it is expensive for very large polygons
-  // (the box IDs of `libspatialjoin`).
-  void setBuildGeometryStore(bool buildGeometryStore) {
-    buildGeometryStore_ = buildGeometryStore;
-  }
 
   // The position in the vocabulary of the word with the given index (the
   // identity without a grid).
@@ -335,7 +320,6 @@ class GeoVocabulary {
     ad_utility::File geoInfoFile_;
     // The parsed geometries, see the class comment.
     std::unique_ptr<sj::GeometryStore> geometryStore_;
-    bool buildGeometryStore_;
     // The grid, or `std::nullopt` if the index of a word is its position.
     std::optional<GeoCellGrid> grid_;
     // The cell of the previous word (only with a grid), to check the order.
@@ -358,8 +342,7 @@ class GeoVocabulary {
     // Initialize the `geoInfoFile_` by writing its header and open a word
     // writer on the underlying vocabulary.
     WordWriter(const UnderlyingVocabulary& vocabulary,
-               const std::string& filename, std::optional<GeoCellGrid> grid,
-               bool buildGeometryStore);
+               const std::string& filename, std::optional<GeoCellGrid> grid);
 
     // Add the next literal to the vocabulary, precompute additional information
     // using `GeometryInfo` and return the literal's new index.
@@ -398,7 +381,6 @@ class GeoVocabulary {
     std::unique_ptr<BlockWriterBase> underlyingWriter_;
     ad_utility::File geoInfoFile_;
     std::unique_ptr<sj::GeometryStore> geometryStore_;
-    bool buildGeometryStore_;
     std::optional<GeoCellGrid> grid_;
     std::optional<GeoCellGrid::CellIndex> lastCellIndex_;
     uint64_t numWords_ = 0;
@@ -413,8 +395,7 @@ class GeoVocabulary {
    public:
     // Constructor, see `WordWriter`.
     BlockWriter(const UnderlyingVocabulary& vocabulary,
-                const std::string& filename, std::optional<GeoCellGrid> grid,
-                bool buildGeometryStore);
+                const std::string& filename, std::optional<GeoCellGrid> grid);
 
     size_t blockSize() const override { return underlyingWriter_->blockSize(); }
     uint64_t indexOf(uint64_t position, std::string_view word) const override;
@@ -459,15 +440,13 @@ class GeoVocabulary {
   // ___________________________________________________________________________
   std::unique_ptr<WordWriter> makeDiskWriterPtr(
       const std::string& filename) const {
-    return std::make_unique<WordWriter>(literals_, filename, grid_,
-                                        buildGeometryStore_);
+    return std::make_unique<WordWriter>(literals_, filename, grid_);
   }
 
   // ___________________________________________________________________________
   std::unique_ptr<BlockWriterBase> makeBlockWriterPtr(
       const std::string& filename) const {
-    return std::make_unique<BlockWriter>(literals_, filename, grid_,
-                                         buildGeometryStore_);
+    return std::make_unique<BlockWriter>(literals_, filename, grid_);
   }
 
   // ___________________________________________________________________________

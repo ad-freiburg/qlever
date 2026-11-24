@@ -278,14 +278,24 @@ TEST(GeoBlockWriter, sameFilesAndIndicesWithGrid) {
   // literals, ordered by their cell, more than two blocks of them. Many
   // corners lie on the boundaries of the cells (multiples of 90 degrees of
   // longitude and of 45 degrees of latitude).
+  //
+  // NOTE: The polygons are tiny, also those that span several cells (around a
+  // corner of the cells), because the geometry store is expensive for
+  // polygons with a large extent (its box IDs).
   std::vector<std::pair<uint64_t, std::string>> cellsAndWords;
   for (size_t i = 0; i < 2 * DEFAULT_WORDS_PER_VOCABULARY_BLOCK + 1; ++i) {
     long lng = static_cast<long>((i * 7) % 300) - 180;
     long lat = static_cast<long>((i * 11) % 130) - 90;
-    auto polygon = [lng, lat](long size) {
-      return wkt(absl::StrCat("POLYGON((", lng, " ", lat, ", ", lng + size, " ",
-                              lat, ", ", lng + size, " ", lat + size, ", ", lng,
-                              " ", lat, "))"));
+    // A triangle from `offset` degrees below and left of (`lng`, `lat`) (but
+    // within the world) to 0.01 degrees above and right of it.
+    auto polygon = [lng, lat](double offset) {
+      double minLng = std::max(lng - offset, -180.0);
+      double minLat = std::max(lat - offset, -90.0);
+      double maxLng = lng + 0.01;
+      double maxLat = lat + 0.01;
+      return wkt(absl::StrCat("POLYGON((", minLng, " ", minLat, ", ", maxLng,
+                              " ", minLat, ", ", maxLng, " ", maxLat, ", ",
+                              minLng, " ", minLat, "))"));
     };
     std::string word;
     switch (i % 5) {
@@ -294,10 +304,10 @@ TEST(GeoBlockWriter, sameFilesAndIndicesWithGrid) {
         word = wkt(absl::StrCat("POINT(", lng, " ", lat, ")"));
         break;
       case 2:
-        word = polygon(1);
+        word = polygon(0);
         break;
       case 3:
-        word = polygon(50);
+        word = polygon(0.01);
         break;
       default:
         word = wkt("NOTAGEOMETRY");
@@ -396,7 +406,6 @@ TEST(GeoBlockWriter, sameGeometryStoreAsWordWriter) {
   // The word-by-word writer and the block writer.
   {
     GV vocabulary;
-    vocabulary.setBuildGeometryStore(true);
     auto writer = vocabulary.makeDiskWriterPtr(filenameA);
     for (const auto& [word, isExternal] : words) {
       (*writer)(word, isExternal);
@@ -405,7 +414,6 @@ TEST(GeoBlockWriter, sameGeometryStoreAsWordWriter) {
   }
   {
     GV vocabulary;
-    vocabulary.setBuildGeometryStore(true);
     SingleVocabularyParallelWriter writer{
         vocabulary.makeBlockWriterPtr(filenameB)};
     writeInBlocks(writer, words);
