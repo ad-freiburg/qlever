@@ -769,8 +769,8 @@ TEST_F(ServiceTest, getCacheKeyWithCaching) {
          false},
         getResultFunction};
 
-    // Services with different `parsedServiceClause_.visibleVariables_` should
-    // have different cache keys.
+    // Two `Service`s that differ only in their visible variables have
+    // different cache keys.
     EXPECT_NE(service1.getCacheKey(), service2.getCacheKey());
   }
   {
@@ -1603,54 +1603,56 @@ TEST_F(ServiceTest, unconsumedLazySiblingResultDoesNotCrash) {
   sibling.reset();
 }
 
-// Test that `makeTreeWithStrippedColumns` either returns `nullopt` if nothing
-// should be stripped, or returns a new `Service` operation with updated
-// `parsedServiceClause_.visibleVariables_`.
-TEST(Service, makeTreeWithStrippedColumns) {
+// Test that `makeTreeWithStrippedColumns` returns a `Service` with only the
+// requested variables, which requests only these from the remote endpoint, and
+// `std::nullopt` if nothing is to be stripped.
+TEST_F(ServiceTest, makeTreeWithStrippedColumns) {
+  using ::column_stripping_test_helpers::hasVariables;
+  using ::column_stripping_test_helpers::isStrippedColumns;
   using V = Variable;
+
+  // A `SERVICE` with the visible variables `?x`, `?y` and `?z`.
   parsedQuery::Service parsedServiceClause{
       {V{"?x"}, V{"?y"}, V{"?z"}},
       TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
       "PREFIX doof: <http://doof.org>",
       "{ }",
       false};
-  auto makeService = [&](const std::set<Variable>& variables) {
-    Service service{ad_utility::testing::getQec(), parsedServiceClause};
-    auto tree = service.makeTreeWithStrippedColumns(variables);
-    AD_CONTRACT_CHECK(tree.has_value() && tree.value() != nullptr);
-    return tree;
+  auto strip = [&](const std::set<V>& requestedVariables) {
+    Service service{testQec, parsedServiceClause};
+    return service.makeTreeWithStrippedColumns(requestedVariables);
   };
 
-  // The `Service` provides `?x`, `?y` and `?z`, but only `?x` and `?z` are
-  // requested.
+  // Only `?x` and `?z` requested: `?y` is stripped.
   {
-    auto tree = makeService({V{"?x"}, V{"?z"}});
-    EXPECT_THAT(tree->get(), column_stripping_test_helpers::hasVariables(
-                                 {V{"?x"}, V{"?z"}}));
+    auto tree = strip({V{"?x"}, V{"?z"}});
+    ASSERT_TRUE(tree.has_value());
+    EXPECT_THAT(tree->get(), hasVariables({V{"?x"}, V{"?z"}}));
   }
 
-  // The `Service` provides `?x`, `?y` and `?z`, an invalid variable is required
-  // which must be ignored.
+  // A requested variable that the `Service` does not have is ignored.
   {
-    auto tree = makeService({V{"?x"}, V{"?z"}, V{"?notValid"}});
-    EXPECT_THAT(tree->get(), column_stripping_test_helpers::hasVariables(
-                                 {V{"?x"}, V{"?z"}}));
+    auto tree = strip({V{"?x"}, V{"?z"}, V{"?notIncluded"}});
+    ASSERT_TRUE(tree.has_value());
+    EXPECT_THAT(tree->get(), hasVariables({V{"?x"}, V{"?z"}}));
   }
 
-  // The `Service` provides `?x`, `?y` and `?z` and all are required.
-  {
-    Service service{ad_utility::testing::getQec(), parsedServiceClause};
-    auto tree =
-        service.makeTreeWithStrippedColumns({V{"?x"}, V{"?y"}, V{"?z"}});
-    EXPECT_EQ(tree, std::nullopt);
-  }
+  // All variables requested: nothing is stripped.
+  EXPECT_EQ(strip({V{"?x"}, V{"?y"}, V{"?z"}}), std::nullopt);
+  EXPECT_EQ(strip({V{"?x"}, V{"?y"}, V{"?z"}, V{"?notIncluded"}}),
+            std::nullopt);
 
-  // The `Service` provides `?x`, `?y` and `?z` and all of these plus an invalid
-  // variable are required. The invalid variable must be ignored.
+  // The stripped `Service` requests only the remaining variables from the
+  // remote endpoint.
   {
-    Service service{ad_utility::testing::getQec(), parsedServiceClause};
-    auto tree = service.makeTreeWithStrippedColumns(
-        {V{"?x"}, V{"?y"}, V{"?z"}, V{"?notValid"}});
-    EXPECT_EQ(tree, std::nullopt);
+    Service service{testQec, parsedServiceClause,
+                    getResultFunctionFactory(
+                        "http://localhorst:80/api",
+                        "PREFIX doof: <http://doof.org> SELECT ?y { }",
+                        genJsonResult({"y"}, {{"bla"}, {"bli"}, {"blu"}}))};
+    auto tree = service.makeTreeWithStrippedColumns({V{"?y"}});
+    ASSERT_TRUE(tree.has_value());
+    EXPECT_THAT(tree->get(),
+                isStrippedColumns<Service>({V{"?y"}}, ::testing::SizeIs(3)));
   }
 }

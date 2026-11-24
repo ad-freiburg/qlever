@@ -320,8 +320,7 @@ TEST(MultiColumnJoin, makeTreeWithStrippedColumns) {
   auto rightSubtree =
       makeValuesForTesting({{4, 1, 2}, {5, 10, 20}, {4, 4, 5}, {4, 6, 5}},
                            {V{"?d"}, V{"?a"}, V{"?b"}});
-  // Alternative right subtree whose join values do not match any row of
-  // leftSubtree
+  // A right subtree whose join values match no row of `leftSubtree`.
   auto alternativeSubtree =
       makeValuesForTesting({{4, 8, 2}, {5, 11, 20}, {4, 4, 5}, {4, 6, 5}},
                            {V{"?d"}, V{"?a"}, V{"?b"}});
@@ -333,7 +332,7 @@ TEST(MultiColumnJoin, makeTreeWithStrippedColumns) {
     return std::move(tree).value();
   };
 
-  // `?a`, `?b` and `?c` requested: `?d` is stripped
+  // `?a`, `?b` and `?c` requested: `?d` is stripped.
   {
     auto tree = strip({V{"?a"}, V{"?b"}, V{"?c"}}, rightSubtree);
     EXPECT_THAT(tree.get(), isStrippedColumns<MultiColumnJoin>(
@@ -343,7 +342,7 @@ TEST(MultiColumnJoin, makeTreeWithStrippedColumns) {
                                     &Id::makeFromInt)));
   }
 
-  // `?a`, `?b`, `?c` and `?d` requested: nothing is stripped
+  // `?a`, `?b`, `?c` and `?d` requested: nothing is stripped.
   {
     auto tree = strip({V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}}, rightSubtree);
     EXPECT_THAT(tree.get(),
