@@ -2206,8 +2206,8 @@ TEST(GroupByIndexScan, minPercentKnownBlocks) {
   QecWrapper ctx{std::make_shared<Index>(makeTestIndex(std::move(config)))};
   auto qec = ctx.makeQec();
 
-  // SELECT ?x WHERE { ?x ?y ?z } GROUP BY ?x, and
-  // SELECT ?x (COUNT(?x) AS ?count) WHERE { ?x <p> ?z } GROUP BY ?x.
+  // `SELECT ?x WHERE { ?x ?y ?z } GROUP BY ?x` (if `fullScan`) or
+  // `SELECT ?x (COUNT(?x) AS ?count) WHERE { ?x <p> ?z } GROUP BY ?x`.
   Variable varX{"?x"};
   auto computeGroupBy = [&](double minPercentKnownBlocks, bool fullScan) {
     auto cleanup = setRuntimeParameterForTest<
