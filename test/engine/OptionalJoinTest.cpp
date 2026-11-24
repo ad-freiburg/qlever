@@ -642,6 +642,8 @@ TEST(OptionalJoin, lazyOptionalJoin) {
 // end inside the last of the `FETCH_BLOCKS` (3) right blocks fetched at once
 // and the right input continues beyond that block.
 TEST(OptionalJoin, lazyOptionalJoinMatchesEndInThirdFetchedBlock) {
+  // The number of fetched blocks is based on this constant in the code.
+  static_assert(ad_utility::detail::FETCH_BLOCKS == 3);
   // One left row and the right blocks [1] [1] [1] [1, 2] [3]. The join reads
   // the first right block and then fetches three more, so the rows with 1 end
   // in the last fetched block without the join knowing it, and the next fetch

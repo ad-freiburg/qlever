@@ -20,6 +20,7 @@
 #include "util/IndexTestHelpers.h"
 #include "util/LocalVocabEntryTestHelpers.h"
 #include "util/OperationTestHelpers.h"
+#include "util/joinAlgorithms/JoinAlgorithms.h"
 
 using ad_utility::testing::makeLocalVocab;
 
@@ -531,6 +532,8 @@ TEST(Minus, repeatingMatchesDontProduceDuplicates) {
 // `FETCH_BLOCKS` (3) right blocks fetched at once and the right input continues
 // beyond that block.
 TEST(Minus, matchesEndInThirdFetchedBlockOfTheRightInput) {
+  // The number of fetched blocks is based on this constant in the code.
+  static_assert(ad_utility::detail::FETCH_BLOCKS == 3);
   // One left row and the right blocks [1] [1] [1] [1, 2] [3], the same blocks
   // as in `OptionalJoin.lazyOptionalJoinMatchesEndInThirdFetchedBlock`.
   std::vector<IdTable> leftTables;
