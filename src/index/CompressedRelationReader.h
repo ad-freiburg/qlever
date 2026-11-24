@@ -477,19 +477,24 @@ class CompressedRelationReader {
       const LocatedTriplesPerBlock& locatedTriples);
 
   // Determine the distinct values and their counts for the column at
-  // `columnIndex` (must be 0 or 1). Used for GROUP BY optimizations. Return
-  // `std::nullopt` if less than `minPercentKnownBlocks` percent of the blocks
-  // of the scan have contents that are known from their metadata (see
+  // `columnIndex` (must be 0 or 1, and the first column that the `scanSpec`
+  // doesn't fix). Used for GROUP BY optimizations. The `limitOffset` applies
+  // to the rows of the scan, not to the result. Return `std::nullopt` if less
+  // than `minPercentKnownBlocks` percent of the blocks of the scan have
+  // contents that are known from their metadata (see
   // `contentsAreKnownFromMetadata`).
   //
-  // NOTE: The counts of these blocks are taken from their metadata, the other
-  // blocks are read. For many such blocks, the normal evaluation of the GROUP
-  // BY is faster, because it groups the rows in parallel to the scan.
+  // NOTE: The counts of these blocks are taken from their metadata. The other
+  // blocks are read and decompressed on the `executor` (see `lazyScan`), so
+  // this function must not be called from one of its threads. For many such
+  // blocks, the normal evaluation of the GROUP BY is faster, because it groups
+  // the rows in parallel to the scan.
   std::optional<IdTable> getDistinctColIdsAndCounts(
       ColumnIndex columnIndex, const ScanSpecAndBlocks& scanSpecAndBlocks,
       const CancellationHandle& cancellationHandle,
       const LocatedTriplesPerBlock& locatedTriplesPerBlock,
-      const LimitOffsetClause& limitOffset, double minPercentKnownBlocks) const;
+      qlever::Executor executor, const LimitOffsetClause& limitOffset,
+      double minPercentKnownBlocks) const;
 
   std::optional<CompressedRelationMetadata> getMetadataForSmallRelation(
       const ScanSpecAndBlocks& scanSpecAndBlocks, Id col0Id,

@@ -680,8 +680,11 @@ std::optional<IdTable> CompressedRelationReader::getDistinctColIdsAndCounts(
     ColumnIndex columnIndex, const ScanSpecAndBlocks& scanSpecAndBlocks,
     const CancellationHandle& cancellationHandle,
     const LocatedTriplesPerBlock& locatedTriplesPerBlock,
-    const LimitOffsetClause& limitOffset, double minPercentKnownBlocks) const {
+    qlever::Executor executor, const LimitOffsetClause& limitOffset,
+    double minPercentKnownBlocks) const {
   AD_CORRECTNESS_CHECK(columnIndex <= 1, "Only column 0 and 1 are supported");
+  const auto& scanSpec = scanSpecAndBlocks.scanSpec_;
+  AD_CORRECTNESS_CHECK(scanSpec.firstFreeColIndex() == columnIndex);
   // The result has two columns: one for the distinct `Id`s and one for their
   // counts.
   IdTableStatic<2> table(allocator_);
@@ -704,8 +707,13 @@ std::optional<IdTable> CompressedRelationReader::getDistinctColIdsAndCounts(
   auto processColId = [&table, &currentColId, &currentCount, &remainingOffset,
                        &remainingLimit](std::optional<Id> colId,
                                         size_t colIdCount) {
+    // Most of the time, the `colId` is the `currentColId`, so first compare
+    // the bits (equal bits imply equal `Id`s, and the full comparison is much
+    // more expensive because of the special cases for `LocalVocabIndex`).
+    bool isCurrentColId = colId.has_value() && currentColId.has_value() &&
+                          colId->getBits() == currentColId->getBits();
     bool abort = false;
-    if (colId != currentColId) {
+    if (!isCurrentColId && colId != currentColId) {
       if (currentColId.has_value()) {
         // Handle `OFFSET` clause correctly.
         if (currentCount > remainingOffset) {
@@ -732,75 +740,85 @@ std::optional<IdTable> CompressedRelationReader::getDistinctColIdsAndCounts(
     return abort;
   };
 
-  const auto& scanSpec = scanSpecAndBlocks.scanSpec_;
-  const auto& blocks = scanSpecAndBlocks.getBlockMetadataView();
+  // Get the `colId` and the count of each block from its metadata if its
+  // contents are known from the metadata (in particular, all its rows have the
+  // same `colId`). Collect the other blocks, which have to be read. Stop after
+  // the blocks that yield at least the rows up to the end of the LIMIT.
+  std::vector<std::pair<Id, size_t>> countsFromMetadata;
+  std::vector<CompressedBlockMetadata> blocksToRead;
+  uint64_t numRowsNeeded =
+      limitOffset.upperBound(std::numeric_limits<uint64_t>::max());
+  uint64_t numRowsLowerBound = 0;
+  for (const auto& block : scanSpecAndBlocks.getBlockMetadataView()) {
+    if (numRowsLowerBound >= numRowsNeeded) {
+      break;
+    }
+    cancellationHandle->throwIfCancelled();
+    numRowsLowerBound +=
+        getNumRowsLowerBound(scanSpec, block, locatedTriplesPerBlock);
+    if (contentsAreKnownFromMetadata(block, columnIndex + 1,
+                                     locatedTriplesPerBlock)) {
+      countsFromMetadata.emplace_back(block.firstTriple_.getId(columnIndex),
+                                      block.numRows_);
+    } else {
+      blocksToRead.push_back(block);
+    }
+  }
 
-  // Return `std::nullopt` if too few blocks have contents that are known from
-  // their metadata (the caller then has to evaluate the GROUP BY normally).
-  auto numKnownBlocks = ql::ranges::count_if(blocks, [&](const auto& block) {
-    return contentsAreKnownFromMetadata(block, columnIndex + 1,
-                                        locatedTriplesPerBlock);
-  });
-  if (100.0 * static_cast<double>(numKnownBlocks) <
-      minPercentKnownBlocks *
-          static_cast<double>(scanSpecAndBlocks.sizeBlockMetadata_)) {
+  // Return `std::nullopt` if too few of these blocks are known from their
+  // metadata (the caller then has to evaluate the GROUP BY normally).
+  auto numBlocks = countsFromMetadata.size() + blocksToRead.size();
+  if (100.0 * static_cast<double>(countsFromMetadata.size()) <
+      minPercentKnownBlocks * static_cast<double>(numBlocks)) {
     return std::nullopt;
   }
 
-  // TODO<joka921> We have to read the other columns for the merging of the
-  // located triples. We could skip this for blocks with no updates, but that
-  // would require more arguments to the `decompressBlock` function.
-  auto scanConfig = getScanConfig(scanSpec, {}, locatedTriplesPerBlock);
-  // Iterate over the blocks and only read (and decompress) those which
-  // contain more than one different `colId`. For the others, we can determine
-  // the count from the metadata.
-  for (const auto& [i, blockMetadata] : ranges::views::enumerate(blocks)) {
-    // The `numRows_` metadata shortcut is safe iff all rows of the block agree
-    // on the grouped column AND the block has no delta triples.
-    if (contentsAreKnownFromMetadata(blockMetadata, columnIndex + 1,
-                                     locatedTriplesPerBlock)) {
-      // The whole block has the same `colId` and no delta triples ->
-      // we get all the information from the metadata.
-      const auto& first = blockMetadata.firstTriple_;
-      Id colId =
-          std::array{first.col0Id_, first.col1Id_, first.col2Id_}[columnIndex];
-      bool abort = processColId(colId, blockMetadata.numRows_);
-      if (abort) {
+  // Read and decompress these blocks concurrently on the `executor`, with only
+  // the grouped column. This is the first column of the scan result, because
+  // the `columnIndex` is the first column that the `scanSpec` doesn't fix.
+  auto blocksRead = lazyScan(scanSpec, std::move(blocksToRead), {},
+                             cancellationHandle, locatedTriplesPerBlock,
+                             std::move(executor), {}, ColumnIndices{0});
+
+  // Process the counts from the metadata in order up to (and including) the
+  // `bound` (all of them if it is `std::nullopt`). Return true iff the LIMIT
+  // has been reached.
+  auto nextFromMetadata = countsFromMetadata.begin();
+  auto processCountsFromMetadataUpTo = [&](std::optional<Id> bound) {
+    for (; nextFromMetadata != countsFromMetadata.end() &&
+           (!bound.has_value() || nextFromMetadata->first <= bound.value());
+         ++nextFromMetadata) {
+      if (processColId(nextFromMetadata->first, nextFromMetadata->second)) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  // Process all `colId`s in ascending order, by merging the counts from the
+  // metadata with the blocks that were read.
+  //
+  // NOTE: Before each block that was read, it suffices to process the counts
+  // from the metadata up to its first `colId`, because the blocks are sorted
+  // and only overlap in their first and last `colId`.
+  for (const IdTable& block : blocksRead) {
+    // `lazyScan` yields no empty blocks, so `colIds.front()` exists.
+    const auto& colIds = block.getColumn(0);
+    AD_CORRECTNESS_CHECK(!colIds.empty());
+    if (processCountsFromMetadataUpTo(colIds.front())) {
+      return std::move(table).toDynamic();
+    }
+    // TODO<C++23>: use `ql::views::chunk_by`.
+    for (Id colId : colIds) {
+      if (processColId(colId, 1)) {
         return std::move(table).toDynamic();
-      }
-    } else {
-      // Multiple `colId`s -> we have to read the block.
-      const auto& optionalBlock = [&]() -> std::optional<DecompressedBlock> {
-        if (i == 0) {
-          return readPossiblyIncompleteBlock(scanSpec, scanConfig,
-                                             blockMetadata, std::nullopt,
-                                             locatedTriplesPerBlock);
-        } else {
-          auto optionalBlock =
-              readAndDecompressBlock(blockMetadata, scanConfig);
-          if (!optionalBlock.has_value()) {
-            return std::nullopt;
-          }
-          return std::move(optionalBlock.value().block_);
-        }
-      }();
-      cancellationHandle->throwIfCancelled();
-      if (!optionalBlock.has_value()) {
-        // The block was skipped because of the graph filter
-        continue;
-      }
-      const auto& block = optionalBlock.value();
-      // TODO<C++23>: use `ql::views::chunk_by`.
-      for (size_t j = 0; j < block.numRows(); ++j) {
-        Id colId = block(j, 0);
-        bool abort = processColId(colId, 1);
-        if (abort) {
-          return std::move(table).toDynamic();
-        }
       }
     }
   }
-  // Don't forget to add the last `col1Id` and its count.
+  if (processCountsFromMetadataUpTo(std::nullopt)) {
+    return std::move(table).toDynamic();
+  }
+  // Don't forget to add the last `colId` and its count.
   processColId(std::nullopt, 0);
   return std::move(table).toDynamic();
 }

@@ -134,7 +134,7 @@ std::pair<size_t, size_t> Permutation::getSizeEstimateForScan(
 // ____________________________________________________________________________
 IdTable Permutation::getDistinctCol1IdsAndCounts(
     Id col0Id, const CancellationHandle& cancellationHandle,
-    const LocatedTriplesState& locatedTriplesState,
+    const LocatedTriplesState& locatedTriplesState, qlever::Executor executor,
     const LimitOffsetClause& limitOffset) const {
   // NOTE: With a `minPercentKnownBlocks` of 0, the result is never
   // `std::nullopt`.
@@ -145,20 +145,21 @@ IdTable Permutation::getDistinctCol1IdsAndCounts(
               ScanSpecification{col0Id, std::nullopt, std::nullopt},
               locatedTriplesState),
           cancellationHandle,
-          getLocatedTriplesForPermutation(locatedTriplesState), limitOffset, 0)
+          getLocatedTriplesForPermutation(locatedTriplesState),
+          std::move(executor), limitOffset, 0)
       .value();
 }
 
 // ____________________________________________________________________________
 std::optional<IdTable> Permutation::getDistinctCol0IdsAndCounts(
     const CancellationHandle& cancellationHandle,
-    const LocatedTriplesState& locatedTriplesState,
+    const LocatedTriplesState& locatedTriplesState, qlever::Executor executor,
     const LimitOffsetClause& limitOffset, double minPercentKnownBlocks) const {
   ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
   return reader().getDistinctColIdsAndCounts(
       0, getScanSpecAndBlocks(scanSpec, locatedTriplesState),
       cancellationHandle, getLocatedTriplesForPermutation(locatedTriplesState),
-      limitOffset, minPercentKnownBlocks);
+      std::move(executor), limitOffset, minPercentKnownBlocks);
 }
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17

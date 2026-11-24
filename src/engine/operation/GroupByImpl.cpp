@@ -1026,7 +1026,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByObjectWithCount() const {
   const auto& permutation = indexScan->permutation();
   auto result = permutation.getDistinctCol1IdsAndCounts(
       col0Id.value(), cancellationHandle(), indexScan->locatedTriplesState(),
-      indexScan->getLimitOffset());
+      executor(), indexScan->getLimitOffset());
 
   indexScan->updateRuntimeInformationWhenOptimizedOut({});
 
@@ -1094,7 +1094,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByForFullIndexScan() const {
                 &RuntimeParameters::groupByIndexScanMinPercentKnownBlocks_>()
           : 0.0;
   auto optionalTable = permutation.value().getDistinctCol0IdsAndCounts(
-      cancellationHandle(), operation->locatedTriplesState(),
+      cancellationHandle(), operation->locatedTriplesState(), executor(),
       operation->getLimitOffset(), minPercentKnownBlocks);
   if (!optionalTable.has_value()) {
     return std::nullopt;

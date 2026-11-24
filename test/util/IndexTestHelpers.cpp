@@ -162,7 +162,8 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
   auto predicates = index.getImpl()
                         .PSO()
                         .getDistinctCol0IdsAndCounts(
-                            cancellationDummy, locatedTriplesSnapshot, {}, 0)
+                            cancellationDummy, locatedTriplesSnapshot,
+                            multiThreadExecutor(), {}, 0)
                         .value();
   for (const auto& predicate : predicates.getColumn(0)) {
     checkConsistencyForPredicate(predicate);
@@ -170,7 +171,8 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
   auto objects = index.getImpl()
                      .OSP()
                      .getDistinctCol0IdsAndCounts(cancellationDummy,
-                                                  locatedTriplesSnapshot, {}, 0)
+                                                  locatedTriplesSnapshot,
+                                                  multiThreadExecutor(), {}, 0)
                      .value();
   for (const auto& object : objects.getColumn(0)) {
     checkConsistencyForObject(object);
