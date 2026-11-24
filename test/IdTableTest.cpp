@@ -21,6 +21,7 @@
 #include "engine/idTable/splitLayout/IdColumnVector.h"
 #include "global/Id.h"
 #include "util/CompilerWarnings.h"
+#include "util/Forward.h"
 #include "util/TypeIdentity.h"
 
 using namespace ad_utility::testing;
@@ -1256,25 +1257,45 @@ TEST(IdTable, addEmptyColumn) {
   EXPECT_EQ(table.getColumn(1).size(), 2);
 }
 
-// Test that a range algorithm accepts a function that takes `IdRef` or
-// `ConstIdRef` for a column of an `IdTable` (see
-// `std::indirectly_unary_invocable`). Without `USE_SPLIT_LAYOUT` these are
-// `Id&` and `const Id&`, with it they are proxies that can also refer to an
-// `Id` (see `IdRef.h`).
+// Test that a range algorithm accepts a function that takes `IdRef`,
+// `ConstIdRef`, `auto&&` or `Id` for a column of an `IdTable` in both layouts
+// (see `std::indirectly_unary_invocable` and the comment above
+// `CanRangesForEach` in `IdColumnTest.cpp`). Without `USE_SPLIT_LAYOUT`,
+// `IdRef` and `ConstIdRef` are `Id&` and `const Id&`, with it they are proxies
+// that can also refer to an `Id` (see `IdRef.h`).
 TEST(IdTable, rangeAlgorithmOnColumnWithIdRef) {
   IdTable table{1, ad_utility::makeUnlimitedAllocator<Id>()};
   table.push_back({V(1)});
   table.push_back({V(2)});
   table.push_back({V(3)});
+  const auto& constTable = table;
 
   ql::ranges::for_each(table.getColumn(0), [](IdRef id) { id = V(7); });
   EXPECT_THAT(table.getColumn(0), ::testing::ElementsAre(V(7), V(7), V(7)));
 
   size_t numSevens = 0;
-  ql::ranges::for_each(
-      std::as_const(table).getColumn(0),
-      [&numSevens](ConstIdRef id) { numSevens += (id == V(7)) ? 1 : 0; });
+  ql::ranges::for_each(constTable.getColumn(0), [&numSevens](ConstIdRef id) {
+    numSevens += (id == V(7)) ? 1 : 0;
+  });
   EXPECT_EQ(numSevens, 3);
+
+  // With `auto&&`, writing needs `AD_FWD`, because the proxy of the split
+  // layout can only be assigned to as an rvalue.
+  ql::ranges::for_each(table.getColumn(0),
+                       [](auto&& id) -> void { AD_FWD(id) = V(8); });
+  EXPECT_THAT(table.getColumn(0), ::testing::ElementsAre(V(8), V(8), V(8)));
+
+  size_t numEights = 0;
+  ql::ranges::for_each(
+      constTable.getColumn(0),
+      [&numEights](auto&& id) -> void { numEights += (id == V(8)) ? 1 : 0; });
+  EXPECT_EQ(numEights, 3);
+
+  numEights = 0;
+  ql::ranges::for_each(table.getColumn(0), [&numEights](const Id id) {
+    numEights += (id == V(8)) ? 1 : 0;
+  });
+  EXPECT_EQ(numEights, 3);
 }
 
 // _____________________________________________________________________________
