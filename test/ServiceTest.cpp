@@ -1543,13 +1543,17 @@ TEST(Service, makeTreeWithStrippedColumns) {
       "PREFIX doof: <http://doof.org>",
       "{ }",
       false};
+  auto makeService = [&](const std::set<Variable>& variables) {
+    Service service{ad_utility::testing::getQec(), parsedServiceClause};
+    auto tree = service.makeTreeWithStrippedColumns(variables);
+    AD_CONTRACT_CHECK(tree.has_value() && tree.value() != nullptr);
+    return tree;
+  };
 
   // The `Service` provides `?x`, `?y` and `?z`, but only `?x` and `?z` are
   // requested.
   {
-    Service service{ad_utility::testing::getQec(), parsedServiceClause};
-    auto tree = service.makeTreeWithStrippedColumns({V{"?x"}, V{"?z"}});
-    AD_CONTRACT_CHECK(tree.has_value() && tree.value() != nullptr);
+    auto tree = makeService({V{"?x"}, V{"?z"}});
     EXPECT_THAT(tree->get(), column_stripping_test_helpers::hasVariables(
                                  {V{"?x"}, V{"?z"}}));
   }
@@ -1557,10 +1561,7 @@ TEST(Service, makeTreeWithStrippedColumns) {
   // The `Service` provides `?x`, `?y` and `?z`, an invalid variable is required
   // which must be ignored.
   {
-    Service service{ad_utility::testing::getQec(), parsedServiceClause};
-    auto tree =
-        service.makeTreeWithStrippedColumns({V{"?x"}, V{"?z"}, V{"?notValid"}});
-    AD_CONTRACT_CHECK(tree.has_value() && tree.value() != nullptr);
+    auto tree = makeService({V{"?x"}, V{"?z"}, V{"?notValid"}});
     EXPECT_THAT(tree->get(), column_stripping_test_helpers::hasVariables(
                                  {V{"?x"}, V{"?z"}}));
   }
