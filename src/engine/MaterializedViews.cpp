@@ -13,19 +13,20 @@
 
 #include <algorithm>
 #include <cmath>
+#include <ctre-unicode.hpp>
 #include <memory>
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <stdexcept>
 
 #include "backports/filesystem.h"
-#include "engine/IndexScan.h"
-#include "engine/Join.h"
 #include "engine/MaterializedViewsQueryAnalysis.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/VariableToColumnMap.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
+#include "engine/operation/IndexScan.h"
+#include "engine/operation/Join.h"
 #include "global/Constants.h"
 #include "global/FileSuffixConstants.h"
 #include "global/RuntimeParameters.h"
@@ -98,13 +99,13 @@ void MaterializedViewWriter::throwIfOrderByInconsistentWithViewOrder() const {
   if (parsedQuery_._isInternalSort == IsInternalSort::False) {
     throw MaterializedViewConfigException(
         "The query to write a materialized view may not contain an `ORDER BY` "
-        "clause. A view is always stored in the internal order of its first "
-        "three columns, so the `ORDER BY` clause's sorting would be silently "
+        "clause. A view is always stored in the internal order of its "
+        "columns, so the `ORDER BY` clause's sorting would be silently "
         "dropped.");
   }
 
   // The user has explicitly written `INTERNAL SORT BY`. This is fine if the
-  // sorting is a prefix of the view's SPO sorting.
+  // sorting is a prefix of the view's sorting.
   auto isConsistentWithViewOrder = [&]() {
     // Sort keys beyond the view's columns cannot correspond to view columns,
     // so their requested order could not be guaranteed.
@@ -308,21 +309,17 @@ MaterializedViewWriter::getBlocksForUnsortedResult(
 // _____________________________________________________________________________
 MaterializedViewWriter::RangeOfIdTables MaterializedViewWriter::getSortedBlocks(
     Sorter& spoSorter, std::shared_ptr<const Result> result) const {
-  // Check if the query result is already sorted by the columns that the
-  // `Comparator` sorts by, considering the target column ordering.
+  // Check if the query result is already sorted by all selected columns,
+  // considering the target column ordering.
   //
-  // NOTE: The `Comparator` sorts by the first four columns, because it treats
-  // the fourth column as the graph column. An appended empty column consists of
-  // `UNDEF`s only, so it need not be checked.
-  constexpr size_t numSortedColumns = ADDITIONAL_COLUMN_GRAPH_ID + 1;
-  const size_t numColumnsToCheck =
-      std::min(numSortedColumns, columnPermutation_.size());
+  // NOTE: An appended empty column consists of `UNDEF`s only, so it need not
+  // be checked.
   const auto& resultSortedBy = result->sortedBy();
   bool isAlreadySorted =
-      resultSortedBy.size() >= numColumnsToCheck &&
+      resultSortedBy.size() >= columnPermutation_.size() &&
       ql::ranges::equal(
-          resultSortedBy | ql::views::take(numColumnsToCheck),
-          columnPermutation_ | ql::views::take(numColumnsToCheck));
+          resultSortedBy | ql::views::take(columnPermutation_.size()),
+          columnPermutation_);
 
   // Either call the version that only permutes the correctly sorted blocks or
   // the version that sorts them.
@@ -390,6 +387,7 @@ void MaterializedViewWriter::writeViewMetadata(
   }
   nlohmann::json viewInfo = {{"version", MATERIALIZED_VIEWS_VERSION},
                              {"columns", std::move(columns)},
+                             {"sorted_on_all_columns", true},
                              {"query", parsedQuery_._originalString}};
   ad_utility::makeOfstream(absl::StrCat(getFilenameBase(), VIEW_INFO_SUFFIX))
       << viewInfo.dump() << std::endl;
@@ -539,6 +537,11 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name,
     }
   }
 
+  // Restore whether the view is stored sorted by all its columns. Views written
+  // by older versions of QLever have no such entry and are only sorted by their
+  // first four columns.
+  isSortedOnAllColumns_ = viewInfoJson.value("sorted_on_all_columns", false);
+
   // Restore original query string and parse it for query analysis.
   if (viewInfoJson.contains("query")) {
     originalQuery_ = viewInfoJson.at("query").get<std::string>();
@@ -548,7 +551,8 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name,
     // interested in analyzing the query structure, not in converting its
     // components to `ValueId`s.
     EncodedIriManager e;
-    parsedQuery_ = SparqlParser::parseQuery(&e, originalQuery_.value(), {});
+    parsedQuery_ =
+        SparqlParser::parseQuery(&e, allocator, originalQuery_.value(), {});
 
     // Compute the `BIND`-to-column map.
     coveredBinds_ = materializedViewsQueryAnalysis::extractBindExpressions(
@@ -961,7 +965,7 @@ std::shared_ptr<IndexScan> MaterializedViewsManager::makeIndexScan(
 
 // _____________________________________________________________________________
 std::shared_ptr<IndexScan> MaterializedViewsManager::makeIndexScan(
-    QueryExecutionContext* qec, const std::string& cacheKey,
+    QueryExecutionContext* qec, std::string_view cacheKey,
     const VariableToColumnMap& varToCol) const {
   // TODO<ullingerc> Do we want to forcefully disable query rewriting if delta
   // triples are present in the current index to prevent diverging results?
@@ -999,8 +1003,8 @@ MaterializedView::computeCacheKey(
   auto encodedIriManager = qec.getIndex().encodedIriManager();
   // The query needs to be parsed again to take the `EncodedIriManager` into
   // account.
-  auto parsedQuery =
-      SparqlParser::parseQuery(&encodedIriManager, originalQuery_.value());
+  auto parsedQuery = SparqlParser::parseQuery(
+      &encodedIriManager, qec.getAllocator(), originalQuery_.value());
   const auto& viewCols = variableToColumnMap();
 
   auto planAndComputeMapping =
@@ -1031,7 +1035,7 @@ MaterializedView::computeCacheKey(
       }
       mapping.insert({col.columnIndex_, it->second.columnIndex_});
     }
-    return CacheKeyAndColumnMapping{executionTree->getCacheKey(),
+    return CacheKeyAndColumnMapping{std::string{executionTree->getCacheKey()},
                                     std::move(mapping)};
   };
 

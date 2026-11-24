@@ -8,14 +8,28 @@
 
 #include <absl/cleanup/cleanup.h>
 
+#include <boost/asio/as_tuple.hpp>
+#include <boost/asio/associated_executor.hpp>
+#include <boost/asio/async_result.hpp>
+#include <boost/asio/awaitable.hpp>
+#include <boost/asio/co_spawn.hpp>
+#include <boost/asio/deferred.hpp>
+#include <boost/asio/dispatch.hpp>
+#include <boost/asio/error.hpp>
 #include <boost/asio/experimental/awaitable_operators.hpp>
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/multiple_exceptions.hpp>
+#include <boost/asio/post.hpp>
+#include <boost/asio/steady_timer.hpp>
+#include <boost/asio/strand.hpp>
+#include <boost/asio/this_coro.hpp>
+#include <boost/asio/use_future.hpp>
 
 #include "backports/atomic_flag.h"
 #include "global/Constants.h"
 #include "util/CancellationHandle.h"
 #include "util/Exception.h"
 #include "util/RunFunctionOnExecutor.h"
-#include "util/http/beast.h"
 
 namespace ad_utility {
 
