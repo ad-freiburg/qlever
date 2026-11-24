@@ -144,6 +144,15 @@ TEST(FilterFactsCanonicalizer, Definitions) {
   EXPECT_THAT(several.conjuncts_,
               ElementsAre(opaque(several.query_._rootGraphPattern._filters[0]
                                      .expression_.getPimpl())));
+
+  // A variable without a value (two `VALUES` clauses without a common value) is
+  // not replaced.
+  auto none = canonical("geof:metricDistance(?ga, ?gb) <= ?r",
+                        "VALUES ?r { 500 } VALUES ?r { 600 }");
+  EXPECT_THAT(
+      none.conjuncts_,
+      ElementsAre(opaque(
+          none.query_._rootGraphPattern._filters[0].expression_.getPimpl())));
 }
 
 // Test that a comparison of `LANG(?x)` with constants (also with `IN`, `||`,
@@ -269,6 +278,7 @@ TEST(FilterFactsCanonicalizer, Opaque) {
   // A right side that is not a number.
   expectOpaque("geof:metricDistance(?ga, ?gb) <= \"500\"");
   expectOpaque("geof:metricDistance(?ga, ?gb) <= ?a");
+  expectOpaque("geof:metricDistance(?ga, ?gb) <= STRLEN(?a)");
 
   // A left side that is not a distance in a unit of length.
   expectOpaque("geof:metricDistance(?ga, ?gb) + 1 <= 500");
