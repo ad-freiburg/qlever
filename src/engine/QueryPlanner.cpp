@@ -1248,9 +1248,10 @@ SubtreePlan QueryPlanner::getTextLeafPlan(
 }
 
 // _____________________________________________________________________________
-SubtreePlanVec QueryPlanner::merge(const SubtreePlanVec& a,
-                                   const SubtreePlanVec& b,
-                                   const QueryPlanner::TripleGraph& tg) const {
+SubtreePlanVec QueryPlanner::merge(
+    const SubtreePlanVec& a, const SubtreePlanVec& b,
+    const QueryPlanner::TripleGraph& tg,
+    const FiltersAndOptionalSubstitutes& filters) const {
   // TODO: Add the following features:
   // If a join is supposed to happen, always check if it happens between
   // a scan with a relatively large result size
@@ -1263,7 +1264,10 @@ SubtreePlanVec QueryPlanner::merge(const SubtreePlanVec& a,
                << b.size() << " plans...\n";
   for (const auto& ai : a) {
     for (const auto& bj : b) {
-      for (auto& plan : createJoinCandidates(ai, bj, tg)) {
+      auto newPlans = createJoinCandidates(ai, bj, tg);
+      ql::ranges::move(createJoinsWithSubstitutes(ai, bj, filters),
+                       std::back_inserter(newPlans));
+      for (auto& plan : newPlans) {
         ++numCandidatePlans_;
         candidates
             .try_emplace(getPruningKey(plan, plan._qet->resultSortedOn()),
@@ -1446,14 +1450,12 @@ void QueryPlanner::applyFiltersIfPossible(
         }
       }
 
-      // In `SeedSubstitutesOnly` mode there are no joining rounds afterwards
-      // that could complete a partial `SpatialJoin`. Therefore only enforced
-      // substitutes may be applied there, because they are complete as soon as
-      // `plan` is attached. A non-enforced substitute would stay incomplete
-      // forever and could still win the final plan selection via its dummy
-      // cost estimate.
+      // In `SeedSubstitutesOnly` mode, only enforced substitutes may be
+      // applied, because they are complete as soon as `plan` is attached. A
+      // non-enforced substitute could stay incomplete forever (for example,
+      // when there are no joining rounds afterwards) and could still win the
+      // plan selection via its dummy cost estimate.
       const bool allowSubstitutes = mode == FilterMode::KeepUnfiltered ||
-                                    mode == FilterMode::ReplaceUnfiltered ||
                                     (mode == FilterMode::SeedSubstitutesOnly &&
                                      filterAndSubst.forceSubstitution_);
       if (allowSubstitutes && filterAndSubst.hasSubstitute() &&
@@ -1652,7 +1654,7 @@ SubtreePlanVec QueryPlanner::runDynamicProgrammingOnConnectedComponent(
     // Regular query planning round for connected component.
     for (size_t i = 1; i * 2 <= k; ++i) {
       checkCancellation();
-      auto newPlans = merge(dpTab[i - 1], dpTab[k - i - 1], tg);
+      auto newPlans = merge(dpTab[i - 1], dpTab[k - i - 1], tg, filters);
       extendDpRow(newPlans);
     }
     // As we only passed in connected components, we expect the result to always
@@ -1760,21 +1762,26 @@ SubtreePlanVec QueryPlanner::runGreedyPlanningOnConnectedComponent(
     ReplacementPlans&& replacementPlans) const {
   const size_t numSeeds =
       findUniqueNodeIds(connectedComponent, !replacementPlans.empty());
+  // Apply the filters and text limits to the `plans` as early as possible. Of
+  // the filter substitutes, only the enforced ones are applied here, the others
+  // are completed with two plans at once by `merge`.
+  //
+  // NOTE: A partial `SpatialJoin` with only one child has a dummy size
+  // estimate of 1, so the greedy planner would choose it right away. Two such
+  // partial `SpatialJoin`s for the same filter, one on each side, could then
+  // never be merged (see #4015).
+  auto applyFiltersAndTextLimits = [this, &filters,
+                                    &textLimits](SubtreePlanVec& plans) {
+    applyFiltersIfPossible<FilterMode::SeedSubstitutesOnly>(plans, filters);
+    applyFiltersIfPossible<FilterMode::ReplaceUnfilteredNoSubstitutes>(plans,
+                                                                       filters);
+    applyTextLimitsIfPossible(plans, textLimits, true);
+  };
+  applyFiltersAndTextLimits(connectedComponent);
   if (numSeeds <= 1) {
-    // Only 0 or 1 nodes in the input, nothing to plan. As in the dynamic
-    // programming planner, only enforced filter substitutes may be applied
-    // here: there are no joining rounds that could complete a partial
-    // `SpatialJoin`, so a non-enforced substitute would stay incomplete.
-    applyFiltersIfPossible<FilterMode::SeedSubstitutesOnly>(connectedComponent,
-                                                            filters);
-    applyFiltersIfPossible<FilterMode::ReplaceUnfilteredNoSubstitutes>(
-        connectedComponent, filters);
-    applyTextLimitsIfPossible(connectedComponent, textLimits, true);
+    // Only 0 or 1 nodes in the input, nothing to plan.
     return connectedComponent;
   }
-  applyFiltersIfPossible<FilterMode::ReplaceUnfiltered>(connectedComponent,
-                                                        filters);
-  applyTextLimitsIfPossible(connectedComponent, textLimits, true);
 
   // Perform a single step of greedy query planning.
   // `nextBestPlan` contains the result of the last step of greedy query
@@ -1786,26 +1793,20 @@ SubtreePlanVec QueryPlanner::runGreedyPlanningOnConnectedComponent(
   // reinforces the above pre-/postconditions. Exception: if `isFirstStep` then
   // `cache` and `nextResult` must be empty, and the first step of greedy
   // planning is performed, which also establishes the pre-/postconditions.
-  auto greedyStep = [this, &tg, &filters, &textLimits,
+  auto greedyStep = [this, &tg, &filters, &applyFiltersAndTextLimits,
                      currentPlans = std::move(connectedComponent),
                      cache = SubtreePlanVec{allocator()}](
-                        SubtreePlanVec& nextBestPlan, bool isFirstStep,
-                        bool isLastStep) mutable {
+                        SubtreePlanVec& nextBestPlan,
+                        bool isFirstStep) mutable {
     checkCancellation();
     // Normally, we already have all combinations of two nodes in `currentPlans`
     // in the cache, so we only have to add the combinations between
     // `currentPlans` and `nextResult`. In the first step, we need to initially
     // compute all possible combinations.
-    auto newPlans = isFirstStep ? merge(currentPlans, currentPlans, tg)
-                                : merge(currentPlans, nextBestPlan, tg);
-    // Do not apply filter substitutes in the last round
-    if (isLastStep) {
-      applyFiltersIfPossible<FilterMode::ReplaceUnfilteredNoSubstitutes>(
-          newPlans, filters);
-    } else {
-      applyFiltersIfPossible<FilterMode::ReplaceUnfiltered>(newPlans, filters);
-    }
-    applyTextLimitsIfPossible(newPlans, textLimits, true);
+    auto newPlans = isFirstStep
+                        ? merge(currentPlans, currentPlans, tg, filters)
+                        : merge(currentPlans, nextBestPlan, tg, filters);
+    applyFiltersAndTextLimits(newPlans);
     AD_CORRECTNESS_CHECK(!newPlans.empty());
     ql::ranges::move(newPlans, std::back_inserter(cache));
     ql::ranges::move(nextBestPlan, std::back_inserter(currentPlans));
@@ -1832,7 +1833,7 @@ SubtreePlanVec QueryPlanner::runGreedyPlanningOnConnectedComponent(
 
   SubtreePlanVec result{allocator()};
   for (size_t i : ad_utility::integerRange(numSeeds - 1)) {
-    greedyStep(result, i == 0, i == numSeeds - 2);
+    greedyStep(result, i == 0);
   }
   // TODO<joka921> Assert that all seeds are covered by the result.
   return result;
@@ -2493,6 +2494,50 @@ auto QueryPlanner::createSpatialJoin(const SubtreePlan& a, const SubtreePlan& b,
   SubtreePlan plan = makeSubtreePlan<SpatialJoin>(std::move(newSpatialJoin));
   mergeSubtreePlanIds(plan, a, b);
   return plan;
+}
+
+// _____________________________________________________________________________
+SubtreePlanVec QueryPlanner::createJoinsWithSubstitutes(
+    const SubtreePlan& a, const SubtreePlan& b,
+    const FiltersAndOptionalSubstitutes& filters) const {
+  SubtreePlanVec candidates{allocator()};
+  if ((a._idsOfIncludedNodes & b._idsOfIncludedNodes) != 0 ||
+      !getJoinColumns(a, b).empty()) {
+    return candidates;
+  }
+
+  // Join `plan` to `substitute` if they share variables that are all always
+  // defined in `plan`. (A variable that might be undefined could still be bound
+  // by a later join, as for the filters in `applyFiltersIfPossible`.)
+  auto join = [this](const SubtreePlan& substitute, const SubtreePlan& plan) {
+    auto jcs = getJoinColumns(substitute, plan);
+    auto isAlwaysDefined = [&plan](const auto& jc) {
+      return plan._qet->getRootOperation()->isVariableAlwaysDefined(
+          plan._qet->getVariableAndInfoByColumnIndex(jc[1]).first);
+    };
+    if (!ql::ranges::all_of(jcs, isAlwaysDefined)) {
+      return SubtreePlanVec{allocator()};
+    }
+    auto newPlans = createJoinCandidates(substitute, plan, jcs);
+    for (auto& newPlan : newPlans) {
+      mergeSubtreePlanIds(newPlan, newPlan, plan);
+    }
+    return newPlans;
+  };
+
+  // Join each substitute that is not applied to `a` or `b` yet with both of
+  // them. (An enforced substitute is complete after `a` and gets no join
+  // with `b`, which shares no variable with it.)
+  for (const auto& [i, filterAndSubst] : ::ranges::views::enumerate(filters)) {
+    if (!filterAndSubst.hasSubstitute() ||
+        (((a._idsOfIncludedFilters | b._idsOfIncludedFilters) >> i) & 1) != 0) {
+      continue;
+    }
+    for (const auto& withA : join(filterAndSubst.substitute_.value(), a)) {
+      ql::ranges::move(join(withA, b), std::back_inserter(candidates));
+    }
+  }
+  return candidates;
 }
 
 // _____________________________________________________________________________________________________________________
