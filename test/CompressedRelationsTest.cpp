@@ -52,8 +52,8 @@ auto I = &Id::makeFromInt;
 
 // Compute the distinct graph IDs contained in the SPO permutation of `index`,
 // mirroring the access pattern used by `DistinctGraphs::computeResult()`
-// (`src/engine/DistinctGraphs.cpp`), but starting from a plain `Index` instead
-// of an `Operation`.
+// (`src/engine/operation/DistinctGraphs.cpp`), but starting from a plain
+// `Index` instead of an `Operation`.
 ad_utility::HashSetWithMemoryLimit<Id::T> computeUniqueGraphIdsForIndex(
     const Index& index,
     ad_utility::SharedCancellationHandle cancellationHandle =
