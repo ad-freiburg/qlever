@@ -637,7 +637,7 @@ TEST(GeoVocabularyTest, GeometryStore) {
   sj::SweepEventList events{cfg, ".", filename};
   for (size_t i = 0; i < literals.size(); ++i) {
     if (auto info = geoVocab.getGeoInfo(i); info.has_value()) {
-      events.add(info.value().getGeometryStoreId().value(),
+      events.add(info.value().getGeometryStoreId().value().id_,
                  ad_utility::detail::boundingBoxToUtilBox(
                      info.value().getBoundingBox()),
                  ::util::geo::CRSType::CRS84, storeId);
