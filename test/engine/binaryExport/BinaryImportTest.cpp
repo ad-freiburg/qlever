@@ -19,10 +19,12 @@
 #include <vector>
 
 #include "../../ValueGetterTestHelpers.h"
+#include "../../util/AllocatorTestHelpers.h"
 #include "../../util/GTestHelpers.h"
 #include "../../util/IdTableHelpers.h"
 #include "../../util/IndexTestHelpers.h"
 #include "../../util/LocalVocabEntryTestHelpers.h"
+#include "../../util/LocalVocabTestHelpers.h"
 #include "../ValuesForTesting.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/binaryExport/BinaryExport.h"
@@ -33,6 +35,7 @@
 #include "util/http/HttpClient.h"
 
 using namespace qlever::binary_export;
+using ad_utility::testing::makeLocalVocab;
 
 namespace {
 // A test index that encodes the IRIs with one of the `prefixes` directly in
@@ -77,7 +80,7 @@ class BinaryExportRoundTrip : public ::testing::Test {
   // Create a QueryExecutionTree from an IdTable and variable names.
   static QueryExecutionTree makeQet(QueryExecutionContext* qec, IdTable table,
                                     const std::vector<std::string>& varNames,
-                                    LocalVocab localVocab = LocalVocab{}) {
+                                    LocalVocab localVocab = makeLocalVocab()) {
     auto values = std::make_shared<ValuesForTesting>(
         qec, std::move(table),
         ad_utility::transform(
@@ -92,8 +95,11 @@ class BinaryExportRoundTrip : public ::testing::Test {
   static std::string exportBytes(const QueryExecutionTree& qet,
                                  const std::vector<std::string>& varNames,
                                  LimitOffsetClause limitAndOffset = {}) {
-    parsedQuery::SelectClause selectClause;
-    selectClause.setSelected(toVariables(varNames));
+    auto allocator = ad_utility::testing::makeAllocator();
+    parsedQuery::SelectClause selectClause{allocator};
+    auto variables = toVariables(varNames);
+    selectClause.setSelected(
+        qlm::vector<Variable>{variables.begin(), variables.end(), allocator});
     auto generator = exportAsQLeverBinary(
         qet, selectClause, limitAndOffset,
         std::make_shared<ad_utility::CancellationHandle<>>());
@@ -154,7 +160,7 @@ class BinaryExportRoundTrip : public ::testing::Test {
   static Result roundTrip(QueryExecutionContext* exportQec,
                           QueryExecutionContext* importQec, IdTable table,
                           const std::vector<std::string>& varNames,
-                          LocalVocab localVocab = LocalVocab{},
+                          LocalVocab localVocab = makeLocalVocab(),
                           bool requestLaziness = false) {
     auto qet =
         makeQet(exportQec, std::move(table), varNames, std::move(localVocab));
@@ -173,7 +179,7 @@ class BinaryExportRoundTrip : public ::testing::Test {
       return {result.idTableView().clone(), result.localVocab().clone(), 1};
     }
     auto [table, vocabs] = aggregateTables(result.idTables(), numColumns);
-    LocalVocab vocab;
+    LocalVocab vocab = makeLocalVocab();
     vocab.mergeWith(vocabs);
     return {std::move(table), std::move(vocab), vocabs.size()};
   }
@@ -273,7 +279,8 @@ TEST_F(BinaryExportRoundTrip, allDatatypes) {
   auto* qec = testContext.qec;
   const auto& index = qec->getIndex();
 
-  // One `Id` per datatype that the export has to handle.
+  // One `Id` per datatype that the export has to handle. A `TripleTermIndex`
+  // is not among them, the export rejects it (see the end of this test).
   Id blankNode = Id::makeFromBlankNodeIndex(BlankNodeIndex::make(42));
   std::vector<Id> ids{
       Id::makeUndefined(),
@@ -289,8 +296,8 @@ TEST_F(BinaryExportRoundTrip, allDatatypes) {
       Id::makeFromWordVocabIndex(WordVocabIndex::make(0)),
       blankNode,
       testContext.encodedIriId()};
-  // Make sure that every datatype is covered.
-  ASSERT_EQ(ids.size(), qlever::enumSize<Datatype>);
+  // Make sure that every other datatype is covered.
+  ASSERT_EQ(ids.size() + 1, qlever::enumSize<Datatype>);
   for (size_t i = 0; i < ids.size(); ++i) {
     ASSERT_EQ(static_cast<size_t>(ids[i].getDatatype()), i);
   }
@@ -343,6 +350,15 @@ TEST_F(BinaryExportRoundTrip, allDatatypes) {
       }
     }
   }
+
+  // A triple term cannot be exported yet.
+  auto tripleTerm = Id::makeFromTripleTermIndex(TripleTermIndex::make(17));
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      exportBytes(makeQet(qec, makeIdTableFromVector({{tripleTerm}}), {"?x"}),
+                  {"?x"}),
+      ::testing::StrEq(
+          "Binary export of triple-term references is not yet supported"),
+      std::runtime_error);
 }
 
 // Test that the columns are matched by the names of the variables, that
@@ -481,7 +497,7 @@ TEST_F(BinaryExportRoundTrip, lazyExportWithSeveralLocalVocabs) {
     // Two tables, each with its own local vocab, and the same blank node.
     std::vector<Result::IdTableVocabPair> tables;
     for (const auto& word : words) {
-      LocalVocab localVocab;
+      LocalVocab localVocab = makeLocalVocab();
       Id id = localVocabId(localVocab, word, *qec);
       tables.emplace_back(makeIdTableFromVector({{id, blankNode}}),
                           std::move(localVocab));
@@ -515,7 +531,7 @@ TEST_F(BinaryExportRoundTrip, severalBatches) {
   auto word = [](size_t i) {
     return absl::StrCat("\"word", i, std::string(stringSize, 'x'), "\"");
   };
-  LocalVocab localVocab;
+  LocalVocab localVocab = makeLocalVocab();
   IdTable table{1, ad_utility::makeUnlimitedAllocator<Id>()};
   for (size_t i = 0; i < numRows; ++i) {
     table.push_back({localVocabId(localVocab, word(i), *qec)});
@@ -541,7 +557,7 @@ TEST_F(BinaryExportRoundTrip, severalBatches) {
     intTable.push_back({Id::makeFromInt(static_cast<int64_t>(i))});
   }
   auto result =
-      roundTrip(qec, qec, intTable.clone(), {"?x"}, LocalVocab{}, true);
+      roundTrip(qec, qec, intTable.clone(), {"?x"}, makeLocalVocab(), true);
   auto [resultTable, resultVocab, numBlocks] = materialize(result, 1);
   EXPECT_GE(numBlocks, 2);
   EXPECT_EQ(resultTable, intTable);
@@ -550,7 +566,7 @@ TEST_F(BinaryExportRoundTrip, severalBatches) {
 // Test the limit on the size of the strings, and the cancellation.
 TEST_F(BinaryExportRoundTrip, limitsAndCancellation) {
   auto* qec = ad_utility::testing::getQec();
-  LocalVocab localVocab;
+  LocalVocab localVocab = makeLocalVocab();
   std::string word = absl::StrCat("\"", std::string(100, 'x'), "\"");
   Id id = localVocabId(localVocab, word, *qec);
   auto bytes = exportBytes(makeQet(qec, makeIdTableFromVector({{id}}), {"?x"},

@@ -10,15 +10,16 @@
 
 // _____________________________________________________________________________
 LocalVocab LocalVocab::clone() const {
-  LocalVocab result;
+  LocalVocab result{allocator_};
   result.mergeWith(*this);
   AD_CORRECTNESS_CHECK(result.size_ == size_);
   return result;
 }
 
 // _____________________________________________________________________________
-LocalVocab LocalVocab::merge(ql::span<const LocalVocab*> vocabs) {
-  LocalVocab result;
+LocalVocab LocalVocab::merge(ql::span<const LocalVocab*> vocabs,
+                             Allocator allocator) {
+  LocalVocab result{std::move(allocator)};
   result.mergeWith(vocabs | ql::views::transform(ad_utility::dereference));
   return result;
 }

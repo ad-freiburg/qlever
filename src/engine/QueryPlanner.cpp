@@ -24,44 +24,44 @@
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
 #include "backports/type_traits.h"
-#include "engine/Bind.h"
-#include "engine/CartesianProductJoin.h"
 #include "engine/CheckUsePatternTrick.h"
-#include "engine/CountAvailablePredicates.h"
 #include "engine/CountConnectedSubgraphs.h"
-#include "engine/Describe.h"
-#include "engine/Distinct.h"
-#include "engine/DistinctGraphs.h"
-#include "engine/ExternalValues.h"
-#include "engine/Filter.h"
-#include "engine/GroupBy.h"
-#include "engine/HasPredicateScan.h"
-#include "engine/IndexScan.h"
-#include "engine/Join.h"
-#include "engine/Load.h"
 #include "engine/MaterializedViews.h"
-#include "engine/Minus.h"
-#include "engine/MultiColumnJoin.h"
 #include "engine/NamedResultCache.h"
-#include "engine/NeutralElementOperation.h"
-#include "engine/NeutralOptional.h"
-#include "engine/OptionalJoin.h"
-#include "engine/OrderBy.h"
-#include "engine/PathSearch.h"
 #include "engine/PermutationSelector.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryRewriteUtils.h"
-#include "engine/RowNumber.h"
-#include "engine/Service.h"
-#include "engine/Sort.h"
-#include "engine/SpatialJoin.h"
-#include "engine/TextIndexScanForEntity.h"
-#include "engine/TextIndexScanForWord.h"
-#include "engine/TextLimit.h"
-#include "engine/TransitivePathBase.h"
-#include "engine/Union.h"
-#include "engine/Values.h"
+#include "engine/operation/Bind.h"
+#include "engine/operation/CartesianProductJoin.h"
+#include "engine/operation/CountAvailablePredicates.h"
+#include "engine/operation/Describe.h"
+#include "engine/operation/Distinct.h"
+#include "engine/operation/DistinctGraphs.h"
+#include "engine/operation/ExternalValues.h"
+#include "engine/operation/Filter.h"
+#include "engine/operation/GroupBy.h"
+#include "engine/operation/HasPredicateScan.h"
+#include "engine/operation/IndexScan.h"
+#include "engine/operation/Join.h"
+#include "engine/operation/Load.h"
+#include "engine/operation/Minus.h"
+#include "engine/operation/MultiColumnJoin.h"
+#include "engine/operation/NeutralElementOperation.h"
+#include "engine/operation/NeutralOptional.h"
+#include "engine/operation/OptionalJoin.h"
+#include "engine/operation/OrderBy.h"
+#include "engine/operation/PathSearch.h"
+#include "engine/operation/RowNumber.h"
+#include "engine/operation/Service.h"
+#include "engine/operation/Sort.h"
+#include "engine/operation/SpatialJoin.h"
+#include "engine/operation/TextIndexScanForEntity.h"
+#include "engine/operation/TextIndexScanForWord.h"
+#include "engine/operation/TextLimit.h"
+#include "engine/operation/TransitivePathBase.h"
+#include "engine/operation/Union.h"
+#include "engine/operation/Values.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
@@ -290,6 +290,10 @@ std::shared_ptr<QueryExecutionTree> QueryPlanner::createExecutionTree(
 
 // _____________________________________________________________________________
 SubtreePlanVec QueryPlanner::optimize(ParsedQuery::GraphPattern* rootPattern) {
+  // Split each FILTER with a conjunct that is a fact (e.g. a maximum
+  // distance) into its conjuncts, so that the fact can be rewritten on its
+  // own (e.g. to a `SpatialJoin`).
+  splitFiltersWithFacts(rootPattern->_filters);
   QueryPlanner::GraphPatternPlanner optimizer{*this, rootPattern};
   for (auto& child : rootPattern->_graphPatterns) {
     child.visit([&optimizer](auto& arg) {
@@ -365,7 +369,7 @@ SubtreePlanVec QueryPlanner::getDistinctRow(
 
 // _____________________________________________________________________________
 SubtreePlanVec QueryPlanner::getPatternTrickRow(
-    const std::vector<Alias>& aliases, const SubtreePlanMatrix& dpTab,
+    ql::span<const Alias> aliases, const SubtreePlanMatrix& dpTab,
     const checkUsePatternTrick::PatternTrickTuple& patternTrickTuple) {
   AD_CORRECTNESS_CHECK(!dpTab.empty());
   const SubtreePlanVec& previous = dpTab.back();
@@ -434,7 +438,10 @@ SubtreePlanVec QueryPlanner::getGroupByRow(
   for (auto& parent : previous) {
     // Inside a `GRAPH ?var {....}` clause,  a `GROUP BY` must implicitly (also)
     // group by the graph variable.
-    auto groupVariables = pq._groupByVariables;
+    // TODO<vrbommireddy> Remove the conversions to `std::vector` when the
+    // constructor of `GroupBy` takes `qlm::vector`s.
+    std::vector<Variable> groupVariables(pq._groupByVariables.begin(),
+                                         pq._groupByVariables.end());
     if (activeGraphVariable_.has_value()) {
       AD_CORRECTNESS_CHECK(
           !ad_utility::contains(groupVariables, activeGraphVariable_.value()),
@@ -444,8 +451,9 @@ SubtreePlanVec QueryPlanner::getGroupByRow(
     }
     // Create a group by operation to determine on which columns the input
     // needs to be sorted
-    SubtreePlan groupByPlan =
-        makeSubtreePlan<GroupBy>(_qec, groupVariables, aliases, parent._qet);
+    SubtreePlan groupByPlan = makeSubtreePlan<GroupBy>(
+        _qec, groupVariables,
+        std::vector<Alias>(aliases.begin(), aliases.end()), parent._qet);
     assignNodesFilterAndTextLimitIds(groupByPlan, parent);
     added.push_back(std::move(groupByPlan));
   }
@@ -610,15 +618,18 @@ CPP_concept TriplePosition =
 
 // Create a `SparqlFilter` that corresponds to the expression `var1==var2`.
 // Used as a helper function below.
-SparqlFilter createEqualFilter(const Variable& var1, const Variable& var2) {
+SparqlFilter createEqualFilter(const Variable& var1, const Variable& var2,
+                               qlever::Allocator<Id> allocator) {
   std::string filterString =
       absl::StrCat("FILTER ( ", var1.name(), "=", var2.name(), ")");
 
   ad_utility::BlankNodeManager bn;
   static EncodedIriManager ev;
-  auto result = sparqlParserHelpers::ParserAndVisitor{&bn, &ev, filterString}
-                    .parseTypesafe(&SparqlAutomaticParser::filterR)
-                    .resultOfParse_;
+  auto result =
+      sparqlParserHelpers::ParserAndVisitor{&bn, &ev, std::move(allocator),
+                                            filterString}
+          .parseTypesafe(&SparqlAutomaticParser::filterR)
+          .resultOfParse_;
 
   // The `filter` rule never adds blank nodes.
   AD_CORRECTNESS_CHECK(bn.numBlocksUsed() == 0u);
@@ -631,10 +642,11 @@ SparqlFilter createEqualFilter(const Variable& var1, const Variable& var2) {
 // equality.
 constexpr auto rewriteSingle = CPP_template_lambda()(typename T)(
     T rewritePosition, SparqlTripleSimple& scanTriple, const auto& addFilter,
-    const auto& generateUniqueVarName)(requires TriplePosition<T>) {
+    const auto& generateUniqueVarName,
+    const qlever::Allocator<Id>& allocator)(requires TriplePosition<T>) {
   Variable filterVar = generateUniqueVarName();
   auto& target = std::invoke(rewritePosition, scanTriple).getVariable();
-  addFilter(createEqualFilter(filterVar, target));
+  addFilter(createEqualFilter(filterVar, target, allocator));
   target = filterVar;
 };
 
@@ -645,12 +657,13 @@ constexpr auto rewriteSingle = CPP_template_lambda()(typename T)(
 constexpr auto handleRepeatedVariablesImpl =
     [](const auto& triple, auto& addIndexScan,
        const auto& generateUniqueVarName, const auto& addFilter,
+       const qlever::Allocator<Id>& allocator,
        ql::span<const Permutation::Enum> permutations, auto... rewritePositions)
     -> CPP_ret(void)(
         requires(TriplePosition<decltype(rewritePositions)>&&...)) {
   auto scanTriple = triple;
   (..., rewriteSingle(rewritePositions, scanTriple, addFilter,
-                      generateUniqueVarName));
+                      generateUniqueVarName, allocator));
   for (const auto& permutation : permutations) {
     addIndexScan(permutation, scanTriple);
   }
@@ -687,13 +700,13 @@ void QueryPlanner::indexScanTwoVarsCase(
   // add an index scan for the rewritten triple.
   auto generate = [this]() { return generateUniqueVarName(); };
   auto handleRepeatedVariables =
-      [&triple, &addIndexScan, &addFilter, &generate](
+      [this, &triple, &addIndexScan, &addFilter, &generate](
           ql::span<const Permutation::Enum> permutations,
           auto... rewritePositions)
       -> CPP_ret(void)(
           requires(TriplePosition<decltype(rewritePositions)>&&...)) {
     return handleRepeatedVariablesImpl(triple, addIndexScan, generate,
-                                       addFilter, permutations,
+                                       addFilter, allocator(), permutations,
                                        rewritePositions...);
   };
 
@@ -742,13 +755,13 @@ void QueryPlanner::indexScanThreeVarsCase(
   // old and the new value for equality for this rewrite. Then also
   // add an index scan for the rewritten triple.
   auto handleRepeatedVariables =
-      [&triple, &addIndexScan, &addFilter, &generate](
+      [this, &triple, &addIndexScan, &addFilter, &generate](
           ql::span<const Permutation::Enum> permutations,
           auto... rewritePositions)
       -> CPP_ret(void)(
           requires(TriplePosition<decltype(rewritePositions)>&&...)) {
     return handleRepeatedVariablesImpl(triple, addIndexScan, generate,
-                                       addFilter, permutations,
+                                       addFilter, allocator(), permutations,
                                        rewritePositions...);
   };
 
@@ -803,7 +816,7 @@ void QueryPlanner::seedFromOrdinaryTriple(
 auto QueryPlanner::seedWithScansAndText(
     const QueryPlanner::TripleGraph& tg, const SubtreePlanMatrix& children,
     TextLimitMap& textLimits) -> PlansAndFilters {
-  PlansAndFilters result{SubtreePlanVec{allocator()}, {}};
+  PlansAndFilters result{SubtreePlanVec{allocator()}, {{}, allocator()}};
   SubtreePlanVec& seeds = result.plans_;
   // add all child plans as seeds
   uint64_t idShift = tg._nodeMap.size();
@@ -992,7 +1005,7 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromPropertyPath(
     const TripleComponent& left, const PropertyPath& path,
     const TripleComponent& right) {
   return path.handlePath<ParsedQuery::GraphPattern>(
-      [&left, &right](const ad_utility::triple_component::Iri& iri) {
+      [this, &left, &right](const ad_utility::triple_component::Iri& iri) {
         return seedFromVarOrIri(left, iri, right);
       },
       [this, &left, &right](const std::vector<PropertyPath>& children,
@@ -1024,7 +1037,7 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromSequence(
     const TripleComponent& right) {
   AD_CORRECTNESS_CHECK(paths.size() > 1);
 
-  ParsedQuery::GraphPattern joinPattern{};
+  ParsedQuery::GraphPattern joinPattern{allocator()};
   TripleComponent innerLeft = left;
   TripleComponent innerRight = generateUniqueVarName();
   for (size_t i = 0; i < paths.size(); i++) {
@@ -1069,15 +1082,9 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromTransitive(
   Variable innerRight = generateUniqueVarName();
   ParsedQuery::GraphPattern childPlan =
       seedFromPropertyPath(innerLeft, path, innerRight);
-  ParsedQuery::GraphPattern p{};
-  p::TransPath transPath;
-  transPath._left = left;
-  transPath._right = right;
-  transPath._innerLeft = innerLeft;
-  transPath._innerRight = innerRight;
-  transPath._min = min;
-  transPath._max = max;
-  transPath._childGraphPattern = std::move(childPlan);
+  ParsedQuery::GraphPattern p{allocator()};
+  p::TransPath transPath{left, right, innerLeft,           innerRight,
+                         min,  max,   std::move(childPlan)};
   p._graphPatterns.emplace_back(std::move(transPath));
   return p;
 }
@@ -1162,8 +1169,8 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromVarOrIri(
     const TripleComponent& left,
     const ad_utility::sparql_types::VarOrIri& varOrIri,
     const TripleComponent& right) {
-  ParsedQuery::GraphPattern p{};
-  p::BasicGraphPattern basic;
+  ParsedQuery::GraphPattern p{allocator()};
+  p::BasicGraphPattern basic{{{}, allocator()}};
   basic._triples.emplace_back(
       left,
       std::visit(
@@ -1185,12 +1192,12 @@ ParsedQuery::GraphPattern QueryPlanner::uniteGraphPatterns(
     std::vector<ParsedQuery::GraphPattern>&& patterns) {
   using GraphPattern = ParsedQuery::GraphPattern;
   // Build a tree of union operations
-  auto p = GraphPattern{};
+  auto p = GraphPattern{allocator()};
   p._graphPatterns.emplace_back(
       p::Union{std::move(patterns[0]), std::move(patterns[1])});
 
   for (size_t i = 2; i < patterns.size(); i++) {
-    GraphPattern next;
+    GraphPattern next{allocator()};
     next._graphPatterns.emplace_back(
         p::Union{std::move(p), std::move(patterns[i])});
     p = std::move(next);
@@ -1675,7 +1682,7 @@ SubtreePlanVec QueryPlanner::runDynamicProgrammingOnConnectedComponent(
 
 // _____________________________________________________________________________
 size_t QueryPlanner::countSubgraphs(std::vector<const SubtreePlan*> graph,
-                                    const std::vector<SparqlFilter>& filters,
+                                    ql::span<const SparqlFilter> filters,
                                     size_t budget) {
   // Remove duplicate plans from `graph`.
   auto getId = [](const SubtreePlan* v) { return v->_idsOfIncludedNodes; };
@@ -1833,7 +1840,7 @@ SubtreePlanVec QueryPlanner::runGreedyPlanningOnConnectedComponent(
 
 // _____________________________________________________________________________
 QueryPlanner::FiltersAndOptionalSubstitutes QueryPlanner::seedFilterSubstitutes(
-    const std::vector<SparqlFilter>& filters) {
+    ql::span<const SparqlFilter> filters) {
   FiltersAndOptionalSubstitutes plans{allocator()};
   plans.reserve(filters.size());
 
@@ -1861,7 +1868,7 @@ QueryPlanner::FiltersAndOptionalSubstitutes QueryPlanner::seedFilterSubstitutes(
 // _____________________________________________________________________________
 QueryPlanner::FiltersAndOptionalSubstitutes
 QueryPlanner::wrapFiltersWithoutSubstitutes(
-    const std::vector<SparqlFilter>& filters) const {
+    ql::span<const SparqlFilter> filters) const {
   return filters | ql::views::transform([](const auto& filter) {
            return FilterAndOptionalSubstitute{filter, std::nullopt};
          }) |
@@ -1870,7 +1877,7 @@ QueryPlanner::wrapFiltersWithoutSubstitutes(
 
 // _____________________________________________________________________________
 SubtreePlanMatrix QueryPlanner::fillDpTab(const QueryPlanner::TripleGraph& tg,
-                                          std::vector<SparqlFilter> filters,
+                                          qlm::vector<SparqlFilter> filters,
                                           TextLimitMap& textLimits,
                                           const SubtreePlanMatrix& children,
                                           ReplacementPlans replacementPlans) {
@@ -3510,8 +3517,8 @@ void QueryPlanner::GraphPatternPlanner::visitSpatialSearch(
     // This helper function adds a subtree plan to the output candidates, which
     // either has the child graph pattern as a right child or no child at all.
     // If it has no child at all, the query planner may look for the right child
-    // of the SpatialJoin outside of the SERVICE. This is only allowed for max
-    // distance joins.
+    // of the SpatialJoin outside of the SERVICE. This is allowed for all joins
+    // except for nearest neighbors joins.
     auto addCandidateSpatialJoin = [this, &sub, &config,
                                     &candidatesOut](bool rightVarOutside) {
       std::optional<std::shared_ptr<QueryExecutionTree>> right = std::nullopt;
@@ -3528,10 +3535,12 @@ void QueryPlanner::GraphPatternPlanner::visitSpatialSearch(
       // The version using the child graph pattern
       addCandidateSpatialJoin(false);
     } else {
-      // The version without using the child graph pattern
-      if (std::holds_alternative<MaxDistanceConfig>(config.task_)) {
-        addCandidateSpatialJoin(true);
-      }
+      // The version without using the child graph pattern (a nearest neighbors
+      // search without child graph pattern is already rejected by
+      // `SpatialQuery::toSpatialJoinConfiguration`).
+      AD_CORRECTNESS_CHECK(
+          !std::holds_alternative<NearestNeighborsConfig>(config.task_));
+      addCandidateSpatialJoin(true);
     }
   }
   visitGroupOptionalOrMinus(std::move(candidatesOut));

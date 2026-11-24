@@ -17,7 +17,7 @@
 #include "../util/OperationTestHelpers.h"
 #include "./ValuesForTesting.h"
 #include "engine/QueryExecutionTree.h"
-#include "engine/StripColumns.h"
+#include "engine/operation/StripColumns.h"
 
 namespace {
 using Vars = std::vector<std::optional<Variable>>;
@@ -71,7 +71,7 @@ TEST(StripColumns, computeResult) {
   using V = Variable;
   auto qec = ad_utility::testing::getQec();
   auto makeOp = [&qec]() {
-    LocalVocab voc;
+    LocalVocab voc{ad_utility::testing::makeAllocator()};
     voc.getIndexAndAddIfNotContained(
         iriLocalVocabEntry("<kartoffel>", qec->getLocalVocabContext()));
     qec->clearCacheUnpinnedOnly();

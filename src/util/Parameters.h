@@ -8,6 +8,7 @@
 #define QLEVER_SRC_UTIL_PARAMETERS_H
 
 #include <absl/cleanup/cleanup.h>
+#include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
 #include <absl/strings/str_split.h>
 
@@ -181,6 +182,14 @@ struct toString {
     return std::to_string(s);
   }
 };
+// Unlike `std::to_string`, omit trailing zeros (e.g. `25` instead of
+// `25.000000`). At most six significant digits are written.
+struct floatToString {
+  template <typename T>
+  std::string operator()(const T& value) const {
+    return absl::StrCat(value);
+  }
+};
 struct boolToString {
   std::string operator()(const bool& v) const { return v ? "true" : "false"; }
 };
@@ -231,8 +240,8 @@ namespace detail::parameterShortNames {
 namespace n = ::ad_utility::detail::parameterSerializers;
 // Partial template specialization for Parameters with common types (numeric
 // types and strings)
-using Float = Parameter<float, n::fl, n::toString>;
-using Double = Parameter<double, n::dbl, n::toString>;
+using Float = Parameter<float, n::fl, n::floatToString>;
+using Double = Parameter<double, n::dbl, n::floatToString>;
 
 using SizeT = Parameter<size_t, n::szt, n::toString>;
 

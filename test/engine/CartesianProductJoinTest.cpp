@@ -15,10 +15,10 @@
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
-#include "engine/CartesianProductJoin.h"
-#include "engine/Distinct.h"
-#include "engine/IndexScan.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/operation/CartesianProductJoin.h"
+#include "engine/operation/Distinct.h"
+#include "engine/operation/IndexScan.h"
 
 using namespace ad_utility::testing;
 using ad_utility::source_location;
@@ -170,18 +170,19 @@ TEST(CartesianProductJoin, computeResult) {
 // cartesian product join.
 TEST(CartesianProductJoin, outOfMemoryException) {
   std::vector<VectorTable> tables;
+  // The cross product of 10 tables with 10 rows each has 10^10 rows.
   VectorTable largeTable;
-  largeTable.emplace_back();
   for (size_t i = 0; i < 10; ++i) {
-    largeTable.back().push_back(0);
+    largeTable.push_back({0});
   }
   for (size_t i = 0; i < 10; ++i) {
     tables.push_back(largeTable);
   }
   auto largeJoin = makeJoin(tables);
   auto allocator = largeJoin.getExecutionContext()->getAllocator();
-  // Manually deplete the allocator.
-  auto left = allocator.amountMemoryLeft().getBytes() / sizeof(Id);
+  // Manually deplete the allocator, but leave some memory for the cache keys of
+  // the children.
+  auto left = (allocator.amountMemoryLeft().getBytes() - 100'000) / sizeof(Id);
   auto ptr = allocator.allocate(left);
   AD_EXPECT_THROW_WITH_MESSAGE(largeJoin.computeResultOnlyForTesting(),
                                ::testing::HasSubstr("cross-product"));
@@ -297,7 +298,8 @@ class CartesianProductJoinLazyTest
     if (std::get<0>(GetParam()) == 0) {
       children.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
           qec, tables.back().clone(), makeUniqueVariables(tables.back()), false,
-          std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt, true));
+          std::vector<ColumnIndex>{}, ad_utility::testing::makeLocalVocab(),
+          std::nullopt, true));
     } else {
       children.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
           qec, splitIntoRandomSubtables(tables.back()),

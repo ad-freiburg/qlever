@@ -274,7 +274,8 @@ class MaterializedViewsPatternMatchingTest
   // Parse `query`'s single basic graph pattern, without going through full
   // query planning.
   parsedQuery::BasicGraphPattern parseTriples(const std::string& query) {
-    auto parsed = SparqlParser::parseQuery(&encodedIriManager_, query, {});
+    auto parsed = SparqlParser::parseQuery(
+        &encodedIriManager_, ad_utility::testing::makeAllocator(), query, {});
     return parsed._rootGraphPattern._graphPatterns.at(0).getBasic();
   }
 

@@ -54,7 +54,8 @@ auto m(Args&&... args) {
 }  // namespace
 
 // Special member functions for the `Subquery` class
-Subquery::Subquery() : _subquery{m()} {}
+Subquery::Subquery(const qlever::Allocator<Id>& allocator)
+    : _subquery{m(allocator)} {}
 Subquery::Subquery(const ParsedQuery& pq) : _subquery{m(pq)} {}
 Subquery::Subquery(ParsedQuery&& pq) noexcept : _subquery{m(std::move(pq))} {}
 Subquery::Subquery(Subquery&& pq) noexcept
