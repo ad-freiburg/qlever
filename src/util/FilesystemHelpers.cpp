@@ -225,10 +225,12 @@ void writeFileAtomically(
   };
   writeTemporaryFile(temporary);
   // An existing file keeps its permissions (the temporary file is a new file
-  // and has the default permissions).
+  // and has the default permissions). `status` reports an error (instead of
+  // throwing) if the file cannot be examined, in particular if it does not
+  // exist, so without an error the file exists and its permissions are known.
   ql::error_code statusError;
   auto status = fs::status(target, statusError);
-  if (!statusError && fs::exists(status)) {
+  if (!statusError) {
     fs::permissions(temporary, status.permissions());
   }
   fs::rename(temporary, target);
@@ -250,27 +252,37 @@ void writeFileAtomically(const fs::path& path, ql::span<const char> bytes) {
     const char* data = bytes.data();
     size_t numBytesLeft = bytes.size();
     while (numBytesLeft > 0) {
-      ssize_t numBytesWritten = ::write(fd, data, numBytesLeft);
+      // Retry a `write` that is interrupted by a signal. This practically never
+      // happens for a regular file and cannot be provoked reliably in a unit
+      // test, so the retry is excluded from the coverage instrumentation (Clang
+      // attributes the lines of the lambda to the enclosing code region).
+      auto writeRetryingOnInterrupt = [ fd, data, numBytesLeft ]()
+          __attribute__((no_profile_instrument_function)) {
+        ssize_t result;
+        do {
+          result = ::write(fd, data, numBytesLeft);
+        } while (result < 0 && errno == EINTR);
+        return result;
+      };
+      ssize_t numBytesWritten = writeRetryingOnInterrupt();
       if (numBytesWritten < 0) {
-        // A `write` to a regular file is practically never interrupted by a
-        // signal, so this case cannot be provoked reliably in a unit test.
-        // LCOV_EXCL_START
-        if (errno == EINTR) {
-          continue;
-        }
-        // LCOV_EXCL_STOP
         throwFileError("write", temporary, errno);
       }
       data += numBytesWritten;
       numBytesLeft -= static_cast<size_t>(numBytesWritten);
     }
     std::move(closeOnError).Cancel();
-    if (::close(fd) != 0) {
-      // `close` only fails on rare errors of the file system (e.g. a deferred
-      // write error of a network file system), which cannot be provoked in a
-      // unit test without mocking the POSIX functions.
-      throwFileError("close", temporary, errno);  // LCOV_EXCL_LINE
-    }
+    // `close` only fails on rare errors of the file system (e.g. a deferred
+    // write error of a network file system), which cannot be provoked in a unit
+    // test without mocking the POSIX functions, so the check is excluded from
+    // the coverage instrumentation (see the retry of `write` above).
+    auto closeOrThrow =
+        [ fd, &temporary ]() __attribute__((no_profile_instrument_function)) {
+      if (::close(fd) != 0) {
+        throwFileError("close", temporary, errno);
+      }
+    };
+    closeOrThrow();
   });
 }
 
