@@ -364,7 +364,10 @@ std::vector<std::string> entryNames(const fs::path& directory) {
   return names;
 }
 
-// _____________________________________________________________________________
+// Test that bytes round-trip through `writeFileAtomically` and
+// `readBinaryFile`, that an existing file is replaced, that
+// `copyFileAtomically` copies a file (also over an existing copy), and that
+// missing files and directories are reported.
 TEST(FilesystemHelpers, readWriteAndCopyFilesAtomically) {
   TempDir dir;
   auto file = dir.path() / "file";
@@ -383,6 +386,7 @@ TEST(FilesystemHelpers, readWriteAndCopyFilesAtomically) {
   writeFileAtomically(file, std::vector<char>{});
   EXPECT_TRUE(readBinaryFile(file).empty());
 
+  // A copy has the same bytes, and an existing copy is replaced.
   writeFileAtomically(file, bytes);
   copyFileAtomically(file, copy);
   EXPECT_EQ(readBinaryFile(copy), bytes);
@@ -470,8 +474,7 @@ TEST(FilesystemHelpers, writeFileAtomicallyWithCallback) {
   EXPECT_THAT(entryNames(dir.path()), ::testing::ElementsAre("file"));
 
   // If the callback throws, the temporary directory (with the temporary file)
-  // is removed, the target is left
-  // unchanged, and the exception is propagated.
+  // is removed, the target is left unchanged, and the exception is propagated.
   AD_EXPECT_THROW_WITH_MESSAGE(
       writeFileAtomically(file,
                           [](const fs::path& temporaryPath) {
@@ -685,9 +688,10 @@ TEST(FilesystemHelpers, writeFileAtomicallyKeepsPermissions) {
 }
 
 // Test that the exception of a failing callback is propagated (and the process
-// is not terminated), also if the temporary file cannot be removed because the
-// directory is not writable. (When the test runs as `root`, the removal
-// succeeds anyway.)
+// is not terminated), also if the temporary directory cannot be removed
+// because the directory of the target is not writable. (The temporary file
+// inside it can still be removed. When the test runs as `root`, the removal of
+// the directory succeeds as well.)
 TEST(FilesystemHelpers, writeFileAtomicallyFailingRemovalOfTemporaryFile) {
   TempDir dir;
   auto subdir = dir.path() / "subdir";
