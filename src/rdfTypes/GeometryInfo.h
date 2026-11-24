@@ -343,8 +343,13 @@ class GeometryInfo {
   MetricLength metricLength_;
   MetricArea metricArea_;
   // The ID of the parsed geometry in the `sj::GeometryStore` of the
-  // `GeoVocabulary` plus one, such that zero means "not stored" (see
-  // `getGeometryStoreId`).
+  // `GeoVocabulary` plus one, zero means "not stored". Only
+  // `getGeometryStoreId` and `setGeometryStoreId` apply the offset.
+  //
+  // NOTE: The offset is needed because the records of versions 5 and 6 are
+  // read with this field zero-filled, and by the rules at
+  // `GEOMETRY_INFO_VERSION`, zero must then mean "not computed" (a sentinel
+  // like the maximum value would need a special case in `fromSerialized`).
   uint64_t geometryStoreId_ = 0;
 
   static constexpr uint64_t bitMaskGeometryType =
