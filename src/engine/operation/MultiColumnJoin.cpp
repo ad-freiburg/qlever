@@ -344,10 +344,11 @@ std::optional<std::shared_ptr<QueryExecutionTree>>
 MultiColumnJoin::makeTreeWithStrippedColumns(
     const std::set<Variable>& requestedVariables) const {
   // The subtree has to provide the requested variables and the variables which
-  // appear in the left as well in the right subtree (therefore collecting the 
+  // appear in the left as well in the right subtree (therefore collecting the
   // variablenames only from the left subtree is sufficient).
-  columnStrippingHelpers::VarsRequiredFromSubtree varsRequiredFromSubtree(&requestedVariables);
-  for (const auto& joinColumn: _joinColumns) {
+  columnStrippingHelpers::VarsRequiredFromSubtree varsRequiredFromSubtree(
+      &requestedVariables);
+  for (const auto& joinColumn : _joinColumns) {
     const auto& joinVar =
         _left->getVariableAndInfoByColumnIndex(joinColumn[0]).first;
     varsRequiredFromSubtree.add(joinVar);

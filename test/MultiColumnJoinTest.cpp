@@ -307,11 +307,11 @@ TEST(MultiColumnJoin, makeTreeWithStrippedColumns) {
   using ::testing::UnorderedElementsAre;
   using V = Variable;
   auto qec = ad_utility::testing::getQec();
-  auto makeValuesForTesting =
-      [qec](const VectorTable& content, std::vector<std::optional<V>> variables) {
-        return ad_utility::makeExecutionTree<ValuesForTesting>(
-            qec, makeIdTableFromVector(content, &Id::makeFromInt), variables);
-      };
+  auto makeValuesForTesting = [qec](const VectorTable& content,
+                                    std::vector<std::optional<V>> variables) {
+    return ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, makeIdTableFromVector(content, &Id::makeFromInt), variables);
+  };
   // The left subtree with the variables `?a`, `?b` and `?c`.
   auto leftSubtree =
       makeValuesForTesting({{1, 2, 3}, {1, 2, 5}, {10, 20, 3}, {1, 6, 3}},

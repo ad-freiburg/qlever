@@ -839,12 +839,10 @@ std::optional<std::shared_ptr<QueryExecutionTree>>
 Service::makeTreeWithStrippedColumns(
     const std::set<Variable>& requestedVariables) const {
   auto contained = [&](const auto& var) {
-  return ad_utility::contains(requestedVariables, var);
-};
-auto visibleVariables =
-    parsedServiceClause_.visibleVariables_ |
-    ql::views::filter(contained) |
-    ::ranges::to_vector;
+    return ad_utility::contains(requestedVariables, var);
+  };
+  auto visibleVariables = parsedServiceClause_.visibleVariables_ |
+                          ql::views::filter(contained) | ::ranges::to_vector;
   if (parsedServiceClause_.visibleVariables_.size() ==
       visibleVariables.size()) {
     return std::nullopt;
