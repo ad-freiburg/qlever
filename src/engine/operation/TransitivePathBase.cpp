@@ -771,14 +771,17 @@ TransitivePathBase::makeTreeWithStrippedColumns(
     return subtree_->getVariableAndInfoByColumnIndex(c).first;
   };
 
-  // Strip the `subtree_`
+  // Strip the `subtree_`. The stripped subtree has to provide the start and
+  // target column of each edge of the path relation, plus the graph column (if
+  // available).
   std::set<Variable> subtreeVars{subVar(lhs_.subCol_), subVar(rhs_.subCol_)};
   if (graphVariable_) subtreeVars.insert(*graphVariable_);
   auto subtree =
       QueryExecutionTree::makeTreeWithStrippedColumns(subtree_, subtreeVars);
 
-  // Create a new `TransitivePath` operation with the stripped subtree and unbound sideTrees.
-  // The `subCol_` gets updated after stripping the `subtree_`.
+  // Create a new `TransitivePath` operation with the stripped subtree and
+  // unbound sideTrees. The `subCol_` gets updated after stripping the
+  // `subtree_`.
   auto unbind = [&](const TransitivePathSide& side) {
     auto copy = side;
     copy.treeAndCol_.reset();
@@ -786,21 +789,24 @@ TransitivePathBase::makeTreeWithStrippedColumns(
     return copy;
   };
   bool useBinSearch = dynamic_cast<const TransitivePathBinSearch*>(this);
-  std::shared_ptr<TransitivePathBase> path = makeTransitivePath(
-      qec, subtree, unbind(lhs_), unbind(rhs_), minDist_, maxDist_,
-      useBinSearch, activeGraphs_, graphVariable_);
+  std::shared_ptr<TransitivePathBase> path =
+      makeTransitivePath(qec, subtree, unbind(lhs_), unbind(rhs_), minDist_,
+                         maxDist_, useBinSearch, activeGraphs_, graphVariable_);
 
-  // The stripped sideTree has to provide the `requestedVariables`, the join variables and the graph variables.
+  // The stripped sideTree has to provide the `requestedVariables`, the join
+  // variables and the graph variables.
   auto isRealBinding = [this](const TransitivePathSide& s) {
     return s.isVariable() && s.isBoundVariable() &&
            !boundVariableIsForEmptyPath_;
   };
   bool lb = isRealBinding(lhs_), rb = isRealBinding(rhs_);
   if (lb || rb) {
-    columnStrippingHelpers::VarsRequiredFromSubtree varsRequiredFromSubtree{&requestedVariables};
+    columnStrippingHelpers::VarsRequiredFromSubtree varsRequiredFromSubtree{
+        &requestedVariables};
     auto joinVar = [](const TransitivePathSide& s) {
-      return s.treeAndCol_->first->getVariableAndInfoByColumnIndex(
-          s.treeAndCol_->second).first;
+      return s.treeAndCol_->first
+          ->getVariableAndInfoByColumnIndex(s.treeAndCol_->second)
+          .first;
     };
     if (lb) varsRequiredFromSubtree.add(joinVar(lhs_));
     if (rb) varsRequiredFromSubtree.add(joinVar(rhs_));
@@ -813,19 +819,21 @@ TransitivePathBase::makeTreeWithStrippedColumns(
     auto strippedSideTree = varsRequiredFromSubtree.stripSubtree(sideTree);
     // Update the column of the join variable after stripping the sideTree.
     auto updateJoinVarCol = [&](bool bound, const TransitivePathSide& s) {
-      return bound ? std::optional{strippedSideTree->getVariableColumn(joinVar(s))}
+      return bound ? std::optional{strippedSideTree->getVariableColumn(
+                         joinVar(s))}
                    : std::nullopt;
     };
     // Bind the `strippedSideTree` to the new `TransitivePath` operation.
-    path = path->bindSides(strippedSideTree, updateJoinVarCol(lb, lhs_), updateJoinVarCol(rb, rhs_));
+    path = path->bindSides(strippedSideTree, updateJoinVarCol(lb, lhs_),
+                           updateJoinVarCol(rb, rhs_));
   }
 
   // The new `TransitivePath` also exports variables that the parent did
   // not request, therefore a `StripColumns` operation is added for them.
   auto tree = std::make_shared<QueryExecutionTree>(qec, std::move(path));
-  if (columnStrippingHelpers::allVariablesAreRequired(*tree, requestedVariables))
+  if (columnStrippingHelpers::allVariablesAreRequired(*tree,
+                                                      requestedVariables))
     return tree;
   return ad_utility::makeExecutionTree<StripColumns>(qec, std::move(tree),
                                                      requestedVariables);
 }
-
