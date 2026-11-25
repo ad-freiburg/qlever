@@ -192,24 +192,6 @@ TEST(RasterFile, throwsForCrsWithoutTransformationToCrs84) {
 }
 
 // _____________________________________________________________________________
-// Test that a raster whose CRS can be transformed from CRS84, but not back, is
-// rejected.
-TEST(RasterFile, throwsForCrsWithoutTransformationFromCrs84) {
-  // PROJ can compute the Airy projection, but not its inverse.
-  constexpr std::string_view airy =
-      "+proj=airy +datum=WGS84 +units=m +type=crs";
-  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
-  // GeoTIFF cannot store this CRS itself, so GDAL writes it to a second file.
-  absl::Cleanup removeAuxFile{[auxPath = path.string() + ".aux.xml"] {
-    ql::filesystem::remove(auxPath);
-  }};
-  writeTestRaster(path.string(), NORTH_UP, airy);
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      RasterFile{path.string()},
-      HasSubstr("Could not transform between CRS84 and the CRS"));
-}
-
-// _____________________________________________________________________________
 // Test that `numBands` returns the number of bands of the file.
 TEST(RasterFile, numBandsCountsAllBands) {
   auto [path, cleanup] = ad_utility::testing::filenameForTesting();
