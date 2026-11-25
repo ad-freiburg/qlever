@@ -179,6 +179,11 @@ TEST(OptionalJoinConditionPlanning, conditionIsAppliedToGroupWithWarning) {
                 conditionMessage);
   expectWarning("SELECT * { ?x <p> ?y OPTIONAL { FILTER(?y < 5) } }",
                 conditionMessage);
+  // A group that only consists of a MINUS is planned like an empty group.
+  expectWarning(
+      "SELECT * { ?x <p> ?y OPTIONAL { MINUS { ?x <q> ?z } FILTER(?y != <a>) "
+      "} }",
+      conditionMessage);
   // `?y` might be UNDEF in the group.
   expectWarning(
       "SELECT * { ?x <p> ?y OPTIONAL { ?x <q> ?z OPTIONAL { ?z <r> ?y } "
@@ -198,14 +203,30 @@ TEST(OptionalJoinConditionPlanning, conditionIsAppliedToGroupWithWarning) {
       "SELECT * { GRAPH ?g { ?x <p> ?y OPTIONAL { VALUES ?z { 1 } "
       "FILTER(?g != <a>) } } }",
       conditionMessage);
-  // A FILTER that can be replaced by a `SpatialJoin`, which is already done
-  // when one of its variables is bound in the group. The plans with the
-  // `SpatialJoin` keep it, the other plans get the FILTER.
-  EXPECT_NO_THROW(h::parseAndPlan(
-      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
-      "SELECT * { ?x <p> ?y OPTIONAL { ?x <q> ?b "
-      "FILTER(geof:distance(?y, ?b) <= 0.5) } }",
-      ad_utility::testing::getQec()));
+  // A FILTER that can be replaced by a `SpatialJoin`, see the NOTE in
+  // `QueryPlanner::applyRemainingFilters`. If `?y` doesn't occur in the group,
+  // the `SpatialJoin` can't be completed there, so the FILTER is part of the
+  // condition.
+  std::string geof =
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> ";
+  expectWarning(geof +
+                    "SELECT * { ?x <p> ?y OPTIONAL { ?x <q> ?b "
+                    "FILTER(geof:distance(?y, ?b) <= 0.5) } }",
+                conditionMessage);
+  expectWarning(geof +
+                    "SELECT * { ?x <p> ?y OPTIONAL { ?x <q> ?b . ?b <r> ?c "
+                    "FILTER(geof:distance(?y, ?b) <= 0.5) } }",
+                conditionMessage);
+  // If `?y` occurs in the group, but might be UNDEF there, the `SpatialJoin`
+  // can be completed in the group. Then the FILTER is evaluated on the content
+  // of the group like before, but without a warning.
+  auto qet = h::parseAndPlan(
+      geof +
+          "SELECT * { ?x <p> ?y OPTIONAL { ?x <q> ?b VALUES ?y { <a> UNDEF } "
+          "FILTER(geof:distance(?y, ?b) <= 0.5) } }",
+      ad_utility::testing::getQec());
+  EXPECT_THAT(qet->getCacheKey(), HasSubstr("SpatialJoin"));
+  EXPECT_THAT(qet->getRootOperation()->collectWarnings(), ::testing::IsEmpty());
 }
 
 // _____________________________________________________________________________
@@ -229,8 +250,7 @@ TEST(OptionalJoinConditionPlanning, existsThatDependsOnLeftSide) {
 // _____________________________________________________________________________
 TEST(OptionalJoinConditionPlanning, messages) {
   // The messages name the FILTER and the variables that make it part of the
-  // condition, but not the other variables, and the rewrite that gives the
-  // result of the SPARQL standard.
+  // condition, but not the other variables, each only once.
   auto query = "SELECT * { ?x <p> ?y OPTIONAL { ?x <q> ?z FILTER(?y < ?z) } }";
   EXPECT_THAT(
       getWarnings(query),
@@ -239,23 +259,24 @@ TEST(OptionalJoinConditionPlanning, messages) {
           "outside of the OPTIONAL but not always inside of it. The SPARQL "
           "standard evaluates such a FILTER on the joined rows, which is not "
           "supported yet, so QLever evaluates it on the content of the "
-          "OPTIONAL alone. To get the standard result, repeat the patterns "
-          "that bind ?y outside of the OPTIONAL also inside of it."));
-  expectWarning(
-      "SELECT * { ?x <p> ?y . ?x <r> ?w OPTIONAL { ?x <q> ?z "
-      "FILTER(?y < ?w || ?y = ?z) } }",
-      "uses ?y, ?w, which are bound outside of the OPTIONAL but not always "
-      "inside of it. The SPARQL standard evaluates such a FILTER on the joined "
-      "rows, which is not supported yet, so QLever evaluates it on the content "
-      "of the OPTIONAL alone. To get the standard result, repeat the patterns "
-      "that bind ?y, ?w outside of the OPTIONAL also inside of it.");
-  expectNotSupported(
-      "SELECT * { ?x <p> ?y OPTIONAL { ?x <q> ?z FILTER EXISTS { ?z <r> ?y } "
-      "} }",
-      "The FILTER EXISTS { ?z <r> ?y } inside of an OPTIONAL contains an "
-      "EXISTS that uses ?y, which is bound outside of the OPTIONAL but not "
-      "always inside of it. The SPARQL standard evaluates such an EXISTS on "
-      "the joined rows, which is not supported yet. To get the standard "
-      "result, repeat the patterns that bind ?y outside of the OPTIONAL also "
-      "inside of it.");
+          "OPTIONAL alone."));
+  EXPECT_THAT(
+      getWarnings("SELECT * { ?x <p> ?y . ?x <r> ?w OPTIONAL { ?x <q> ?z "
+                  "FILTER(?y < ?w || ?y = ?z) } }"),
+      ::testing::ElementsAre(
+          "The FILTER (?y < ?w || ?y = ?z) inside of an OPTIONAL uses ?y, ?w, "
+          "which are bound outside of the OPTIONAL but not always inside of "
+          "it. The SPARQL standard evaluates such a FILTER on the joined rows, "
+          "which is not supported yet, so QLever evaluates it on the content "
+          "of the OPTIONAL alone."));
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      h::parseAndPlan("SELECT * { ?x <p> ?y OPTIONAL { ?x <q> ?z FILTER EXISTS "
+                      "{ ?z <r> ?y } } }",
+                      ad_utility::testing::getQec()),
+      ::testing::EndsWith(
+          "The FILTER EXISTS { ?z <r> ?y } inside of an OPTIONAL contains an "
+          "EXISTS that uses ?y, which is bound outside of the OPTIONAL but not "
+          "always inside of it. The SPARQL standard evaluates such an EXISTS "
+          "on the joined rows, which is not supported yet."),
+      NotSupportedException);
 }

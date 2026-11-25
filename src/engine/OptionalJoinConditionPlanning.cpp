@@ -29,16 +29,11 @@ namespace {
 std::string makeMessage(const sparqlExpression::SparqlExpressionPimpl& filter,
                         bool inExists,
                         const std::vector<std::string>& variables) {
-  auto variableList = absl::StrJoin(variables, ", ");
-  // NOTE: If the patterns that bind the `variables` are repeated inside of the
-  // OPTIONAL, the `variables` are always bound there, and the join with the
-  // left side gives the same result as the evaluation on the joined rows
-  // (provided that these patterns always bind the `variables` and only use
-  // variables of the left side).
   return absl::StrCat(
       "The FILTER ", filter.getDescriptor(), " inside of an OPTIONAL",
-      inExists ? " contains an EXISTS that" : "", " uses ", variableList,
-      ", which ", variables.size() > 1 ? "are" : "is",
+      inExists ? " contains an EXISTS that" : "", " uses ",
+      absl::StrJoin(variables, ", "), ", which ",
+      variables.size() > 1 ? "are" : "is",
       " bound outside of the OPTIONAL but not always inside of it. The SPARQL "
       "standard evaluates such ",
       inExists ? "an EXISTS" : "a FILTER",
@@ -46,8 +41,7 @@ std::string makeMessage(const sparqlExpression::SparqlExpressionPimpl& filter,
       inExists ? ""
                : ", so QLever evaluates it on the content of the OPTIONAL "
                  "alone",
-      ". To get the standard result, repeat the patterns that bind ",
-      variableList, " outside of the OPTIONAL also inside of it.");
+      ".");
 }
 
 // Return the names of the `variables` (pointers) for which `predicate` is
@@ -55,13 +49,9 @@ std::string makeMessage(const sparqlExpression::SparqlExpressionPimpl& filter,
 template <typename Variables, typename Predicate>
 std::vector<std::string> getNamesOfVariables(const Variables& variables,
                                              const Predicate& predicate) {
-  std::vector<std::string> names;
-  for (const Variable* variable : variables) {
-    if (predicate(variable) && !ad_utility::contains(names, variable->name())) {
-      names.push_back(variable->name());
-    }
-  }
-  return names;
+  return ad_utility::removeDuplicates(
+      ::ranges::to_vector(variables | ql::views::filter(predicate) |
+                          ql::views::transform(&Variable::name)));
 }
 
 // Return a predicate that is true for a `variable` iff it can have a different

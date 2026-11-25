@@ -341,11 +341,10 @@ class QueryPlanner {
 
   // Return the bit map of the `filters` (same format as
   // `SubtreePlan::_idsOfIncludedFilters`) that are the condition of the left
-  // join, if the `plans` are the final plans of the group of an OPTIONAL, see
-  // `isPartOfOptionalJoinCondition`. This only depends on the group and not on
-  // the plan, so only the first plan is used.
+  // join, if `plan` is a final plan of the group of an OPTIONAL, see
+  // `isPartOfOptionalJoinCondition`.
   uint64_t getIdsOfOptionalJoinConditionFilters(
-      const SubtreePlanVec& plans, const FiltersAndOptionalSubstitutes& filters,
+      const SubtreePlan& plan, const FiltersAndOptionalSubstitutes& filters,
       const ad_utility::HashSet<Variable>& variablesOfLeftSideOfOptional) const;
 
   // Add all the possible index scans for the triple represented by the node.
@@ -804,14 +803,10 @@ class QueryPlanner {
     // Return the variables of the results of the children of the
     // `rootPattern_` which we have dealt with so far. Such a variable might be
     // undefined in all rows of the result, which is fine, as only the absence
-    // of shared variables leads to a special case.
+    // of shared variables leads to a special case. Inside of `GRAPH ?g {...}`,
+    // this includes `?g` if one of these children is a triple, because its
+    // index scan has a column for `?g`.
     ad_utility::HashSet<Variable> getVariablesOfPreviousPatterns() const;
-
-    // Return the variables of the left side of an OPTIONAL that is the next
-    // child of the `rootPattern_`, that is, the variables of
-    // `getVariablesOfPreviousPatterns`, and the graph variable inside of
-    // `GRAPH ?g {...}` if it is bound by a triple.
-    ad_utility::HashSet<Variable> getVariablesOfLeftSideOfOptional() const;
 
     // Helper function for `visitGroupOptionalOrMinus`. SPARQL queries like
     // `SELECT * { OPTIONAL { ?a ?b ?c }}`, `SELECT * { MINUS { ?a ?b ?c }}` or
