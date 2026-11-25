@@ -464,6 +464,31 @@ TEST(RasterFile, readsFloatBandsWithNumericNoData) {
 }
 
 // _____________________________________________________________________________
+// Test that `lookupPoint` throws if a pixel cannot be read, here because the
+// file ends after its header.
+TEST(RasterFile, throwsForPixelThatCannotBeRead) {
+  auto [path, cleanup] = ad_utility::testing::filenameForTesting();
+  writeTestRaster(path.string());
+  // Cut off the pixel data, which follows the header.
+  uintmax_t pixelDataOffset = 0;
+  {
+    GDALDatasetUniquePtr dataset{GDALDataset::Open(
+        path.string().c_str(), GDAL_OF_RASTER | GDAL_OF_READONLY)};
+    ASSERT_NE(dataset, nullptr);
+    const char* offset =
+        dataset->GetRasterBand(1)->GetMetadataItem("BLOCK_OFFSET_0_0", "TIFF");
+    ASSERT_NE(offset, nullptr);
+    pixelDataOffset = std::stoull(offset);
+  }
+  ql::filesystem::resize_file(path, pixelDataOffset);
+  auto allocator = qlever::makeUnlimitedAllocator<char>();
+  RasterFile file{path.string()};
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      file.lookupPoint(CENTER_OF_PIXEL_1_0, std::vector{1}, allocator),
+      HasSubstr("Could not read pixel (1, 0)"));
+}
+
+// _____________________________________________________________________________
 // Test that `lookupPoint` rejects an empty list of bands and band numbers that
 // do not exist. Bands are numbered from 1, and the file has only band 1.
 TEST(RasterFile, rejectsInvalidBandNumbers) {

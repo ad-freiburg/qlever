@@ -166,7 +166,7 @@ RasterFile::Impl::Impl(const std::string& path) {
     // A `double` must hold every value of the type exactly, because GDAL
     // returns the NoData value as a `double`, see `readNoData`.
     if (GDALDataTypeIsComplex(type) || type == GDT_Int64 ||
-        type == GDT_UInt64 || type == GDT_Unknown) {
+        type == GDT_UInt64) {
       throw std::runtime_error(absl::StrCat(
           "Band ", bandNumber, " of raster file \"", path,
           "\" has the unsupported type ", GDALGetDataTypeName(type)));
