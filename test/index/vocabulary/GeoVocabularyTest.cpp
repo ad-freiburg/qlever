@@ -296,7 +296,8 @@ TEST(GeoVocabularyTest, InvalidGeometryInfoVersion) {
 }
 
 // Test that a geoinfo file of version 5, whose padding bytes may hold arbitrary
-// content, is read with the source CRS zeroed and the serialization type `WKT`.
+// content, is read with the source CRS zeroed, the serialization type `WKT` and
+// no geometry store ID.
 TEST(GeoVocabularyTest, ReadVersion5) {
   // Write a `GeoVocabulary` of the current version.
   const std::string filename = absl::StrCat(gtestCurrentTestName(), ".dat");
@@ -317,9 +318,9 @@ TEST(GeoVocabularyTest, ReadVersion5) {
     ww->finish();
   }
 
-  // Turn the geoinfo file into one of version 5: the version 6 has the same
-  // record size, but in version 5, the bytes `[28, 32)` of a valid record could
-  // contain arbitrary content.
+  // Turn the geoinfo file into one of version 5: its records are the first
+  // `geometryInfoSize(5)` bytes of the current ones, and the bytes `[28, 32)`
+  // of a valid record could contain arbitrary content.
   const std::string geoInfoFilename = AnyGeoVocab::getGeoInfoFilename(filename);
   std::string contents;
   {
@@ -328,23 +329,29 @@ TEST(GeoVocabularyTest, ReadVersion5) {
   }
   constexpr size_t recordSize = 48;
   static_assert(geometryInfoSize(5) == recordSize);
-  ASSERT_EQ(contents.size(), sizeof(uint64_t) + literals.size() * recordSize);
+  ASSERT_EQ(contents.size(),
+            sizeof(uint64_t) + literals.size() * sizeof(GeometryInfo));
   const uint64_t version5 = 5;
-  std::memcpy(contents.data(), &version5, sizeof(version5));
+  std::string contents5(reinterpret_cast<const char*>(&version5),
+                        sizeof(version5));
   for (size_t i = 0; i < literals.size(); ++i) {
-    auto record = contents.begin() + sizeof(uint64_t) + i * recordSize;
-    if (std::any_of(record, record + recordSize,
+    std::string record = contents.substr(
+        sizeof(uint64_t) + i * sizeof(GeometryInfo), recordSize);
+    if (std::any_of(record.begin(), record.end(),
                     [](char c) { return c != 0; })) {
-      std::fill(record + 28, record + 32, '\xab');
+      std::fill(record.begin() + 28, record.begin() + 32, '\xab');
     }
+    contents5 += record;
   }
+  contents = std::move(contents5);
   {
     std::ofstream out{geoInfoFilename, std::ios::binary | std::ios::trunc};
     out << contents;
   }
 
   // Read the version 5 file. The fields in the bytes `[28, 32)` must be zero:
-  // the source CRS "not computed" and the serialization type `WKT`.
+  // the source CRS "not computed" and the serialization type `WKT`. The
+  // geometry is not in the geometry store, which version 5 did not have.
   AnyGeoVocab geoVocab;
   geoVocab.open(filename);
   using Bytes = std::array<uint8_t, sizeof(GeometryInfo)>;
@@ -355,6 +362,7 @@ TEST(GeoVocabularyTest, ReadVersion5) {
     if (expected.has_value()) {
       EXPECT_EQ(actual.value().getSourceCrsType(), std::nullopt);
       EXPECT_EQ(actual.value().getRequestedInfo<SourceCrsType>(), std::nullopt);
+      EXPECT_EQ(actual.value().getGeometryStoreId(), std::nullopt);
       auto expectedBytes = absl::bit_cast<Bytes>(expected.value());
       std::fill(expectedBytes.begin() + 28, expectedBytes.begin() + 32, 0);
       EXPECT_EQ(absl::bit_cast<Bytes>(actual.value()), expectedBytes);
