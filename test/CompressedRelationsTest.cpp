@@ -1753,6 +1753,30 @@ TEST(CompressedRelationReader, getResultSizeOfScanDuplicatesInGraphs) {
                 scanSpecAndBlocks, locatedTriples,
                 std::make_shared<ad_utility::CancellationHandle<>>()),
             20u);
+
+  // The same holds when one of the two occurrences is deleted (the middle
+  // block then has only a deleted triple and is read for that reason alone).
+  auto oneOccurrenceDeleted = makeLocatedTriplesPerBlock(
+      blocks, {IdTriple<>{{V(1), V(0), V(16), V(43)}}}, false);
+  CompressedRelationReader::ScanSpecAndBlocks scanSpecAndAugmentedBlocks{
+      ScanSpecification{V(1), std::nullopt, std::nullopt},
+      getBlockMetadataRangesfromVec(
+          oneOccurrenceDeleted.getAugmentedMetadata())};
+  EXPECT_EQ(reader->getResultSizeOfScan(
+                scanSpecAndAugmentedBlocks, oneOccurrenceDeleted,
+                std::make_shared<ad_utility::CancellationHandle<>>()),
+            20u);
+
+  // Deleting a triple that occurs in one graph only reduces the size by one.
+  auto otherTripleDeleted = makeLocatedTriplesPerBlock(
+      blocks, {IdTriple<>{{V(1), V(0), V(18), V(42)}}}, false);
+  CompressedRelationReader::ScanSpecAndBlocks scanSpecAndAugmentedBlocks2{
+      ScanSpecification{V(1), std::nullopt, std::nullopt},
+      getBlockMetadataRangesfromVec(otherTripleDeleted.getAugmentedMetadata())};
+  EXPECT_EQ(reader->getResultSizeOfScan(
+                scanSpecAndAugmentedBlocks2, otherTripleDeleted,
+                std::make_shared<ad_utility::CancellationHandle<>>()),
+            19u);
 }
 
 // Test that the exact size computation of a scan checks the cancellation
