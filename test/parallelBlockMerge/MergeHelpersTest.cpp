@@ -60,6 +60,9 @@ struct ZeroSizeBlockInput {
     return wrapped_.getBlock(runIdx, blockIdx);
   }
   Block makeEmptyBlock() const { return {}; }
+  void reserveBlock(Block& block, size_t numElements) const {
+    block.reserve(numElements);
+  }
   template <typename U>
   void appendToBlock(Block& block, U&& element) const {
     block.push_back(AD_FWD(element));
@@ -336,6 +339,9 @@ struct WeightedInput {
     return wrapped_.getBlock(runIdx, blockIdx);
   }
   Block makeEmptyBlock() const { return {}; }
+  void reserveBlock(Block& block, size_t numElements) const {
+    block.reserve(numElements);
+  }
   template <typename U>
   void appendToBlock(Block& block, U&& element) const {
     block.push_back(AD_FWD(element));

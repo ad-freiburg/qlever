@@ -659,8 +659,8 @@ TEST(ParallelBlockMerge, outputBlockMemoryLimit) {
   EXPECT_EQ(numElements, 400u);
 }
 
-// An input policy that derives from `SizeInput` and additionally has the
-// optional `reserveBlock` function of `InputConcept`. It records the
+// An input policy that derives from `SizeInput` and overrides its
+// `reserveBlock` function (see `InputConcept`) to record the
 // `numElements` of every call. The recorded state is shared between all
 // copies, because the merge takes the input by value.
 struct ReservingInput : public SizeInput {
@@ -677,8 +677,6 @@ struct ReservingInput : public SizeInput {
   }
 };
 static_assert(InputConcept<ReservingInput>);
-static_assert(detail::hasReserveBlock<ReservingInput>);
-static_assert(!detail::hasReserveBlock<SizeInput>);
 
 // _____________________________________________________________________________
 TEST(ParallelBlockMerge, reserveBlockOfTheInputIsCalled) {

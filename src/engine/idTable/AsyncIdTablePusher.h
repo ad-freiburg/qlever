@@ -140,7 +140,10 @@ class AsyncIdTablePusher {
   // Construct a pusher that runs its work on the `executor` and hands blocks of
   // `blocksize` rows with `numColumns` columns (which are allocated via the
   // `allocator`) to the `sink`. The execution context behind the `executor`
-  // has to outlive this object, which holds a strand on the `executor`.
+  // has to outlive this object, which holds a strand on the `executor`. The
+  // `sink` is either a `Sink` (see there), which may hand back an empty block
+  // for reuse, or a callable with the signature `void(Block)`, which is wrapped
+  // into a `Sink` that never hands back a block (see `wrapSink`).
   template <typename SinkFunction>
   AsyncIdTablePusher(ql::any_io_executor executor, size_t numColumns,
                      size_t blocksize, Allocator allocator, SinkFunction sink)
