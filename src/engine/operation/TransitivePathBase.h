@@ -13,7 +13,6 @@
 #include <memory>
 
 #include "backports/functional.h"
-#include "engine/operation/StripColumns.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/operation/Operation.h"
 #include "util/ContainersWithAllocator.h"
