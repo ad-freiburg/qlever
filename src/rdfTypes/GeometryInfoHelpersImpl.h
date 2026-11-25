@@ -37,6 +37,7 @@
 #include "util/Exception.h"
 #include "util/GeoConverters.h"
 #include "util/Log.h"
+#include "util/OverloadCallOperator.h"
 #include "util/TypeTraits.h"
 #include "util/Views.h"
 #include "util/json.h"
@@ -115,9 +116,16 @@ inline ParseResult parseWktOrThrow(const std::string_view& wkt,
   using enum WKTType;
   try {
     switch (type) {
-      case POINT:
-        parsed = pointFromWKTProj<CoordType>(c, &c, projFunc, crsType, strict);
+      case POINT: {
+        auto point =
+            pointFromWKTProj<CoordType>(c, &c, projFunc, crsType, strict);
+        // `POINT EMPTY` yields a point with sentinel coordinates.
+        if (point.empty()) {
+          throw std::runtime_error("Cannot parse point from WKT");
+        }
+        parsed = point;
         break;
+      }
       case LINESTRING: {
         auto line =
             lineFromWKTProj<CoordType>(c, &c, projFunc, crsType, strict);
@@ -215,20 +223,6 @@ inline GeoPoint utilPointToGeoPoint(const Point<CoordType>& point) {
   return {point.getY(), point.getX()};
 }
 
-// Compute the centroid of a parsed geometry and return it as a `GeoPoint`
-// wrapped inside a `Centroid` struct.
-inline std::optional<Centroid> centroidAsGeoPoint(const ParsedWkt& geometry) {
-  auto uPoint = std::visit([](auto& val) { return centroid(val); }, geometry);
-  try {
-    return Centroid{utilPointToGeoPoint(uPoint)};
-  } catch (const CoordinateOutOfRangeException& ex) {
-    AD_LOG_DEBUG << "Cannot compute centroid due to invalid "
-                    "coordinates. Error: "
-                 << ex.what() << std::endl;
-    return std::nullopt;
-  }
-}
-
 // Compute the bounding box of a parsed geometry and return it as a pair of two
 // `GeoPoint`s wrapped inside a `BoundingBox` struct.
 inline std::optional<BoundingBox> boundingBoxAsGeoPoints(
@@ -257,10 +251,11 @@ inline Point<CoordType> geoPointToUtilPoint(const GeoPoint& point,
 // Serialize a bounding box given by a pair of `GeoPoint`s to a WKT literal
 // (without quotes or datatype).
 inline std::string boundingBoxAsWkt(const GeoPoint& lowerLeft,
-                                    const GeoPoint& upperRight) {
+                                    const GeoPoint& upperRight,
+                                    CRSType projCrs = defaultCrs) {
   Box<CoordType> box{geoPointToUtilPoint(lowerLeft),
                      geoPointToUtilPoint(upperRight)};
-  return getWKT(box);
+  return getWKT(box, defaultCrs, projCrs);
 }
 
 // Convert a `BoundingBox` struct holding two `GeoPoint`s to a `Box` struct as
@@ -322,6 +317,16 @@ inline constexpr auto CRS_TYPE_IRI = []() {
       crs84, wgs84, webMerc};
 }();
 
+// Check that the order of `CRS_TYPE_IRI` is the order of the `CRSType` enum.
+static_assert(
+    !CRS_TYPE_IRI[static_cast<size_t>(CRSType::UNSUPPORTED)].has_value());
+static_assert(CRS_TYPE_IRI[static_cast<size_t>(CRSType::CRS84)] ==
+              detail::crsStrings::crs84);
+static_assert(CRS_TYPE_IRI[static_cast<size_t>(CRSType::WGS84)] ==
+              detail::crsStrings::wgs84);
+static_assert(CRS_TYPE_IRI[static_cast<size_t>(CRSType::WEB_MERCATOR)] ==
+              detail::crsStrings::webMerc);
+
 // Lookup the IRI for a given CRS type in the array of prepared IRIs.
 inline std::optional<std::string_view> crsTypeToIri(uint16_t type) {
   if (type < CRS_TYPE_IRI.size()) {
@@ -373,9 +378,8 @@ enum class AnyGeometryMember : uint8_t {
 // Helper to convert the dynamic container `AnyGeometry` to the `ParsedWkt`
 // variant type
 CPP_template(typename Visitor, typename T)(
-    requires SimilarTo<
-        T, DAnyGeometry>) inline auto visitAnyGeometry(Visitor visitor,
-                                                       T&& geom) {
+    requires SimilarTo<T, DAnyGeometry>)
+inline auto visitAnyGeometry(Visitor visitor, T&& geom) {
   using enum AnyGeometryMember;
   // `AnyGeometry` is a class from `pb_util`. It does not operate on an enum,
   // this is why we use our own enum here. The correct matching of the integer
@@ -417,10 +421,11 @@ struct MetricLengthVisitor {
 
   // Compute the length of a multi-geometry by adding up the lengths of its
   // members.
-  CPP_template(typename T)(requires ad_utility::SimilarToAny<
-                           T, MultiLine<CoordType>, MultiPolygon<CoordType>,
-                           MultiPoint<CoordType>, Collection<CoordType>>) double
-  operator()(const T& multiGeom) const {
+  CPP_template(typename T)(
+      requires ad_utility::SimilarToAny<
+          T, MultiLine<CoordType>, MultiPolygon<CoordType>,
+          MultiPoint<CoordType>, Collection<CoordType>>)
+  double operator()(const T& multiGeom) const {
     // This overload only handles the geometry types implemented by vectors.
     static_assert(ad_utility::similarToInstantiation<T, std::vector>);
 
@@ -431,8 +436,8 @@ struct MetricLengthVisitor {
   // Compute the length for the custom container type `AnyGeometry` from
   // `pb_util`. It can dynamically hold any geometry type.
   CPP_template(typename T)(
-      requires ad_utility::SimilarTo<T, AnyGeometry<CoordType>>) double
-  operator()(const T& geom) const {
+      requires ad_utility::SimilarTo<T, AnyGeometry<CoordType>>)
+  double operator()(const T& geom) const {
     return visitAnyGeometry(MetricLengthVisitor{}, geom);
   }
 
@@ -511,8 +516,8 @@ struct MetricAreaVisitor {
   // The remaining geometry types always return the area zero
   CPP_template(typename T)(
       requires SameAsAny<T, Point<CoordType>, MultiPoint<CoordType>,
-                         Line<CoordType>, MultiLine<CoordType>>) double
-  operator()(const T&) const {
+                         Line<CoordType>, MultiLine<CoordType>>)
+  double operator()(const T&) const {
     return 0.0;
   }
 
@@ -559,37 +564,76 @@ struct ParseGeoPointOrWktVisitor {
 
 static constexpr ParseGeoPointOrWktVisitor parseGeoPointOrWkt;
 
-// Helper to convert a geometry from `pb_util` to a WKT string.
+// Helper to get the CRS of a `GeoPointOrWkt` variant. A `GeoPoint` is always
+// in the default CRS. For a WKT literal (with quotation marks and datatype),
+// the CRS is given by the IRI at its start, or it is the default CRS if there
+// is none (`getCRSType` skips the opening quotation mark).
+inline CRSType sourceCrsFromGeoPointOrWkt(const GeoPointOrWkt& geoPointOrWkt) {
+  return std::visit(ad_utility::OverloadCallOperator{
+                        [](const GeoPoint&) { return defaultCrs; },
+                        [](const std::string& wkt) { return getCRSType(wkt); }},
+                    geoPointOrWkt);
+}
+
+// Helper to convert a geometry from `pb_util` (in CRS84) to a WKT string,
+// projected to `projCrs` (with the IRI of `projCrs` unless it is CRS84).
 struct UtilGeomToWktVisitor {
   // Visitor for `std::optional` inputs.
   template <typename T>
-  std::optional<std::string> operator()(const std::optional<T>& opt) const {
+  std::optional<std::string> operator()(const std::optional<T>& opt,
+                                        CRSType projCrs = defaultCrs) const {
     if (!opt.has_value()) {
       return std::nullopt;
     }
-    return UtilGeomToWktVisitor{}(opt.value());
+    return UtilGeomToWktVisitor{}(opt.value(), projCrs);
   }
 
   // Visitor for the `ParsedWkt` variant.
-  std::optional<std::string> operator()(const ParsedWkt& variant) const {
-    return std::visit(UtilGeomToWktVisitor{}, variant);
+  std::optional<std::string> operator()(const ParsedWkt& variant,
+                                        CRSType projCrs = defaultCrs) const {
+    return std::visit(
+        [projCrs](const auto& var) {
+          return UtilGeomToWktVisitor{}(var, projCrs);
+        },
+        variant);
   }
 
   // Visitor for each of the `pb_util` geometry types.
-  CPP_template(typename T)(
-      requires SimilarToAnyTypeIn<T, ParsedWkt>) std::optional<std::string>
-  operator()(const T& geom) const {
-    return getWKT(geom);
+  CPP_template(typename T)(requires SimilarToAnyTypeIn<T, ParsedWkt>)
+  std::optional<std::string> operator()(const T& geom,
+                                        CRSType projCrs = defaultCrs) const {
+    return getWKT(geom, defaultCrs, projCrs);
   }
 
   // Visitor for the custom container type `AnyGeometry`.
-  std::optional<std::string> operator()(
-      const AnyGeometry<CoordType>& geom) const {
-    return visitAnyGeometry(UtilGeomToWktVisitor{}, geom);
+  std::optional<std::string> operator()(const AnyGeometry<CoordType>& geom,
+                                        CRSType projCrs = defaultCrs) const {
+    return visitAnyGeometry(
+        [projCrs](const auto& var) {
+          return UtilGeomToWktVisitor{}(var, projCrs);
+        },
+        geom);
   }
 };
 
 static constexpr UtilGeomToWktVisitor utilGeomToWkt;
+
+// Helper to get the WKT string (without quotation marks and datatype) of a
+// `GeoPointOrWkt` variant. The `std::string` alternative holds the full
+// literal with quotation marks and datatype, as the `GeoPointOrWktValueGetter`
+// yields it.
+inline std::optional<std::string> wktFromGeoPointOrWkt(
+    const GeoPointOrWkt& geoPointOrWkt) {
+  return std::visit(
+      ad_utility::OverloadCallOperator{
+          [](const GeoPoint& point) -> std::optional<std::string> {
+            return utilGeomToWkt(geoPointToUtilPoint(point));
+          },
+          [](const std::string& wkt) -> std::optional<std::string> {
+            return removeDatatype(wkt);
+          }},
+      geoPointOrWkt);
+}
 
 // Helper to convert a geometry from `pb_util` to a GeoJSON geometry object (RFC
 // 7946). The input is expected to be in CRS84, as GeoJSON only supports this
@@ -686,9 +730,8 @@ static constexpr UtilGeomToGeoJsonVisitor utilGeomToGeoJson;
 // that this is 1-indexed and non-collection types return themselves at index 1.
 struct GeometryNVisitor {
   // Visitor for collection types.
-  CPP_template(typename T)(
-      requires WktCollectionType<T>) std::optional<ParsedWkt>
-  operator()(const T& geom, int64_t n) const {
+  CPP_template(typename T)(requires WktCollectionType<T>)
+  std::optional<ParsedWkt> operator()(const T& geom, int64_t n) const {
     // Index range check.
     if (n < 1 || n - 1 >= static_cast<int64_t>(geom.size())) {
       return std::nullopt;
@@ -706,9 +749,8 @@ struct GeometryNVisitor {
   }
 
   // Visitor for single geometry types.
-  CPP_template(typename T)(
-      requires WktSingleGeometryType<T>) std::optional<ParsedWkt>
-  operator()(const T& geom, int64_t n) const {
+  CPP_template(typename T)(requires WktSingleGeometryType<T>)
+  std::optional<ParsedWkt> operator()(const T& geom, int64_t n) const {
     // For non collection types, only index 1 is defined and returns the
     // geometry itself.
     if (n == 1) {
@@ -841,6 +883,78 @@ struct UtilGeomProjectionVisitor {
 static constexpr UtilGeomProjectionVisitor projectWebMerc{
     CRSType::CRS84, CRSType::WEB_MERCATOR};
 
+// Compute the centroid of a parsed geometry (which is in CRS84) in the CRS
+// `sourceCrs` of its literal and return it as a `GeoPoint` (in CRS84) wrapped
+// inside a `Centroid` struct.
+//
+// NOTE: The centroid of the geometry projected to CRS84 is not the projection
+// of its centroid in the source CRS when the projection is not linear, as for
+// the y axis of Web Mercator (700 km apart for Canada).
+inline std::optional<Centroid> centroidAsGeoPoint(const ParsedWkt& geometry,
+                                                  CRSType sourceCrs) {
+  auto computeCentroid = [](const ParsedWkt& geom) {
+    return std::visit([](const auto& val) { return centroid(val); }, geom);
+  };
+
+  // Project the geometry back to `sourceCrs` unless that is CRS84, compute the
+  // centroid there and project it to CRS84.
+  Point<CoordType> resultCentroid;
+  if (sourceCrs == defaultCrs) {
+    resultCentroid = computeCentroid(geometry);
+  } else {
+    const UtilGeomProjectionVisitor projectToSourceCrs{defaultCrs, sourceCrs};
+    resultCentroid = projectToCRS(computeCentroid(projectToSourceCrs(geometry)),
+                                  sourceCrs, defaultCrs);
+  }
+
+  try {
+    return Centroid{utilPointToGeoPoint(resultCentroid)};
+  } catch (const CoordinateOutOfRangeException& ex) {
+    AD_LOG_DEBUG << "Cannot compute centroid due to invalid "
+                    "coordinates. Error: "
+                 << ex.what() << std::endl;
+    return std::nullopt;
+  }
+}
+
+// Combine `info` (a `Centroid` or `BoundingBox`) and `crs` into a
+// `WithSourceCrs<T>`. Empty iff one of them is empty, in particular for a
+// `GeometryInfo` read from an index that predates the stored source CRS (see
+// `GeometryInfo::getSourceCrsType`).
+template <typename T>
+inline std::optional<WithSourceCrs<T>> getWithSourceCrs(
+    std::optional<T> info, std::optional<SourceCrsType> crs) {
+  if (!info.has_value() || !crs.has_value()) {
+    return std::nullopt;
+  }
+  return WithSourceCrs<T>{info.value(), crs.value()};
+}
+
+// Parse the WKT literal `wkt` and compute its `T` (a `Centroid` or
+// `BoundingBox`) together with its source CRS. Empty iff the literal cannot be
+// parsed or has an unsupported CRS.
+template <typename T>
+inline std::optional<WithSourceCrs<T>> getWithSourceCrsFromWkt(
+    std::string_view wkt) {
+  auto parseResult = parseWkt(wkt);
+  if (!parseResult.parsedWkt_.has_value()) {
+    return std::nullopt;
+  }
+
+  // A literal with an unsupported CRS has no parsed geometry, see `parseWkt`.
+  AD_CORRECTNESS_CHECK(parseResult.sourceCrs_ != CRSType::UNSUPPORTED);
+  std::optional<T> info;
+  if constexpr (std::is_same_v<T, Centroid>) {
+    info = centroidAsGeoPoint(parseResult.parsedWkt_.value(),
+                              parseResult.sourceCrs_);
+  } else if constexpr (std::is_same_v<T, BoundingBox>) {
+    info = boundingBoxAsGeoPoints(parseResult.parsedWkt_.value());
+  } else {
+    static_assert(ad_utility::alwaysFalse<T>);
+  }
+  return getWithSourceCrs(info, SourceCrsType{parseResult.sourceCrs_});
+}
+
 // Helper for `MetricDistanceVisitor`.
 template <typename T, typename U>
 CPP_concept IsPairOfUtilGeoms =
@@ -854,8 +968,8 @@ struct MetricDistanceVisitor {
   }
 
   // Delegate the actual distance computation to `pb_util`.
-  CPP_template(typename T, typename U)(requires IsPairOfUtilGeoms<T, U>) double
-  operator()(const T& a, const U& b) const {
+  CPP_template(typename T, typename U)(requires IsPairOfUtilGeoms<T, U>)
+  double operator()(const T& a, const U& b) const {
     return webMercMeterDist<T, U>(a, b);
   }
 

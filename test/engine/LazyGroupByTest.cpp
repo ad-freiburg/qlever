@@ -5,13 +5,16 @@
 #include <gmock/gmock.h>
 
 #include "../util/IdTableHelpers.h"
-#include "engine/GroupBy.h"
-#include "engine/GroupByImpl.h"
+#include "../util/LocalVocabTestHelpers.h"
 #include "engine/LazyGroupBy.h"
+#include "engine/operation/GroupBy.h"
+#include "engine/operation/GroupByImpl.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
+
+using ad_utility::testing::makeLocalVocab;
 
 namespace {
 auto I = ad_utility::testing::IntId;
@@ -45,7 +48,7 @@ class LazyGroupByTest : public ::testing::Test {
 
   std::vector<GroupByImpl::Aggregate> aggregates_{
       {std::move(sparqlExpression_), 1}};
-  LocalVocab localVocab_{};
+  LocalVocab localVocab_ = makeLocalVocab();
   LazyGroupBy lazyGroupBy_{
       localVocab_,
       GroupByImpl::computeUnsequentialProcessingMetadata(aggregates_, {yVar_})
@@ -60,8 +63,7 @@ class LazyGroupByTest : public ::testing::Test {
         idTable.asStaticView<0>(),
         ua,
         localVocab_,
-        std::make_shared<ad_utility::CancellationHandle<>>(),
-        std::chrono::steady_clock::time_point::max()};
+        std::make_shared<ad_utility::CancellationHandle<>>()};
 
     evaluationContext._groupedVariables = ad_utility::HashSet<Variable>{yVar_};
     evaluationContext._previousResultsFromSameGroup.resize(2);
@@ -149,7 +151,7 @@ TEST(LazyGroupBy, verifyGroupConcatIsCorrectlyInitialized) {
                std::vector{std::optional{variable}}));
   std::vector<GroupByImpl::Aggregate> aggregates{
       {std::move(sparqlExpression), 0}};
-  LocalVocab localVocab{};
+  LocalVocab localVocab = makeLocalVocab();
   LazyGroupBy lazyGroupBy{
       localVocab,
       GroupByImpl::computeUnsequentialProcessingMetadata(aggregates, {variable})

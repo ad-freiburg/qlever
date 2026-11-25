@@ -99,9 +99,10 @@ class BlankNodeExpression : public SparqlExpression {
   static IdOrLocalVocabEntry makeBlankNode(std::string_view label,
                                            uint64_t index,
                                            const EvaluationContext* context) {
-    return LocalVocabEntry::fromStringRepresentation(
-        absl::StrCat(QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX, "_:un", label, "_",
-                     index, ">"),
+    return toIdOrLocalVocabEntry(
+        ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
+            absl::StrCat(QLEVER_INTERNAL_BLANK_NODE_IRI_PREFIX, "_:un", label,
+                         "_", index, ">")),
         context->getLocalVocabContext());
   }
 
@@ -109,9 +110,9 @@ class BlankNodeExpression : public SparqlExpression {
   // based on the result of `getNextLabel`.
   CPP_template(typename Printable, typename Func)(
       requires ad_utility::InvocableWithConvertibleReturnType<
-          Func, std::optional<Printable>>
-          CPP_and std::is_constructible_v<absl::AlphaNum, Printable>)
-      ExpressionResult
+          Func, std::optional<Printable>> &&
+      std::is_constructible_v<absl::AlphaNum, Printable>)
+  ExpressionResult
       evaluateImpl(EvaluationContext* context, Func getNextLabel) const {
     VectorWithMemoryLimit<IdOrLocalVocabEntry> result{context->_allocator};
     const size_t numElements = context->size();
@@ -173,8 +174,12 @@ class BlankNodeExpression : public SparqlExpression {
                 [it = generator.begin(), &generator,
                  context]() mutable -> std::optional<std::string> {
                   AD_CORRECTNESS_CHECK(it != generator.end());
+                  // Named, because `*it` is a prvalue for a split column (see
+                  // `resultGeneratorImpl`) and moving a prvalue prevents copy
+                  // elision.
+                  decltype(auto) input = *it;
                   const auto& value =
-                      StringValueGetter{}(std::move(*it), context);
+                      StringValueGetter{}(std::move(input), context);
                   ++it;
                   if (!value.has_value()) {
                     return std::nullopt;

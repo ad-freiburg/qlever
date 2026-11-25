@@ -6,12 +6,12 @@
 #define QLEVER_SRC_ENGINE_JOINWITHINDEXSCANHELPERS_H
 
 #include "engine/AddCombinedRowToTable.h"
-#include "engine/IndexScan.h"
 #include "engine/Result.h"
+#include "engine/operation/IndexScan.h"
 #include "index/CompressedRelationReader.h"
 #include "util/Iterators.h"
-#include "util/JoinAlgorithms/JoinAlgorithms.h"
-#include "util/JoinAlgorithms/JoinColumnMapping.h"
+#include "util/joinAlgorithms/JoinAlgorithms.h"
+#include "util/joinAlgorithms/JoinColumnMapping.h"
 
 namespace qlever::joinWithIndexScanHelpers {
 

@@ -11,18 +11,14 @@
 
 #include "backports/algorithm.h"
 #include "global/Id.h"
+#include "global/ValueIdComparison.h"
 #include "util/Algorithm.h"
+#include "util/Log.h"
 #include "util/OverloadCallOperator.h"
 
 namespace valueIdComparators {
-// This enum encodes the different numeric comparators LessThan, LessEqual,
-// Equal, NotEqual, GreaterEqual, GreaterThan.
-enum struct Comparison { LT, LE, EQ, NE, GE, GT };
-
-// The result of the comparisons is actually ternary because we sometimes
-// distinguish between "false" and "type mismatch" (see the comment directly
-// above for details).
-enum struct ComparisonResult { False, True, Undef };
+// `Comparison` and `ComparisonResult` are defined in
+// `global/ValueIdComparison.h`.
 
 // Convert the comparison result to a boolean value, assuming that it is not
 // `Undef`.
@@ -388,6 +384,12 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForId(
     case Datatype::Date:
     case Datatype::GeoPoint:
     case Datatype::BlankNodeIndex:
+    // A `TripleTermIndex` is compared by its bits, which is correct for the
+    // equality as long as there are no query-local triple terms. The order
+    // comparisons also use the bit order for now.
+    // TODO<Prashanth0703> Determine the correct semantic ordering of triple
+    // terms.
+    case Datatype::TripleTermIndex:
       // TODO<joka921> The same caveat as for `EncodedVal` above applies to the
       // `SecondaryVocabIndex` type: the comparison via bits is only correct for
       // equality, because the words of a secondary vocabulary are all sorted
@@ -471,9 +473,7 @@ inline bool areTypesCompatible(Datatype typeA, Datatype typeB) {
 // 1. Comparing an `Id` of type `EncodedVal` to a word of one of the
 //    vocabularies is not correct either, not even for equality, because an
 //    encoded IRI is ordered by its encoding and not by its string value, see
-//    issue #2448. The same holds for an `Id` of type `LocalVocabIndex` whose
-//    word is an encoded IRI: it is not even consistently ordered with respect
-//    to the *internal* order, see the note at `ValueId::compareThreeWay`.
+//    issue #2448.
 // 2. Comparing literals with different datatypes blurs the distinction between
 //    `sameTerm` and `=`, which is also why `!(A = B)` and `A != B` currently
 //    behave differently, see issue #2405.

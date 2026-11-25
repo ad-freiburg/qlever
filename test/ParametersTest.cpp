@@ -10,8 +10,8 @@
 
 #include <gmock/gmock.h>
 
-#include "util/MemorySize/MemorySize.h"
 #include "util/Parameters.h"
+#include "util/memorySize/MemorySize.h"
 
 using namespace ad_utility;
 using namespace memory_literals;
@@ -64,6 +64,27 @@ TEST(Parameter, verifyParameterConstraint) {
 
   EXPECT_THROW(parameter.set(1), std::runtime_error);
   EXPECT_EQ(parameter.get(), 0);
+}
+
+// Test that a throwing `onUpdateAction` restores the old value, and that a
+// cleared action is not triggered anymore.
+TEST(Parameter, onUpdateActionThrowIsRolledBack) {
+  Parameter<size_t, szt, toString> parameter{42, "test"};
+
+  // The value stays at 100 when the action rejects 101.
+  parameter.setOnUpdateAction([](size_t value) {
+    if (value > 100) {
+      throw std::runtime_error{"Test"};
+    }
+  });
+  EXPECT_NO_THROW(parameter.set(100));
+  EXPECT_THROW(parameter.set(101), std::runtime_error);
+  EXPECT_EQ(parameter.get(), 100);
+
+  // After clearing the action, setting the value triggers nothing.
+  parameter.clearOnUpdateAction();
+  EXPECT_NO_THROW(parameter.set(101));
+  EXPECT_EQ(parameter.get(), 101);
 }
 
 // _____________________________________________________________________________

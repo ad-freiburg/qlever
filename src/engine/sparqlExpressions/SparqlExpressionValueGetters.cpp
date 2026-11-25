@@ -6,16 +6,18 @@
 
 #include <absl/strings/str_format.h>
 
+#include <ctre-unicode.hpp>
+
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/type_traits.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "index/ExportIds.h"
-#include "parser/LiteralOrIri.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/Literal.h"
+#include "rdfTypes/LiteralOrIri.h"
 #include "util/ParsedUri.h"
 
 using namespace sparqlExpression::detail;
@@ -81,6 +83,7 @@ NumericValue NumericValueGetter::operator()(
     case Datatype::WordVocabIndex:
     case Datatype::Date:
     case Datatype::GeoPoint:
+    case Datatype::TripleTermIndex:
     case Datatype::BlankNodeIndex:
     case Datatype::SecondaryVocabIndex:
       return NotNumeric{};
@@ -108,6 +111,7 @@ NumericOrDateValue NumericOrDateValueGetter::operator()(
     case Datatype::Date:
       return id.getDate();
     case Datatype::GeoPoint:
+    case Datatype::TripleTermIndex:
     case Datatype::BlankNodeIndex:
     case Datatype::SecondaryVocabIndex:
       return NotNumeric{};
@@ -128,6 +132,10 @@ auto EffectiveBooleanValueGetter::operator()(
       return (id.getInt() != 0) ? True : False;
     case Datatype::Bool:
       return id.getBool() ? True : False;
+    case Datatype::TripleTermIndex:
+      // SPARQL 1.2 section 17.2.3: EBV of a non-literal is an error.
+      // `Undef` represents that error, not an unbound triple term.
+      return Undef;
     case Datatype::Undefined:
     case Datatype::BlankNodeIndex:
       return Undef;
@@ -223,34 +231,40 @@ std::optional<std::string> ReplacementStringGetter::operator()(
   return convertToReplacementString(s.getContent());
 }
 
+// Each token of a replacement string is either literal text, an escaped `\` or
+// `$`, or a reference to a group (with all the digits that follow the `$`).
+// Regex pattern at namespace scope for C++17 compatibility.
+namespace {
+constexpr ctll::fixed_string replacementTokenRegex =
+    "[^\\\\$]+|\\\\[\\\\$]|\\$[0-9]+";
+}  // namespace
+
 // ____________________________________________________________________________
-std::string ReplacementStringGetter::convertToReplacementString(
+std::optional<std::string> ReplacementStringGetter::convertToReplacementString(
     std::string_view view) {
   std::string result;
   // Rough estimate of the size of the result string.
   result.reserve(view.size());
-  for (size_t i = 0; i < view.size(); i++) {
-    char c = view.at(i);
-    switch (c) {
-      case '$':
-        // Re2 used \1, \2, ... for backreferences, so we change $ to \.
-        result.push_back('\\');
-        break;
-      case '\\':
-        // "\$" is unescaped to "$"
-        if (i + 1 < view.size() && view.at(i + 1) == '$') {
-          result.push_back('$');
-          i++;
-        } else {
-          // Escape existing backslashes.
-          result.push_back(c);
-          result.push_back(c);
-        }
-        break;
-      default:
-        result.push_back(c);
-        break;
+  size_t numConsumed = 0;
+  for (auto match : ctre::tokenize<replacementTokenRegex>(view)) {
+    std::string_view token = match.to_view();
+    numConsumed += token.size();
+    if (token == "\\$") {
+      // A literal dollar needs no escaping in RE2.
+      result.push_back('$');
+    } else if (token.front() == '$') {
+      // Re2 uses `\N` instead of `$N` to refer to a group.
+      result.push_back('\\');
+      result.append(token.substr(1));
+    } else {
+      // Literal text, or `\\`, which is a literal backslash in RE2 too.
+      result.append(token);
     }
+  }
+  // `ctre::tokenize` stops at the first position where no token starts, so
+  // the replacement string is valid iff all of it was consumed.
+  if (numConsumed != view.size()) {
+    return std::nullopt;
   }
   return result;
 }
@@ -283,6 +297,10 @@ Id IsSomethingValueGetter<isSomethingFunction, prefix>::operator()(
     case Datatype::Date:
     case Datatype::GeoPoint:
       return Id::makeFromBool(prefix == isLiteralPrefix);
+    case Datatype::TripleTermIndex:
+      // A triple term is neither an IRI nor a literal (SPARQL 1.2 sections
+      // 17.4.2.3 and 17.4.2.5).
+      return Id::makeFromBool(false);
     case Datatype::TextRecordIndex:
     case Datatype::WordVocabIndex:
     case Datatype::BlankNodeIndex:
@@ -319,6 +337,9 @@ bool IsValidValueGetter::operator()(
 IntDoubleStr ToNumericValueGetter::operator()(
     ValueId id, [[maybe_unused]] const EvaluationContext* context) const {
   switch (id.getDatatype()) {
+    // A triple term cannot be cast to a numeric or boolean literal, the
+    // `monostate` becomes an undefined expression result.
+    case Datatype::TripleTermIndex:
     case Datatype::Undefined:
       return std::monostate{};
     case Datatype::Int:
@@ -380,6 +401,7 @@ OptIri DatatypeValueGetter::operator()(ValueId id,
     case SecondaryVocabIndex:
       return (*this)(getLiteralOrIri(id, context), context);
     case Undefined:
+    case TripleTermIndex:
     case BlankNodeIndex:
     case TextRecordIndex:
     case WordVocabIndex:
@@ -418,39 +440,59 @@ OptIri IriValueGetter::operator()(
 }
 
 // _____________________________________________________________________________
-UnitOfMeasurement UnitOfMeasurementValueGetter::operator()(
-    ValueId id, const EvaluationContext* context) const {
-  // Use cache to remember fully parsed units for reoccurring ValueIds
+CPP_template_out_def(auto iriToValue, auto undefined)(
+    requires ad_utility::InvocableWithExactReturnType<
+        decltype(iriToValue), decltype(undefined), std::string_view>)
+decltype(undefined)
+    EnumValueGetter<CPP_sfinae_args(iriToValue, undefined)>::operator()(
+        ValueId id, const EvaluationContext * context) const {
+  // Use the cache to remember the values of reoccurring `ValueId`s.
   return cache_.getOrCompute(
-      id, [&context](const ValueId& value) -> UnitOfMeasurement {
+      id, [&context](const ValueId& value) -> decltype(undefined) {
         // Get string content of ValueId
         auto str = idToLiteralOrIri(value, context, true);
         // Use LiteralOrIri overload for actual computation
         if (str.has_value()) {
-          return UnitOfMeasurementValueGetter{}(str.value(), context);
+          return litOrIriToValue(str.value());
         }
-        return UnitOfMeasurement::UNKNOWN;
+        return undefined;
       });
 }
 
 // _____________________________________________________________________________
-UnitOfMeasurement UnitOfMeasurementValueGetter::operator()(
-    const LiteralOrIri& s, const EvaluationContext*) const {
-  return litOrIriToUnit(s);
+CPP_template_out_def(auto iriToValue, auto undefined)(
+    requires ad_utility::InvocableWithExactReturnType<
+        decltype(iriToValue), decltype(undefined), std::string_view>)
+decltype(undefined)
+    EnumValueGetter<CPP_sfinae_args(iriToValue, undefined)>::operator()(
+        const LiteralOrIri & s, const EvaluationContext*) const {
+  return litOrIriToValue(s);
 }
 
 // _____________________________________________________________________________
-UnitOfMeasurement UnitOfMeasurementValueGetter::litOrIriToUnit(
-    const LiteralOrIri& s) {
+CPP_template_out_def(auto iriToValue, auto undefined)(
+    requires ad_utility::InvocableWithExactReturnType<
+        decltype(iriToValue), decltype(undefined), std::string_view>)
+decltype(undefined)
+    EnumValueGetter<CPP_sfinae_args(iriToValue, undefined)>::litOrIriToValue(
+        const LiteralOrIri& s) {
   // The GeoSPARQL standard requires literals of datatype xsd:anyURI for units
-  // of measurement. Because this is a rather obscure requirement, we support
-  // IRIs also.
+  // of measurement and CRS types. Because this is a rather obscure requirement,
+  // we support IRIs also.
   if (s.isIri() || (s.isLiteral() && s.getLiteral().hasDatatype() &&
                     s.getLiteral().getDatatype() == XSD_ANYURI_TYPE)) {
-    return ad_utility::detail::iriToUnitOfMeasurement(s.getContent());
+    return iriToValue(s.getContent());
   }
-  return UnitOfMeasurement::UNKNOWN;
+  return undefined;
 }
+
+// Explicit instantiations of the two `EnumValueGetter`s, see the header.
+namespace sparqlExpression::detail {
+template struct EnumValueGetter<&ad_utility::detail::iriToUnitOfMeasurement,
+                                UnitOfMeasurement::UNKNOWN>;
+template struct EnumValueGetter<&ad_utility::SourceCrsType::iriToCrsType,
+                                ad_utility::crsTypeUnsupported>;
+}  // namespace sparqlExpression::detail
 
 //______________________________________________________________________________
 std::optional<ad_utility::GeoPointOrWkt> GeoPointOrWktValueGetter::operator()(
@@ -472,6 +514,7 @@ std::optional<ad_utility::GeoPointOrWkt> GeoPointOrWktValueGetter::operator()(
     case Undefined:
     case TextRecordIndex:
     case WordVocabIndex:
+    case TripleTermIndex:
     case BlankNodeIndex:
     case EncodedVal:
       return std::nullopt;
@@ -492,10 +535,10 @@ std::optional<ad_utility::GeoPointOrWkt> GeoPointOrWktValueGetter::operator()(
 
 //______________________________________________________________________________
 CPP_template(typename T, typename ValueGetter)(
-    requires(concepts::same_as<sparqlExpression::IdOrLocalVocabEntry, T> ||
-             concepts::same_as<std::optional<std::string>, T>)) T
-    getValue(ValueId id, const sparqlExpression::EvaluationContext* context,
-             ValueGetter& valueGetter) {
+    requires(concepts::same_as<sparqlExpression::IdOrLiteralOrIri, T> ||
+             concepts::same_as<std::optional<std::string>, T>))
+T getValue(ValueId id, const sparqlExpression::EvaluationContext* context,
+           ValueGetter& valueGetter) {
   using enum Datatype;
   switch (id.getDatatype()) {
     case LocalVocabIndex:
@@ -505,6 +548,7 @@ CPP_template(typename T, typename ValueGetter)(
       return valueGetter(getLiteralOrIri(id, context), context);
     case TextRecordIndex:
     case WordVocabIndex:
+    case TripleTermIndex:
     case BlankNodeIndex:
     case Bool:
     case Int:
@@ -512,7 +556,7 @@ CPP_template(typename T, typename ValueGetter)(
     case Date:
     case GeoPoint:
     case Undefined:
-      if constexpr (std::is_same_v<T, sparqlExpression::IdOrLocalVocabEntry>) {
+      if constexpr (std::is_same_v<T, sparqlExpression::IdOrLiteralOrIri>) {
         return Id::makeUndefined();
       } else {
         return std::nullopt;
@@ -522,9 +566,9 @@ CPP_template(typename T, typename ValueGetter)(
 }
 
 //_____________________________________________________________________________
-sparqlExpression::IdOrLocalVocabEntry IriOrUriValueGetter::operator()(
+sparqlExpression::IdOrLiteralOrIri IriOrUriValueGetter::operator()(
     ValueId id, const EvaluationContext* context) const {
-  return getValue<sparqlExpression::IdOrLocalVocabEntry>(id, context, *this);
+  return getValue<sparqlExpression::IdOrLiteralOrIri>(id, context, *this);
 }
 
 //______________________________________________________________________________
@@ -546,6 +590,7 @@ std::optional<std::string> LanguageTagValueGetter::operator()(
     case LocalVocabIndex:
     case TextRecordIndex:
     case WordVocabIndex:
+    case TripleTermIndex:
     case BlankNodeIndex:
     case SecondaryVocabIndex:
       return getValue<std::optional<std::string>>(id, context, *this);
@@ -554,13 +599,12 @@ std::optional<std::string> LanguageTagValueGetter::operator()(
 }
 
 //______________________________________________________________________________
-sparqlExpression::IdOrLocalVocabEntry IriOrUriValueGetter::operator()(
-    const LiteralOrIri& litOrIri, const EvaluationContext* context) const {
-  return LocalVocabEntry{
-      LiteralOrIri{litOrIri.isIri() ? litOrIri.getIri()
-                                    : Iri::fromIrirefWithoutBrackets(
-                                          litOrIri.getLiteral().getContent())},
-      context->getLocalVocabContext()};
+sparqlExpression::IdOrLiteralOrIri IriOrUriValueGetter::operator()(
+    const LiteralOrIri& litOrIri, const EvaluationContext*) const {
+  return LiteralOrIri{
+      litOrIri.isIri()
+          ? litOrIri.getIri()
+          : Iri::fromIrirefWithoutBrackets(litOrIri.getLiteral().getContent())};
 }
 
 //______________________________________________________________________________
@@ -630,6 +674,7 @@ std::optional<RequestedInfo> GeometryInfoValueGetter<CPP_sfinae_args(
           .getRequestedInfo<RequestedInfo>();
     case TextRecordIndex:
     case WordVocabIndex:
+    case TripleTermIndex:
     case BlankNodeIndex:
     case Bool:
     case Int:
@@ -670,6 +715,11 @@ template struct GeometryInfoValueGetter<ad_utility::NumGeometries>;
 template struct GeometryInfoValueGetter<ad_utility::MetricLength>;
 template struct GeometryInfoValueGetter<ad_utility::MetricArea>;
 template struct GeometryInfoValueGetter<ad_utility::SerializationType>;
+template struct GeometryInfoValueGetter<ad_utility::GeometryStoreId>;
+template struct GeometryInfoValueGetter<
+    ad_utility::WithSourceCrs<ad_utility::Centroid>>;
+template struct GeometryInfoValueGetter<
+    ad_utility::WithSourceCrs<ad_utility::BoundingBox>>;
 }  // namespace sparqlExpression::detail
 
 //______________________________________________________________________________
@@ -729,6 +779,7 @@ template struct TypeErasedValueGetter<ToNumericValueGetter>;
 template struct TypeErasedValueGetter<DatatypeValueGetter>;
 template struct TypeErasedValueGetter<IriValueGetter>;
 template struct TypeErasedValueGetter<UnitOfMeasurementValueGetter>;
+template struct TypeErasedValueGetter<CRSTypeValueGetter>;
 template struct TypeErasedValueGetter<GeoPointOrWktValueGetter>;
 template struct TypeErasedValueGetter<LanguageTagValueGetter>;
 template struct TypeErasedValueGetter<IriOrUriValueGetter>;
@@ -751,6 +802,12 @@ template struct TypeErasedValueGetter<
     GeometryInfoValueGetter<ad_utility::MetricArea>>;
 template struct TypeErasedValueGetter<
     GeometryInfoValueGetter<ad_utility::SerializationType>>;
+template struct TypeErasedValueGetter<
+    GeometryInfoValueGetter<ad_utility::GeometryStoreId>>;
+template struct TypeErasedValueGetter<
+    GeometryInfoValueGetter<ad_utility::WithSourceCrs<ad_utility::Centroid>>>;
+template struct TypeErasedValueGetter<GeometryInfoValueGetter<
+    ad_utility::WithSourceCrs<ad_utility::BoundingBox>>>;
 template struct TypeErasedValueGetter<StringOrDateGetter>;
 template struct TypeErasedValueGetter<IntValueGetter>;
 template struct TypeErasedValueGetter<RegexValueGetter>;

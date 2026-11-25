@@ -17,6 +17,7 @@
 #include <utility>
 
 #include "backports/algorithm.h"
+#include "backports/shift.h"
 #include "util/GlobalExecutor.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
@@ -25,6 +26,31 @@
 #include "util/views/AsyncTransformView.h"
 
 namespace ad_utility {
+
+// Remove the consecutive duplicates from the sorted `block`, also those that
+// are equal to `lastOfPrevious`, the last element of the block before it (if
+// any). This is the work that `uniqueBlockView` (see below) performs for a
+// single block; it is also used directly by consumers that are handed the
+// blocks one by one instead of as a range (for example
+// `chunkwisePermutationWriter::ChunkWriter`).
+template <typename Block, typename Value>
+void removeDuplicatesFromBlock(Block& block,
+                               const std::optional<Value>& lastOfPrevious) {
+  auto beg =
+      lastOfPrevious.has_value()
+          ? ql::ranges::find_if(block, [&p = lastOfPrevious.value()](
+                                           const auto& el) { return el != p; })
+          : block.begin();
+  // Move the remaining elements to the front and deduplicate them there, so
+  // that a single `erase` at the end (which is cheap) suffices. If all
+  // elements are duplicates of `lastOfPrevious`, then `shiftedEnd` is the
+  // `begin()` of the `block`.
+  auto shiftedEnd =
+      beg == block.begin()
+          ? block.end()
+          : ql::shift_left(block.begin(), block.end(), beg - block.begin());
+  block.erase(std::unique(block.begin(), shiftedEnd), block.end());
+}
 
 // The default number of blocks that `uniqueBlockView` (see below) hands to the
 // global thread pool at the same time. Removing the duplicates from a block is
@@ -96,13 +122,7 @@ uniqueBlockView(
   // single block, given the last value of the block before it (if any).
   auto deduplicate = [](std::pair<Block, std::optional<Value>> blockAndLast) {
     auto& [block, lastOfPrevious] = blockAndLast;
-    auto beg = lastOfPrevious.has_value()
-                   ? ql::ranges::find_if(
-                         block, [&p = lastOfPrevious.value()](
-                                    const auto& el) { return el != p; })
-                   : block.begin();
-    block.erase(std::unique(beg, block.end()), block.end());
-    block.erase(block.begin(), beg);
+    removeDuplicatesFromBlock(block, lastOfPrevious);
     return std::move(block);
   };
   // NOTE: The `AsyncTransformView` can't be moved, so it is stored on the heap.

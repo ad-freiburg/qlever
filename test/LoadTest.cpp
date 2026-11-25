@@ -9,14 +9,15 @@
 
 #include "DeltaTriplesTestHelpers.h"
 #include "engine/ExecuteUpdate.h"
-#include "engine/Load.h"
 #include "engine/QueryPlanner.h"
+#include "engine/operation/Load.h"
 #include "index/TripleComponentConversions.h"
 #include "parser/SparqlParser.h"
 #include "util/GTestHelpers.h"
 #include "util/HttpClientTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
+#include "util/LocalVocabEntryTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 #include "util/RuntimeParametersTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
@@ -160,10 +161,11 @@ TEST_F(LoadTest, computeResult) {
               ASSERT_THAT(field.isLiteral() || field.isIri(),
                           testing::IsTrue());
               using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
-              auto lveOpt = lv.getIndexOrNullopt(LocalVocabEntry{
-                  field.isLiteral() ? LiteralOrIri{field.getLiteral()}
-                                    : LiteralOrIri{field.getIri()},
-                  testQec->getLocalVocabContext()});
+              auto lveOpt =
+                  lv.getIndexOrNullopt(ad_utility::testing::localVocabEntry(
+                      field.isLiteral() ? LiteralOrIri{field.getLiteral()}
+                                        : LiteralOrIri{field.getIri()},
+                      testQec->getLocalVocabContext()));
               ASSERT_THAT(lveOpt, testing::Not(testing::Eq(std::nullopt)));
               idOpt = Id::makeFromLocalVocabIndex(lveOpt.value());
             }
@@ -354,7 +356,7 @@ TEST_F(LoadTest, clone) {
 TEST_F(LoadTest, Integration) {
   auto parsedUpdate = SparqlParser::parseUpdate(
       &blankNodeManager_, &testQec->getIndex().encodedIriManager(),
-      "LOAD <https://mundhahs.dev>");
+      testQec->getAllocator(), "LOAD <https://mundhahs.dev>");
   ASSERT_THAT(parsedUpdate, testing::SizeIs(1));
   auto qec =
       ad_utility::testing::getQec(ad_utility::testing::TestIndexConfig{});
@@ -379,7 +381,7 @@ TEST_F(LoadTest, Integration) {
 TEST_F(LoadTest, IntegrationWithBlankNodes) {
   auto parsedUpdate = SparqlParser::parseUpdate(
       &blankNodeManager_, &testQec->getIndex().encodedIriManager(),
-      "LOAD <https://mundhahs.dev>");
+      testQec->getAllocator(), "LOAD <https://mundhahs.dev>");
   ASSERT_THAT(parsedUpdate, testing::SizeIs(1));
   auto qec =
       ad_utility::testing::getQec(ad_utility::testing::TestIndexConfig{});

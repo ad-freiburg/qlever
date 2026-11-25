@@ -65,8 +65,9 @@ CPP_concept ValueAsNumericId =
 // Convert a numeric value (either a plain number, or the `NumericValue` variant
 // from above) into an `ID`. When `NanOrInfToUndef` is `true` then floating
 // point `NaN` or `+-infinity` values will become `Id::makeUndefined()`.
-CPP_template(bool NanOrInfToUndef = false,
-             typename T)(requires ValueAsNumericId<T>) Id makeNumericId(T t) {
+CPP_template(bool NanOrInfToUndef = false, typename T)(
+    requires ValueAsNumericId<T>)
+Id makeNumericId(T t) {
   if constexpr (concepts::integral<T>) {
     return Id::makeFromInt(t);
   } else if constexpr (ql::concepts::floating_point<T> && NanOrInfToUndef) {
@@ -328,10 +329,18 @@ struct LiteralFromIdGetter : Mixin<LiteralFromIdGetter> {
   }
 };
 
-// Similar to `LiteralFromIdGetter`, but correctly preprocesses strings so that
-// they can be used by re2 as replacement strings. So '$1 \abc \$' becomes
-// '\1 \\abc $', where the former variant is valid in the SPARQL standard and
-// the latter represents the format that re2 expects.
+// Similar to `LiteralFromIdGetter`, but converts the replacement string of
+// `fn:replace` into the rewrite string that RE2 expects. So '$1 \\ \$' becomes
+// '\1 \\ $'. Return `std::nullopt` if the replacement string is invalid (error
+// `FORX0004` in the XPath standard).
+//
+// NOTE 1: A replacement string is invalid if it contains a `$` that is neither
+// escaped nor followed by a digit, or a `\` that is not part of `\\` or `\$`.
+//
+// NOTE 2: A reference keeps all the digits that follow the `$`, so the result
+// is not yet a valid rewrite string if these are more than one. Which of them
+// belong to the group number depends on the pattern (see
+// `adaptRewriteToPattern` in `ReplaceExpression.cpp`).
 struct ReplacementStringGetter : Mixin<ReplacementStringGetter> {
   using Value = std::optional<std::string>;
   using Mixin<ReplacementStringGetter>::operator();
@@ -342,7 +351,8 @@ struct ReplacementStringGetter : Mixin<ReplacementStringGetter> {
                                         const EvaluationContext*) const;
 
  private:
-  static std::string convertToReplacementString(std::string_view view);
+  static std::optional<std::string> convertToReplacementString(
+      std::string_view view);
 };
 
 // Convert the input into a `shared_ptr<RE2>`. Return nullptr if the input is
@@ -389,8 +399,8 @@ struct DatatypeValueGetter : Mixin<DatatypeValueGetter> {
 // `IriValueGetter` returns an
 // `std::optional<ad_utility::triple_component::Iri>` object. If the
 // `LiteralOrIri` object contains an `Iri`, the Iri is returned. This
-// ValueGetter is currently used in `StringExpressions.cpp` within the
-// implementation of `STRDT()`.
+// ValueGetter is currently used in `StrLangAndStrDtExpressions.cpp` within
+// the implementation of `STRDT()`.
 struct IriValueGetter : Mixin<IriValueGetter> {
   using Value = OptIri;
   using Mixin<IriValueGetter>::operator();
@@ -401,23 +411,37 @@ struct IriValueGetter : Mixin<IriValueGetter> {
   OptIri operator()(const LiteralOrIri& s, const EvaluationContext*) const;
 };
 
-// `UnitOfMeasurementValueGetter` returns a `UnitOfMeasurement`.
-struct UnitOfMeasurementValueGetter : Mixin<UnitOfMeasurementValueGetter> {
-  // Set the size of this cache to at least the number of supported units.
-  mutable ad_utility::util::LRUCache<ValueId, UnitOfMeasurement> cache_{10};
-  using Value = UnitOfMeasurement;
-  using Mixin<UnitOfMeasurementValueGetter>::operator();
-  UnitOfMeasurement operator()(ValueId id, const EvaluationContext*) const;
-  UnitOfMeasurement operator()(const LiteralOrIri& s,
-                               const EvaluationContext*) const;
+// `EnumValueGetter` turns an IRI, or a literal of datatype `xsd:anyURI`, into
+// a value of an enum via the function `iriToValue` (which takes the IRI
+// without brackets). Everything else, including unknown IRIs, becomes the enum
+// value `undefined`. Instances are `UnitOfMeasurementValueGetter` and
+// `CRSTypeValueGetter` below.
+CPP_template(auto iriToValue, auto undefined)(
+    requires ad_utility::InvocableWithExactReturnType<
+        decltype(iriToValue), decltype(undefined), std::string_view>)
+struct EnumValueGetter : Mixin<EnumValueGetter<iriToValue, undefined>> {
+  using Value = decltype(undefined);
+  // Cache for the ID path. Its size must be at least twice the number of
+  // values of the enum (each value has an IRI and a literal form), 32 covers
+  // both instances.
+  mutable ad_utility::util::LRUCache<ValueId, Value> cache_{32};
+  using Mixin<EnumValueGetter<iriToValue, undefined>>::operator();
+  Value operator()(ValueId id, const EvaluationContext*) const;
+  Value operator()(const LiteralOrIri& s, const EvaluationContext*) const;
 
-  // The actual implementation for a given `LiteralOrIri` which is guaranteed
-  // not to use the `EvaluationContext`. This method can be used to convert
-  // `LiteralOrIri` objects holding a unit of measurement, even when no
-  // `EvaluationContext` is available. Currently used for `geof:distance` filter
-  // substitution during query planning.
-  static UnitOfMeasurement litOrIriToUnit(const LiteralOrIri& s);
+  // The actual implementation for a given `LiteralOrIri`, which does not need
+  // an `EvaluationContext`. Used by the `geof:distance` filter substitution
+  // during query planning, where there is none.
+  static Value litOrIriToValue(const LiteralOrIri& s);
 };
+
+using UnitOfMeasurementValueGetter =
+    EnumValueGetter<&ad_utility::detail::iriToUnitOfMeasurement,
+                    UnitOfMeasurement::UNKNOWN>;
+
+using CRSTypeValueGetter =
+    EnumValueGetter<&ad_utility::SourceCrsType::iriToCrsType,
+                    ad_utility::crsTypeUnsupported>;
 
 // This value getter retrieves geometries: `GeoPoints` or literals with
 // `geo:wktLiteral` datatype.
@@ -458,12 +482,12 @@ struct LanguageTagValueGetter : Mixin<LanguageTagValueGetter> {
 
 // Value getter for implementing the expressions `IRI()`/`URI()`.
 struct IriOrUriValueGetter : Mixin<IriOrUriValueGetter> {
-  using Value = IdOrLocalVocabEntry;
+  using Value = IdOrLiteralOrIri;
   using Mixin<IriOrUriValueGetter>::operator();
-  IdOrLocalVocabEntry operator()(ValueId id,
-                                 const EvaluationContext* context) const;
-  IdOrLocalVocabEntry operator()(const LiteralOrIri& litOrIri,
-                                 const EvaluationContext* context) const;
+  IdOrLiteralOrIri operator()(ValueId id,
+                              const EvaluationContext* context) const;
+  IdOrLiteralOrIri operator()(const LiteralOrIri& litOrIri,
+                              const EvaluationContext* context) const;
 };
 
 // Value getter similar to `IriOrUriValueGetter`. Parses the base IRI once so
@@ -487,9 +511,8 @@ struct ParsedUriGetter : Mixin<ParsedUriGetter> {
 // calculated, when requesting the centroid).
 
 CPP_template(typename RequestedInfo = ad_utility::GeometryInfo)(
-    requires ad_utility::RequestedInfoT<
-        RequestedInfo>) struct GeometryInfoValueGetter
-    : Mixin<GeometryInfoValueGetter<RequestedInfo>> {
+    requires ad_utility::RequestedInfoT<RequestedInfo>)
+struct GeometryInfoValueGetter : Mixin<GeometryInfoValueGetter<RequestedInfo>> {
   using Value = std::optional<RequestedInfo>;
   using Mixin<GeometryInfoValueGetter<RequestedInfo>>::operator();
   std::optional<RequestedInfo> operator()(

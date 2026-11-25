@@ -7,6 +7,7 @@
 
 #include <gtest/gtest_prod.h>
 
+#include "backports/span.h"
 #include "engine/UpdateMetadata.h"
 #include "index/Index.h"
 #include "parser/ParsedQuery.h"
@@ -32,9 +33,9 @@ class ExecuteUpdate {
   // Resolve all `TripleComponent`s and `Graph`s in a vector of
   // `SparqlTripleSimpleWithGraph` into `Variable`s or `Id`s.
   static std::pair<std::vector<ExecuteUpdate::TransformedTriple>, LocalVocab>
-  transformTriplesTemplate(
-      const IndexImpl& index, const VariableToColumnMap& variableColumns,
-      const std::vector<SparqlTripleSimpleWithGraph>& triples);
+  transformTriplesTemplate(const IndexImpl& index,
+                           const VariableToColumnMap& variableColumns,
+                           ql::span<const SparqlTripleSimpleWithGraph> triples);
   FRIEND_TEST(ExecuteUpdate, transformTriplesTemplate);
 
   // Resolve a single `IdOrVariable` to an `Id` by looking up the value in the

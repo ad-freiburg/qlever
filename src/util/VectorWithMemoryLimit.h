@@ -12,12 +12,15 @@
 #define QLEVER_SRC_UTIL_VECTORWITHMEMORYLIMIT_H
 
 #include <initializer_list>
+#include <iterator>
+#include <type_traits>
 #include <vector>
 
 #include "backports/concepts.h"
 #include "backports/keywords.h"
 #include "backports/type_traits.h"
 #include "util/AllocatorWithLimit.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/Forward.h"
 #include "util/TypeTraits.h"
 
@@ -53,13 +56,12 @@ class VectorWithMemoryLimit
   // `vector` take the allocator as a last parameter)
   // * there must be a constructor of `Base` for the given arguments.
   CPP_template(typename... Args)(
-      requires(sizeof...(Args) > 0) CPP_and CPP_NOT(
-          concepts::derived_from<ql::remove_cvref_t<ad_utility::First<Args...>>,
-                                 Base>)
-          CPP_and concepts::convertible_to<ad_utility::Last<Args...>, Allocator>
-              CPP_and concepts::constructible_from<Base, Args&&...>)
-      QL_EXPLICIT(sizeof...(Args) == 1) VectorWithMemoryLimit(Args&&... args)
-      : Base(AD_FWD(args)...) {}
+      requires(sizeof...(Args) > 0) &&
+      CPP_NOT(concepts::derived_from<
+              ql::remove_cvref_t<ad_utility::First<Args...>>, Base>) &&
+      qlm::detail::isConstructibleWithAllocator<Base, Allocator, Args...>)
+  QL_EXPLICIT(sizeof...(Args) == 1)
+  VectorWithMemoryLimit(Args&&... args) : Base(AD_FWD(args)...) {}
 
   // We have to explicitly forward the `initializer_list` constructor because it
   // for some reason is not covered by the above generic mechanism.
@@ -90,6 +92,16 @@ class VectorWithMemoryLimit
   VectorWithMemoryLimit(CloneTag, const VectorWithMemoryLimit& other)
       : Base{static_cast<const Base&>(other)} {}
 };
+
+// Deduce the element type from an iterator pair and an allocator (which may be
+// an allocator for a different element type that is convertible to the
+// allocator of the deduced element type). This allows for example
+// `... | ::ranges::to<VectorWithMemoryLimit>(allocator)`.
+template <typename It, typename A,
+          typename V = typename std::iterator_traits<It>::value_type,
+          typename = std::enable_if_t<
+              std::is_convertible_v<A, ad_utility::AllocatorWithLimit<V>>>>
+VectorWithMemoryLimit(It, It, A) -> VectorWithMemoryLimit<V>;
 
 static_assert(!ql::concepts::default_initializable<VectorWithMemoryLimit<int>>);
 static_assert(!ql::concepts::copyable<VectorWithMemoryLimit<int>>);

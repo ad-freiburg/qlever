@@ -57,6 +57,12 @@ std::string utf8ToLower(std::string_view s, const char* localeName = "");
 template <bool useICU = useICUDefault>
 std::string utf8ToUpper(std::string_view s, const char* localeName = "");
 
+// Remove all accents from a UTF-8 string, e.g. "Café" becomes "Cafe". This
+// decomposes `s` (NFD), drops all nonspacing marks (Unicode category `Mn`) and
+// recomposes the result (NFC). If `useICU == false`, `s` is returned unchanged.
+template <bool useICU = useICUDefault>
+std::string removeAccentsUtf8(std::string_view s);
+
 /**
  * Get the substring from the UTF8-encoded str that starts at the start-th
  * codepoint as has a length of size codepoints. If start >= the number of
@@ -119,17 +125,16 @@ streams.
 of the range elements.
 */
 CPP_template(typename Range)(
-    requires ql::ranges::input_range<Range> CPP_and
-        ad_utility::Streamable<ql::iter_reference_t<ql::ranges::iterator_t<
-            Range>>>) void lazyStrJoin(std::ostream* stream, Range&& r,
-                                       std::string_view separator);
+    requires ql::ranges::input_range<Range> &&
+    ad_utility::Streamable<ql::iter_reference_t<ql::ranges::iterator_t<Range>>>)
+void lazyStrJoin(std::ostream* stream, Range&& r, std::string_view separator);
 
 // Similar to the overload of `lazyStrJoin` above, but the result is returned as
 // a string.
 CPP_template(typename Range)(
-    requires ql::ranges::input_range<Range> CPP_and ad_utility::Streamable<
-        ql::iter_reference_t<ql::ranges::iterator_t<Range>>>) std::string
-    lazyStrJoin(Range&& r, std::string_view separator);
+    requires ql::ranges::input_range<Range> &&
+    ad_utility::Streamable<ql::iter_reference_t<ql::ranges::iterator_t<Range>>>)
+std::string lazyStrJoin(Range&& r, std::string_view separator);
 
 /*
 @brief Adds indentation before the given string and directly after new line
@@ -205,8 +210,8 @@ inline QL_CONSTEXPR bool constantTimeEquals(std::string_view view1,
 
 // _________________________________________________________________________
 CPP_template_def(typename Range)(
-    requires ql::ranges::input_range<Range> CPP_and_def ad_utility::Streamable<
-        ql::iter_reference_t<ql::ranges::iterator_t<Range>>>)
+    requires ql::ranges::input_range<Range> &&
+    ad_utility::Streamable<ql::iter_reference_t<ql::ranges::iterator_t<Range>>>)
 void lazyStrJoin(std::ostream* stream, Range&& r, std::string_view separator) {
   auto begin = std::begin(r);
   auto end = std::end(r);
@@ -230,8 +235,8 @@ void lazyStrJoin(std::ostream* stream, Range&& r, std::string_view separator) {
 
 // _________________________________________________________________________
 CPP_template_def(typename Range)(
-    requires ql::ranges::input_range<Range> CPP_and_def ad_utility::Streamable<
-        ql::iter_reference_t<ql::ranges::iterator_t<Range>>>)
+    requires ql::ranges::input_range<Range> &&
+    ad_utility::Streamable<ql::iter_reference_t<ql::ranges::iterator_t<Range>>>)
 std::string lazyStrJoin(Range&& r, std::string_view separator) {
   std::ostringstream stream;
   lazyStrJoin(&stream, AD_FWD(r), separator);

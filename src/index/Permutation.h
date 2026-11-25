@@ -22,6 +22,7 @@
 #include "index/KeyOrder.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "util/CancellationHandle.h"
+#include "util/EnumSize.h"
 #include "util/Executor.h"
 #include "util/File.h"
 #include "util/HashSet.h"
@@ -43,6 +44,7 @@ class Permutation {
   using KeyOrder = qlever::KeyOrder;
   /// Identifiers for the six possible permutations.
   enum struct Enum { PSO, POS, SPO, SOP, OPS, OSP };
+  QLEVER_NESTED_ENUM_SIZE(Enum, 6);
   // Unfortunately there is a bug in GCC that doesn't allow use to simply use
   // `using enum`.
   static constexpr auto PSO = Enum::PSO;
@@ -113,15 +115,16 @@ class Permutation {
 
   // For a given ID for the col0, retrieve all IDs of the col1 and col2.
   // If `col1Id` is specified, only the col2 is returned for triples that
-  // additionally have the specified col1. .This is just a thin wrapper around
-  // `CompressedRelationMetaData::scan`, which reads the blocks on the
-  // `executor`.
+  // additionally have the specified col1. This is just a thin wrapper around
+  // `CompressedRelationReader::scan`, which reads the blocks on the
+  // `executor` (see there, also for the `columnSubset`).
   IdTable scan(const ScanSpecAndBlocks& scanSpecAndBlocks,
                ColumnIndicesRef additionalColumns,
                const CancellationHandle& cancellationHandle,
                const LocatedTriplesState& locatedTriplesState,
                qlever::Executor executor,
-               const LimitOffsetClause& limitOffset = {}) const;
+               const LimitOffsetClause& limitOffset = {},
+               std::optional<ColumnIndices> columnSubset = std::nullopt) const;
 
   // For a given relation, determine the `col1Id`s and their counts. This is
   // used for `computeGroupByObjectWithCount`. The `col0Id` must have metadata
@@ -183,7 +186,8 @@ class Permutation {
       ColumnIndicesRef additionalColumns,
       const CancellationHandle& cancellationHandle,
       const LocatedTriplesState& locatedTriplesState, qlever::Executor executor,
-      const LimitOffsetClause& limitOffset = {}) const;
+      const LimitOffsetClause& limitOffset = {},
+      std::optional<ColumnIndices> columnSubset = std::nullopt) const;
 
   // A lazy scan together with the independent `CompressedRelationReader` it
   // reads from. The `reader_` owns the file handle and allocator that `blocks_`
@@ -225,10 +229,12 @@ class Permutation {
 
   // Get the exact size of the result of a scan, taking into account the
   // given located triples. This requires an exact location of the delta
-  // triples within the respective blocks.
+  // triples within the respective blocks (see
+  // `CompressedRelationReader::getResultSizeOfScan`).
   size_t getResultSizeOfScan(
       const ScanSpecAndBlocks& scanSpecAndBlocks,
-      const LocatedTriplesState& locatedTriplesState) const;
+      const LocatedTriplesState& locatedTriplesState,
+      const CancellationHandle& cancellationHandle) const;
 
   // Get a lower and upper bound for the size of the result of a scan, taking
   // into account the given `deltaTriples`. For this call, it is enough that
@@ -302,6 +308,13 @@ class Permutation {
       ColumnIndex col) const;
 
  private:
+  // Throw a `std::runtime_error` that names this permutation if it was not
+  // loaded (see `loadFromDisk`), for example for a `Qlever` instance that was
+  // loaded from a blob of the named result cache. Called by the entry points
+  // of the scans, so that such queries fail with a readable message instead of
+  // an assertion deep inside the scan.
+  void throwIfNotLoaded() const;
+
   // Common implementation of the two `lazyScan` overloads above. Performs the
   // scan through the given `reader`, which may either be this permutation's
   // shared reader or an independently created one.
@@ -312,7 +325,8 @@ class Permutation {
       ColumnIndicesRef additionalColumns,
       const CancellationHandle& cancellationHandle,
       const LocatedTriplesState& locatedTriplesState, qlever::Executor executor,
-      const LimitOffsetClause& limitOffset) const;
+      const LimitOffsetClause& limitOffset,
+      std::optional<ColumnIndices> columnSubset) const;
 
   // The base filename of the permutation without the suffix below
   std::string onDiskBase_;

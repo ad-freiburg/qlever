@@ -33,8 +33,8 @@
 #include "util/HashMap.h"
 #include "util/NoCopyNoMove.h"
 #include "util/RegexSet.h"
-#include "util/Serializer/Serializer.h"
 #include "util/TypeTraits.h"
+#include "util/serializer/Serializer.h"
 
 // Return true if `word` is a blank node. A word is a blank node if it starts
 // with `_:`, or, when `blankNodeIriRegexes` is given, if it is an IRI that is
@@ -110,21 +110,22 @@ using Triple =
 
 // The index of a word within a partial vocabulary and the corresponding bool
 // that indicates if it belongs to the external vocabulary.
-// The `isExternal` bool is encoded in the most significant bit of the id which
-// can never be used anyway because this is occupied by the datatype bits of the
-// final `Id`.
+// The `isExternal` bool is encoded in the most significant bit, so that both
+// fit into a single 64-bit integer. For the `FoldedValueId`, this bit is one of
+// the datatype bits, for the `SplitLayoutId` it is the highest bit of the
+// payload.
 class PartialVocabIndexWithExternalFlag {
   uint64_t encodedIndex_;
 
  public:
   PartialVocabIndexWithExternalFlag(uint64_t index, bool isExternal)
       : encodedIndex_{(uint64_t(isExternal) << 63) | index} {
-    // The top four bits of any partial-vocab index must be zero: in the final
-    // `Id` they are occupied by the datatype tag (see `ValueId::numDataBits`).
-    // This guard catches future regressions that funnel a tagged value or an
-    // underflowed counter through here, which would otherwise silently
-    // collide with the `isExternal` bit and corrupt the vocabulary mapping.
-    AD_EXPENSIVE_CHECK(index < (uint64_t{1} << ValueId::numDataBits));
+    // The `index` must not collide with the `isExternal` bit. For the
+    // `FoldedValueId`, it must not reach the datatype bits
+    // (`ValueId::maxIndex`), for the `SplitLayoutId` it must not use the
+    // highest bit of the payload.
+    AD_EXPENSIVE_CHECK(index <= std::min<uint64_t>(ValueId::maxIndex,
+                                                   (uint64_t{1} << 63) - 1));
   }
 
   PartialVocabIndexWithExternalFlag() = default;
@@ -201,13 +202,13 @@ struct ItemMapAndBuffer : public ad_utility::NoCopyNoMove {
   // Remove all the entries and deallocate all the strings, but keep the hash
   // map's memory for the next partial vocabulary.
   //
-  // NOTE: `erase(begin(), end())` is deliberately not `clear()`, which
-  // deallocates the backing array for all but very small maps (see
-  // `ClearBackingArray` in `absl/container/internal/raw_hash_set.cc`).
+  // NOTE: `clear()` keeps the table of the hash map for all the
+  // implementations that `ItemMap` can have (the Boost containers, and the
+  // `std` containers of libstdc++ and libc++), see the test
+  // `HashContainersWithAllocator.clearKeepsTable`. This is not the case for
+  // the Abseil containers.
   void clear() {
-    // The above holds for the Abseil hash maps only.
-    static_assert(ad_utility::isInstantiation<ItemMap, absl::flat_hash_map>);
-    map_.erase(map_.begin(), map_.end());
+    map_.clear();
     buffer_.clear();
   }
 };

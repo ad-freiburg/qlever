@@ -11,6 +11,10 @@
 
 #include "engine/spatialJoinAlgorithms/SpatialJoinAlgorithmBase.h"
 
+#include <absl/strings/str_cat.h>
+
+#include "util/ContainersWithAllocator.h"
+
 // ____________________________________________________________________________
 SpatialJoinAlgorithmBase::SpatialJoinAlgorithmBase(
     QueryExecutionContext* qec, PreparedSpatialJoinParams params,
@@ -33,7 +37,7 @@ void SpatialJoinAlgorithmBase::addResultTableEntry(
   // columns given in `sourceColumns`.
   auto addColumns = [&resrow, &rescol, &result](
                         const IdTableView<0>* copyFrom, size_t rowIndCopy,
-                        const std::vector<ColumnIndex>& sourceColumns) {
+                        const qlm::vector<ColumnIndex>& sourceColumns) {
     for (size_t col : sourceColumns) {
       result->at(resrow, rescol) = copyFrom->at(rowIndCopy, col);
       ++rescol;
@@ -74,4 +78,27 @@ std::optional<GeoPoint> SpatialJoinAlgorithmBase::getPoint(
   return id.getDatatype() == Datatype::GeoPoint
              ? std::optional{id.getGeoPoint()}
              : std::nullopt;
+}
+
+// ____________________________________________________________________________
+void SpatialJoinAlgorithmBase::addSkippedRowsWarning(
+    size_t numSkippedLeft, size_t numSkippedRight,
+    std::string_view reason) const {
+  if (!spatialJoin_.has_value()) {
+    return;
+  }
+  std::string counts;
+  if (numSkippedLeft > 0) {
+    absl::StrAppend(&counts, config_.left_.name(), ": ", numSkippedLeft);
+  }
+  if (numSkippedRight > 0) {
+    absl::StrAppend(&counts, counts.empty() ? "" : ", ", config_.right_.name(),
+                    ": ", numSkippedRight);
+  }
+  if (counts.empty()) {
+    return;
+  }
+  spatialJoin_.value()->addWarning(
+      absl::StrCat(spatialJoin_.value()->getDescriptor(),
+                   ": skipped rows with ", reason, " (", counts, ")"));
 }

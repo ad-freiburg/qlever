@@ -22,8 +22,8 @@ Currently not written with support for dynamically-allocated array of objects
 in mind, so that may not work.
 */
 CPP_template(typename T, typename Deleter = std::default_delete<T>)(
-    requires std::is_copy_constructible_v<T>) class CopyableUniquePtr
-    : public std::unique_ptr<T, Deleter> {
+    requires std::is_copy_constructible_v<T>)
+class CopyableUniquePtr : public std::unique_ptr<T, Deleter> {
   // This makes calling functions, etc. from the base class so much easier.
   using Base = std::unique_ptr<T, Deleter>;
 
