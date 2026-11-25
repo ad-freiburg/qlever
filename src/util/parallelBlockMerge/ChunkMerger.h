@@ -22,8 +22,8 @@
 #include "util/Exception.h"
 #include "util/Forward.h"
 #include "util/Iterators.h"
-#include "util/MemorySize/MemorySize.h"
 #include "util/NoCopyNoMove.h"
+#include "util/memorySize/MemorySize.h"
 #include "util/parallelBlockMerge/MergeHelpers.h"
 #include "util/parallelBlockMerge/MergeOptions.h"
 #include "util/parallelBlockMerge/RunsInputPolicy.h"
@@ -85,9 +85,9 @@ struct MergeState {
 // If `moveElements` is `true`, then the elements are moved out of the input
 // blocks into the output blocks.
 CPP_template(bool moveElements, typename Input, typename Comparator)(
-    requires InputConcept<Input>) class ChunkMerger
-    : public ad_utility::InputRangeFromGet<OutputBlockT<Input>>,
-      public ad_utility::NoCopyNoMove {
+            requires InputConcept<Input>)
+class ChunkMerger : public ad_utility::InputRangeFromGet<OutputBlockT<Input>>,
+                    public ad_utility::NoCopyNoMove {
  public:
   using Block = typename Input::Block;
   using OutputBlock = OutputBlockT<Input>;

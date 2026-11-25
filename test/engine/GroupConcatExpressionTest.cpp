@@ -7,8 +7,12 @@
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/LocalVocabEntryTestHelpers.h"
+#include "../util/LocalVocabTestHelpers.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
+
+using ad_utility::testing::makeLocalVocab;
 
 namespace {
 using namespace sparqlExpression;
@@ -23,20 +27,18 @@ void expectIdsAreConcatenatedTo(
   auto g = generateLocationTrace(location);
 
   Variable var{"?x"};
-  LocalVocab localVocab;
+  LocalVocab localVocab = makeLocalVocab();
   ad_utility::SharedCancellationHandle cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
   VariableToColumnMap map{
       {var, {0, ColumnIndexAndTypeInfo::PossiblyUndefined}}};
 
-  EvaluationContext context{
-      *qec,
-      map,
-      idTable.asStaticView<0>(),
-      idTable.getAllocator(),
-      localVocab,
-      std::move(cancellationHandle),
-      std::chrono::time_point<std::chrono::steady_clock>::max()};
+  EvaluationContext context{*qec,
+                            map,
+                            idTable.asStaticView<0>(),
+                            idTable.getAllocator(),
+                            localVocab,
+                            std::move(cancellationHandle)};
 
   GroupConcatExpression expression{
       distinct, std::make_unique<VariableExpression>(var), ";"};
@@ -51,7 +53,7 @@ void expectLiteralsAreConcatenatedTo(
     const std::vector<tc::Literal>& literals,
     const ad_utility::triple_component::Literal& literal,
     ad_utility::source_location location = AD_CURRENT_SOURCE_LOC()) {
-  LocalVocab localVocab;
+  LocalVocab localVocab = makeLocalVocab();
   IdTable input{1, ad_utility::makeUnlimitedAllocator<Id>()};
 
   for (const auto& inputLiteral : literals) {
@@ -99,14 +101,14 @@ TEST(GroupConcatExpression, basicConcatenation) {
 // _____________________________________________________________________________
 TEST(GroupConcatExpression, concatenationWithUndefined) {
   auto* qec = ad_utility::testing::getQec();
-  LocalVocab localVocab;
+  LocalVocab localVocab = makeLocalVocab();
   expectIdsAreConcatenatedTo(qec, false,
                              makeIdTableFromVector({{Id::makeUndefined()}}),
                              ExpressionResult{Id::makeUndefined()});
 
   auto idx = localVocab.getIndexAndAddIfNotContained(
-      LocalVocabEntry::fromStringRepresentation("\"a\"",
-                                                qec->getLocalVocabContext()));
+      ad_utility::testing::localVocabEntryFromStringRepresentation(
+          "\"a\"", qec->getLocalVocabContext()));
   auto a = Id::makeFromLocalVocabIndex(idx);
   expectIdsAreConcatenatedTo(
       qec, false, makeIdTableFromVector({{Id::makeUndefined()}, {a}}),

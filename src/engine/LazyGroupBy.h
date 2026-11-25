@@ -5,7 +5,7 @@
 #ifndef QLEVER_SRC_ENGINE_LAZYGROUPBY_H
 #define QLEVER_SRC_ENGINE_LAZYGROUPBY_H
 
-#include "engine/GroupByImpl.h"
+#include "engine/operation/GroupByImpl.h"
 
 // Helper class to lazily compute the result of a group by operation. It makes
 // use of the hash map optimization to store the intermediate results of the
@@ -42,6 +42,10 @@ class LazyGroupBy {
                     size_t beginIndex, size_t endIndex);
 
  private:
+  // Implementation of `processBlock` for a chunk of the block.
+  void processChunk(sparqlExpression::EvaluationContext& evaluationContext,
+                    size_t beginIndex, size_t endIndex);
+
   // Reset the stored aggregation data. This is cheaper than recreating the
   // objects every time.
   void resetAggregationData();

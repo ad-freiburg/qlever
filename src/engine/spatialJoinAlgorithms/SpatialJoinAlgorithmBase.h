@@ -13,7 +13,7 @@
 #define QLEVER_SRC_ENGINE_SPATIALJOINALGORITHMBASE_H
 
 #include "engine/Result.h"
-#include "engine/SpatialJoin.h"
+#include "engine/operation/SpatialJoin.h"
 
 // Abstract base class for the algorithms computing a `SpatialJoin`. Each
 // concrete algorithm (baseline, S2, bounding box/r-tree, libspatialjoin, ...)
@@ -58,6 +58,15 @@ class SpatialJoinAlgorithmBase {
   // by the S2-based algorithms as well as `RtreeEntryAlgorithm`.
   static std::optional<GeoPoint> getPoint(const IdTableView<0>* restable,
                                           size_t row, ColumnIndex col);
+
+  // Add a warning to the `SpatialJoin` operation if rows of the left and/or
+  // right input were skipped. The `reason` describes the skipped values, the
+  // default fits all algorithms that parse WKT literals, the `s2` algorithm
+  // passes "values that are not points".
+  void addSkippedRowsWarning(
+      size_t numSkippedLeft, size_t numSkippedRight,
+      std::string_view reason =
+          "invalid or unsupported geometry literals") const;
 
   QueryExecutionContext* qec_;
   PreparedSpatialJoinParams params_;

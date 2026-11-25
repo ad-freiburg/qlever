@@ -22,6 +22,7 @@
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
 #include "engine/ConstructTripleGenerator.h"
+#include "engine/binaryExport/BinaryExport.h"
 #include "global/RuntimeParameters.h"
 #include "index/ExportIds.h"
 #include "rdfTypes/RdfEscaping.h"
@@ -764,11 +765,15 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream<
 
   STREAMABLE_YIELD("]}");
 
-  // Optionally add field `meta` with timing information.
-  if (getRuntimeParameter<&RuntimeParameters::sparqlResultsJsonWithTime_>()) {
-    auto timeMs = requestTimer.msecs().count();
-    STREAMABLE_YIELD(absl::StrCat(R"(,"meta":{"query-time-ms":)", timeMs,
-                                  R"(,"result-size-total":)", resultSize, "}"));
+  // Optionally add field `meta` with timing information, the total result
+  // size, and the warnings. The warnings are collected only now, so that
+  // warnings that were added during the lazy computation are included.
+  if (getRuntimeParameter<&RuntimeParameters::sparqlResultsJsonWithMeta_>()) {
+    nlohmann::ordered_json meta;
+    meta["query-time-ms"] = requestTimer.msecs().count();
+    meta["result-size-total"] = resultSize;
+    meta["warnings"] = qet.collectWarnings();
+    STREAMABLE_YIELD(absl::StrCat(R"(,"meta":)", meta.dump()));
   }
 
   STREAMABLE_YIELD("}");
@@ -785,9 +790,14 @@ STREAMABLE_GENERATOR_TYPE ExportQueryExecutionTrees::selectQueryResultToStream<
     [[maybe_unused]] CancellationHandle cancellationHandle,
     [[maybe_unused]] const ad_utility::Timer& requestTimer,
     [[maybe_unused]] STREAMABLE_YIELDER_TYPE streamableYielder) {
-  throw std::runtime_error(
-      "The binary export of QLever results is not yet implemented, please have "
-      "a little patience");
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+  return qlever::binary_export::exportAsQLeverBinary(
+      qet, selectClause, limitAndOffset, std::move(cancellationHandle));
+#else
+  throw std::runtime_error{
+      "The special binary export is currently not supported in the reduced "
+      "feature mode for C++17"};
+#endif
 }
 
 // _____________________________________________________________________________

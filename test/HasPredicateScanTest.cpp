@@ -11,13 +11,13 @@
 #include "./util/IdTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "engine/CallFixedSize.h"
-#include "engine/CountAvailablePredicates.h"
-#include "engine/HasPredicateScan.h"
-#include "engine/IndexScan.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
 #include "engine/PermutationSelector.h"
 #include "engine/ValuesForTesting.h"
+#include "engine/operation/CountAvailablePredicates.h"
+#include "engine/operation/HasPredicateScan.h"
+#include "engine/operation/IndexScan.h"
 #include "global/Pattern.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
@@ -421,7 +421,6 @@ TEST_F(HasPredicateScanTest, patternTrickAllEntitiesWithDeltaTriples) {
     return QueryExecutionContext{index,
                                  &queryResultCache,
                                  makeAllocator(),
-                                 SortPerformanceEstimator{},
                                  &namedResultCache,
                                  std::make_shared<MaterializedViewsManager>(),
                                  executor()};
@@ -503,4 +502,20 @@ TEST_F(HasPredicateScanTest, patternTrickAllEntitiesWithDeltaTriples) {
   runTestUnordered(patternTrick, {{p3, Int(1)}, {p2, Int(1)}, {p, Int(2)}});
   EXPECT_EQ(indexScan->getRootOperation()->runtimeInfo().status_,
             RuntimeInformation::Status::lazilyMaterializedCompleted);
+
+  // An entry with a pattern index that is neither `NoPattern` nor a valid
+  // pattern index is illegal.
+  index->deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
+    deltaTriples.insertInternalTriplesForTesting(
+        cancellationHandle,
+        {IdTriple<0>{std::array{zPrivate, hasPattern, Id::makeFromInt(273),
+                                graphOfHasPattern.value()}}});
+  });
+  queryResultCache.clearAll();
+  auto qecIllegal = makeQec();
+  auto illegalScan = HasPredicateScan::makePatternScan(
+      &qecIllegal, TripleComponent{V{"?x"}}, V{"?predicate"});
+  auto illegalPatternTrick = CountAvailablePredicates(
+      &qecIllegal, illegalScan, 0, V{"?predicate"}, V{"?count"});
+  EXPECT_ANY_THROW(illegalPatternTrick.computeResultOnlyForTesting());
 }

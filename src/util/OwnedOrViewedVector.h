@@ -21,8 +21,8 @@
 #include "backports/span.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
-#include "util/Serializer/SerializeVector.h"
-#include "util/Serializer/Serializer.h"
+#include "util/serializer/SerializeVector.h"
+#include "util/serializer/Serializer.h"
 
 namespace ad_utility {
 
@@ -96,14 +96,14 @@ class OwnedOrViewedVector {
 
   // Create an array that is a non-owning, zero-copy view directly into the
   // buffer of `serializer`, which must support zero-copy deserialization (see
-  // `ZeroCopyReadSerializer` in `util/Serializer/Serializer.h`). The returned
+  // `ZeroCopyReadSerializer` in `util/serializer/Serializer.h`). The returned
   // object is only valid as long as the memory backing `serializer`'s buffer
   // is valid and unchanged. The layout that is read here is the one that is
   // written by the serialization below (which is the same as the one of a
   // `std::vector<T>` or `ql::span<const T>`).
-  CPP_template(typename S)(requires serialization::ZeroCopyReadSerializer<
-                           S>) static OwnedOrViewedVector
-      fromZeroCopyDeserializer(S& serializer) {
+  CPP_template(typename S)(
+      requires serialization::ZeroCopyReadSerializer<S>)
+  static OwnedOrViewedVector fromZeroCopyDeserializer(S& serializer) {
     return OwnedOrViewedVector{
         serialization::zeroCopyDeserializeToSpan<T>(serializer)};
   }

@@ -43,8 +43,14 @@ class ExportQueryExecutionTrees {
       turtle, csv, tsv, ntriples, qleverJson};
   static constexpr std::array supportedMediaTypesForAskQueries{
       qleverJson, sparqlJson, sparqlXml};
+  // NOTE: The binary format is not supported in the reduced feature mode for
+  // C++17, such that clients fall back to a different format.
   static constexpr std::array supportedMediaTypesForSelectQueries{
-      octetStream, csv, tsv, sparqlXml, sparqlJson, qleverJson};
+      octetStream,        csv, tsv, sparqlXml, sparqlJson, qleverJson,
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+      binaryQleverExport,
+#endif
+  };
   // The media types the result-serialization templates may be instantiated
   // with.
   static constexpr std::array staticallySupportedMediaTypes{

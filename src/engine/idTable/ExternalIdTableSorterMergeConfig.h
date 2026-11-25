@@ -26,7 +26,7 @@
 #include "util/CompressedBlockFile.h"
 #include "util/Exception.h"
 #include "util/GlobalExecutor.h"
-#include "util/MemorySize/MemorySize.h"
+#include "util/memorySize/MemorySize.h"
 #include "util/parallelBlockMerge/MergeOptions.h"
 
 // How the merge phase of a `CompressedExternalIdTableSorter` (see

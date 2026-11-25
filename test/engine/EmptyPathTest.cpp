@@ -13,14 +13,18 @@
 #include "../QueryPlannerTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/LocalVocabEntryTestHelpers.h"
+#include "../util/LocalVocabTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
 #include "./ValuesForTesting.h"
-#include "engine/EmptyPath.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/operation/EmptyPath.h"
 #include "index/DeltaTriples.h"
 #include "util/Tie.h"
+
+using ad_utility::testing::makeLocalVocab;
 
 static constexpr auto executor = &ad_utility::testing::singleThreadExecutor;
 
@@ -437,9 +441,10 @@ TEST(EmptyPath, theResultOfTheExistenceCheckCanBeFullyMaterialized) {
   // Use a child with two tables and a local vocab, such that the materialized
   // result is the concatenation of several chunks and the local vocabs of
   // those chunks have to be merged.
-  LocalVocab localVocab;
-  localVocab.getIndexAndAddIfNotContained(LocalVocabEntry::fromIriref(
-      "<notInTheIndex>", qec->getLocalVocabContext()));
+  LocalVocab localVocab = makeLocalVocab();
+  localVocab.getIndexAndAddIfNotContained(
+      ad_utility::testing::iriLocalVocabEntry("<notInTheIndex>",
+                                              qec->getLocalVocabContext()));
   std::vector<IdTable> tables;
   tables.push_back(makeIdTableFromVector({{getId("<a>")}, {getId("<p>")}}));
   tables.push_back(makeIdTableFromVector({{getId("<z>")}}));
@@ -565,7 +570,6 @@ TEST(EmptyPath, deletedTriplesAreRespected) {
                             &cache,
                             ad_utility::testing::makeAllocator(
                                 ad_utility::MemorySize::megabytes(100)),
-                            SortPerformanceEstimator{},
                             &namedCache,
                             materializedViews,
                             executor()};
@@ -655,7 +659,7 @@ TEST(EmptyPath, fullyMaterializedChildrenAreSupported) {
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
   auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{getId("<a>")}, {getId("<p>")}}),
-      Vars{Variable{"?x"}}, false, std::vector<ColumnIndex>{}, LocalVocab{},
+      Vars{Variable{"?x"}}, false, std::vector<ColumnIndex>{}, makeLocalVocab(),
       std::nullopt, true);
   EmptyPath emptyPath{qec, Variable{"?x"}, Graphs::All(), std::nullopt,
                       EmptyPath::CheckedChild{std::move(child), 0}};
@@ -794,7 +798,6 @@ TEST(EmptyPath, allEntitiesAreYieldedInChunks) {
                             &cache,
                             ad_utility::testing::makeAllocator(
                                 ad_utility::MemorySize::megabytes(100)),
-                            SortPerformanceEstimator{},
                             &namedCache,
                             materializedViews,
                             executor()};

@@ -8,22 +8,30 @@
 
 #include <optional>
 
-#include "engine/Bind.h"
-#include "engine/IndexScan.h"
-#include "engine/Join.h"
+#include "./util/LocalVocabTestHelpers.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
-#include "engine/NeutralElementOperation.h"
-#include "engine/Sort.h"
 #include "engine/ValuesForTesting.h"
+#include "engine/operation/Bind.h"
+#include "engine/operation/IndexScan.h"
+#include "engine/operation/Join.h"
+#include "engine/operation/NeutralElementOperation.h"
+#include "engine/operation/NeutralOptional.h"
+#include "engine/operation/OptionalJoin.h"
+#include "engine/operation/Sort.h"
+#include "engine/operation/Union.h"
+#include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "global/RuntimeParameters.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 #include "util/RuntimeParametersTestHelpers.h"
+
+using ad_utility::testing::makeLocalVocab;
 
 static constexpr auto executor = &ad_utility::testing::singleThreadExecutor;
 
@@ -74,7 +82,7 @@ TEST(OperationTest, limitIsRepresentedInCacheKey) {
     NeutralElementOperation n{getQec()};
     EXPECT_THAT(n.getCacheKey(), testing::Not(testing::HasSubstr("LIMIT 20")));
     l._limit = 20;
-    n.applyLimitOffset(l);
+    n.applyLimitOffset(l, false);
     EXPECT_THAT(n.getCacheKey(), testing::HasSubstr("LIMIT 20"));
     EXPECT_THAT(n.getCacheKey(), testing::Not(testing::HasSubstr("OFFSET 34")));
   }
@@ -82,7 +90,7 @@ TEST(OperationTest, limitIsRepresentedInCacheKey) {
   {
     NeutralElementOperation n{getQec()};
     l._offset = 34;
-    n.applyLimitOffset(l);
+    n.applyLimitOffset(l, false);
     EXPECT_THAT(n.getCacheKey(), testing::HasSubstr("OFFSET 34"));
   }
 }
@@ -91,17 +99,113 @@ TEST(OperationTest, limitIsRepresentedInCacheKey) {
 TEST(OperationTest, limitAndOffsetAreStacked) {
   NeutralElementOperation n{getQec()};
 
-  n.applyLimitOffset({std::nullopt, 1});
+  n.applyLimitOffset({std::nullopt, 1}, false);
   EXPECT_EQ(n.getLimitOffset(), LimitOffsetClause(std::nullopt, 1));
 
-  n.applyLimitOffset({20, 2});
+  n.applyLimitOffset({20, 2}, false);
   EXPECT_EQ(n.getLimitOffset(), LimitOffsetClause(20, 3));
 
-  n.applyLimitOffset({std::nullopt, 4});
+  n.applyLimitOffset({std::nullopt, 4}, false);
   EXPECT_EQ(n.getLimitOffset(), LimitOffsetClause(16, 7));
 
-  n.applyLimitOffset({6, 7});
+  n.applyLimitOffset({6, 7}, false);
   EXPECT_EQ(n.getLimitOffset(), LimitOffsetClause(6, 14));
+}
+
+// Test that the operations which push a `LIMIT` into a child clone the child
+// only if it may be shared, and modify it in place if it is exclusively owned
+// (see `Operation::applyLimitOffsetToChild`).
+TEST(OperationTest, limitPushdownClonesOnlySharedChildren) {
+  auto* qec = getQec();
+  // A child that is sorted on its only column `?a`, so that none of the
+  // operations below wraps it in a `Sort`.
+  auto makeChild = [qec]() {
+    return ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, makeIdTableFromVector({{1}, {2}, {3}}),
+        std::vector<std::optional<Variable>>{Variable{"?a"}}, false,
+        std::vector<ColumnIndex>{0});
+  };
+  // A child with a grandchild, to check that the pushdown also continues in
+  // place below the first clone.
+  auto makeNestedChild = [qec, &makeChild]() {
+    return ad_utility::makeExecutionTree<NeutralOptional>(qec, makeChild());
+  };
+  auto getLimitOffset = [](const QueryExecutionTree* tree) {
+    return tree->getRootOperation()->getLimitOffset();
+  };
+  auto getGrandchild = [](const QueryExecutionTree* child) {
+    return child->getRootOperation()->getChildren().at(0);
+  };
+  // `makeOperation` gets the children into which the operation pushes the
+  // `LIMIT`.
+  auto testPushdown = [&makeNestedChild, &getLimitOffset, &getGrandchild](
+                          auto makeOperation, size_t numPushedChildren = 1,
+                          ad_utility::source_location loc =
+                              AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(loc);
+    std::vector<std::shared_ptr<QueryExecutionTree>> children;
+    for (size_t i = 0; i < numPushedChildren; ++i) {
+      children.push_back(makeNestedChild());
+    }
+    auto operation = makeOperation(children);
+
+    // Children that may be shared are cloned (deeply) before the pushdown and
+    // stay unchanged themselves.
+    operation->applyLimitOffset({2}, false);
+    std::vector<QueryExecutionTree*> clones;
+    for (size_t i = 0; i < numPushedChildren; ++i) {
+      auto* child = children.at(i).get();
+      auto* clone = operation->getChildren().at(i);
+      EXPECT_NE(clone, child);
+      EXPECT_NE(getGrandchild(clone), getGrandchild(child));
+      EXPECT_TRUE(getLimitOffset(child).isUnconstrained());
+      EXPECT_TRUE(getLimitOffset(getGrandchild(child)).isUnconstrained());
+      EXPECT_EQ(getLimitOffset(clone), LimitOffsetClause(2));
+      EXPECT_EQ(getLimitOffset(getGrandchild(clone)), LimitOffsetClause(2));
+      clones.push_back(clone);
+    }
+
+    // Exclusively owned children are modified in place, and so are their
+    // children.
+    std::vector<QueryExecutionTree*> grandchildren;
+    ql::ranges::transform(clones, std::back_inserter(grandchildren),
+                          getGrandchild);
+    operation->applyLimitOffset({1}, true);
+    for (size_t i = 0; i < numPushedChildren; ++i) {
+      auto* clone = operation->getChildren().at(i);
+      EXPECT_EQ(clone, clones.at(i));
+      EXPECT_EQ(getGrandchild(clone), grandchildren.at(i));
+      EXPECT_EQ(getLimitOffset(clone), LimitOffsetClause(1));
+      EXPECT_EQ(getLimitOffset(getGrandchild(clone)), LimitOffsetClause(1));
+    }
+  };
+
+  testPushdown([qec](auto children) {
+    return std::make_unique<Sort>(qec, std::move(children.at(0)),
+                                  colIndices({0}));
+  });
+  testPushdown([qec](auto children) {
+    using namespace sparqlExpression;
+    return std::make_unique<Bind>(
+        qec, std::move(children.at(0)),
+        parsedQuery::Bind{SparqlExpressionPimpl{std::make_unique<IdExpression>(
+                                                    Id::makeFromInt(42)),
+                                                "42 AS ?b"},
+                          Variable{"?b"}});
+  });
+  testPushdown([qec](auto children) {
+    return std::make_unique<NeutralOptional>(qec, std::move(children.at(0)));
+  });
+  testPushdown([qec, &makeChild](auto children) {
+    return std::make_unique<OptionalJoin>(qec, std::move(children.at(0)),
+                                          makeChild());
+  });
+  testPushdown(
+      [qec](auto children) {
+        return std::make_unique<Union>(qec, std::move(children.at(0)),
+                                       std::move(children.at(1)));
+      },
+      2);
 }
 
 // ________________________________________________
@@ -207,7 +311,6 @@ class OperationTestFixture : public testing::Test {
       index,
       &cache,
       makeAllocator(),
-      SortPerformanceEstimator{},
       &namedCache,
       materializedViewsManager,
       executor(),
@@ -283,8 +386,8 @@ TEST_F(OperationTestFixture, verifyCachePreventsInProgressState) {
 TEST_F(OperationTestFixture, getPrecomputedResultBecauseSiblingOfService) {
   // If a precomputedResult is set, it will be returned by `getResult`
   auto idTable = makeIdTableFromVector({{1, 6, 0}, {2, 5, 0}, {3, 4, 0}});
-  auto result = std::make_shared<const Result>(
-      idTable.clone(), std::vector<ColumnIndex>{0}, LocalVocab{});
+  auto result = std::make_shared<const Result>(idTable.clone(), colIndices({0}),
+                                               makeLocalVocab());
   operation.precomputedResultBecauseSiblingOfService() =
       std::make_optional(result);
   EXPECT_EQ(operation.getResult(), result);
@@ -345,14 +448,35 @@ TEST_F(OperationTestFixture, warningsArePartOfRuntimeInformation) {
   }
 }
 
-// _____________________________________________________________________________
-
+// Test that an operation and its child use the cancellation handle of their
+// context, and that cancelling the handle aborts the running computation.
 TEST(OperationTest, verifyExceptionIsThrownOnCancellation) {
-  auto qec = getQec();
+  // Use a separate context, such that the handle of the context that is shared
+  // between the tests (see `getQec`) is not cancelled.
+  auto index = std::make_shared<Index>(makeTestIndex(
+      "verifyExceptionIsThrownOnCancellation", TestIndexConfig{}));
+  QueryResultCache cache;
+  NamedResultCache namedCache;
   auto handle = std::make_shared<CancellationHandle<>>();
+  QueryExecutionContext qec{index,
+                            &cache,
+                            makeAllocator(),
+                            &namedCache,
+                            std::make_shared<MaterializedViewsManager>(),
+                            executor(),
+                            ad_utility::noop,
+                            false,
+                            false,
+                            QueryExecutionContext::DisableCaching::False,
+                            false,
+                            handle};
   ShallowParentOperation operation =
-      ShallowParentOperation::of<StallForeverOperation>(qec);
-  operation.recursivelySetCancellationHandle(handle);
+      ShallowParentOperation::of<StallForeverOperation>(&qec);
+  // All operations use the handle of the context.
+  EXPECT_EQ(operation.cancellationHandle(), handle);
+  EXPECT_EQ(
+      operation.getChildren().at(0)->getRootOperation()->cancellationHandle(),
+      handle);
 
   ad_utility::JThread thread{[&]() {
     std::this_thread::sleep_for(5ms);
@@ -361,28 +485,6 @@ TEST(OperationTest, verifyExceptionIsThrownOnCancellation) {
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(operation.computeResult(false),
                                         ::testing::HasSubstr("timed out"),
                                         ad_utility::CancellationException);
-}
-
-// _____________________________________________________________________________
-
-TEST(OperationTest, verifyRemainingTimeDoesCountDown) {
-  constexpr auto timeout = 5ms;
-  auto qec = getQec();
-  ShallowParentOperation operation =
-      ShallowParentOperation::of<StallForeverOperation>(qec);
-  operation.recursivelySetTimeConstraint(timeout);
-
-  auto childOperation = std::dynamic_pointer_cast<StallForeverOperation>(
-      operation.getChildren().at(0)->getRootOperation());
-
-#ifndef _QLEVER_NO_TIMING_TESTS
-  EXPECT_GT(operation.publicRemainingTime(), 0ms);
-  EXPECT_GT(childOperation->publicRemainingTime(), 0ms);
-#endif
-  std::this_thread::sleep_for(timeout);
-  // Verify that the time is up for the parent and the child.
-  EXPECT_EQ(operation.publicRemainingTime(), 0ms);
-  EXPECT_EQ(childOperation->publicRemainingTime(), 0ms);
 }
 
 // ________________________________________________
@@ -435,7 +537,7 @@ TEST(OperationTest, estimatesForCachedResults) {
 // ________________________________________________
 TEST(Operation, createRuntimInfoFromEstimates) {
   NeutralElementOperation operation{getQec()};
-  operation.applyLimitOffset({12, 3});
+  operation.applyLimitOffset({12, 3}, false);
   operation.createRuntimeInfoFromEstimates(nullptr);
   EXPECT_EQ(operation.runtimeInfo().details_["limit"], 12);
   EXPECT_EQ(operation.runtimeInfo().details_["offset"], 3);
@@ -550,7 +652,7 @@ TEST(Operation, updateRuntimeInformationUpdatesOptimizedOutChildren) {
             ad_utility::makeExecutionTree<ValuesForTesting>(
                 qec, makeIdTableFromVector({{1}}),
                 std::vector<std::optional<Variable>>{Variable{"?x"}}),
-            {0}};
+            colIndices({0})};
   // The child of the `Sort` was optimized out, but its own child is only
   // computed afterwards.
   auto& childRti = sort.getChildren().at(0)->getRootOperation()->runtimeInfo();
@@ -586,13 +688,15 @@ TEST(Operation, verifyRuntimeInformationIsUpdatedForLazyOperations) {
   std::vector<IdTable> idTablesVector{};
   idTablesVector.push_back(makeIdTableFromVector({{3, 4}}));
   idTablesVector.push_back(makeIdTableFromVector({{7, 8}}));
-  LocalVocab localVocab{};
+  LocalVocab localVocab = makeLocalVocab();
   localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{
       ad_utility::triple_component::Literal::literalWithoutQuotes("Test"),
       qec->getLocalVocabContext()});
-  ValuesForTesting valuesForTesting{
-      qec,   std::move(idTablesVector),  {Variable{"?x"}, Variable{"?y"}},
-      false, std::vector<ColumnIndex>{}, std::move(localVocab)};
+  auto valuesForTestingPtr = std::make_shared<ValuesForTesting>(
+      qec, std::move(idTablesVector),
+      std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}},
+      false, std::vector<ColumnIndex>{}, std::move(localVocab));
+  auto& valuesForTesting = *valuesForTestingPtr;
 
   ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
   EXPECT_THROW(
@@ -647,12 +751,12 @@ TEST(Operation, ensureFailedStatusIsSetWhenGeneratorThrowsException) {
       index,
       &cache,
       makeAllocator(ad_utility::MemorySize::megabytes(100)),
-      SortPerformanceEstimator{},
       &namedCache,
       materializedViewsManager,
       executor(),
       [&](std::string) { signaledUpdate = true; }};
-  AlwaysFailOperation operation{&context};
+  auto operationPtr = std::make_shared<AlwaysFailOperation>(&context);
+  auto& operation = *operationPtr;
   ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
   auto result =
       operation.runComputation(timer, ComputationMode::LAZY_IF_SUPPORTED);
@@ -678,17 +782,17 @@ TEST(Operation, ensureFailedStatusIsSetWhenGeneratorIsCancelled) {
       index,
       &cache,
       makeAllocator(ad_utility::MemorySize::megabytes(100)),
-      SortPerformanceEstimator{},
       &namedCache,
       materializedViewsManager,
       executor(),
       [&](std::string) { signaledUpdate = true; }};
-  CustomGeneratorOperation operation{&context, []() -> Result::Generator {
-                                       throw CancellationException{
-                                           CancellationState::MANUAL,
-                                           "Operation was cancelled"};
-                                       co_return;
-                                     }()};
+  auto operationPtr = std::make_shared<CustomGeneratorOperation>(
+      &context, []() -> Result::Generator {
+        throw CancellationException{CancellationState::MANUAL,
+                                    "Operation was cancelled"};
+        co_return;
+      }());
+  auto& operation = *operationPtr;
   ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
   auto result =
       operation.runComputation(timer, ComputationMode::LAZY_IF_SUPPORTED);
@@ -716,25 +820,25 @@ TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd) {
       index,
       &cache,
       makeAllocator(ad_utility::MemorySize::megabytes(100)),
-      SortPerformanceEstimator{},
       &namedCache,
       materializedViewsManager,
       executor(),
       [&](std::string) { ++updateCallCounter; }};
-  CustomGeneratorOperation operation{
+  auto operationPtr = std::make_shared<CustomGeneratorOperation>(
       &context, [](const IdTable& idTable) -> Result::Generator {
         std::this_thread::sleep_for(50ms);
-        co_yield {idTable.clone(), LocalVocab{}};
+        co_yield {idTable.clone(), makeLocalVocab()};
         // This one should not trigger because it's below the 50ms threshold
         std::this_thread::sleep_for(30ms);
-        co_yield {idTable.clone(), LocalVocab{}};
+        co_yield {idTable.clone(), makeLocalVocab()};
         std::this_thread::sleep_for(30ms);
-        co_yield {idTable.clone(), LocalVocab{}};
+        co_yield {idTable.clone(), makeLocalVocab()};
         // This one should not trigger directly, but trigger because it's the
         // last one
         std::this_thread::sleep_for(30ms);
-        co_yield {idTable.clone(), LocalVocab{}};
-      }(idTable)};
+        co_yield {idTable.clone(), makeLocalVocab()};
+      }(idTable));
+  auto& operation = *operationPtr;
 
   ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
   auto result =
@@ -756,13 +860,14 @@ TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd) {
 // _____________________________________________________________________________
 TEST(Operation, verifyTimeAfterLastChunkIsAddedToRuntimeInformation) {
   auto idTable = makeIdTableFromVector({{}});
-  CustomGeneratorOperation operation{
+  auto operationPtr = std::make_shared<CustomGeneratorOperation>(
       getQec(), [](const IdTable& idTable) -> Result::Generator {
-        co_yield {idTable.clone(), LocalVocab{}};
+        co_yield {idTable.clone(), makeLocalVocab()};
         // Work that is done after the last chunk, e.g. a filter that discards
         // the remaining input, has to be accounted for, too.
         std::this_thread::sleep_for(5ms);
-      }(idTable)};
+      }(idTable));
+  auto& operation = *operationPtr;
 
   ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
   auto result =
@@ -793,16 +898,16 @@ TEST(Operation, ensureSignalUpdateIsCalledAtTheEndOfPartialConsumption) {
       index,
       &cache,
       makeAllocator(ad_utility::MemorySize::megabytes(100)),
-      SortPerformanceEstimator{},
       &namedCache,
       materializedViewsManager,
       executor(),
       [&](std::string) { ++updateCallCounter; }};
-  CustomGeneratorOperation operation{
+  auto operationPtr = std::make_shared<CustomGeneratorOperation>(
       &context, [](const IdTable& idTable) -> Result::Generator {
-        co_yield {idTable.clone(), LocalVocab{}};
-        co_yield {idTable.clone(), LocalVocab{}};
-      }(idTable)};
+        co_yield {idTable.clone(), makeLocalVocab()};
+        co_yield {idTable.clone(), makeLocalVocab()};
+      }(idTable));
+  auto& operation = *operationPtr;
 
   {
     ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
@@ -827,10 +932,12 @@ TEST(Operation, verifyLimitIsProperlyAppliedAndUpdatesRuntimeInfoCorrectly) {
   std::vector<IdTable> idTablesVector{};
   idTablesVector.push_back(makeIdTableFromVector({{3, 4}}));
   idTablesVector.push_back(makeIdTableFromVector({{7, 8}, {9, 123}}));
-  ValuesForTesting valuesForTesting{
-      qec, std::move(idTablesVector), {Variable{"?x"}, Variable{"?y"}}};
+  auto valuesForTestingPtr = std::make_shared<ValuesForTesting>(
+      qec, std::move(idTablesVector),
+      std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}});
+  auto& valuesForTesting = *valuesForTestingPtr;
 
-  valuesForTesting.applyLimitOffset({._limit = 1, ._offset = 1});
+  valuesForTesting.applyLimitOffset({._limit = 1, ._offset = 1}, false);
 
   ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
 
@@ -1030,7 +1137,7 @@ TEST(OperationTest, disableCachingForOperation) {
   ValuesForTesting valuesForTesting{
       qec, std::move(idTablesVector), {Variable{"?x"}, Variable{"?y"}}, true};
 
-  QueryCacheKey cacheKey{valuesForTesting.getCacheKey(),
+  QueryCacheKey cacheKey{std::string{valuesForTesting.getCacheKey()},
                          qec->locatedTriplesState().index_};
 
   // By default, the result of `valuesForTesting` is cached because it is
@@ -1073,7 +1180,7 @@ TEST(OperationTest, disableCachingGlobally) {
 
   EXPECT_THAT(valuesForTesting.getCacheKey(), ::testing::IsEmpty());
 
-  QueryCacheKey cacheKey{valuesForTesting.getCacheKey(),
+  QueryCacheKey cacheKey{std::string{valuesForTesting.getCacheKey()},
                          qec->locatedTriplesState().index_};
 
   // Initially not contained in the cache (because we cleared the cache).
@@ -1123,8 +1230,8 @@ TEST(OperationTest, isDeterministicPropagatesFromChildren) {
   EXPECT_FALSE(randBindTree->getRootOperation()->isDeterministic());
 
   // Wrapping it in a Sort still yields non-deterministic.
-  auto sortedTree = ad_utility::makeExecutionTree<Sort>(
-      qec, randBindTree, std::vector<ColumnIndex>{});
+  auto sortedTree =
+      ad_utility::makeExecutionTree<Sort>(qec, randBindTree, colIndices({}));
   EXPECT_FALSE(sortedTree->getRootOperation()->isDeterministic());
 }
 
@@ -1182,12 +1289,12 @@ TEST(Operation, isDistinctByRecognizesLimitOne) {
 
   // A limit greater than one doesn't help, as the result may still contain
   // duplicates.
-  values->applyLimitOffset(LimitOffsetClause{._limit = 2});
+  values->applyLimitOffset(LimitOffsetClause{._limit = 2}, false);
   EXPECT_FALSE(values->getRootOperation()->isDistinctBy(SC{0}));
 
   // With `LIMIT 1` the result has at most one row, so it is trivially distinct
   // wrt any set of columns.
-  values->applyLimitOffset(LimitOffsetClause{._limit = 1});
+  values->applyLimitOffset(LimitOffsetClause{._limit = 1}, false);
   EXPECT_TRUE(values->getRootOperation()->isDistinctBy(SC{0}));
   EXPECT_TRUE(values->getRootOperation()->isDistinctBy(SC{}));
 }
@@ -1212,4 +1319,27 @@ TEST(Operation, makeDistinctTreeDefaultRequiresNotAlreadyDistinct) {
 
   ASSERT_FALSE(scanOp.isDistinctBy(SC{0}));
   EXPECT_EQ(scanOp.makeDistinctTree(SC{0}), std::nullopt);
+}
+
+// Test that the cache keys of operations and the cache key stored in a
+// `QueryExecutionTree` are allocated with the allocator of the query and thus
+// count toward its memory limit.
+TEST(Operation, cacheKeysRespectMemoryLimit) {
+  auto qec = getQec();
+  auto op = std::make_shared<ValuesForTesting>(
+      qec, makeIdTableFromVector({{1}}),
+      std::vector<std::optional<Variable>>{Variable{"?x"}});
+
+  QueryExecutionTree tree{qec, op};
+  const auto& allocator = qec->getAllocator();
+  EXPECT_EQ(tree.getCacheKey().get_allocator(), allocator);
+  EXPECT_EQ(op->getCacheKey().get_allocator(), allocator);
+
+  // Use up all the memory that is left.
+  std::vector<Id, ad_utility::AllocatorWithLimit<Id>> blocker(
+      allocator.amountMemoryLeft().getBytes() / sizeof(Id), allocator);
+  EXPECT_THROW(op->getCacheKey(),
+               ad_utility::detail::AllocationExceedsLimitException);
+  EXPECT_THROW((QueryExecutionTree{qec, op}),
+               ad_utility::detail::AllocationExceedsLimitException);
 }

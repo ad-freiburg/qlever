@@ -31,10 +31,10 @@ namespace columnBasedIdTable::splitLayout {
 template <typename Allocator>
 class IdColumnVector {
  public:
-  using PayloadAllocator =
-      std::allocator_traits<Allocator>::template rebind_alloc<Id::PayloadType>;
-  using DatatypeAllocator =
-      std::allocator_traits<Allocator>::template rebind_alloc<Id::DatatypeType>;
+  using PayloadAllocator = typename std::allocator_traits<
+      Allocator>::template rebind_alloc<Id::PayloadType>;
+  using DatatypeAllocator = typename std::allocator_traits<
+      Allocator>::template rebind_alloc<Id::DatatypeType>;
 
   using value_type = Id;
   // The two reference types, see `BasicIdColumnIterator`.

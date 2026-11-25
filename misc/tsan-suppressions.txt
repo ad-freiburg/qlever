@@ -36,10 +36,16 @@ race:boost::asio::execution::detail::shared_target_executor::~shared_target_exec
 # earlier read of the exception by another thread, for example of its `what()`
 # in a `catch` block. The code itself is correct, sharing exceptions between
 # threads via `std::exception_ptr` is explicitly allowed.
-# NOTE: This entry does not cover memory that the exception owns, like the
+# NOTE 1: This entry does not cover memory that the exception owns, like the
 # message of a `std::runtime_error`: it is freed by the destructor of the
 # exception, which `_M_release` calls from within `libstdc++.so`, so
 # `_M_release` does not appear in the reported stacks. The tests that pass
 # exceptions between threads therefore throw exceptions that own no memory
 # (see `TestException` in `test/util/TestException.h`).
+# NOTE 2: The entry also does not match when the exception is handed to another
+# thread from inside a `catch` block and that thread drops its reference first:
+# the `catch` block then frees the exception in `__cxa_end_catch`, not in
+# `_M_release`. Code that hands an exception to another thread therefore does
+# so only after the `catch` block, see `CallFunctionAndPassToHandler` in
+# `src/util/AsioHelpers.h`.
 race:std::__exception_ptr::exception_ptr::_M_release

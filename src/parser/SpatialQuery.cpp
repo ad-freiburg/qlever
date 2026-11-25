@@ -45,10 +45,9 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
   } else if (predString == "right") {
     setVariable("right", object, right_);
   } else if (predString == "numNearestNeighbors") {
-    throwIf(!object.isInt(),
-            "The parameter `<numNearestNeighbors>` expects an integer (the "
-            "maximum "
-            "number of nearest neighbors)");
+    throwIf(!object.isInt() || object.getInt() <= 0,
+            "The parameter `<numNearestNeighbors>` expects a positive integer "
+            "(the maximum number of nearest neighbors)");
     maxResults_ = object.getInt();
   } else if (predString == "maxDistance") {
     if (object.isInt()) {
@@ -222,9 +221,9 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
         "for the right side may not be specified in the `SERVICE`.");
   }
 
-  // Only if the number of results is limited, it is mandatory that the right
-  // variable must be selected inside the service. If only the distance is
-  // limited, it may be declared inside or outside of the service.
+  // Only a nearest neighbors search requires the right variable to be selected
+  // inside the service. For all other searches it may be declared inside or
+  // outside of the service.
   throwIf(
       !ignoreMissingRightChild_ && maxResults_.has_value() &&
           !childGraphPattern_.has_value(),
@@ -323,6 +322,11 @@ SpatialQuery::SpatialQuery(const SparqlTriple& triple) {
     maxDist_ = matchToInt(match.get<detail::distCaptureGroup>());
     ignoreMissingRightChild_ = true;
     AD_CORRECTNESS_CHECK(maxResults_.has_value());
+    // A limit of zero also results from a number too large for `from_chars`,
+    // which then leaves the result untouched.
+    throwIf(maxResults_.value() == 0,
+            "The number of nearest neighbors in `<nearest-neighbors:...>` must "
+            "be a positive integer");
   } else {
     AD_THROW(absl::StrCat("Tried to perform spatial join with unknown triple ",
                           input,

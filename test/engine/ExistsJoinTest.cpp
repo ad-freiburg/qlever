@@ -7,13 +7,17 @@
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/LocalVocabEntryTestHelpers.h"
+#include "../util/LocalVocabTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
-#include "engine/ExistsJoin.h"
-#include "engine/IndexScan.h"
 #include "engine/JoinHelpers.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/operation/ExistsJoin.h"
+#include "engine/operation/IndexScan.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
+
+using ad_utility::testing::makeLocalVocab;
 
 using namespace ad_utility::testing;
 
@@ -196,14 +200,14 @@ TEST(ExistsJoin, computeResult) {
 // _____________________________________________________________________________
 TEST(ExistsJoin, computeExistsJoinLeftIndexNestedLoopJoinOptimization) {
   auto* qec = ad_utility::testing::getQec();
-  LocalVocabEntry entryA = LocalVocabEntry::fromStringRepresentation(
+  LocalVocabEntry entryA = localVocabEntryFromStringRepresentation(
       "\"a\"", qec->getLocalVocabContext());
-  LocalVocabEntry entryB = LocalVocabEntry::fromStringRepresentation(
+  LocalVocabEntry entryB = localVocabEntryFromStringRepresentation(
       "\"b\"", qec->getLocalVocabContext());
 
-  LocalVocab leftVocab;
+  LocalVocab leftVocab = makeLocalVocab();
   leftVocab.getIndexAndAddIfNotContained(entryA);
-  LocalVocab rightVocab;
+  LocalVocab rightVocab = makeLocalVocab();
   rightVocab.getIndexAndAddIfNotContained(entryB);
 
   // From this table columns 1 and 2 will be used for the join.
@@ -253,14 +257,14 @@ TEST(ExistsJoin, computeExistsJoinLeftIndexNestedLoopJoinOptimization) {
 // _____________________________________________________________________________
 TEST(ExistsJoin, computeExistsJoinRightIndexNestedLoopJoinOptimization) {
   auto* qec = ad_utility::testing::getQec();
-  LocalVocabEntry entryA = LocalVocabEntry::fromStringRepresentation(
+  LocalVocabEntry entryA = localVocabEntryFromStringRepresentation(
       "\"a\"", qec->getLocalVocabContext());
-  LocalVocabEntry entryB = LocalVocabEntry::fromStringRepresentation(
+  LocalVocabEntry entryB = localVocabEntryFromStringRepresentation(
       "\"b\"", qec->getLocalVocabContext());
 
-  LocalVocab leftVocab;
+  LocalVocab leftVocab = makeLocalVocab();
   leftVocab.getIndexAndAddIfNotContained(entryA);
-  LocalVocab rightVocab;
+  LocalVocab rightVocab = makeLocalVocab();
   rightVocab.getIndexAndAddIfNotContained(entryB);
 
   // From this table columns 2 and 1 will be used for the join.
@@ -608,7 +612,8 @@ TEST(ExistsJoin, lazyExistsJoinWithOneMaterializedTable) {
     auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, makeIdTableFromVector({{U, V(10)}, {1, 11}, {2, 12}, {3, 13}}),
         std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}},
-        false, std::vector<ColumnIndex>{0}, LocalVocab{}, std::nullopt, true);
+        false, std::vector<ColumnIndex>{0}, makeLocalVocab(), std::nullopt,
+        true);
     auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, std::move(rightTables),
         std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?z"}},
@@ -644,7 +649,8 @@ TEST(ExistsJoin, lazyExistsJoinWithOneMaterializedTable) {
     auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, makeIdTableFromVector({{V(2), V(22)}}),
         std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?z"}},
-        false, std::vector<ColumnIndex>{0}, LocalVocab{}, std::nullopt, true);
+        false, std::vector<ColumnIndex>{0}, makeLocalVocab(), std::nullopt,
+        true);
     ExistsJoin existsJoin{qec, left, right, Variable{"?exists"}};
 
     qec->getQueryTreeCache().clearAll();
@@ -837,11 +843,12 @@ TEST(ExistsJoin, addExistsJoinsToSubtreeDoesntCollideForHiddenVariables) {
       qec, makeIdTableFromVector({{0, 1}}),
       std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?b"}});
 
-  ParsedQuery query;
+  ParsedQuery query{qec->getAllocator()};
   query._rootGraphPattern._graphPatterns.push_back(
       parsedQuery::BasicGraphPattern{
-          {SparqlTriple{TripleComponent{Variable{"?a"}}, iri("<something>"),
-                        TripleComponent{Variable{"?b"}}}}});
+          {{SparqlTriple{TripleComponent{Variable{"?a"}}, iri("<something>"),
+                         TripleComponent{Variable{"?b"}}}},
+           qec->getAllocator()}});
   // Only add ?a (and select it via `*`, exactly as the parser does) to see if
   // ?b remains hidden.
   query.selectClause().setAsterisk();
@@ -871,11 +878,12 @@ TEST(ExistsJoin, addExistsJoinsToSubtreeSkipsAlreadyHandledExists) {
       qec, makeIdTableFromVector({{0, 1}}),
       std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?b"}});
 
-  ParsedQuery query;
+  ParsedQuery query{qec->getAllocator()};
   query._rootGraphPattern._graphPatterns.push_back(
       parsedQuery::BasicGraphPattern{
-          {SparqlTriple{TripleComponent{Variable{"?a"}}, iri("<something>"),
-                        TripleComponent{Variable{"?b"}}}}});
+          {{SparqlTriple{TripleComponent{Variable{"?a"}}, iri("<something>"),
+                         TripleComponent{Variable{"?b"}}}},
+           qec->getAllocator()}});
   // Select the visible variables via `*`, exactly as the parser does.
   query.selectClause().setAsterisk();
   query.selectClause().addVisibleVariable(Variable{"?a"});
@@ -906,11 +914,12 @@ TEST(ExistsJoin, cacheKeyDiffersForDifferentJoinColumns) {
       qec, makeIdTableFromVector({{0, 1}}),
       std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?b"}});
 
-  ParsedQuery query;
+  ParsedQuery query{qec->getAllocator()};
   query._rootGraphPattern._graphPatterns.push_back(
       parsedQuery::BasicGraphPattern{
-          {SparqlTriple{TripleComponent{Variable{"?a"}}, iri("<something>"),
-                        TripleComponent{Variable{"?b"}}}}});
+          {{SparqlTriple{TripleComponent{Variable{"?a"}}, iri("<something>"),
+                         TripleComponent{Variable{"?b"}}}},
+           qec->getAllocator()}});
 
   // Select the visible variables via `*`, exactly as the parser does.
   query.selectClause().setAsterisk();

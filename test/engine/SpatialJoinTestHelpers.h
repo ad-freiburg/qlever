@@ -6,15 +6,16 @@
 #include <cstdlib>
 
 #include "../util/IndexTestHelpers.h"
-#include "engine/IndexScan.h"
-#include "engine/Join.h"
 #include "engine/QueryExecutionTree.h"
-#include "engine/SpatialJoin.h"
+#include "engine/operation/IndexScan.h"
+#include "engine/operation/Join.h"
+#include "engine/operation/SpatialJoin.h"
 #include "engine/spatialJoinAlgorithms/BoundingBoxAlgorithm.h"
 #include "index/ExportIds.h"
 #include "index/vocabulary/VocabularyType.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/Variable.h"
+#include "util/ContainersWithAllocator.h"
 
 namespace SpatialJoinTestHelpers {
 
@@ -298,7 +299,8 @@ inline std::vector<std::string> printTable(const QueryExecutionContext* qec,
     std::string line = "";
     for (size_t k = 0; k < table->idTableView().numColumns(); k++) {
       auto test = ql::exportIds::idToStringAndType(
-          qec->getIndex(), table->idTableView().at(i, k), {});
+          qec->getIndex(), table->idTableView().at(i, k),
+          LocalVocab{qec->getAllocator()});
       line += test.value().first;
       line += " ";
     }
@@ -523,15 +525,16 @@ inline BoundingBoxAlgorithm getDummySpatialJoinAlgsForWrapperTesting(
   std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
   SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
 
-  PreparedSpatialJoinParams params{nullptr,
-                                   nullptr,
-                                   nullptr,
-                                   nullptr,
-                                   0,
-                                   0,
-                                   std::vector<ColumnIndex>{},
-                                   std::vector<ColumnIndex>{},
-                                   1};
+  PreparedSpatialJoinParams params{
+      nullptr,
+      nullptr,
+      nullptr,
+      nullptr,
+      0,
+      0,
+      qlm::vector<ColumnIndex>{qec.value()->getAllocator()},
+      qlm::vector<ColumnIndex>{qec.value()->getAllocator()},
+      1};
 
   return {qec.value(), params, spatialJoin->onlyForTestingGetConfig()};
 }

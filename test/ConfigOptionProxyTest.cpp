@@ -11,9 +11,9 @@
 #include "../test/util/ConfigOptionHelpers.h"
 #include "../test/util/GTestHelpers.h"
 #include "backports/type_traits.h"
-#include "util/ConfigManager/ConfigOption.h"
-#include "util/ConfigManager/ConfigOptionProxy.h"
 #include "util/TypeTraits.h"
+#include "util/configManager/ConfigOption.h"
+#include "util/configManager/ConfigOptionProxy.h"
 
 namespace ad_utility {
 
@@ -53,8 +53,8 @@ struct DoTest {
 `ConfigOption`, or `const ConfigOption`.
 */
 CPP_template(template <typename> typename ProxyType, typename OptionType)(
-    requires SameAsAny<OptionType, ConfigOption,
-                       const ConfigOption>) void basicConstructorTest() {
+    requires SameAsAny<OptionType, ConfigOption, const ConfigOption>)
+void basicConstructorTest() {
   // Do the test for all possible types.
   doForTypeInConfigOptionValueType(DoTest<ProxyType, OptionType>{});
 }

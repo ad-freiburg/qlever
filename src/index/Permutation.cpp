@@ -30,9 +30,18 @@ Permutation::Permutation(Enum permutation, Allocator allocator,
       permutation_{permutation} {}
 
 // _____________________________________________________________________
+void Permutation::throwIfNotLoaded() const {
+  if (!isLoaded_) {
+    throw std::runtime_error("This query requires the permutation " +
+                             readableName_ + ", which was not loaded");
+  }
+}
+
+// _____________________________________________________________________
 CompressedRelationReader::ScanSpecAndBlocks Permutation::getScanSpecAndBlocks(
     const ScanSpecification& scanSpec,
     const LocatedTriplesState& locatedTriplesState) const {
+  throwIfNotLoaded();
   return {scanSpec, BlockMetadataRanges(getAugmentedMetadataForPermutation(
                         locatedTriplesState))};
 }
@@ -95,22 +104,23 @@ IdTable Permutation::scan(const ScanSpecAndBlocks& scanSpecAndBlocks,
                           const CancellationHandle& cancellationHandle,
                           const LocatedTriplesState& locatedTriplesState,
                           qlever::Executor executor,
-                          const LimitOffsetClause& limitOffset) const {
-  if (!isLoaded_) {
-    throw std::runtime_error("This query requires the permutation " +
-                             readableName_ + ", which was not loaded");
-  }
+                          const LimitOffsetClause& limitOffset,
+                          std::optional<ColumnIndices> columnSubset) const {
+  throwIfNotLoaded();
   return reader().scan(scanSpecAndBlocks, additionalColumns, cancellationHandle,
                        getLocatedTriplesForPermutation(locatedTriplesState),
-                       std::move(executor), limitOffset);
+                       std::move(executor), limitOffset,
+                       std::move(columnSubset));
 }
 
 // _____________________________________________________________________
 size_t Permutation::getResultSizeOfScan(
     const ScanSpecAndBlocks& scanSpecAndBlocks,
-    const LocatedTriplesState& locatedTriplesState) const {
+    const LocatedTriplesState& locatedTriplesState,
+    const CancellationHandle& cancellationHandle) const {
   return reader().getResultSizeOfScan(
-      scanSpecAndBlocks, getLocatedTriplesForPermutation(locatedTriplesState));
+      scanSpecAndBlocks, getLocatedTriplesForPermutation(locatedTriplesState),
+      cancellationHandle);
 }
 
 // _____________________________________________________________________
@@ -247,10 +257,12 @@ CompressedRelationReader::IdTableGeneratorInputRange Permutation::lazyScan(
     ColumnIndicesRef additionalColumns,
     const CancellationHandle& cancellationHandle,
     const LocatedTriplesState& locatedTriplesState, qlever::Executor executor,
-    const LimitOffsetClause& limitOffset) const {
+    const LimitOffsetClause& limitOffset,
+    std::optional<ColumnIndices> columnSubset) const {
   return lazyScanImpl(reader(), scanSpecAndBlocks, std::move(optBlocks),
                       additionalColumns, cancellationHandle,
-                      locatedTriplesState, std::move(executor), limitOffset);
+                      locatedTriplesState, std::move(executor), limitOffset,
+                      std::move(columnSubset));
 }
 
 // _____________________________________________________________________________
@@ -261,17 +273,18 @@ CompressedRelationReader::IdTableGeneratorInputRange Permutation::lazyScanImpl(
     ColumnIndicesRef additionalColumns,
     const CancellationHandle& cancellationHandle,
     const LocatedTriplesState& locatedTriplesState, qlever::Executor executor,
-    const LimitOffsetClause& limitOffset) const {
+    const LimitOffsetClause& limitOffset,
+    std::optional<ColumnIndices> columnSubset) const {
   ColumnIndices columns{additionalColumns.begin(), additionalColumns.end()};
   if (!optBlocks.has_value()) {
     optBlocks = CompressedRelationReader::convertBlockMetadataRangesToVector(
         scanSpecAndBlocks.blockMetadata_);
   }
-  return reader.lazyScan(scanSpecAndBlocks.scanSpec_,
-                         std::move(optBlocks.value()), std::move(columns),
-                         cancellationHandle,
-                         getLocatedTriplesForPermutation(locatedTriplesState),
-                         std::move(executor), limitOffset);
+  return reader.lazyScan(
+      scanSpecAndBlocks.scanSpec_, std::move(optBlocks.value()),
+      std::move(columns), cancellationHandle,
+      getLocatedTriplesForPermutation(locatedTriplesState), std::move(executor),
+      limitOffset, std::move(columnSubset));
 }
 
 // _____________________________________________________________________________
@@ -284,9 +297,10 @@ Permutation::LazyScanWithReader Permutation::lazyScanWithUnlimitedReader(
   auto independentReader = std::make_unique<CompressedRelationReader>(
       reader().makeReaderWithReboundAllocator(
           ad_utility::makeUnlimitedAllocator<Id>()));
-  auto blocks = lazyScanImpl(
-      *independentReader, scanSpecAndBlocks, std::nullopt, additionalColumns,
-      cancellationHandle, locatedTriplesState, std::move(executor), {});
+  auto blocks =
+      lazyScanImpl(*independentReader, scanSpecAndBlocks, std::nullopt,
+                   additionalColumns, cancellationHandle, locatedTriplesState,
+                   std::move(executor), {}, std::nullopt);
   return {std::move(independentReader), std::move(blocks)};
 }
 
@@ -310,6 +324,7 @@ BlockMetadataRanges Permutation::getAugmentedMetadataForPermutation(
 
 // ______________________________________________________________________
 const Permutation& Permutation::internalPermutation() const {
+  throwIfNotLoaded();
   AD_CONTRACT_CHECK(internalPermutation_ != nullptr);
   return *internalPermutation_;
 }

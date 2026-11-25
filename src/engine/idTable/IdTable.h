@@ -16,18 +16,22 @@
 #include "backports/algorithm.h"
 #include "backports/functional.h"
 #include "backports/span.h"
+#include "engine/idTable/ColumnStorageTraits.h"
 #include "engine/idTable/IdTableRow.h"
 #include "engine/idTable/VectorWithElementwiseMove.h"
 #include "global/Id.h"
 #include "util/Algorithm.h"
 #include "util/AllocatorWithLimit.h"
+#include "util/ChunkedForLoop.h"
 #include "util/IsProxy.h"
 #include "util/Iterators.h"
 #include "util/LambdaHelpers.h"
 #include "util/ResetWhenMoved.h"
 #include "util/SourceLocation.h"
+#include "util/TransparentFunctors.h"
 #include "util/UninitializedAllocator.h"
 #include "util/Views.h"
+#include "util/views/ChunkedIotaView.h"
 
 namespace columnBasedIdTable {
 // The `IdTable` class is QLever's central data structure. It is used to store
@@ -126,9 +130,16 @@ class IdTable {
   // column). Also the moving of `IdTable`s becomes cheaper, as the moved-from
   // object still needs the storage for the (moved-from) columns.
   static constexpr size_t numInlinedColumns = 10;
+
+  using Traits = ColumnStorageTraits<ColumnStorage, T>;
+  using reference = typename Traits::Ref;
+  using const_reference = typename Traits::ConstRef;
+  using ColumnRef = typename Traits::ColumnRef;
+  using ConstColumnRef = typename Traits::ConstColumnRef;
+
   using Storage = detail::VectorWithElementwiseMove<
       ColumnStorage, absl::InlinedVector<ColumnStorage, numInlinedColumns>>;
-  using ViewSpans = absl::InlinedVector<ql::span<const T>, numInlinedColumns>;
+  using ViewSpans = absl::InlinedVector<ConstColumnRef, numInlinedColumns>;
   using Data = std::conditional_t<isView, ViewSpans, Storage>;
   using Allocator = decltype(std::declval<ColumnStorage&>().get_allocator());
 
@@ -191,13 +202,12 @@ class IdTable {
   // dynamic number of columns) must be equal, else a runtime check fails.
   // Note: this also allows to create an empty view.
   CPP_template(typename = void)(
-      requires columnsAreAllocatable CPP_and std::is_default_constructible_v<
-          Allocator>) explicit IdTable(size_t numColumns)
-      : IdTable(numColumns, Allocator{}) {}
+      requires columnsAreAllocatable &&
+      std::is_default_constructible_v<Allocator>)
+  explicit IdTable(size_t numColumns) : IdTable(numColumns, Allocator{}) {}
 
-  CPP_template(typename = void)(
-      requires(columnsAreAllocatable)) explicit IdTable(size_t numColumns,
-                                                        Allocator allocator)
+  CPP_template(typename = void)(requires(columnsAreAllocatable))
+  explicit IdTable(size_t numColumns, Allocator allocator)
       : numColumns_{numColumns}, allocator_{std::move(allocator)} {
     if constexpr (!isDynamic) {
       AD_CONTRACT_CHECK(NumColumns == numColumns);
@@ -214,9 +224,9 @@ class IdTable {
   // fails. Additional columns (if `columns.size() > numColumns`) are deleted.
   // This behavior is useful for unit tests Where we can just generically pass
   // in more columns than are needed in any test.
-  CPP_template(typename ColT)(
-      requires ql::ranges::forward_range<ColT> CPP_and CPP_NOT(isView))
-      IdTable(size_t numColumns, ColT columns)
+  CPP_template(typename ColT)(requires ql::ranges::forward_range<ColT> &&
+                                    CPP_NOT(isView))
+  IdTable(size_t numColumns, ColT columns)
       : data_{ql::make_move_iterator(columns.begin()),
               ql::make_move_iterator(columns.end())},
         numColumns_{numColumns} {
@@ -236,13 +246,13 @@ class IdTable {
   // If `NumColumns == 0` then the number of columns has to be specified via
   // `setNumColumns()`.
   CPP_template(typename = void)(
-      requires CPP_NOT(isView) CPP_and columnsAreAllocatable CPP_and
-          std::is_default_constructible_v<Allocator>) IdTable()
-      : IdTable{NumColumns, Allocator{}} {}
+      requires CPP_NOT(isView) && columnsAreAllocatable &&
+      std::is_default_constructible_v<Allocator>)
+  IdTable() : IdTable{NumColumns, Allocator{}} {}
 
-  CPP_template(typename = void)(
-      requires CPP_NOT(isView)
-          CPP_and columnsAreAllocatable) explicit IdTable(Allocator allocator)
+  CPP_template(typename = void)(requires CPP_NOT(isView) &&
+                                      columnsAreAllocatable)
+  explicit IdTable(Allocator allocator)
       : IdTable{NumColumns, std::move(allocator)} {}
 
   // `IdTables` are expensive to copy, so we disable accidental copies as they
@@ -300,8 +310,8 @@ class IdTable {
  public:
   // For an empty and dynamic (`NumColumns == 0`) `IdTable`, specify the
   // number of columns.
-  CPP_template(typename = void)(
-      requires(columnsAreAllocatable)) void setNumColumns(size_t numColumns) {
+  CPP_template(typename = void)(requires(columnsAreAllocatable))
+  void setNumColumns(size_t numColumns) {
     AD_CONTRACT_CHECK(empty());
     AD_CONTRACT_CHECK(isDynamic || numColumns == NumColumns);
     numColumns_ = numColumns;
@@ -309,8 +319,9 @@ class IdTable {
   }
 
   // Add a new empty column to the table.
-  CPP_template(typename = void)(
-      requires columnsAreAllocatable CPP_and isDynamic) void addEmptyColumn() {
+  CPP_template(typename = void)(requires columnsAreAllocatable &&
+                                      isDynamic)
+  void addEmptyColumn() {
     data().emplace_back(size(), allocator_);
     ++numColumns_;
   }
@@ -343,8 +354,8 @@ class IdTable {
   // for performance reason whenever possible.
   // TODO<joka921, C++23> Use the multidimensional subscript operator.
   // TODO<joka921, C++23> Use explicit object parameters ("deducing this").
-  CPP_template(typename = void)(requires(!isView)) T& operator()(
-      size_t row, size_t column) {
+  CPP_template(typename = void)(requires(!isView))
+  reference operator()(size_t row, size_t column) {
     AD_EXPENSIVE_CHECK(column < data().size(), [&]() {
       return absl::StrCat(row, " , ", column, ", ", data().size(), " ",
                           numColumns(), ", ", numStaticColumns);
@@ -352,25 +363,25 @@ class IdTable {
     AD_EXPENSIVE_CHECK(row < data().at(column).size());
     return data()[column][row];
   }
-  const T& operator()(size_t row, size_t column) const {
+  const_reference operator()(size_t row, size_t column) const {
     return data()[column][row];
   }
 
   // Get safe access to a single element specified by the row and the column.
   // Throw if the row or the column is out of bounds. See the note for
   // `operator()` above.
-  CPP_template(typename = void)(requires(!isView)) T& at(size_t row,
-                                                         size_t column) {
+  CPP_template(typename = void)(requires(!isView))
+  reference at(size_t row, size_t column) {
     return data().at(column).at(row);
   }
   // TODO<C++26> Remove overload for `isView` and drop requires clause.
-  CPP_template(typename = void)(requires(!isView)) const T& at(
-      size_t row, size_t column) const {
+  CPP_template(typename = void)(requires(!isView))
+  const_reference at(size_t row, size_t column) const {
     return data().at(column).at(row);
   }
   // `std::span::at` is a C++26 feature, so we have to implement it ourselves.
-  CPP_template(typename = void)(requires(isView)) const T& at(
-      size_t row, size_t column) const {
+  CPP_template(typename = void)(requires(isView))
+  const_reference at(size_t row, size_t column) const {
     const auto& col = data().at(column);
     AD_CONTRACT_CHECK(row < col.size());
     return col[row];
@@ -379,8 +390,8 @@ class IdTable {
   // Get a reference to the `i`-th row. The returned proxy objects can be
   // implicitly and trivially converted to `row_reference`. For the design
   // rationale behind those proxy types see above for their definition.
-  CPP_template(typename = void)(requires(!isView)) row_reference_restricted
-  operator[](size_t index) {
+  CPP_template(typename = void)(requires(!isView))
+  row_reference_restricted operator[](size_t index) {
     return *(begin() + index);
   }
   const_row_reference_restricted operator[](size_t index) const {
@@ -389,8 +400,8 @@ class IdTable {
 
   // Same as operator[], but throw an exception if the `row` is out of bounds.
   // This is similar to the behavior of `std::vector::at`.
-  CPP_template(typename = void)(requires(!isView)) row_reference_restricted
-      at(size_t row) {
+  CPP_template(typename = void)(requires(!isView))
+  row_reference_restricted at(size_t row) {
     AD_CONTRACT_CHECK(row < numRows());
     return operator[](row);
   }
@@ -403,15 +414,15 @@ class IdTable {
   // `std::vector` and other containers.
   // TODO<C++23, joka921> Remove the duplicates via explicit object parameters
   // ("deducing this").
-  CPP_template(typename = void)(requires(!isView)) row_reference_restricted
-      front() {
+  CPP_template(typename = void)(requires(!isView))
+  row_reference_restricted front() {
     return (*this)[0];
   }
 
   const_row_reference_restricted front() const { return (*this)[0]; }
 
-  CPP_template(typename = void)(requires(!isView)) row_reference_restricted
-      back() {
+  CPP_template(typename = void)(requires(!isView))
+  row_reference_restricted back() {
     return (*this)[numRows() - 1];
   }
   const_row_reference_restricted back() const { return (*this)[numRows() - 1]; }
@@ -424,7 +435,8 @@ class IdTable {
   //
   // Note: The semantics of this function is similar to `std::vector::resize`.
   // To set the capacity, use the `reserve` function.
-  CPP_template(typename = void)(requires(!isView)) void resize(size_t numRows) {
+  CPP_template(typename = void)(requires(!isView))
+  void resize(size_t numRows) {
     ql::ranges::for_each(data(),
                          [numRows](auto& column) { column.resize(numRows); });
     numRows_ = numRows;
@@ -436,8 +448,8 @@ class IdTable {
   // iterators are invalidated, but you obtain the guarantee, that the insertion
   // of the next `numRows - size()` elements (via `insert` or `push_back`) can
   // be done in O(1) time without dynamic allocations.
-  CPP_template(typename = void)(requires(!isView)) void reserve(
-      size_t numRows) {
+  CPP_template(typename = void)(requires(!isView))
+  void reserve(size_t numRows) {
     ql::ranges::for_each(data(),
                          [numRows](auto& column) { column.reserve(numRows); });
   }
@@ -445,7 +457,8 @@ class IdTable {
   // Delete all the elements, but keep the allocated memory (`capacityRows_`
   // stays the same). Runs in O(1) time. To also free the allocated memory, call
   // `shrinkToFit()` after calling `clear()` .
-  CPP_template(typename = void)(requires(!isView)) void clear() {
+  CPP_template(typename = void)(requires(!isView))
+  void clear() {
     numRows_ = 0;
     ql::ranges::for_each(data(), [](auto& column) { column.clear(); });
   }
@@ -453,7 +466,8 @@ class IdTable {
   // Adjust the capacity to exactly match the size. This optimizes the memory
   // consumption of this table. This operation runs in O(size()), allocates
   // memory, and invalidates all iterators.
-  CPP_template(typename = void)(requires(!isView)) void shrinkToFit() {
+  CPP_template(typename = void)(requires(!isView))
+  void shrinkToFit() {
     ql::ranges::for_each(data(), [](auto& column) { column.shrink_to_fit(); });
   }
 
@@ -464,7 +478,8 @@ class IdTable {
   // `O(n)`. The underlying data model is a dynamic array like `std::vector`.
 
   // Insert a new uninitialized row at the end.
-  CPP_template(typename = void)(requires(!isView)) void emplace_back() {
+  CPP_template(typename = void)(requires(!isView))
+  void emplace_back() {
     ql::ranges::for_each(data(), [](auto& column) { column.emplace_back(); });
     ++numRows_;
   }
@@ -474,10 +489,9 @@ class IdTable {
   // fail (in Debug mode). The `newRow` can be any random access range that
   // stores the right type and has the right size.
   CPP_template(typename RowLike)(
-      requires CPP_NOT(isView) CPP_and ql::ranges::random_access_range<RowLike>
-          CPP_and
-              ql::concepts::same_as<ql::ranges::range_value_t<RowLike>,
-                                    T>) void push_back(const RowLike& newRow) {
+      requires CPP_NOT(isView) && ql::ranges::random_access_range<RowLike> &&
+      ql::concepts::same_as<ql::ranges::range_value_t<RowLike>, T>)
+  void push_back(const RowLike& newRow) {
     AD_EXPENSIVE_CHECK(newRow.size() == numColumns());
     ++numRows_;
     ql::ranges::for_each(ad_utility::integerRange(numColumns()),
@@ -486,8 +500,8 @@ class IdTable {
                          });
   }
 
-  CPP_template(typename = void)(requires(!isView)) void push_back(
-      const std::initializer_list<T>& newRow) {
+  CPP_template(typename = void)(requires(!isView))
+  void push_back(const std::initializer_list<T>& newRow) {
     push_back(ql::ranges::ref_view{newRow});
   }
 
@@ -506,30 +520,54 @@ class IdTable {
   // exception: If `this` is a view (because the `isView` template parameter is
   // `true`), then the copy constructor will also create a (const and
   // non-owning) view, but `clone` will create a mutable deep copy of the data
-  // that the view points to
-  CPP_template(typename = void)(requires(isCloneable)) OwnedTable
-      clone() const {
+  // that the view points to. The columns are copied in chunks of `chunkSize`
+  // rows, with a call to `chunkOperation` (e.g. a cancellation check) after
+  // each chunk. With the default `Noop`, each column is copied in one chunk.
+  CPP_template(typename ChunkOperation = ad_utility::Noop)(
+      requires(isCloneable&& columnsAreAllocatable) &&
+      ql::concepts::invocable<ChunkOperation>)
+  OwnedTable clone(
+      ChunkOperation chunkOperation = {},
+      size_t chunkSize = ad_utility::CANCELLATION_CHECK_CHUNK_SIZE) const {
+    const size_t numRows = size();
+    if constexpr (std::is_same_v<ChunkOperation, ad_utility::Noop>) {
+      chunkSize = std::max(numRows, size_t{1});
+    }
     Storage storage;
     for (const auto& column : getColumns()) {
-      storage.emplace_back(column.begin(), column.end(), getAllocator());
+      auto& target = storage.emplace_back(getAllocator());
+      target.reserve(numRows);
+      for (auto [begin, end] :
+           ad_utility::chunkedIotaView(size_t{0}, numRows, chunkSize)) {
+        target.insert(target.end(), column.begin() + begin,
+                      column.begin() + end);
+        std::invoke(chunkOperation);
+      }
     }
     return OwnedTable{std::move(storage), numColumns_, numRows_, allocator_};
   }
 
   // `moveOrClone` always returns an `OwnedTable`. For r-value `IdTables` (no
   // views), this moves the table. For l-value referenced `IdTable`s and
-  // all `IdTableView`s return a deep copy via `clone()`. The typical usage is
+  // all `IdTableView`s return a deep copy via `clone()`, with the given
+  // `chunkOperation` and `chunkSize`. The typical usage is
   // `auto newTable = AD_FWD(oldTable).moveOrClone()` meaning "I want to take
   // ownership of an `IdTable` that owns its data as efficiently as possible".
-  CPP_member auto moveOrClone() const& -> CPP_ret(OwnedTable)(
-                                           requires isCloneable) {
-    return clone();
+  CPP_template(typename ChunkOperation = ad_utility::Noop)(
+      requires isCloneable)
+  OwnedTable moveOrClone(
+      ChunkOperation chunkOperation = {},
+      size_t chunkSize = ad_utility::CANCELLATION_CHECK_CHUNK_SIZE) const& {
+    return clone(std::move(chunkOperation), chunkSize);
   }
 
-  CPP_member auto moveOrClone() && -> CPP_ret(OwnedTable)(
-                                       requires isCloneable) {
+  CPP_template(typename ChunkOperation = ad_utility::Noop)(
+      requires isCloneable)
+  OwnedTable moveOrClone(
+      ChunkOperation chunkOperation = {},
+      size_t chunkSize = ad_utility::CANCELLATION_CHECK_CHUNK_SIZE) && {
     if constexpr (isView) {
-      return clone();
+      return clone(std::move(chunkOperation), chunkSize);
     } else {
       return std::move(*this);
     }
@@ -540,9 +578,8 @@ class IdTable {
   // is then resized and filled with the appropriate contents.
   CPP_template(typename = void)(
       requires(!std::is_copy_constructible_v<ColumnStorage>))
-      IdTable<T, NumColumns, ColumnStorage, IsView::False> clone(
-          std::vector<ColumnStorage> newColumns,
-          Allocator allocator = {}) const {
+  IdTable<T, NumColumns, ColumnStorage, IsView::False> clone(
+      std::vector<ColumnStorage> newColumns, Allocator allocator = {}) const {
     AD_CONTRACT_CHECK(newColumns.size() >= numColumns());
     Data newStorage(ql::make_move_iterator(newColumns.begin()),
                     ql::make_move_iterator(newColumns.begin() + numColumns()));
@@ -565,10 +602,11 @@ class IdTable {
   //       in fact moves a dynamic table to a new dynamic table. This makes
   //       generic code that is templated on the number of columns easier to
   //       write.
-  CPP_template(int NewNumColumns)(
-      requires(isDynamic || NewNumColumns == NumColumns || NewNumColumns == 0)
-          CPP_and CPP_NOT(
-              isView)) IdTable<T, NewNumColumns, ColumnStorage> toStatic() && {
+  CPP_template(int NewNumColumns)(requires(isDynamic ||
+                                                 NewNumColumns == NumColumns ||
+                                                 NewNumColumns == 0) &&
+                                        CPP_NOT(isView))
+  IdTable<T, NewNumColumns, ColumnStorage> toStatic() && {
     AD_CONTRACT_CHECK(numColumns() == NewNumColumns || NewNumColumns == 0);
     auto result = IdTable<T, NewNumColumns, ColumnStorage>{
         std::move(data()), numColumns(), std::move(numRows_),
@@ -579,8 +617,8 @@ class IdTable {
   // Move this `IdTable` into a dynamic `IdTable` with `NumColumns == 0`. This
   // function may only be called on rvalues, because the table will be moved
   // from.
-  CPP_template(typename = void)(
-      requires(!isView)) IdTable<T, 0, ColumnStorage> toDynamic() && {
+  CPP_template(typename = void)(requires(!isView))
+  IdTable<T, 0, ColumnStorage> toDynamic() && {
     auto result = IdTable<T, 0, ColumnStorage>{std::move(data()), numColumns_,
                                                std::move(numRows_),
                                                std::move(allocator_)};
@@ -600,9 +638,9 @@ class IdTable {
   // Note: This function can also be used with `NewNumColumns == 0`. Then it
   // creates a dynamic view from a dynamic table. This makes generic code
   // that is templated on the number of columns easier to write.
-  CPP_template(size_t NewNumColumns)(requires(isDynamic || NewNumColumns == 0))
-      IdTable<T, NewNumColumns, ColumnStorage, IsView::True> asStaticView()
-          const {
+  CPP_template(size_t NewNumColumns)(requires(isDynamic ||
+                                                    NewNumColumns == 0))
+  IdTable<T, NewNumColumns, ColumnStorage, IsView::True> asStaticView() const {
     AD_CONTRACT_CHECK(numColumns() == NewNumColumns || NewNumColumns == 0);
     ViewSpans viewSpans(data().begin(), data().end());
 
@@ -614,11 +652,11 @@ class IdTable {
   // requiring an already-existing owning `IdTable`. This is used e.g. to
   // build a view directly from spans that were obtained via zero-copy
   // deserialization from a buffer (see `zeroCopyDeserializeToSpan` in
-  // `util/Serializer/SerializeVector.h`). The caller is responsible for
+  // `util/serializer/SerializeVector.h`). The caller is responsible for
   // ensuring that the memory backing `columns` outlives the returned view.
-  CPP_template(typename = void)(requires(isView)) static IdTable
-      fromColumns(ViewSpans columns, size_t numColumns, size_t numRows,
-                  Allocator allocator) {
+  CPP_template(typename = void)(requires(isView))
+  static IdTable fromColumns(ViewSpans columns, size_t numColumns,
+                             size_t numRows, Allocator allocator) {
     if constexpr (!isDynamic) {
       AD_CONTRACT_CHECK(numColumns == NumColumns);
     }
@@ -636,10 +674,9 @@ class IdTable {
     AD_CONTRACT_CHECK(offset + size <= numRows_);
     auto viewSpans = ::ranges::to<ViewSpans>(
         ad_utility::allView(getColumns()) |
-        ql::views::transform(
-            [offset, size](const auto& col) -> ql::span<const T> {
-              return col.subspan(offset, size);
-            }));
+        ql::views::transform([offset, size](const auto& col) -> ConstColumnRef {
+          return col.subspan(offset, size);
+        }));
     return IdTable<T, NumColumns, ColumnStorage, IsView::True>{
         std::move(viewSpans), numColumns_, size, allocator_};
   }
@@ -648,8 +685,8 @@ class IdTable {
   // the columns that may be permuted. The subset of the columns is specified by
   // the argument `columnIndices`.
   CPP_template(typename = void)(requires isDynamic)
-      IdTable<T, 0, ColumnStorage, IsView::True> asColumnSubsetView(
-          ql::span<const ColumnIndex> columnIndices) const {
+  IdTable<T, 0, ColumnStorage, IsView::True> asColumnSubsetView(
+      ql::span<const ColumnIndex> columnIndices) const {
     AD_CONTRACT_CHECK(ql::ranges::all_of(
         columnIndices, [this](size_t idx) { return idx < numColumns(); }));
     ViewSpans viewSpans;
@@ -701,8 +738,8 @@ class IdTable {
   }
 
   // Delete the column with the given column index.
-  CPP_template(typename = void)(requires isDynamic) void deleteColumn(
-      ColumnIndex colIdx) {
+  CPP_template(typename = void)(requires isDynamic)
+  void deleteColumn(ColumnIndex colIdx) {
     AD_CONTRACT_CHECK(colIdx < numColumns());
     data().erase(data().begin() + colIdx);
     numColumns_--;
@@ -746,10 +783,12 @@ class IdTable {
 
   // The usual overloads of `begin()` and `end()` for const and mutable
   // `IdTable`s.
-  CPP_template(typename = void)(requires(!isView)) iterator begin() {
+  CPP_template(typename = void)(requires(!isView))
+  iterator begin() {
     return {this, 0};
   }
-  CPP_template(typename = void)(requires(!isView)) iterator end() {
+  CPP_template(typename = void)(requires(!isView))
+  iterator end() {
     return {this, size()};
   }
   const_iterator begin() const { return {this, 0}; }
@@ -862,8 +901,8 @@ class IdTable {
 
   // Check whether two `IdTables` have the same content. Mostly used for unit
   // testing.
-  CPP_template(typename = void)(requires(!isView)) bool operator==(
-      const IdTable& other) const {
+  CPP_template(typename = void)(requires(!isView))
+  bool operator==(const IdTable& other) const {
     if (numColumns() != other.numColumns()) {
       return (empty() && other.empty());
     }
@@ -885,16 +924,21 @@ class IdTable {
     return true;
   }
 
-  // Get the `i`-th column. It is stored contiguously in memory.
-  CPP_template(typename = void)(requires(!isView)) ql::span<T> getColumn(
-      size_t i) {
-    return {data().at(i)};
+  // Get the `i`-th column as a `ColumnRef` (see `ColumnStorageTraits`). For a
+  // `std::vector` this is a `ql::span` of its contiguous `Id`s, for the split
+  // columns a view of their two arrays (payloads and datatypes).
+  CPP_template(typename = void)(requires(!isView))
+  ColumnRef getColumn(size_t i) {
+    return static_cast<ColumnRef>(data().at(i));
   }
-  ql::span<const T> getColumn(size_t i) const { return {data().at(i)}; }
+
+  ConstColumnRef getColumn(size_t i) const {
+    return static_cast<ConstColumnRef>(data().at(i));
+  }
 
   // Return all the columns as a `std::vector` (if `isDynamic`) or as a
-  // `std::array` (else). The elements of the vector/array are `ql::span<T>`
-  // or `ql::span<const T>`, depending on whether `this` is const.
+  // `std::array` (else). The elements of the vector/array are `ColumnRef`
+  // or `ConstColumnRef`, depending on whether `this` is const.
   auto getColumns() { return getColumnsImpl(*this); }
   auto getColumns() const { return getColumnsImpl(*this); }
 
@@ -911,12 +955,10 @@ class IdTable {
     if constexpr (isDynamic) {
       // TODO<joka921, for the dynamic case we could maybe use a vector with
       // a small buffer optimization or a fixed maximal size from folly etc.
-      std::vector<Column> columns;
-      columns.reserve(self.numColumns());
-      for (size_t i = 0; i < self.numColumns(); ++i) {
-        columns.push_back(self.getColumn(i));
-      }
-      return columns;
+      return ad_utility::integerRange(self.numColumns()) |
+             ql::views::transform(
+                 [&self](size_t i) { return self.getColumn(i); }) |
+             ::ranges::to_vector;
     } else {
       std::array<Column, NumColumns> columns;
       for (size_t i = 0; i < self.numColumns(); ++i) {
@@ -932,6 +974,8 @@ class IdTable {
 namespace detail {
 using DefaultAllocator =
     ad_utility::default_init_allocator<Id, ad_utility::AllocatorWithLimit<Id>>;
+// The storage of a column of an `IdTable`. The types of its columns and
+// elements (`IdColumnRef`, `IdRef` etc. below) follow from it.
 using IdVector = std::vector<Id, DefaultAllocator>;
 }  // namespace detail
 
@@ -1044,15 +1088,24 @@ static_assert(!qlever::isProxy<IdTableView<3>>);
 
 // Type aliases for the columns of an `IdTable` (a mutable view, a read-only
 // view, and an owning column) and for the references to a single element (a
-// mutable and a const one). Currently just aliases for `ql::span<Id>`,
-// `ql::span<const Id>`, `std::vector<Id>`, `Id&` and `const Id&`; a later
-// commit switches them to storage-efficient split-column types and proxies,
-// once `IdTable` stores the payload and datatype of each `Id` in separate
-// arrays.
-using IdColumnRef = ql::span<Id>;
-using ConstIdColumnRef = ql::span<const Id>;
+// mutable and a const one). They follow from the column storage
+// `detail::IdVector`, so they are `ql::span<Id>`, `ql::span<const Id>`, `Id&`
+// and `const Id&`. `IdColumn` is an owning column with the default allocator
+// that is not part of an `IdTable`, a `std::vector<Id>`.
 using IdColumn = std::vector<Id>;
-using IdRef = Id&;
-using ConstIdRef = const Id&;
+
+namespace detail {
+using IdVectorTraits = columnBasedIdTable::ColumnStorageTraits<IdVector, Id>;
+}  // namespace detail
+
+using IdColumnRef = detail::IdVectorTraits::ColumnRef;
+using ConstIdColumnRef = detail::IdVectorTraits::ConstColumnRef;
+
+// `IdRef` and `ConstIdRef` are the `reference` of the column views and not the
+// `Ref` of the traits. With split columns the former is the full proxy, which
+// can be written through a variable, while `IdTable` hands out the restricted
+// one (see `IdRef.h`).
+using IdRef = IdColumnRef::reference;
+using ConstIdRef = ConstIdColumnRef::reference;
 
 #endif  // QLEVER_SRC_ENGINE_IDTABLE_IDTABLE_H

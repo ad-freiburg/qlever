@@ -22,7 +22,6 @@
 #include "backports/three_way_comparison.h"
 #include "concepts/concepts.hpp"
 #include "global/Constants.h"
-#include "global/Id.h"
 #include "rdfTypes/GeoPoint.h"
 #include "util/BitUtils.h"
 
@@ -38,6 +37,16 @@ enum class CRSType : uint8_t;
 
 namespace ad_utility {
 
+// The values `util::geo::CRSType::UNSUPPORTED` and `util::geo::CRSType::CRS84`
+// (the default CRS), which this header cannot name (the enum is only
+// forward-declared). Used by the `CRSTypeValueGetter` in
+// `SparqlExpressionValueGetters.h` and by `WktCentroid` in
+// `GeoSparqlHelpers.h`, checked against the enum in `GeometryInfo.cpp`.
+constexpr inline ::util::geo::CRSType crsTypeUnsupported{0};
+constexpr inline ::util::geo::CRSType crsTypeCrs84{1};
+
+struct SourceCrsType;
+
 // These encapsulating structs are required for the `RequestedInfo` templates
 // used in the `GeometryInfo` class and the `GeometryInfoValueGetter`.
 
@@ -51,6 +60,10 @@ struct Centroid {
   Centroid(double lat, double lng) : centroid_{lat, lng} {}
 
   GeoPoint centroid() const { return centroid_; }
+
+  // Return a `POINT` WKT literal without quotes or datatype representing this
+  // centroid, projected to `crs` (with the IRI of `crs` unless it is CRS84).
+  std::string asWkt(SourceCrsType crs) const;
 };
 
 // The individual coordinates describing the bounding box.
@@ -76,8 +89,10 @@ struct BoundingBox {
   }
 
   // Return a `POLYGON` WKT literal without quotes or datatype representing this
-  // bounding box.
+  // bounding box, in CRS84 or projected to `crs` (with the IRI of `crs` unless
+  // it is CRS84).
   std::string asWkt() const;
+  std::string asWkt(SourceCrsType crs) const;
 
   // Extract the minimum or maximum coordinates
   template <BoundingCoordinate RequestedCoordinate>
@@ -129,6 +144,8 @@ struct SourceCrsType {
 
   // Returns the representing IRI.
   std::optional<std::string_view> asIri() const;
+  // Convert a CRS IRI string to CRS type.
+  static ::util::geo::CRSType iriToCrsType(std::string_view uri);
 
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL_CONSTEXPR(SourceCrsType, type_)
 };
@@ -184,11 +201,33 @@ struct MetricArea {
   bool isValid() const { return !std::isnan(area_); }
 };
 
+// The typed ID of a parsed geometry in the `sj::GeometryStore` of the
+// `GeoVocabulary` (see `GeometryInfo::getGeometryStoreId`). Its upper 8 bits
+// hold the type of the geometry and its lower 56 bits the ID in the store (see
+// `sj::ID_TYPE_SHIFT` and `sj::typedId`).
+struct GeometryStoreId {
+  uint64_t id_;
+
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL_CONSTEXPR(GeometryStoreId, id_)
+};
+
 // The serialization format of a geometry literal. For now, only WKT literals
 // are supported (in the future possibly e.g. GeoJSON or KML). The value zero
 // is `WKT`, because all records written before this field was taken into use
 // are WKT literals, see the rules at `GEOMETRY_INFO_VERSION`.
 enum class SerializationType : uint16_t { WKT };
+
+// A `Centroid` or `BoundingBox` together with the `SourceCrsType` of the
+// geometry it was computed from. The `info_` is stored in `CRS84` regardless of
+// `crs_`. This is needed by functions that return a geometry in the CRS of
+// their input, such as `geof:centroid` or `geof:envelope`.
+template <typename Info>
+struct WithSourceCrs {
+  using InfoType = Info;
+
+  Info info_;
+  SourceCrsType crs_;
+};
 
 // Class for internal exception handling of errors from `s2geometry`.
 class InvalidPolygonError : public std::runtime_error {
@@ -202,12 +241,14 @@ class InvalidPolygonError : public std::runtime_error {
 class GeometryInfo;
 
 // Concept for the `RequestedInfo` template parameter: any of these types is
-// allowed to be requested.
+// allowed to be requested. `Centroid` and `BoundingBox` can additionally
+// be requested wrapped in `WithSourceCrs`.
 template <typename T>
 CPP_concept RequestedInfoT =
     SameAsAny<T, GeometryInfo, Centroid, BoundingBox, GeometryType,
               SourceCrsType, NumGeometries, MetricLength, MetricArea,
-              SerializationType>;
+              SerializationType, GeometryStoreId> ||
+    SameAsAny<T, WithSourceCrs<Centroid>, WithSourceCrs<BoundingBox>>;
 
 // Where the actual geometries are required, this type can be used.
 using GeoPointOrWkt = std::variant<GeoPoint, std::string>;
@@ -220,6 +261,7 @@ using GeoPointOrWkt = std::variant<GeoPoint, std::string>;
 //    zeroed explicitly in later builds of this version).
 // 6: The bytes `[28, 32)` are the two 16-bit fields `sourceCrs_` (initially
 //    reserved and zero) and `serializationType_`, see below.
+// 7: The bytes `[48, 56)` are the 64-bit field `geometryStoreId_`, see below.
 //
 // From version 6 on, the binary representation is append-only, so that adding
 // a field does not invalidate existing indices:
@@ -247,14 +289,14 @@ using GeoPointOrWkt = std::variant<GeoPoint, std::string>;
 //   `GEOMETRY_INFO_VERSION`, raise `MIN_LOADABLE_GEOMETRY_INFO_VERSION` to it,
 //   and remove the handling of the dropped versions from `fromSerialized` and
 //   `GEOMETRY_INFO_SIZE_PER_VERSION`.
-constexpr uint64_t GEOMETRY_INFO_VERSION = 6;
+constexpr uint64_t GEOMETRY_INFO_VERSION = 7;
 constexpr uint64_t MIN_LOADABLE_GEOMETRY_INFO_VERSION = 5;
 
 // The size of the binary representation of `GeometryInfo` for each loadable
 // version, starting at `MIN_LOADABLE_GEOMETRY_INFO_VERSION`.
 inline constexpr std::array<size_t, GEOMETRY_INFO_VERSION -
                                         MIN_LOADABLE_GEOMETRY_INFO_VERSION + 1>
-    GEOMETRY_INFO_SIZE_PER_VERSION{48, 48};
+    GEOMETRY_INFO_SIZE_PER_VERSION{48, 48, 56};
 
 // Return true iff a `GeometryInfo` of the given `version` can be read.
 constexpr bool isLoadableGeometryInfoVersion(uint64_t version) {
@@ -279,6 +321,17 @@ class GeometryInfo {
   // cannot be all-zero. This is currently used by the disk serialization of
   // `GeoVocabulary` to represent invalid literals.
   EncodedBoundingBox boundingBox_;
+  // The centroid is computed in the source CRS of the literal (see
+  // `sourceCrs_`), then projected to CRS84 and stored in CRS84.
+  //
+  // NOTE 1: Projecting the geometry to CRS84 first and computing the centroid
+  // there would give a different result, e.g. for Web Mercator, because its y
+  // axis is not linear in the latitude.
+  //
+  // NOTE 2: Records written before this rule (indices built between #3583 and
+  // #3787) hold the centroid computed in CRS84, which `geof:centroid` returns
+  // projected to the source CRS. Rebuild such an index if it has Web Mercator
+  // literals (for WGS84 both centroids are the same).
   uint64_t geometryTypeAndCentroid_;
   uint32_t numGeometries_;
   // The CRS named by the IRI of the literal (before the projection to CRS84),
@@ -290,15 +343,16 @@ class GeometryInfo {
   SerializationType serializationType_ = SerializationType::WKT;
   MetricLength metricLength_;
   MetricArea metricArea_;
-
-  // TODO<ullingerc>: Implement the behavior for the following two
-  // attributes
-  //   int64_t parsedGeometryOffset_ = -1;
+  // The ID of the parsed geometry in the `sj::GeometryStore` of the
+  // `GeoVocabulary` plus one, see `getGeometryStoreId`. Zero means "not
+  // computed", as the rules at `GEOMETRY_INFO_VERSION` require for a field
+  // added after version 5.
+  uint64_t geometryStoreId_ = 0;
 
   static constexpr uint64_t bitMaskGeometryType =
-      bitMaskForHigherBits(ValueId::numDatatypeBits);
+      bitMaskForHigherBits(GeoPoint::numTypeBits);
   static constexpr uint64_t bitMaskCentroid =
-      bitMaskForLowerBits(ValueId::numDataBits);
+      bitMaskForLowerBits(GeoPoint::numDataBits);
 
  public:
   GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
@@ -327,9 +381,8 @@ class GeometryInfo {
   // to the strict parsing mode of `pb_util`. This is a purely syntactic check.
   //
   // NOTE: A valid literal does not necessarily yield a geometry in
-  // `fromWktLiteral`. In particular, `EMPTY` geometries (except `POINT EMPTY`,
-  // which the strict mode rejects), an unsupported CRS IRI, and coordinates
-  // out of range are all valid.
+  // `fromWktLiteral`. In particular, `EMPTY` geometries, an unsupported CRS
+  // IRI, and coordinates out of range are all valid.
   static bool isValidWktStrict(std::string_view wkt);
 
   // Create geometry info for a GeoPoint object.
@@ -385,6 +438,22 @@ class GeometryInfo {
   // Get the serialization format of the literal.
   SerializationType getSerializationType() const;
 
+  // Get the ID of the parsed geometry in the `sj::GeometryStore` of the
+  // `GeoVocabulary`. Empty iff the geometry is not stored there (for example
+  // because the index predates the store).
+  std::optional<GeometryStoreId> getGeometryStoreId() const;
+
+  // Set the ID of the parsed geometry in the `sj::GeometryStore`, see
+  // `getGeometryStoreId`.
+  void setGeometryStoreId(uint64_t id);
+
+  // Return the ID of an arbitrary WKT literal in the `sj::GeometryStore`, which
+  // is always empty (only a literal of the `GeoVocabulary` can be stored
+  // there).
+  static std::optional<GeometryStoreId> getGeometryStoreId(std::string_view) {
+    return std::nullopt;
+  }
+
   // Return the serialization format of an arbitrary WKT literal, which is
   // always `WKT`.
   static std::optional<SerializationType> getSerializationType(
@@ -394,12 +463,12 @@ class GeometryInfo {
   // stored in this object (see `getSourceCrsType`).
   CPP_template(typename RequestedInfo = GeometryInfo)(
       requires RequestedInfoT<RequestedInfo>)
-      std::optional<RequestedInfo> getRequestedInfo() const;
+  std::optional<RequestedInfo> getRequestedInfo() const;
 
   // Parse the given WKT literal and compute only the requested information.
   CPP_template(typename RequestedInfo = GeometryInfo)(
-      requires RequestedInfoT<RequestedInfo>) static std::
-      optional<RequestedInfo> getRequestedInfo(std::string_view wkt);
+      requires RequestedInfoT<RequestedInfo>)
+  static std::optional<RequestedInfo> getRequestedInfo(std::string_view wkt);
 };
 
 // The binary representation of a `GeometryInfo` must not contain implicit

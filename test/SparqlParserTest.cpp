@@ -1116,14 +1116,16 @@ TEST(ParserTest, isDeterministic) {
 
   // `Describe`, `TransPath` and `Load` never occur in the argument of an
   // `EXISTS`, the only place where `isDeterministic()` is called.
-  auto expectUnreachable = [](p::GraphPatternOperation op) {
-    ParsedQuery::GraphPattern pattern;
+  auto allocator = ad_utility::testing::makeAllocator();
+  auto expectUnreachable = [&allocator](p::GraphPatternOperation op) {
+    ParsedQuery::GraphPattern pattern{allocator};
     pattern._graphPatterns.push_back(std::move(op));
     AD_EXPECT_THROW_WITH_MESSAGE(std::ignore = pattern.isDeterministic(),
                                  ::testing::HasSubstr("unreachable"));
   };
-  expectUnreachable(p::Describe{});
-  expectUnreachable(p::TransPath{});
+  expectUnreachable(p::Describe{{}, {}, p::Subquery{allocator}});
+  expectUnreachable(
+      p::TransPath{{}, {}, {}, {}, 0, 0, ParsedQuery::GraphPattern{allocator}});
   expectUnreachable(p::Load{
       TripleComponent::Iri::fromIriref("<https://example.org>"), false});
 }
@@ -1494,6 +1496,19 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
     ASSERT_EQ(q._rootGraphPattern._filters[0].expression_.getDescriptor(),
               "(LANG(?x) = \"en\")");
   }
+  // Ensure filter is applied regularly if the language is a literal with a
+  // language tag or a datatype (which `LANG(?y)` never equals).
+  auto filtersFor = [](std::string_view language) {
+    return parseQuery(
+               absl::StrCat("PREFIX xsd: <http://www.w3.org/2001/XMLSchema#> "
+                            "SELECT * { ?x <label> ?y . FILTER (LANG(?y) = ",
+                            language, ")}"))
+        ._rootGraphPattern._filters.size();
+  };
+  EXPECT_EQ(filtersFor("\"en\"@de"), 1u);
+  EXPECT_EQ(filtersFor("\"en\"^^<x>"), 1u);
+  // A literal with the datatype `xsd:string` is a plain literal.
+  EXPECT_EQ(filtersFor("\"en\"^^xsd:string"), 0u);
   // Ensure filter is applied regularly if list is empty.
   {
     ParsedQuery q =
@@ -1687,17 +1702,18 @@ TEST(ParserTest, parseWithDatasets) {
 
   ad_utility::BlankNodeManager bnm;
   EncodedIriManager ev;
+  auto alloc = ad_utility::testing::makeAllocator();
   // If the datasets are specified externally, then `USING [NAMED]` is forbidden
   // by the SPARQL standard.
   AD_EXPECT_THROW_WITH_MESSAGE(
-      SparqlParser::parseUpdate(&bnm, &ev,
+      SparqlParser::parseUpdate(&bnm, &ev, alloc,
                                 "DELETE { ?x <b> <c> } USING <g> WHERE { ?x ?y "
                                 "?z FILTER EXISTS {?a ?b ?c} }",
                                 {{{iri("<h>"), false}}}),
       ::testing::HasSubstr("`USING [NAMED]` is disallowed"));
   // Same goes for `WITH`
   AD_EXPECT_THROW_WITH_MESSAGE(
-      SparqlParser::parseUpdate(&bnm, &ev,
+      SparqlParser::parseUpdate(&bnm, &ev, alloc,
                                 "WITH <g> DELETE { ?x <b> <c> } WHERE { "
                                 "?x ?y ?z "
                                 "FILTER EXISTS {?a ?b ?c} }",
@@ -1735,18 +1751,18 @@ TEST(ParserTest, parseWithDatasets) {
   auto insertDataOp = m::GraphUpdate(
       {}, {SparqlTripleSimpleWithGraph{iri("<a>"), iri("<b>"), iri("<c>"),
                                        std::monostate{}}});
-  EXPECT_THAT(
-      SparqlParser::parseUpdate(
-          &bnm, &ev, "DELETE WHERE { ?s ?p ?o }; INSERT DATA { <a> <b> <c> }",
-          {DatasetClause{iri("<foo>"), false},
-           DatasetClause{iri("<bar>"), true}}),
-      testing::ElementsAre(
-          m::UpdateClause(
-              deleteWhereOp, deleteWherePattern,
-              m::datasetClausesMatcher({{iri("<foo>")}}, {{iri("<bar>")}})),
-          m::UpdateClause(
-              insertDataOp, m::GraphPattern(),
-              m::datasetClausesMatcher({{iri("<foo>")}}, {{iri("<bar>")}}))));
+  EXPECT_THAT(SparqlParser::parseUpdate(
+                  &bnm, &ev, alloc,
+                  "DELETE WHERE { ?s ?p ?o }; INSERT DATA { <a> <b> <c> }",
+                  {DatasetClause{iri("<foo>"), false},
+                   DatasetClause{iri("<bar>"), true}}),
+              testing::ElementsAre(
+                  m::UpdateClause(deleteWhereOp, deleteWherePattern,
+                                  m::datasetClausesMatcher({{iri("<foo>")}},
+                                                           {{iri("<bar>")}})),
+                  m::UpdateClause(insertDataOp, m::GraphPattern(),
+                                  m::datasetClausesMatcher({{iri("<foo>")}},
+                                                           {{iri("<bar>")}}))));
 }
 
 // _____________________________________________________________________________

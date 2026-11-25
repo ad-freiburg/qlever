@@ -23,6 +23,9 @@
 
 namespace ad_utility::triple_component {
 
+class Iri;
+class IriView;
+
 // A class template to hold IRIs. When `isOwning = true` (the default), storage
 // is `std::string`. When `isOwning = false`, storage is `std::string_view` and
 // all mutating/allocating functions are disabled. Use the `Iri` and `IriView`
@@ -44,6 +47,10 @@ class BasicIri {
   static constexpr std::string_view schemePattern = "://";
 
  private:
+  // Required for `toOwned` below.
+  template <bool>
+  friend class BasicIri;
+
   // Store the string value of the IRI including the angle brackets.
   StorageType iri_;
 
@@ -56,13 +63,16 @@ class BasicIri {
   // A default constructed IRI is empty.
   BasicIri() = default;
 
-  CPP_template(typename H,
-               typename I)(requires ql::concepts::same_as<I, BasicIri>) friend H
-      AbslHashValue(H h, const I& iri) {
+  CPP_template(typename H, typename I)(
+      requires ql::concepts::same_as<I, BasicIri>)
+  friend H AbslHashValue(H h, const I& iri) {
     return H::combine(std::move(h), iri.iri_);
   }
 
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(BasicIri, iri_)
+
+  // Return an owning copy of this IRI.
+  Iri toOwned() const;
 
   // Build an `Iri` from a string that is already in QLever's internal
   // normalized format (see the class comment). The string is stored verbatim
@@ -113,6 +123,11 @@ class Iri : public BasicIri<true> {
   using BasicIri<true>::BasicIri;
 
  private:
+  // The qualified name is needed, because inside a class derived from
+  // `BasicIri<...>` GCC 8 resolves a plain `BasicIri` to the specialization
+  // of the base class.
+  template <bool>
+  friend class ::ad_utility::triple_component::BasicIri;
   explicit Iri(BasicIri<true>&& base) : BasicIri<true>(std::move(base)) {}
 
   // The implementation of the `fromIriref` overload for owned strings (see
@@ -139,9 +154,8 @@ class Iri : public BasicIri<true> {
   // is moved into the `Iri` instead of being copied. Note that this only binds
   // to rvalues of exactly `std::string`; for everything else (in particular
   // lvalues) the `std::string_view` overload above is chosen.
-  CPP_template(typename S)(
-      requires ql::concepts::same_as<S, std::string>) static Iri
-      fromIriref(S&& stringWithBrackets) {
+  CPP_template(typename S)(requires ql::concepts::same_as<S, std::string>)
+  static Iri fromIriref(S&& stringWithBrackets) {
     return fromOwnedIriref(std::move(stringWithBrackets));
   }
 
@@ -207,7 +221,22 @@ class IriView : public BasicIri<false> {
   using BasicIri<false>::BasicIri;
 
  private:
+  // The qualified name is needed, because inside a class derived from
+  // `BasicIri<...>` GCC 8 resolves a plain `BasicIri` to the specialization
+  // of the base class.
+  template <bool>
+  friend class ::ad_utility::triple_component::BasicIri;
   explicit IriView(BasicIri<false>&& base) : BasicIri<false>(std::move(base)) {}
+
+  // Only for the corresponding constructor of `LiteralOrIriView` (see there).
+  friend class LiteralOrIriView;
+  template <bool isOwning>
+  IriView(const BasicIri<isOwning>& equal [[maybe_unused]],
+          std::string_view storage)
+      : BasicIri<false>{storage} {
+    AD_EXPENSIVE_CHECK(storage ==
+                       std::string_view{equal.toStringRepresentation()});
+  }
 
  public:
   template <typename H>
@@ -219,6 +248,12 @@ class IriView : public BasicIri<false> {
     return IriView{BasicIri<false>::fromStringRepresentation(sv)};
   }
 };
+
+// _____________________________________________________________________________
+template <bool isOwning>
+Iri BasicIri<isOwning>::toOwned() const {
+  return Iri{BasicIri<true>{std::string{iri_}}};
+}
 
 }  // namespace ad_utility::triple_component
 
