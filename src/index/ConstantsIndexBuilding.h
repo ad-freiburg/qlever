@@ -229,6 +229,13 @@ constexpr inline size_t MAX_INDEX_ROWS_PER_BLOCK =
 constexpr inline std::string_view INDEX_ROWS_PER_BLOCK_KEY =
     "index-rows-per-block";
 
+// The key under which an index that is built with `USE_SPLIT_LAYOUT` records
+// this in its configuration (`meta-data.json`), with the value `true`. An index
+// without this key has the folded layout of the `Id`, so the configuration of
+// an index of the default build does not change. A binary only loads an index
+// with the same layout of the `Id`.
+constexpr inline std::string_view SPLIT_ID_LAYOUT_KEY = "split-id-layout";
+
 constexpr inline size_t NumColumnsIndexBuilding = 4;
 
 // The maximal number of distinct graphs in a block such that this information
