@@ -50,10 +50,10 @@ if [[ $# -gt 0 && "$1" != "-c" ]]; then
     set -- -c "$@"
 fi
 
-# If the user is not `qlever`, start a new login shell (to make sure that the
-# profile script from the Dockerfile is executed).
-# specified.
-if ! whoami > /dev/null || [ "$(whoami)" != "qlever" ]; then
+# If the user is not `qlever`, or if no `-e GID=...` is specified (so that there
+# is nothing to change, and no need for `sudo`), start a new login shell (to make
+# sure that the profile script from the Dockerfile is executed).
+if ! whoami > /dev/null || [ "$(whoami)" != "qlever" ] || [ -z "$GID" ]; then
   exec bash --login "$@"
 fi
 

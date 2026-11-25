@@ -63,9 +63,10 @@ WORKDIR /qlever
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y wget python3-yaml unzip curl bzip2 pkg-config libicu74 python3-icu uuid-runtime make lbzip2 libjemalloc2 liburing2 libzstd1 libboost-program-options1.83.0 libboost-iostreams1.83.0 libboost-url1.83.0 pipx bash-completion vim sudo && rm -rf /var/lib/apt/lists/*
 
-# Set up user `qlever` with temporary sudo rights (which will be removed again
-# by the `docker-entrypoint.sh` script, see there).
-RUN groupadd -r qlever && useradd --no-log-init -d /qlever -r -g qlever qlever
+# Set up user `qlever` with sudo rights, which `docker-entrypoint.sh` needs to
+# change the UID and GID of that user (see there). The initial UID and GID are
+# fixed, so that they match the numeric `USER` at the end of this file.
+RUN groupadd -r -g 999 qlever && useradd --no-log-init -d /qlever -r -u 999 -g qlever qlever
 RUN chown qlever:qlever /qlever
 RUN echo "qlever ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
@@ -96,6 +97,10 @@ COPY --from=builder /qlever/build/qlever-* /qlever/
 COPY --from=builder /qlever/build/*Main /qlever/
 COPY --from=builder /qlever/e2e/* /qlever/e2e/
 COPY --chmod=755 docker-entrypoint.sh /qlever/
+
+# Use the numeric UID and GID of `qlever` (see above). Kubernetes cannot verify
+# `runAsNonRoot: true` when the user of the image is specified by name.
+USER 999:999
 
 # Our entrypoint script does some clever things; see the comments in there.
 ENTRYPOINT ["/qlever/docker-entrypoint.sh"]

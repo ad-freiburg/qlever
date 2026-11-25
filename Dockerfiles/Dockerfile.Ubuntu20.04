@@ -34,7 +34,8 @@ RUN apt-get update && apt-get install -y wget python3-yaml unzip curl bzip2 pkg-
 
 ARG UID=1000
 RUN groupadd -r qlever && useradd --no-log-init -r -u $UID -g qlever qlever && chown qlever:qlever /app
-USER qlever
+# Numeric, so that Kubernetes can verify `runAsNonRoot: true`.
+USER ${UID}
 ENV PATH=/app/:$PATH
 
 COPY --from=builder /app/build/qlever-* /app/
