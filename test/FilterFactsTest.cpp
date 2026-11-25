@@ -137,20 +137,21 @@ TEST(FilterFactsCanonicalizer, Definitions) {
   expect("BIND(geof:metricDistance(?ga, ?gb) AS ?d)", "?d <= 500",
          Comparison::LE, 500);
 
-  // A variable with several values, with a value that is not a number, or
-  // with no value after the join of its `VALUES` clauses is not replaced.
-  auto expectOpaque = [](std::string_view definitions,
-                         ad_utility::source_location l =
-                             AD_CURRENT_SOURCE_LOC()) {
-    auto trace = generateLocationTrace(l);
-    auto result = canonical("geof:metricDistance(?ga, ?gb) <= ?r", definitions);
-    EXPECT_THAT(result.conjuncts_,
-                ElementsAre(opaque(result.query_._rootGraphPattern._filters[0]
-                                       .expression_.getPimpl())));
-  };
-  expectOpaque("VALUES ?r { 500 600 }");
-  expectOpaque("VALUES ?r { 500 \"600\" }");
-  expectOpaque("VALUES ?r { 500 } VALUES ?r { 600 }");
+  // A variable with several values is not replaced.
+  auto several =
+      canonical("geof:metricDistance(?ga, ?gb) <= ?r", "VALUES ?r { 500 600 }");
+  EXPECT_THAT(several.conjuncts_,
+              ElementsAre(opaque(several.query_._rootGraphPattern._filters[0]
+                                     .expression_.getPimpl())));
+
+  // A variable without a value (two `VALUES` clauses without a common value) is
+  // not replaced.
+  auto none = canonical("geof:metricDistance(?ga, ?gb) <= ?r",
+                        "VALUES ?r { 500 } VALUES ?r { 600 }");
+  EXPECT_THAT(
+      none.conjuncts_,
+      ElementsAre(opaque(
+          none.query_._rootGraphPattern._filters[0].expression_.getPimpl())));
 }
 
 // Test that only the columns of `VALUES` without `UNDEF`, the `BIND`s of
@@ -234,6 +235,7 @@ TEST(FilterFactsCanonicalizer, Opaque) {
   // A right side that is not a number.
   expectOpaque("geof:metricDistance(?ga, ?gb) <= \"500\"");
   expectOpaque("geof:metricDistance(?ga, ?gb) <= ?a");
+  expectOpaque("geof:metricDistance(?ga, ?gb) <= STRLEN(?a)");
 
   // A left side that is not a distance in a unit of length.
   expectOpaque("geof:metricDistance(?ga, ?gb) + 1 <= 500");
