@@ -19,6 +19,7 @@
 #include "parser/PayloadVariables.h"
 #include "parser/SpatialQuery.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
+#include "util/ColumnStrippingTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
 
@@ -1746,6 +1747,8 @@ TEST(QueryPlanner, SpatialJoinChildrenShareNoVariable) {
 // evaluated as a semi-join with a `SpatialJoin` (their regular filter is not
 // implemented), and only those.
 TEST(QueryPlanner, SpatialJoinCycleAsSemiJoin) {
+  using column_stripping_test_helpers::countOperations;
+
   // A region `<f1>` that contains the smaller region `<r1>` and the point
   // `<t3>`, and a region `<f2>` that contains nothing. `<r1>` contains the
   // point `<t1>`, the point `<t2>` is outside of all regions.
@@ -1796,18 +1799,6 @@ TEST(QueryPlanner, SpatialJoinCycleAsSemiJoin) {
     return IdTable{
         qet->getResult()->idTableView().asColumnSubsetView(indices).clone()};
   };
-  // Return the number of semi-joins (`ExistsJoin`s) in `qet`.
-  auto count = [](const QueryExecutionTree& qet, const auto& self) -> size_t {
-    const auto& operation = *qet.getRootOperation();
-    size_t result = dynamic_cast<const ExistsJoin*>(&operation) != nullptr;
-    for (const auto* child : operation.getChildren()) {
-      result += self(*child, self);
-    }
-    return result;
-  };
-  auto countSemiJoins = [&count](const QueryExecutionTree& qet) {
-    return count(qet, count);
-  };
 
   // A triangle: `<t1>` is the only point in `<r1>` in `<f1>`, with both
   // planners.
@@ -1817,7 +1808,7 @@ TEST(QueryPlanner, SpatialJoinCycleAsSemiJoin) {
         "?t <q> ?tg . FILTER geof:sfContains(?fg, ?rg) "
         "FILTER geof:sfContains(?fg, ?tg) FILTER geof:sfContains(?rg, ?tg)",
         frt, greedy);
-    EXPECT_EQ(countSemiJoins(*qet), 1);
+    EXPECT_EQ(countOperations<ExistsJoin>(*qet), 1);
     EXPECT_THAT(columns(qet, frt), matchesIdTableFromVector(
                                        {{id("<f1>"), id("<r1>"), id("<t1>")}}));
   }
@@ -1827,7 +1818,7 @@ TEST(QueryPlanner, SpatialJoinCycleAsSemiJoin) {
   auto parallel = plan(
       "FILTER geof:sfIntersects(?fg, ?rg) FILTER geof:sfContains(?fg, ?rg)",
       {"?f", "?r"});
-  EXPECT_EQ(countSemiJoins(*parallel), 1);
+  EXPECT_EQ(countOperations<ExistsJoin>(*parallel), 1);
   EXPECT_THAT(columns(parallel, {"?f", "?r"}),
               matchesIdTableFromVector({{id("<f1>"), id("<r1>")}}));
 
@@ -1836,7 +1827,7 @@ TEST(QueryPlanner, SpatialJoinCycleAsSemiJoin) {
       "?t <q> ?tg . FILTER geof:sfContains(?fg, ?rg) "
       "FILTER geof:sfContains(?fg, ?tg)",
       frt);
-  EXPECT_EQ(countSemiJoins(*chain), 0);
+  EXPECT_EQ(countOperations<ExistsJoin>(*chain), 0);
   EXPECT_THAT(columns(chain, frt),
               matchesIdTableFromVector({{id("<f1>"), id("<r1>"), id("<t1>")},
                                         {id("<f1>"), id("<r1>"), id("<t3>")}}));
