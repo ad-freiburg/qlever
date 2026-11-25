@@ -715,6 +715,7 @@ template struct GeometryInfoValueGetter<ad_utility::NumGeometries>;
 template struct GeometryInfoValueGetter<ad_utility::MetricLength>;
 template struct GeometryInfoValueGetter<ad_utility::MetricArea>;
 template struct GeometryInfoValueGetter<ad_utility::SerializationType>;
+template struct GeometryInfoValueGetter<ad_utility::GeometryStoreId>;
 template struct GeometryInfoValueGetter<
     ad_utility::WithSourceCrs<ad_utility::Centroid>>;
 template struct GeometryInfoValueGetter<
@@ -801,6 +802,8 @@ template struct TypeErasedValueGetter<
     GeometryInfoValueGetter<ad_utility::MetricArea>>;
 template struct TypeErasedValueGetter<
     GeometryInfoValueGetter<ad_utility::SerializationType>>;
+template struct TypeErasedValueGetter<
+    GeometryInfoValueGetter<ad_utility::GeometryStoreId>>;
 template struct TypeErasedValueGetter<
     GeometryInfoValueGetter<ad_utility::WithSourceCrs<ad_utility::Centroid>>>;
 template struct TypeErasedValueGetter<GeometryInfoValueGetter<
