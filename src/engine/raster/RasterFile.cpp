@@ -116,7 +116,7 @@ struct RasterFile::Impl {
 
   // Return the center of the pixel at `column`, `row`. It is not `const`,
   // because GDAL 3.8 needs a non-const geotransform.
-  GeoPoint pixelCenter(int column, int row);
+  GeoPoint computePixelCenter(int column, int row);
 };
 
 // _____________________________________________________________________________
@@ -228,7 +228,7 @@ void RasterFile::Impl::checkBands(ql::span<const int> bands) const {
 }
 
 // _____________________________________________________________________________
-GeoPoint RasterFile::Impl::pixelCenter(int column, int row) {
+GeoPoint RasterFile::Impl::computePixelCenter(int column, int row) {
   double x = 0.0;
   double y = 0.0;
   GDALApplyGeoTransform(pixelToRaster_.data(), column + 0.5, row + 0.5, &x, &y);
@@ -297,8 +297,8 @@ PixelTable RasterFile::lookupPoint(const GeoPoint& point,
   }
 
   // Build a table with one row.
-  qlm::vector<GeoPoint> centers({impl.pixelCenter(pixelColumn, pixelRow)},
-                                allocator);
+  qlm::vector<GeoPoint> centers(
+      {impl.computePixelCenter(pixelColumn, pixelRow)}, allocator);
   std::vector<BandValues> valuesPerBand;
   valuesPerBand.reserve(bands.size());
   for (const std::optional<PixelValue>& value : pixelValues) {
@@ -308,7 +308,7 @@ PixelTable RasterFile::lookupPoint(const GeoPoint& point,
 }
 
 // _____________________________________________________________________________
-std::string rasterFilePath(const ql::filesystem::path& folder,
+std::string findRasterFile(const ql::filesystem::path& folder,
                            std::string_view name) {
   for (const auto& entry : ql::filesystem::directory_iterator(folder)) {
     const ql::filesystem::path& file = entry.path();
