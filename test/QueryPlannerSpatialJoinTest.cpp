@@ -19,6 +19,7 @@
 #include "parser/PayloadVariables.h"
 #include "parser/SpatialQuery.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
+#include "util/IdTableHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
 
 namespace h = queryPlannerTestHelpers;
@@ -1745,10 +1746,9 @@ TEST(QueryPlanner, SpatialJoinChildrenShareNoVariable) {
 // evaluated as a semi-join with a `SpatialJoin` (their regular filter is not
 // implemented), and only those.
 TEST(QueryPlanner, SpatialJoinCycleAsSemiJoin) {
-  // A small region `<f1>` that contains `<r1>`, `<t1>` and `<x1>`, and a region
-  // `<f2>` that contains `<t3>` and `<x2>`. `<t2>` is just outside of `<f1>`.
-  // The points `<r1>`, `<t1>`, `<t2>` and `<x1>` are within 5 km of each
-  // other, `<t3>` and `<x2>` are far away from them.
+  // A region `<f1>` that contains the smaller region `<r1>` and the point
+  // `<t3>`, and a region `<f2>` that contains nothing. `<r1>` contains the
+  // point `<t1>`, the point `<t2>` is outside of all regions.
   std::string kg;
   auto add = [&kg](std::string_view subject, std::string_view predicate,
                    std::string_view wkt) {
@@ -1758,28 +1758,43 @@ TEST(QueryPlanner, SpatialJoinCycleAsSemiJoin) {
   add("<f1>", "<g>",
       "POLYGON((7.8 47.9, 7.85 47.9, 7.85 48.1, 7.8 48.1, 7.8 47.9))");
   add("<f2>", "<g>", "POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))");
-  add("<r1>", "<p>", "POINT(7.835 48.012)");
+  add("<r1>", "<p>",
+      "POLYGON((7.83 47.99, 7.845 47.99, 7.845 48.02, 7.83 48.02, "
+      "7.83 47.99))");
   add("<t1>", "<q>", "POINT(7.84 48.0)");
   add("<t2>", "<q>", "POINT(7.86 48.0)");
-  add("<t3>", "<q>", "POINT(0.5 0.5)");
-  add("<x1>", "<s>", "POINT(7.845 48.0)");
-  add("<x2>", "<s>", "POINT(0.6 0.5)");
+  add("<t3>", "<q>", "POINT(7.81 48.05)");
   auto qec = ad_utility::testing::getQec(kg);
   auto id = ad_utility::testing::makeGetId(qec->getIndex());
 
-  // Plan the query with the triples and filters in `body`, with the dynamic
-  // programming planner and with the greedy planner.
-  auto plan = [qec](std::string_view body, bool greedy = false) {
+  // Plan the query with the triples and filters in `body`, which selects and
+  // is ordered by the `variables`, with the dynamic programming planner or
+  // with the greedy planner.
+  auto plan = [qec](std::string_view body,
+                    const std::vector<std::string>& variables,
+                    bool greedy = false) {
     auto budget =
         setRuntimeParameterForTest<&RuntimeParameters::queryPlanningBudget_>(
             greedy ? 0 : 1500);
     qec->clearCacheUnpinnedOnly();
+    auto selected = absl::StrJoin(variables, " ");
     return h::parseAndPlan(
         absl::StrCat(
             "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
-            "SELECT * WHERE { ?f <g> ?fg . ?r <p> ?rg . ",
-            body, " }"),
+            "SELECT ",
+            selected, " WHERE { ?f <g> ?fg . ?r <p> ?rg . ", body,
+            " } ORDER BY ", selected),
         qec);
+  };
+  // Return the columns of the result of `qet` for the `variables`.
+  auto columns = [](const std::shared_ptr<QueryExecutionTree>& qet,
+                    const std::vector<std::string>& variables) {
+    std::vector<ColumnIndex> indices;
+    for (const auto& variable : variables) {
+      indices.push_back(qet->getVariableColumn(Variable{variable}));
+    }
+    return IdTable{
+        qet->getResult()->idTableView().asColumnSubsetView(indices).clone()};
   };
   // Return the number of semi-joins (`ExistsJoin`s) in `qet`.
   auto count = [](const QueryExecutionTree& qet, const auto& self) -> size_t {
@@ -1793,63 +1808,38 @@ TEST(QueryPlanner, SpatialJoinCycleAsSemiJoin) {
   auto countSemiJoins = [&count](const QueryExecutionTree& qet) {
     return count(qet, count);
   };
-  // Return the rows of the result of `qet` for the given `variables`.
-  auto rows = [](const std::shared_ptr<QueryExecutionTree>& qet,
-                 const std::vector<std::string>& variables) {
-    const auto& table = qet->getResult()->idTableView();
-    std::vector<std::vector<Id>> result(table.numRows());
-    for (const auto& variable : variables) {
-      auto column = qet->getVariableColumn(Variable{variable});
-      for (size_t row = 0; row < table.numRows(); ++row) {
-        result.at(row).push_back(table(row, column));
-      }
-    }
-    return result;
-  };
-  using ::testing::UnorderedElementsAreArray;
 
-  // A triangle: `<r1>` and `<t1>` in `<f1>` are the only result (`<t2>` is not
-  // in `<f1>`), with both planners.
-  std::string_view triangle =
-      "?t <q> ?tg . FILTER geof:sfContains(?fg, ?rg) "
-      "FILTER geof:sfContains(?fg, ?tg) FILTER(geof:distance(?rg, ?tg) <= 5)";
+  // A triangle: `<t1>` is the only point in `<r1>` in `<f1>`, with both
+  // planners.
+  std::vector<std::string> frt{"?f", "?r", "?t"};
   for (bool greedy : {false, true}) {
-    auto qet = plan(triangle, greedy);
+    auto qet = plan(
+        "?t <q> ?tg . FILTER geof:sfContains(?fg, ?rg) "
+        "FILTER geof:sfContains(?fg, ?tg) FILTER geof:sfContains(?rg, ?tg)",
+        frt, greedy);
     EXPECT_EQ(countSemiJoins(*qet), 1);
-    EXPECT_THAT(rows(qet, {"?f", "?r", "?t"}),
-                UnorderedElementsAreArray(std::vector<std::vector<Id>>{
-                    {id("<f1>"), id("<r1>"), id("<t1>")}}));
+    EXPECT_THAT(columns(qet, frt), matchesIdTableFromVector(
+                                       {{id("<f1>"), id("<r1>"), id("<t1>")}}));
   }
 
-  // A cycle of four filters: `<r1>` and `<x1>` in `<f1>`, both close to `<t1>`
-  // and to `<t2>`.
-  auto square = plan(
-      "?t <q> ?tg . ?x <s> ?xg . FILTER geof:sfContains(?fg, ?rg) "
-      "FILTER geof:sfContains(?fg, ?xg) "
-      "FILTER(geof:distance(?rg, ?tg) <= 5) "
-      "FILTER(geof:distance(?tg, ?xg) <= 5)");
-  EXPECT_EQ(countSemiJoins(*square), 1);
-  EXPECT_THAT(rows(square, {"?f", "?r", "?t", "?x"}),
-              UnorderedElementsAreArray(std::vector<std::vector<Id>>{
-                  {id("<f1>"), id("<r1>"), id("<t1>"), id("<x1>")},
-                  {id("<f1>"), id("<r1>"), id("<t2>"), id("<x1>")}}));
-
-  // Two geometric relations between the same two variables: one is a semi-join.
+  // Two geometric relations between the same two variables: one is a
+  // semi-join.
   auto parallel = plan(
-      "FILTER geof:sfIntersects(?fg, ?rg) FILTER geof:sfContains(?fg, ?rg)");
+      "FILTER geof:sfIntersects(?fg, ?rg) FILTER geof:sfContains(?fg, ?rg)",
+      {"?f", "?r"});
   EXPECT_EQ(countSemiJoins(*parallel), 1);
-  EXPECT_THAT(rows(parallel, {"?f", "?r"}),
-              UnorderedElementsAreArray(
-                  std::vector<std::vector<Id>>{{id("<f1>"), id("<r1>")}}));
+  EXPECT_THAT(columns(parallel, {"?f", "?r"}),
+              matchesIdTableFromVector({{id("<f1>"), id("<r1>")}}));
 
-  // Two filters with the same region but without a cycle: no semi-join.
+  // Two relations with the same region but without a cycle: no semi-join.
   auto chain = plan(
       "?t <q> ?tg . FILTER geof:sfContains(?fg, ?rg) "
-      "FILTER geof:sfContains(?fg, ?tg)");
+      "FILTER geof:sfContains(?fg, ?tg)",
+      frt);
   EXPECT_EQ(countSemiJoins(*chain), 0);
-  EXPECT_THAT(rows(chain, {"?f", "?r", "?t"}),
-              UnorderedElementsAreArray(std::vector<std::vector<Id>>{
-                  {id("<f1>"), id("<r1>"), id("<t1>")}}));
+  EXPECT_THAT(columns(chain, frt),
+              matchesIdTableFromVector({{id("<f1>"), id("<r1>"), id("<t1>")},
+                                        {id("<f1>"), id("<r1>"), id("<t3>")}}));
 }
 
 // _____________________________________________________________________________
@@ -2207,6 +2197,14 @@ TEST(QueryPlanner, FilterWithoutForcedSubstituteInSingleSeedComponent) {
       h::Filter("geof:sfIntersects(?b, ?a)",
                 h::ExistsJoin(scan("?a", "<p>", "?b"), ::testing::_)),
       qec);
+
+  // The same for a `geof:distance` filter, which is evaluated regularly.
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "FILTER(geof:distance(?b, ?a) <= 5) }",
+      h::Filter("geof:distance(?b, ?a) <= 5", scan("?a", "<p>", "?b")), qec);
 }
 
 // Test that an enforced filter substitute with a fixed side is applied after
