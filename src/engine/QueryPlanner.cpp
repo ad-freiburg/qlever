@@ -38,6 +38,7 @@
 #include "engine/operation/Describe.h"
 #include "engine/operation/Distinct.h"
 #include "engine/operation/DistinctGraphs.h"
+#include "engine/operation/ExistsJoin.h"
 #include "engine/operation/ExternalValues.h"
 #include "engine/operation/Filter.h"
 #include "engine/operation/GroupBy.h"
@@ -1524,12 +1525,18 @@ void QueryPlanner::applyFiltersIfPossible(
       // the bound value, so it may only be applied after that join. This
       // happens at the latest at the end of the group graph pattern, in the
       // `ApplyAllFiltersAndReplaceUnfiltered` mode.
-      if (applyAll ||
+      bool isAlwaysDefined =
           plan._qet->getRootOperation()->areVariablesAlwaysDefined(
-              filterAndSubst.filter_.expression_.containedVariables())) {
-        // Apply this filter regularly.
-        SubtreePlan newPlan = makeSubtreePlan<Filter>(
-            _qec, plan._qet, filterAndSubst.filter_.expression_);
+              filterAndSubst.filter_.expression_.containedVariables());
+      if (applyAll || isAlwaysDefined) {
+        // Apply this filter regularly, or via its substitute if it has one
+        // (see `createSemiJoinWithSubstitute`).
+        SubtreePlan newPlan =
+            isAlwaysDefined && filterAndSubst.hasSubstitute() &&
+                    !filterAndSubst.forceSubstitution_
+                ? createSemiJoinWithSubstitute(plan, filterAndSubst)
+                : makeSubtreePlan<Filter>(_qec, plan._qet,
+                                          filterAndSubst.filter_.expression_);
         mergeSubtreePlanIds(newPlan, newPlan, plan);
         newPlan._idsOfIncludedFilters |= (size_t(1) << i);
         newPlan.type = plan.type;
@@ -2524,6 +2531,39 @@ SubtreePlanVec QueryPlanner::createJoinsWithSubstitutes(
     }
   }
   return candidates;
+}
+
+// _____________________________________________________________________________
+SubtreePlan QueryPlanner::createSemiJoinWithSubstitute(
+    const SubtreePlan& plan,
+    const FilterAndOptionalSubstitute& filterAndSubst) const {
+  // Attach the column of each variable of the filter in `plan` as a child to
+  // the substitute. For example, for `geof:sfContains(?x, ?y)`, this gives a
+  // `SpatialJoin` of the values of `?x` and `?y` in `plan`.
+  SubtreePlan substitute = filterAndSubst.substitute_.value();
+  for (const auto* variable :
+       filterAndSubst.filter_.expression_.containedVariables()) {
+    SubtreePlan column{QueryExecutionTree::makeTreeWithStrippedColumns(
+        plan._qet, {*variable}, HideStrippedColumns::True)};
+    auto candidates = createJoinCandidates(substitute, column,
+                                           getJoinColumns(substitute, column));
+    AD_CORRECTNESS_CHECK(!candidates.empty());
+    substitute = std::move(candidates.front());
+  }
+
+  // Keep the rows of `plan` that are also in the result of the substitute, via
+  // an `ExistsJoin` and a `Filter` on its added column (like for `FILTER
+  // EXISTS`). The `Filter` gets the descriptor of the original filter.
+  static std::atomic<size_t> counter = 0;
+  Variable exists{
+      absl::StrCat(QLEVER_INTERNAL_VARIABLE_PREFIX, "semi_join_", ++counter)};
+  auto existsJoin =
+      makeExecutionTree<ExistsJoin>(_qec, plan._qet, substitute._qet, exists);
+  return makeSubtreePlan<Filter>(
+      _qec, std::move(existsJoin),
+      sparqlExpression::SparqlExpressionPimpl{
+          std::make_unique<sparqlExpression::VariableExpression>(exists),
+          filterAndSubst.filter_.expression_.getDescriptor()});
 }
 
 // _____________________________________________________________________________________________________________________

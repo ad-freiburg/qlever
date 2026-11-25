@@ -514,6 +514,19 @@ class QueryPlanner {
       const SubtreePlan& a, const SubtreePlan& b,
       const FiltersAndOptionalSubstitutes& filters) const;
 
+  // Apply the filter of `filterAndSubst` to `plan`, which binds all of its
+  // variables, via its substitute: a semi-join of `plan` with the substitute,
+  // whose children are the columns of these variables in `plan`.
+  //
+  // NOTE: This is needed for a `SpatialJoin` substitute that cannot connect two
+  // plans, because its variables were bound together by other joins or
+  // substitutes (for example, for a cycle of geometric relations, or when its
+  // two sides share a variable). The geometric relations like
+  // `geof:sfContains` cannot be evaluated as a regular filter.
+  SubtreePlan createSemiJoinWithSubstitute(
+      const SubtreePlan& plan,
+      const FilterAndOptionalSubstitute& filterAndSubst) const;
+
   // Helper that generates `IndexScan` query plans on materialized views if they
   // can be used to avoid joins between some of the `triples`. The resulting
   // plans for part of the `triples` are given in a vector of query planning
