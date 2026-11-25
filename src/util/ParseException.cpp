@@ -4,8 +4,6 @@
 
 #include "util/ParseException.h"
 
-#include <Token.h>
-
 #include "util/Exception.h"
 #include "util/Log.h"
 #include "util/StringUtils.h"

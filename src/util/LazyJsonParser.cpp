@@ -5,7 +5,6 @@
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 #include "util/LazyJsonParser.h"
 
-#include <absl/strings/ascii.h>
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
 

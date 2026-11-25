@@ -11,7 +11,6 @@
 
 #include "engine/operation/Sort.h"
 
-#include "engine/CallFixedSize.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "engine/operation/ColumnStrippingHelpers.h"

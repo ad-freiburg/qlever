@@ -7,7 +7,6 @@
 #include <charconv>
 #include <ctre-unicode.hpp>
 
-#include "sparqlParser/generated/SparqlAutomaticLexer.h"
 #include "util/StringUtils.h"
 
 namespace sparqlParserHelpers {
