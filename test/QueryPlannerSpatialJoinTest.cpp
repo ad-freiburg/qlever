@@ -2138,6 +2138,23 @@ TEST(QueryPlanner, SpatialJoinFromFilterBetweenJoinsGreedy) {
       qec);
 }
 
+// Test that both planners substitute a filter with a `SpatialJoin` when one
+// side of the filter is possibly undefined, here bound in an `OPTIONAL` that
+// shares no variable with the rest.
+TEST(QueryPlanner, SpatialJoinFromFilterWithPossiblyUndefinedSide) {
+  auto scan = h::IndexScanFromStrings;
+  using enum SpatialJoinType::Enum;
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE { ?x <wkt> ?a . OPTIONAL { ?y <wkt> ?b } "
+      "FILTER(geof:sfIntersects(?a, ?b)) }",
+      h::spatialJoinFilterSubstitute(
+          -1, -1, Var{"?a"}, Var{"?b"}, std::nullopt, PayloadVariables::all(),
+          SpatialJoinAlgorithm::LIBSPATIALJOIN, INTERSECTS, std::nullopt,
+          scan("?x", "<wkt>", "?a"),
+          h::NeutralOptional(scan("?y", "<wkt>", "?b"))));
+}
+
 // _____________________________________________________________________________
 TEST(QueryPlanner, SpatialJoinFromGeofRelateFilter) {
   auto scan = h::IndexScanFromStrings;

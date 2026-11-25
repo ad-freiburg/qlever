@@ -2506,19 +2506,14 @@ SubtreePlanVec QueryPlanner::createJoinsWithSubstitutes(
     return candidates;
   }
 
-  // Join `plan` to `substitute` if they share variables that are all always
-  // defined in `plan`. (A variable that might be undefined could still be bound
-  // by a later join, as for the filters in `applyFiltersIfPossible`.)
+  // Join `plan` to `substitute`.
+  //
+  // NOTE: This also joins on a variable that is possibly undefined in `plan`.
+  // If the filter is the only connection between `a` and `b` in the query
+  // graph, there is no other way to merge them.
   auto join = [this](const SubtreePlan& substitute, const SubtreePlan& plan) {
-    auto jcs = getJoinColumns(substitute, plan);
-    auto isAlwaysDefined = [&plan](const auto& jc) {
-      return plan._qet->getRootOperation()->isVariableAlwaysDefined(
-          plan._qet->getVariableAndInfoByColumnIndex(jc[1]).first);
-    };
-    if (!ql::ranges::all_of(jcs, isAlwaysDefined)) {
-      return SubtreePlanVec{allocator()};
-    }
-    auto newPlans = createJoinCandidates(substitute, plan, jcs);
+    auto newPlans = createJoinCandidates(substitute, plan,
+                                         getJoinColumns(substitute, plan));
     for (auto& newPlan : newPlans) {
       mergeSubtreePlanIds(newPlan, newPlan, plan);
     }
