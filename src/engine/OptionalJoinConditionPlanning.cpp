@@ -20,28 +20,20 @@
 namespace qlever::queryPlanner {
 
 namespace {
-// Return the message for the `filter` of an OPTIONAL that uses the
-// `variables`, which are bound outside of the OPTIONAL, but not always inside
-// of it. If `inExists` is true, the `variables` are used by an `EXISTS` in the
-// `filter` and the message is for a `NotSupportedException`, otherwise it is
-// for the warning that the `filter` is evaluated on the content of the
-// OPTIONAL alone.
-std::string makeMessage(const sparqlExpression::SparqlExpressionPimpl& filter,
-                        bool inExists,
-                        const std::vector<std::string>& variables) {
+// Return the message of the `NotSupportedException` for the `filter` of an
+// OPTIONAL that contains an `EXISTS` that uses the `variables`, which are
+// bound outside of the OPTIONAL, but not always inside of it.
+std::string makeExistsMessage(
+    const sparqlExpression::SparqlExpressionPimpl& filter,
+    const std::vector<std::string>& variables) {
   return absl::StrCat(
-      "The FILTER ", filter.getDescriptor(), " inside of an OPTIONAL",
-      inExists ? " contains an EXISTS that" : "", " uses ",
+      "The FILTER ", filter.getDescriptor(),
+      " inside of an OPTIONAL contains an EXISTS that uses ",
       absl::StrJoin(variables, ", "), ", which ",
       variables.size() > 1 ? "are" : "is",
       " bound outside of the OPTIONAL but not always inside of it. The SPARQL "
-      "standard evaluates such ",
-      inExists ? "an EXISTS" : "a FILTER",
-      " on the joined rows, which is not supported yet",
-      inExists ? ""
-               : ", so QLever evaluates it on the content of the OPTIONAL "
-                 "alone",
-      ".");
+      "standard evaluates such an EXISTS on the joined rows, which is not "
+      "supported yet.");
 }
 
 // Return the names of the `variables` (pointers) for which `predicate` is
@@ -89,21 +81,10 @@ bool isPartOfOptionalJoinCondition(
                 [](const Variable& variable) { return &variable; }),
         getsValueFromLeftSide);
     if (!variables.empty()) {
-      throw NotSupportedException{makeMessage(filter, true, variables)};
+      throw NotSupportedException{makeExistsMessage(filter, variables)};
     }
   }
   return ql::ranges::any_of(filter.containedVariables(), getsValueFromLeftSide);
-}
-
-// _____________________________________________________________________________
-std::string getOptionalJoinConditionWarning(
-    const sparqlExpression::SparqlExpressionPimpl& filter,
-    const ad_utility::HashSet<Variable>& variablesOfLeftSide,
-    absl::FunctionRef<bool(const Variable&)> isAlwaysDefinedInGroup) {
-  auto variables = getNamesOfVariables(
-      filter.containedVariables(),
-      makeGetsValueFromLeftSide(variablesOfLeftSide, isAlwaysDefinedInGroup));
-  return makeMessage(filter, false, variables);
 }
 
 }  // namespace qlever::queryPlanner

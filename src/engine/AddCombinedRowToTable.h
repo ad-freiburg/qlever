@@ -135,10 +135,10 @@ class AddCombinedRowToIdTable {
   }
 
   // Set the `rowFilter`, see `RowFilter`. It must stay alive as long as rows
-  // are added. Requires at least one join column.
+  // are added.
   void setRowFilter(RowFilter* rowFilter) {
     AD_CONTRACT_CHECK(rowFilter != nullptr && nextIndex_ == 0 &&
-                      numJoinColumns_ > 0 && resultTable_.numColumns() > 0);
+                      resultTable_.numColumns() > 0);
     rowFilter_ = rowFilter;
   }
 
@@ -499,6 +499,9 @@ class AddCombinedRowToIdTable {
   // `oldSize`) and pass them to the `rowFilter_`.
   void applyRowFilter(size_t oldSize) {
     writtenRows_.resize(nextIndex_);
+    // A left row is identified by the address of the first column of the left
+    // input, see `WrittenRow`.
+    AD_CORRECTNESS_CHECK(inputLeft().numColumns() > 0);
     const Id* leftInput = inputLeft().getColumn(0).data();
     for (const auto& [targetIndex, sourceIndices] : indexBuffer_) {
       writtenRows_[targetIndex] = {leftInput, sourceIndices[0], true};

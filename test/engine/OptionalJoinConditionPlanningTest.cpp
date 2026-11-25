@@ -53,16 +53,8 @@ std::vector<std::string> getWarnings(std::string query) {
       ->collectWarnings();
 }
 
-// Expect that the plan for the `query` has a warning with the given `message`.
-void expectWarning(std::string query, std::string_view message,
-                   ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
-  auto trace = generateLocationTrace(l);
-  EXPECT_THAT(getWarnings(std::move(query)),
-              ::testing::Contains(HasSubstr(message)));
-}
-
-constexpr std::string_view conditionMessage =
-    "so QLever evaluates it on the content of the OPTIONAL alone";
+constexpr std::string_view crossProductMessage =
+    "is evaluated by comparing all pairs of rows (Cartesian product)";
 constexpr std::string_view existsMessage =
     "inside of an OPTIONAL contains an EXISTS that uses";
 
@@ -253,35 +245,58 @@ TEST(OptionalJoinConditionPlanning, conditionIsPassedToOptionalJoin) {
   EXPECT_THAT(qet->getRootOperation()->collectWarnings(), ::testing::IsEmpty());
 }
 
-// Test that a FILTER of the condition is applied to the group of the OPTIONAL
-// with a warning if there is no `OptionalJoin` that could evaluate it.
-TEST(OptionalJoinConditionPlanning, conditionIsAppliedToGroupWithWarning) {
-  // Without a shared variable, there is no `OptionalJoin`. The FILTER is then
-  // applied to the group, after all other FILTERs, like before the condition
-  // was determined.
+// Test that an OPTIONAL without a shared variable is planned as an
+// `OptionalJoin` without join columns if it has a condition, with a warning
+// about the Cartesian product.
+TEST(OptionalJoinConditionPlanning, conditionWithoutSharedVariable) {
+  // Expect that the root of the plan for `query` is an `OptionalJoin` without
+  // join columns and with the `condition`, and that there is the warning about
+  // the Cartesian product.
+  auto expectCrossProduct = [](std::string query, std::string_view condition,
+                               ad_utility::source_location l =
+                                   AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    auto qet = h::parseAndPlan(std::move(query), ad_utility::testing::getQec());
+    auto join =
+        std::dynamic_pointer_cast<OptionalJoin>(qet->getRootOperation());
+    ASSERT_NE(join, nullptr);
+    EXPECT_THAT(join->getDescriptor(), HasSubstr("Cartesian product"));
+    ASSERT_EQ(join->condition().size(), 1);
+    EXPECT_THAT(join->condition().at(0).getDescriptor(), HasSubstr(condition));
+    EXPECT_THAT(qet->collectWarnings(),
+                ::testing::Contains(HasSubstr(crossProductMessage)));
+  };
   auto scan = h::IndexScanFromStrings;
+  // A FILTER that only uses variables of the group stays in the group.
   h::expect(
       "SELECT * { ?x <p> ?y OPTIONAL { ?a <q> ?z FILTER(?y < ?z) "
       "FILTER(?z > 3) } }",
       h::QetWithWarnings(
-          {std::string{conditionMessage}},
-          h::CartesianProductJoin(
-              scan("?x", "<p>", "?y"),
-              h::NeutralOptional(h::Filter(
-                  "?y < ?z", h::Filter("?z > 3", scan("?a", "<q>", "?z")))))));
-  // The same for an OPTIONAL with an empty group, and with a group that only
-  // consists of a MINUS, which is planned like an empty group.
-  expectWarning("SELECT * { ?x <p> ?y OPTIONAL { FILTER(?y < 5) } }",
-                conditionMessage);
-  expectWarning(
+          {std::string{crossProductMessage}},
+          h::OptionalJoin(scan("?x", "<p>", "?y"),
+                          h::Filter("?z > 3", scan("?a", "<q>", "?z")))));
+  expectCrossProduct(
+      "SELECT * { ?x <p> ?y OPTIONAL { ?a <q> ?z FILTER(?y < ?z) } }",
+      "?y < ?z");
+  // An empty group, and a group that only consists of a MINUS, which is
+  // planned like an empty group (with the warning that the MINUS is ignored).
+  expectCrossProduct("SELECT * { ?x <p> ?y OPTIONAL { FILTER(?y < 5) } }",
+                     "?y < 5");
+  expectCrossProduct(
       "SELECT * { ?x <p> ?y OPTIONAL { MINUS { ?x <q> ?z } FILTER(?y != <a>) "
       "} }",
-      conditionMessage);
+      "?y != <a>");
   // Inside `GRAPH ?g`, the left side binds `?g`, but the group doesn't.
-  expectWarning(
+  expectCrossProduct(
       "SELECT * { GRAPH ?g { ?x <p> ?y OPTIONAL { VALUES ?z { 1 } "
       "FILTER(?g != <a>) } } }",
-      conditionMessage);
+      "?g != <a>");
+  // Without a condition, there is no warning (the OPTIONAL is computed with a
+  // `NeutralOptional`).
+  EXPECT_THAT(
+      getWarnings(
+          "SELECT * { ?x <p> ?y OPTIONAL { ?a <q> ?z FILTER(?z > 3) } }"),
+      ::testing::IsEmpty());
 }
 
 // Test that a query is rejected if the argument of an `EXISTS` in a FILTER of
@@ -305,28 +320,16 @@ TEST(OptionalJoinConditionPlanning, existsThatDependsOnLeftSide) {
 
 // Test the exact messages of the warning and of the exception.
 TEST(OptionalJoinConditionPlanning, messages) {
-  // The messages name the FILTER and the variables that make it part of the
-  // condition, but not the other variables, each only once. The OPTIONALs
-  // share no variable with the left side, so there is no `OptionalJoin` that
-  // could evaluate the condition.
-  auto query = "SELECT * { ?x <p> ?y OPTIONAL { ?a <q> ?z FILTER(?y < ?z) } }";
   EXPECT_THAT(
-      getWarnings(query),
+      getWarnings(
+          "SELECT * { ?x <p> ?y OPTIONAL { ?a <q> ?z FILTER(?y < ?z) } }"),
       ::testing::ElementsAre(
-          "The FILTER (?y < ?z) inside of an OPTIONAL uses ?y, which is bound "
-          "outside of the OPTIONAL but not always inside of it. The SPARQL "
-          "standard evaluates such a FILTER on the joined rows, which is not "
-          "supported yet, so QLever evaluates it on the content of the "
-          "OPTIONAL alone."));
-  EXPECT_THAT(
-      getWarnings("SELECT * { ?x <p> ?y . ?x <r> ?w OPTIONAL { ?a <q> ?z "
-                  "FILTER(?y < ?w || ?y = ?z) } }"),
-      ::testing::ElementsAre(
-          "The FILTER (?y < ?w || ?y = ?z) inside of an OPTIONAL uses ?y, ?w, "
-          "which are bound outside of the OPTIONAL but not always inside of "
-          "it. The SPARQL standard evaluates such a FILTER on the joined rows, "
-          "which is not supported yet, so QLever evaluates it on the content "
-          "of the OPTIONAL alone."));
+          "An OPTIONAL clause that shares no variables with the patterns "
+          "before it, but whose FILTER uses variables of these patterns, is "
+          "evaluated by comparing all pairs of rows (Cartesian product). This "
+          "can be very slow for large inputs."));
+  // The message for an EXISTS names the FILTER and the variables that are
+  // bound outside of the OPTIONAL.
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       h::parseAndPlan("SELECT * { ?x <p> ?y OPTIONAL { ?x <q> ?z FILTER EXISTS "
                       "{ ?z <r> ?y } } }",

@@ -180,14 +180,36 @@ TEST(OptionalJoinWithConditionQuery, sharedVariableMaybeUndefOnRight) {
 }
 
 // _____________________________________________________________________________
-// An OPTIONAL that shares no variable with the left side is computed like
-// before the condition was determined: the FILTER is applied to the group
-// alone, with a warning (see `OptionalJoinConditionPlanningTest`). There, `?h`
-// is unbound, so the FILTER removes all rows of the group.
-TEST(OptionalJoinWithConditionQuery, conditionIsAppliedToGroup) {
+// An OPTIONAL that shares no variable with the left side: the condition is
+// evaluated on all pairs of rows (with a warning, see
+// `OptionalJoinConditionPlanningTest`). <a1> (height 180) only gets the weight
+// 90, <a2> (height 150) all weights except 50.
+TEST(OptionalJoinWithConditionQuery, noSharedVariables) {
   EXPECT_THAT(runQuery("SELECT ?a ?w { ?a <height> ?h OPTIONAL { ?b <weight> "
-                       "?w FILTER(?w > ?h - 100) } } ORDER BY ?a"),
-              ElementsAre("<a1>\t", "<a2>\t", "<a3>\t", "<a4>\t"));
+                       "?w FILTER(?w > ?h - 100) } } ORDER BY ?a ?w"),
+              ElementsAre("<a1>\t90", "<a2>\t55", "<a2>\t60", "<a2>\t70",
+                          "<a2>\t75", "<a2>\t90", "<a3>\t75", "<a3>\t90",
+                          "<a4>\t70", "<a4>\t75", "<a4>\t90"));
+}
+
+// _____________________________________________________________________________
+// Like `noSharedVariables`, with `FILTER(?w < 80)`, which only uses a variable
+// of the OPTIONAL and stays in the group.
+TEST(OptionalJoinWithConditionQuery, noSharedVariablesAndFilterInGroup) {
+  EXPECT_THAT(runQuery("SELECT ?a ?w { ?a <height> ?h OPTIONAL { ?b <weight> "
+                       "?w FILTER(?w < 80) FILTER(?w > ?h - 100) } } "
+                       "ORDER BY ?a ?w"),
+              ElementsAre("<a1>\t", "<a2>\t55", "<a2>\t60", "<a2>\t70",
+                          "<a2>\t75", "<a3>\t75", "<a4>\t70", "<a4>\t75"));
+}
+
+// _____________________________________________________________________________
+// An empty group has a single row without columns, which is compatible with
+// every row on the left. The condition doesn't remove any row.
+TEST(OptionalJoinWithConditionQuery, emptyGroup) {
+  EXPECT_THAT(runQuery("SELECT ?a { ?a <height> ?h OPTIONAL { FILTER(?h > "
+                       "160) } } ORDER BY ?a"),
+              ElementsAre("<a1>", "<a2>", "<a3>", "<a4>"));
 }
 
 namespace {
@@ -561,6 +583,47 @@ TEST(OptionalJoinWithCondition, resultWithLocalVocab) {
   EXPECT_EQ(numUndef, 2'500u);
 }
 
+// _____________________________________________________________________________
+// Without join columns, every left row is compatible with every right row
+// (Cartesian product), see `OptionalJoin::optionalJoinWithoutJoinColumns`.
+// The left row without a match is written at the end.
+TEST(OptionalJoinWithCondition, noJoinColumns) {
+  Relation left{{"?x", "?y"}, rows({{1, 10}, {2, 20}, {3, 30}})};
+  Relation right{{"?z"}, rows({{5}, {15}, {25}})};
+  auto join = makeJoin(left, right, {"?y < ?z"});
+  EXPECT_THAT(computeRows(join),
+              ElementsAre(Row{I(1), I(10), I(15)}, Row{I(1), I(10), I(25)},
+                          Row{I(2), I(20), I(25)}, Row{I(3), I(30), U}));
+}
+
+// _____________________________________________________________________________
+// An empty right side: every left row is written once, with UNDEF.
+TEST(OptionalJoinWithCondition, noJoinColumnsEmptyRight) {
+  Relation left{{"?x", "?y"}, rows({{1, 10}, {2, 20}})};
+  Relation right{{"?z"}, {}};
+  auto join = makeJoin(left, right, {"?y < ?z"});
+  EXPECT_THAT(computeRows(join),
+              ElementsAre(Row{I(1), I(10), U}, Row{I(2), I(20), U}));
+}
+
+// _____________________________________________________________________________
+TEST(OptionalJoinWithCondition, noJoinColumnsDescriptorAndEstimates) {
+  Relation left{{"?x", "?y"}, rows({{1, 10}, {2, 20}, {3, 30}})};
+  Relation right{{"?z"}, rows({{5}, {15}, {25}})};
+  auto join = makeJoin(left, right, {"?y < ?z"});
+  EXPECT_THAT(join.getDescriptor(),
+              ::testing::HasSubstr(
+                  "OptionalJoin (Cartesian product) with condition (?y < ?z)"));
+  EXPECT_THAT(join.getCacheKey(), ::testing::HasSubstr("condition: ["));
+  EXPECT_TRUE(join.resultSortedOn().empty());
+  // The size of the Cartesian product (plus one, like for every
+  // `OptionalJoin`) is an upper bound for the size of the result.
+  EXPECT_EQ(join.getSizeEstimate(), 10u);
+  EXPECT_FLOAT_EQ(join.getMultiplicity(0),
+                  makeTree(left)->getMultiplicity(0) * 3);
+  EXPECT_GT(join.getCostEstimate(), 0u);
+}
+
 namespace {
 
 // _____________________________________________________________________________
@@ -883,6 +946,13 @@ Relation randomRelation(std::mt19937& gen, std::vector<std::string> variables,
   return relation;
 }
 
+// Sort `relation` by its first column.
+void sortByFirstColumn(Relation& relation) {
+  ql::ranges::stable_sort(relation.rows_, [](const Row& a, const Row& b) {
+    return a.at(0) < b.at(0);
+  });
+}
+
 // `relation` as text for the message of a failed test, e.g.
 // `?x ?y: (1 U) (2 3)`.
 std::string relationToString(const Relation& relation) {
@@ -989,6 +1059,30 @@ TEST(OptionalJoinWithCondition, joinColumnsWithUndefRandomInputs) {
               }
             }
           }
+        }
+      }
+    }
+  }
+}
+
+// _____________________________________________________________________________
+// Random inputs without join columns. With a small buffer size, the pairs of a
+// left row are written by several calls to `flush`.
+TEST(OptionalJoinWithCondition, noJoinColumnsRandomInputs) {
+  std::mt19937 gen{7};
+  std::vector<std::pair<size_t, size_t>> sizes{{10, 10}, {1, 30}, {30, 1},
+                                               {20, 7},  {0, 5},  {5, 0}};
+  for (const auto& condition : testConditions()) {
+    for (const auto& [sizeLeft, sizeRight] : sizes) {
+      auto left = randomRelation(gen, {"?x", "?y"}, sizeLeft, 6, {0, 0.2});
+      auto right = randomRelation(gen, {"?z", "?w"}, sizeRight, 6, {0.2, 0});
+      sortByFirstColumn(left);
+      for (bool leftInBlocks : {false, true}) {
+        for (size_t bufferSize : {1, 100'000}) {
+          auto join = makeJoin(makeTree(left, leftInBlocks, 4), makeTree(right),
+                               {condition.sparql_});
+          join.setRowAdderBufferSizeForTesting(bufferSize);
+          expectResultMatchesReference(join, left, right, condition);
         }
       }
     }

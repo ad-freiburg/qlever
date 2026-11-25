@@ -108,7 +108,9 @@ class OptionalJoin : public Operation {
       const Variable& variable) const override;
 
   // Joins two result tables on any number of columns, inserting the special
-  // value `Id::makeUndefined()` for any entries marked as optional.
+  // value `Id::makeUndefined()` for any entries marked as optional. Without
+  // join columns, the `condition_` must not be empty, see
+  // `optionalJoinWithoutJoinColumns`.
   void optionalJoin(
       const IdTableView<0>& left, const IdTableView<0>& right,
       ql::span<const std::array<ColumnIndex, 2>> joinColumns,
@@ -139,6 +141,13 @@ class OptionalJoin : public Operation {
       return expression.isDeterministic();
     });
   }
+
+  // The part of `optionalJoin` without join columns: every pair of a row of
+  // `left` and a row of `right` is written, and the `condition_` decides which
+  // of these pairs stay in the `result`. The `result` is not sorted.
+  void optionalJoinWithoutJoinColumns(const IdTableView<0>& left,
+                                      const IdTableView<0>& right,
+                                      IdTable* result);
 
   // Return the filter that applies the `condition_` to the rows that an
   // `AddCombinedRowToIdTable` writes for this join, or `nullptr` if the

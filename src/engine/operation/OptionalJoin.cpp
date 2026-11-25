@@ -38,7 +38,9 @@ OptionalJoin::OptionalJoin(QueryExecutionContext* qec,
       _joinColumns(QueryExecutionTree::getJoinColumns(*_left, *_right)),
       keepJoinColumns_{keepJoinColumns},
       condition_{std::move(condition)} {
-  AD_CORRECTNESS_CHECK(!_joinColumns.empty());
+  // Without join columns, an `OptionalJoin` is only created for a condition,
+  // see `optionalJoinWithoutJoinColumns`.
+  AD_CORRECTNESS_CHECK(!_joinColumns.empty() || !condition_.empty());
 
   // The condition is evaluated on the joined rows, so the join column has to
   // be kept if the condition uses the join variable.
@@ -169,7 +171,9 @@ string OptionalJoin::getDescriptor() const {
         _left->getVariableAndInfoByColumnIndex(leftCol).first.name();
     joinVars += varName + " ";
   }
-  std::string result = "OptionalJoin on " + joinVars;
+  std::string result = _joinColumns.empty()
+                           ? "OptionalJoin (Cartesian product) "
+                           : "OptionalJoin on " + joinVars;
   if (!condition_.empty()) {
     result += "with condition " +
               absl::StrJoin(condition_, " && ",
@@ -314,7 +318,9 @@ size_t OptionalJoin::getCostEstimate() {
     // its increased complexity
     costEstimate *= 4;
     // Make the join 7% more expensive per join column
-    costEstimate *= (1 + (_joinColumns.size() - 1) * 0.07);
+    if (!_joinColumns.empty()) {
+      costEstimate *= (1 + (_joinColumns.size() - 1) * 0.07);
+    }
 
     _costEstimate =
         _left->getCostEstimate() + _right->getCostEstimate() + costEstimate;
@@ -324,6 +330,24 @@ size_t OptionalJoin::getCostEstimate() {
 
 // _____________________________________________________________________________
 void OptionalJoin::computeSizeEstimateAndMultiplicities() {
+  if (_joinColumns.empty()) {
+    // Without join columns, each left row yields at most one row per right
+    // row (or a single row with UNDEF), so the Cartesian product is an upper
+    // bound. As below, add 1 so that the estimate is never 0.
+    size_t sizeLeft = _left->getSizeEstimate();
+    size_t sizeRight = std::max(size_t{1}, _right->getSizeEstimate());
+    _sizeEstimate = sizeLeft * sizeRight + 1;
+    _multiplicities.clear();
+    for (size_t i = 0; i < _left->getResultWidth(); i++) {
+      _multiplicities.push_back(_left->getMultiplicity(i) * sizeRight);
+    }
+    for (size_t i = 0; i < _right->getResultWidth(); i++) {
+      _multiplicities.push_back(_right->getMultiplicity(i) *
+                                std::max(size_t{1}, sizeLeft));
+    }
+    _multiplicitiesComputed = true;
+    return;
+  }
   // The number of distinct entries in the result is at most the minimum of
   // the numbers of distinc entries in all join columns.
   // The multiplicity in the result is approximated by the product of the
@@ -430,6 +454,10 @@ void OptionalJoin::optionalJoin(
     Implementation implementation) {
   // check for trivial cases
   if (left.empty()) {
+    return;
+  }
+  if (joinColumns.empty()) {
+    optionalJoinWithoutJoinColumns(left, right, result);
     return;
   }
 
@@ -554,6 +582,32 @@ void OptionalJoin::optionalJoin(
   }
   result->setColumnSubset(joinColumnData.permutationResult());
   checkCancellation();
+}
+
+// _____________________________________________________________________________
+void OptionalJoin::optionalJoinWithoutJoinColumns(const IdTableView<0>& left,
+                                                  const IdTableView<0>& right,
+                                                  IdTable* result) {
+  AD_CORRECTNESS_CHECK(!condition_.empty());
+  auto rowAdder = ad_utility::AddCombinedRowToIdTable(
+      0, left, right, std::move(*result), cancellationHandle(),
+      keepJoinColumns_, rowAdderBufferSize_);
+  // As in `optionalJoin`, the filter writes the left rows without a match at
+  // the end, when the result is moved out of the `rowAdder`.
+  auto conditionFilter = makeConditionFilter();
+  rowAdder.setRowFilter(conditionFilter.get());
+  // The condition is evaluated on every pair of rows, so the running time is
+  // O(n * m), as for a FILTER on a Cartesian product.
+  for (size_t row = 0; row < left.numRows(); ++row) {
+    if (right.empty()) {
+      rowAdder.addOptionalRow(row);
+    } else {
+      rowAdder.addRows(std::array{row},
+                       ql::views::iota(size_t{0}, right.numRows()));
+    }
+    checkCancellation();
+  }
+  *result = std::move(rowAdder).resultTable();
 }
 
 // _____________________________________________________________________________
