@@ -12,6 +12,7 @@
 #include "../QueryPlannerTestHelpers.h"
 #include "../util/GTestHelpers.h"
 #include "engine/OptionalJoinConditionPlanning.h"
+#include "engine/operation/OptionalJoin.h"
 #include "util/ParseException.h"
 
 namespace {
@@ -157,74 +158,92 @@ TEST(OptionalJoinConditionPlanning, filterStaysInGroup) {
       "{ ?x <r> ?z } } }");
 }
 
-// Test that a FILTER of the condition is applied to the group of the OPTIONAL
-// with a warning, as long as the `OptionalJoin` can't evaluate it.
-TEST(OptionalJoinConditionPlanning, conditionIsAppliedToGroupWithWarning) {
+// Test that a FILTER of the condition is passed to the `OptionalJoin`, which
+// evaluates it on the joined rows, without a warning.
+TEST(OptionalJoinConditionPlanning, conditionIsPassedToOptionalJoin) {
+  // Expect that the root of the plan for the `query` is an `OptionalJoin` with
+  // the `condition` (the expressions as written in the FILTERs), and that
+  // there is no warning.
+  auto expectCondition = [](std::string query,
+                            std::vector<std::string> condition,
+                            ad_utility::source_location l =
+                                AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    SCOPED_TRACE(query);
+    auto qet = h::parseAndPlan(std::move(query), ad_utility::testing::getQec());
+    auto join =
+        std::dynamic_pointer_cast<OptionalJoin>(qet->getRootOperation());
+    ASSERT_NE(join, nullptr);
+    // The descriptor of the expression of a FILTER is in parentheses.
+    std::vector<std::string> descriptors;
+    for (const auto& expression : join->condition()) {
+      descriptors.push_back(expression.getDescriptor());
+    }
+    for (auto& expression : condition) {
+      expression = absl::StrCat("(", expression, ")");
+    }
+    EXPECT_EQ(descriptors, condition);
+    EXPECT_THAT(qet->collectWarnings(), ::testing::IsEmpty());
+  };
   auto scan = h::IndexScanFromStrings;
-  // `?y` is only bound on the left side. The FILTER is applied to the group,
-  // after all other FILTERs, like before the condition was determined.
-  h::expect(
-      "SELECT * { ?x <p> ?y OPTIONAL { ?x <q> ?z FILTER(?y < ?z) } }",
-      h::QetWithWarnings(
-          {std::string{conditionMessage}},
-          h::OptionalJoin(scan("?x", "<p>", "?y"),
-                          h::Filter("?y < ?z", scan("?x", "<q>", "?z")))));
-  h::expect(
+  // `?y` is only bound on the left side.
+  auto query = "SELECT * { ?x <p> ?y OPTIONAL { ?x <q> ?z FILTER(?y < ?z) } }";
+  expectCondition(query, {"?y < ?z"});
+  h::expect(query,
+            h::OptionalJoin(scan("?x", "<p>", "?y"), scan("?x", "<q>", "?z")));
+  // A FILTER that is not part of the condition is applied to the group.
+  query =
       "SELECT * { ?x <p> ?y OPTIONAL { ?x <q> ?z FILTER(?y < ?z) "
-      "FILTER(?z > 3) } }",
-      h::QetWithWarnings(
-          {std::string{conditionMessage}},
-          h::OptionalJoin(
-              scan("?x", "<p>", "?y"),
-              h::Filter("?y < ?z",
-                        h::Filter("?z > 3", scan("?x", "<q>", "?z"))))));
-  // The same for an OPTIONAL that shares no variable with the left side, and
-  // for an OPTIONAL with an empty group.
-  expectWarning("SELECT * { ?x <p> ?y OPTIONAL { ?a <q> ?z FILTER(?y < ?z) } }",
-                conditionMessage);
-  expectWarning("SELECT * { ?x <p> ?y OPTIONAL { FILTER(?y < 5) } }",
-                conditionMessage);
-  // A group that only consists of a MINUS is planned like an empty group.
-  expectWarning(
-      "SELECT * { ?x <p> ?y OPTIONAL { MINUS { ?x <q> ?z } FILTER(?y != <a>) "
-      "} }",
-      conditionMessage);
-  // `?y` might be UNDEF in the group.
-  expectWarning(
+      "FILTER(?z > 3) } }";
+  expectCondition(query, {"?y < ?z"});
+  h::expect(query,
+            h::OptionalJoin(scan("?x", "<p>", "?y"),
+                            h::Filter("?z > 3", scan("?x", "<q>", "?z"))));
+  // Two FILTERs of the condition.
+  expectCondition(
+      "SELECT * { ?x <p> ?y OPTIONAL { ?x <q> ?z FILTER(?y < ?z) "
+      "FILTER(?y > 3) } }",
+      {"?y < ?z", "?y > 3"});
+  // `?y` might be UNDEF in the group, so it is a second join column, which
+  // might be UNDEF on the right side.
+  expectCondition(
       "SELECT * { ?x <p> ?y OPTIONAL { ?x <q> ?z OPTIONAL { ?z <r> ?y } "
       "FILTER(?y < 5) } }",
-      conditionMessage);
-  expectWarning(
+      {"?y < 5"});
+  expectCondition(
       "SELECT * { ?x <p> ?y OPTIONAL { VALUES ?y { 1 UNDEF } ?x <q> ?z "
       "FILTER(?y < ?z) } }",
-      conditionMessage);
-  // The left side is a previous OPTIONAL.
-  expectWarning(
+      {"?y < ?z"});
+  // The left side is a previous OPTIONAL, so `?z` might be UNDEF there.
+  expectCondition(
       "SELECT * { ?x <p> ?y OPTIONAL { ?x <q> ?z } OPTIONAL { ?x <r> ?w "
       "FILTER(?z < ?w) } }",
-      conditionMessage);
-  // Inside `GRAPH ?g`, the left side binds `?g`, but the group doesn't.
-  expectWarning(
-      "SELECT * { GRAPH ?g { ?x <p> ?y OPTIONAL { VALUES ?z { 1 } "
-      "FILTER(?g != <a>) } } }",
-      conditionMessage);
+      {"?z < ?w"});
+  // The join variable `?z` might be UNDEF on the left side.
+  expectCondition(
+      "SELECT * { ?x <p> ?y OPTIONAL { ?x <q> ?z } OPTIONAL { ?z <r> ?w "
+      "FILTER(?y < ?w) } }",
+      {"?y < ?w"});
+  // Two join columns, `?x` and `?p`.
+  expectCondition("SELECT * { ?x ?p ?y OPTIONAL { ?x ?p ?z FILTER(?y < ?z) } }",
+                  {"?y < ?z"});
   // A FILTER that can be replaced by a `SpatialJoin`, see the NOTE in
   // `QueryPlanner::applyRemainingFilters`. If `?y` doesn't occur in the group,
   // the `SpatialJoin` can't be completed there, so the FILTER is part of the
   // condition.
   std::string geof =
       "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> ";
-  expectWarning(geof +
-                    "SELECT * { ?x <p> ?y OPTIONAL { ?x <q> ?b "
-                    "FILTER(geof:distance(?y, ?b) <= 0.5) } }",
-                conditionMessage);
-  expectWarning(geof +
-                    "SELECT * { ?x <p> ?y OPTIONAL { ?x <q> ?b . ?b <r> ?c "
-                    "FILTER(geof:distance(?y, ?b) <= 0.5) } }",
-                conditionMessage);
+  expectCondition(geof +
+                      "SELECT * { ?x <p> ?y OPTIONAL { ?x <q> ?b "
+                      "FILTER(geof:distance(?y, ?b) <= 0.5) } }",
+                  {"geof:distance(?y, ?b) <= 0.5"});
+  expectCondition(geof +
+                      "SELECT * { ?x <p> ?y OPTIONAL { ?x <q> ?b . ?b <r> ?c "
+                      "FILTER(geof:distance(?y, ?b) <= 0.5) } }",
+                  {"geof:distance(?y, ?b) <= 0.5"});
   // If `?y` occurs in the group, but might be UNDEF there, the `SpatialJoin`
   // can be completed in the group. Then the FILTER is evaluated on the content
-  // of the group like before, but without a warning.
+  // of the group like before, without a warning.
   auto qet = h::parseAndPlan(
       geof +
           "SELECT * { ?x <p> ?y OPTIONAL { ?x <q> ?b VALUES ?y { <a> UNDEF } "
@@ -232,6 +251,37 @@ TEST(OptionalJoinConditionPlanning, conditionIsAppliedToGroupWithWarning) {
       ad_utility::testing::getQec());
   EXPECT_THAT(qet->getCacheKey(), HasSubstr("SpatialJoin"));
   EXPECT_THAT(qet->getRootOperation()->collectWarnings(), ::testing::IsEmpty());
+}
+
+// Test that a FILTER of the condition is applied to the group of the OPTIONAL
+// with a warning if there is no `OptionalJoin` that could evaluate it.
+TEST(OptionalJoinConditionPlanning, conditionIsAppliedToGroupWithWarning) {
+  // Without a shared variable, there is no `OptionalJoin`. The FILTER is then
+  // applied to the group, after all other FILTERs, like before the condition
+  // was determined.
+  auto scan = h::IndexScanFromStrings;
+  h::expect(
+      "SELECT * { ?x <p> ?y OPTIONAL { ?a <q> ?z FILTER(?y < ?z) "
+      "FILTER(?z > 3) } }",
+      h::QetWithWarnings(
+          {std::string{conditionMessage}},
+          h::CartesianProductJoin(
+              scan("?x", "<p>", "?y"),
+              h::NeutralOptional(h::Filter(
+                  "?y < ?z", h::Filter("?z > 3", scan("?a", "<q>", "?z")))))));
+  // The same for an OPTIONAL with an empty group, and with a group that only
+  // consists of a MINUS, which is planned like an empty group.
+  expectWarning("SELECT * { ?x <p> ?y OPTIONAL { FILTER(?y < 5) } }",
+                conditionMessage);
+  expectWarning(
+      "SELECT * { ?x <p> ?y OPTIONAL { MINUS { ?x <q> ?z } FILTER(?y != <a>) "
+      "} }",
+      conditionMessage);
+  // Inside `GRAPH ?g`, the left side binds `?g`, but the group doesn't.
+  expectWarning(
+      "SELECT * { GRAPH ?g { ?x <p> ?y OPTIONAL { VALUES ?z { 1 } "
+      "FILTER(?g != <a>) } } }",
+      conditionMessage);
 }
 
 // Test that a query is rejected if the argument of an `EXISTS` in a FILTER of
@@ -256,8 +306,10 @@ TEST(OptionalJoinConditionPlanning, existsThatDependsOnLeftSide) {
 // Test the exact messages of the warning and of the exception.
 TEST(OptionalJoinConditionPlanning, messages) {
   // The messages name the FILTER and the variables that make it part of the
-  // condition, but not the other variables, each only once.
-  auto query = "SELECT * { ?x <p> ?y OPTIONAL { ?x <q> ?z FILTER(?y < ?z) } }";
+  // condition, but not the other variables, each only once. The OPTIONALs
+  // share no variable with the left side, so there is no `OptionalJoin` that
+  // could evaluate the condition.
+  auto query = "SELECT * { ?x <p> ?y OPTIONAL { ?a <q> ?z FILTER(?y < ?z) } }";
   EXPECT_THAT(
       getWarnings(query),
       ::testing::ElementsAre(
@@ -267,7 +319,7 @@ TEST(OptionalJoinConditionPlanning, messages) {
           "supported yet, so QLever evaluates it on the content of the "
           "OPTIONAL alone."));
   EXPECT_THAT(
-      getWarnings("SELECT * { ?x <p> ?y . ?x <r> ?w OPTIONAL { ?x <q> ?z "
+      getWarnings("SELECT * { ?x <p> ?y . ?x <r> ?w OPTIONAL { ?a <q> ?z "
                   "FILTER(?y < ?w || ?y = ?z) } }"),
       ::testing::ElementsAre(
           "The FILTER (?y < ?w || ?y = ?z) inside of an OPTIONAL uses ?y, ?w, "

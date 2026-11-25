@@ -374,9 +374,10 @@ void QueryPlanner::applyRemainingFilters(
     //
     // NOTE: A FILTER of the condition can already be part of a plan if
     // `applyFiltersIfPossible` has replaced it by a `SpatialJoin`. Such a plan
-    // gets neither the FILTER as part of its condition nor a warning, and it
-    // evaluates the FILTER on the content of the group, like before the
-    // condition was determined.
+    // doesn't get the FILTER as part of its condition, and it evaluates the
+    // FILTER on the content of the group, like before the condition was
+    // determined, without a warning. The other plans evaluate it on the joined
+    // rows, so the result depends on the chosen plan.
     //
     // This only happens if the variable of the left side occurs in the group,
     // but might be UNDEF there (for example, from `VALUES ?y { <a> UNDEF }`).
@@ -385,9 +386,9 @@ void QueryPlanner::applyRemainingFilters(
     // other one, and plans with an incomplete `SpatialJoin` never reach the
     // final row of the dynamic programming.
     //
-    // TODO<ninofrey> Such a plan should at least get the warning, and once the
-    // `OptionalJoin` evaluates the condition, the FILTER must not be applied
-    // in the group as well.
+    // TODO<ninofrey> Don't replace a FILTER that uses a variable of the left
+    // side which might be UNDEF in the group by a `SpatialJoin`, so that all
+    // plans evaluate it on the joined rows.
     for (auto& plan : plans) {
       for (const auto& [i, filterAndSubst] :
            ::ranges::views::enumerate(filters)) {
@@ -2461,8 +2462,10 @@ SubtreePlanVec QueryPlanner::createJoinCandidates(
 
   // OPTIONAL JOINS are not symmetric!
   if (b.type == SubtreePlan::OPTIONAL) {
-    // Join the two optional columns using an optional join
-    return singlePlanVec(makeSubtreePlan<OptionalJoin>(_qec, a._qet, b._qet));
+    // Join the two optional columns using an optional join, which evaluates
+    // the condition of the OPTIONAL (see `applyRemainingFilters`).
+    return singlePlanVec(makeSubtreePlan<OptionalJoin>(
+        _qec, a._qet, b._qet, true, b.optionalJoinCondition_));
   }
 
   if (auto opt = createJoinWithPathSearch(a, b, jcs)) {
@@ -3261,6 +3264,9 @@ bool QueryPlanner::GraphPatternPlanner::handleUnconnectedMinusOrOptional(
         "remove all results whenever the pattern of the MINUS clause matches.");
     return true;
   }
+  // There is no `OptionalJoin`, which could evaluate the condition of the
+  // OPTIONAL, so its FILTERs are applied to the group with a warning.
+  applyOptionalJoinConditionToGroup(candidates, previousVariables);
   // An OPTIONAL clause that doesn't share any variable with the preceding
   // patterns behaves as if it is joined with the neutral element.
   //
@@ -3439,10 +3445,6 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
       for (auto& c : candidates) {
         c.type = SubtreePlan::OPTIONAL;
       }
-      // TODO<ninofrey> Pass the condition to the `OptionalJoin`, which has to
-      // evaluate it on the joined rows.
-      applyOptionalJoinConditionToGroup(candidates,
-                                        variablesOfLeftSideOfOptional.value());
     }
     visitGroupOptionalOrMinus(std::move(candidates));
     if (datasetBackup.has_value()) {
