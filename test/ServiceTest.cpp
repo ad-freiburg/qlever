@@ -773,6 +773,18 @@ TEST_F(ServiceTest, getCacheKeyWithCaching) {
     // have different cache keys.
     EXPECT_NE(service1.getCacheKey(), service2.getCacheKey());
   }
+  {
+    parsedQuery::Service parsedServiceClause{
+        {},
+        TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
+        "PREFIX doof: <http://doof.org>",
+        "{ }",
+        false};
+    Service service{
+        testQec, parsedServiceClause,
+        getResultFunctionFactory("http://localhorst:80/api", "", "{}")};
+    EXPECT_THAT(service.getCacheKey(), HasSubstr("SELECT * "));
+  }
 }
 
 // Test that bindingToTripleComponent behaves as expected.
