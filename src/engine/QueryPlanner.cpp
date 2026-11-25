@@ -2557,13 +2557,15 @@ std::optional<SubtreePlan> QueryPlanner::createSemiJoinWithSubstitute(
   // the substitute. For example, for `geof:sfContains(?x, ?y)`, this gives a
   // `SpatialJoin` of the values of `?x` and `?y` in `plan`.
   //
-  // NOTE: `StripColumns` shares `plan` instead of rebuilding it like
-  // `makeTreeWithStrippedColumns`, which is cheaper during the planning, and
-  // `plan` keeps its cache key, so that it is computed only once.
+  // NOTE: Each column is a `StripColumns` of a clone of `plan`, so that each
+  // operation occurs only once in the tree (for example, with its own runtime
+  // information). The clone has the same cache key, so `plan` is computed only
+  // once. `makeTreeWithStrippedColumns` would rebuild `plan` instead, which is
+  // more expensive during the planning.
   SubtreePlan substitute = filterAndSubst.substitute_.value();
   for (const auto* variable :
        filterAndSubst.filter_.expression_.containedVariables()) {
-    auto column = makeSubtreePlan<StripColumns>(_qec, plan._qet,
+    auto column = makeSubtreePlan<StripColumns>(_qec, plan._qet->clone(),
                                                 std::set<Variable>{*variable});
     auto candidates = createJoinCandidates(substitute, column,
                                            getJoinColumns(substitute, column));
