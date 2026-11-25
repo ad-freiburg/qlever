@@ -69,7 +69,6 @@ RuntimeParameters::RuntimeParameters() {
   add(materializedViewPatternMatchNumReplacementPlans_);
   add(serviceAllowedIriPrefixes_);
   add(permutationWriterNumBlocksInFlight_);
-  add(permutationCompressionLevel_);
   add(vacuumMinimumBlockSize_);
   add(disableCaching_);
   add(logLevel_);
