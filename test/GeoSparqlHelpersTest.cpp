@@ -109,8 +109,6 @@ TEST(GeoSparqlHelpers, ParseWktPoint) {
   testWktPointInvalid("POINT42.0 7.8)");
   testWktPointInvalid("POINT(42.0 7.8");
   testWktPointInvalid("POINT(42.0)");
-  // testWktPointInvalid("POINT(42.0 7.8 3.14)"); TODO<yarox-1> This should be
-  // invalid but is currently still accepted by util.
 }
 
 // _____________________________________________________________________________
