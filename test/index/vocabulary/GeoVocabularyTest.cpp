@@ -8,7 +8,6 @@
 
 #include <algorithm>
 #include <cstring>
-#include <fstream>
 
 #include "../../GeometryInfoTestHelpers.h"
 #include "VocabularyTestHelpers.h"
@@ -19,6 +18,7 @@
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
 #include "util/File.h"
+#include "util/FilesystemHelpers.h"
 
 namespace {
 
@@ -322,11 +322,7 @@ TEST(GeoVocabularyTest, ReadVersion5) {
   // `geometryInfoSize(5)` bytes of the current ones, and the bytes `[28, 32)`
   // of a valid record could contain arbitrary content.
   const std::string geoInfoFilename = AnyGeoVocab::getGeoInfoFilename(filename);
-  std::string contents;
-  {
-    std::ifstream in{geoInfoFilename, std::ios::binary};
-    contents.assign(std::istreambuf_iterator<char>{in}, {});
-  }
+  auto contents = qlever::util::readBinaryFile(geoInfoFilename);
   constexpr size_t recordSize = 48;
   static_assert(geometryInfoSize(5) == recordSize);
   ASSERT_EQ(contents.size(),
@@ -335,19 +331,16 @@ TEST(GeoVocabularyTest, ReadVersion5) {
   std::string contents5(reinterpret_cast<const char*>(&version5),
                         sizeof(version5));
   for (size_t i = 0; i < literals.size(); ++i) {
-    std::string record = contents.substr(
-        sizeof(uint64_t) + i * sizeof(GeometryInfo), recordSize);
+    std::string record(
+        contents.data() + sizeof(uint64_t) + i * sizeof(GeometryInfo),
+        recordSize);
     if (std::any_of(record.begin(), record.end(),
                     [](char c) { return c != 0; })) {
       std::fill(record.begin() + 28, record.begin() + 32, '\xab');
     }
     contents5 += record;
   }
-  contents = std::move(contents5);
-  {
-    std::ofstream out{geoInfoFilename, std::ios::binary | std::ios::trunc};
-    out << contents;
-  }
+  qlever::util::writeFileAtomically(geoInfoFilename, contents5);
 
   // Read the version 5 file. The fields in the bytes `[28, 32)` must be zero:
   // the source CRS "not computed" and the serialization type `WKT`. The

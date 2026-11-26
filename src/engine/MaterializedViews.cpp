@@ -387,8 +387,9 @@ void MaterializedViewWriter::writeViewMetadata(
                              {"columns", std::move(columns)},
                              {"sorted_on_all_columns", true},
                              {"query", parsedQuery_._originalString}};
-  ad_utility::makeOfstream(absl::StrCat(getFilenameBase(), VIEW_INFO_SUFFIX))
-      << viewInfo.dump() << std::endl;
+  std::string serializedViewInfo = absl::StrCat(viewInfo.dump(), "\n");
+  qlever::util::writeFileAtomically(
+      absl::StrCat(getFilenameBase(), VIEW_INFO_SUFFIX), serializedViewInfo);
 }
 
 // _____________________________________________________________________________
