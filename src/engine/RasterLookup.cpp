@@ -13,6 +13,7 @@
 #include <absl/strings/str_format.h>
 #include <absl/strings/str_join.h>
 
+#include "backports/span.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/raster/RasterFile.h"
 #include "global/Constants.h"
@@ -30,29 +31,24 @@
 
 namespace {
 
-// The pixels with their values in `bands` under the geometry in `geometry`: a
-// point stored in the `Id`, or a WKT literal from the vocabulary or
-// `localVocab`. Like `GeoPointOrWktValueGetter`. Other `Id`s (UNDEF, numbers,
-// IRIs, ...) give no pixels. With a `radius` in metres, the geometry is first
-// widened by it. The time to fetch a WKT literal is added to
+// Return the pixels under `geometry` with their values in `options.bands_`.
+// The geometry is either a point stored in the `Id` itself or a WKT literal
+// from the vocabulary or `localVocab`, as in `GeoPointOrWktValueGetter`. All
+// other `Id`s give no pixels. The time to fetch a WKT literal is added to
 // `timeFetchingGeometries`.
 qlever::raster::PixelTable lookupPixels(
-    qlever::raster::RasterFile& rasterFile, ql::span<const int> bands,
-    std::optional<double> radius, Id geometry, const Index& index,
-    const LocalVocab& localVocab, const qlm::Allocator<char>& allocator,
+    qlever::raster::RasterFile& rasterFile,
+    const qlever::raster::LookupOptions& options, Id geometry,
+    const Index& index, const LocalVocab& localVocab,
+    const qlm::Allocator<char>& allocator,
     ad_utility::Timer::Duration& timeFetchingGeometries) {
   auto noPixels = [&]() {
-    return qlever::raster::PixelTable(bands.size(), allocator);
+    return qlever::raster::PixelTable(options.bands_.size(), allocator);
   };
   using enum Datatype;
   switch (geometry.getDatatype()) {
-    case GeoPoint: {
-      if (radius.has_value()) {
-        return rasterFile.lookupCircle(geometry.getGeoPoint(), bands,
-                                       radius.value(), allocator);
-      }
-      return rasterFile.lookupPoint(geometry.getGeoPoint(), bands, allocator);
-    }
+    case GeoPoint:
+      return rasterFile.lookupPoint(geometry.getGeoPoint(), options, allocator);
     case VocabIndex:
     case LocalVocabIndex:
     case SecondaryVocabIndex: {
@@ -63,7 +59,7 @@ qlever::raster::PixelTable lookupPixels(
           literalOrIri.getDatatype() == GEO_WKT_LITERAL) {
         std::string wktLiteral = literalOrIri.toStringRepresentation();
         timeFetchingGeometries += timer.value();
-        return rasterFile.lookupGeometry(wktLiteral, bands, radius, allocator);
+        return rasterFile.lookupGeometry(wktLiteral, options, allocator);
       }
       return noPixels();
     }
@@ -380,16 +376,18 @@ Result RasterLookup::computeResult([[maybe_unused]] bool requestLaziness) {
 
   if (!input.empty()) {
     ColumnIndex geometryColumn = subtree_->getVariableColumn(config_.geometry_);
+    // Every row is looked up with these options.
+    qlever::raster::LookupOptions options;
     // The parser already checked that each number is at least 1.
-    std::vector<int> bands;
     for (const RasterLookupConfiguration::Band& band : config_.bands_) {
-      bands.push_back(band.number_);
+      options.bands_.push_back(band.number_);
     }
+    options.radius_ = config_.radius_;
     // A fixed dataset is opened once and used for all rows, so GDAL's cache of
     // read blocks stays warm. Closed at the end of this block.
     std::optional<qlever::raster::RasterFile> fixedRasterFile;
     if (const auto* name = std::get_if<std::string>(&config_.dataset_)) {
-      fixedRasterFile = openRasterFile(path_.value(), *name, bands);
+      fixedRasterFile = openRasterFile(path_.value(), *name, options.bands_);
     }
     // A variable dataset opens each file when a row first names it, keyed by
     // the `Id`, so that the name is only read once per value.
@@ -421,7 +419,7 @@ Result RasterLookup::computeResult([[maybe_unused]] bool requestLaziness) {
         if (name.has_value()) {
           try {
             rasterFile = openRasterFile(findRasterFile(name.value()),
-                                        name.value(), bands);
+                                        name.value(), options.bands_);
           } catch (const InvalidSparqlQueryException&) {
           }
         }
@@ -453,9 +451,8 @@ Result RasterLookup::computeResult([[maybe_unused]] bool requestLaziness) {
       // limit. GDAL's own memory (its block cache, and the mask image while it
       // is drawn) does not.
       qlever::raster::PixelTable pixels = lookupPixels(
-          *rasterFile, bands, config_.radius_, input(inputRow, geometryColumn),
-          getIndex(), subResult->localVocab(), allocator(),
-          timeFetchingGeometries);
+          *rasterFile, options, input(inputRow, geometryColumn), getIndex(),
+          subResult->localVocab(), allocator(), timeFetchingGeometries);
       if (pixels.numPixels() == 0) {
         ++numRowsWithoutPixels;
         continue;
@@ -473,7 +470,8 @@ Result RasterLookup::computeResult([[maybe_unused]] bool requestLaziness) {
                                 input(inputRow, column), CHUNK_SIZE,
                                 checkCancellationCallback);
       }
-      for (size_t bandIndex = 0; bandIndex < bands.size(); ++bandIndex) {
+      for (size_t bandIndex = 0; bandIndex < options.bands_.size();
+           ++bandIndex) {
         const qlever::raster::BandValues& values =
             pixels.valuesPerBand_[bandIndex];
         auto column =
@@ -486,8 +484,8 @@ Result RasterLookup::computeResult([[maybe_unused]] bool requestLaziness) {
             checkCancellationCallback);
       }
       if (config_.center_.has_value()) {
-        auto column =
-            output.getColumn(firstBandColumn + bands.size()).subspan(firstRow);
+        auto column = output.getColumn(firstBandColumn + options.bands_.size())
+                          .subspan(firstRow);
         ad_utility::chunkedForLoop<CHUNK_SIZE>(
             0, pixels.numPixels(),
             [&](size_t pixelIndex) {

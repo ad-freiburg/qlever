@@ -24,6 +24,7 @@
 
 #include "backports/algorithm.h"
 #include "backports/filesystem.h"
+#include "backports/span.h"
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "util/Exception.h"
 
@@ -35,6 +36,11 @@ namespace {
 // CRS of the file. This is about 1 km, which keeps the error of a transformed
 // edge at a few centimeters.
 constexpr double MAX_SEGMENT_LENGTH_DEGREES = 0.01;
+
+// The number of corners per quarter circle when a geometry is widened by a
+// radius. With 8, the polygon is at most 0.5% of the radius away from the true
+// circle, which is far less than a pixel for usual radii.
+constexpr int BUFFER_SEGMENTS_PER_QUARTER_CIRCLE = 8;
 
 // GDAL's drivers must be registered once per process, before the first file
 // is opened.
@@ -248,12 +254,11 @@ struct RasterFile::Impl {
                                      const qlm::Allocator<char>& allocator);
 
   // Return the pixels that belong to `geometry`, which is in CRS84 (see
-  // `rasterizeMask`), with their values in `bands`. With a `radius` in metres,
+  // `rasterizeMask`), with their values in `options.bands_`. With a radius,
   // `geometry` is first widened by that radius. Takes ownership, because
   // `geometry` is changed in place.
   PixelTable lookupOgrGeometry(std::unique_ptr<OGRGeometry> geometry,
-                               ql::span<const int> bands,
-                               std::optional<double> radius,
+                               const LookupOptions& options,
                                const qlm::Allocator<char>& allocator);
 };
 
@@ -488,8 +493,11 @@ qlm::vector<uint8_t> RasterFile::Impl::rasterizeMask(
 
 // _____________________________________________________________________________
 PixelTable RasterFile::Impl::lookupOgrGeometry(
-    std::unique_ptr<OGRGeometry> geometry, ql::span<const int> bands,
-    std::optional<double> radius, const qlm::Allocator<char>& allocator) {
+    std::unique_ptr<OGRGeometry> geometry, const LookupOptions& options,
+    const qlm::Allocator<char>& allocator) {
+  // Short names for the options, which the steps below use often.
+  ql::span<const int> bands = options.bands_;
+  const std::optional<double>& radius = options.radius_;
   checkBands(bands);
   ++statistics_.numShapeLookups_;
   auto noPixels = [&]() { return PixelTable(bands.size(), allocator); };
@@ -518,7 +526,8 @@ PixelTable RasterFile::Impl::lookupOgrGeometry(
           dataset_->GetSpatialRef()->GetName(), "\""));
     }
     // `Buffer` returns a new geometry, which `geometry` now owns.
-    geometry.reset(geometry->Buffer(radius.value() / metresPerUnit_.value()));
+    geometry.reset(geometry->Buffer(radius.value() / metresPerUnit_.value(),
+                                    BUFFER_SEGMENTS_PER_QUARTER_CIRCLE));
     // Record the time to grow the geometry by the radius.
     addTimeTo(statistics_.timeGrowingGeometries_);
     if (!geometry) {
@@ -646,8 +655,15 @@ const LookupStatistics& RasterFile::statistics() const {
 
 // _____________________________________________________________________________
 PixelTable RasterFile::lookupPoint(const GeoPoint& point,
-                                   ql::span<const int> bands,
+                                   const LookupOptions& options,
                                    const qlm::Allocator<char>& allocator) {
+  // With a radius, the point is widened to a circle and looked up as a shape.
+  if (options.radius_.has_value()) {
+    return impl_->lookupOgrGeometry(
+        std::make_unique<OGRPoint>(point.getLng(), point.getLat()), options,
+        allocator);
+  }
+  ql::span<const int> bands = options.bands_;
   Impl& impl = *impl_;
   impl.checkBands(bands);
   ++impl.statistics_.numPointLookups_;
@@ -705,47 +721,36 @@ PixelTable RasterFile::lookupPoint(const GeoPoint& point,
 }
 
 // _____________________________________________________________________________
-PixelTable RasterFile::lookupCircle(const GeoPoint& center,
-                                    ql::span<const int> bands, double radius,
-                                    const qlm::Allocator<char>& allocator) {
-  return impl_->lookupOgrGeometry(
-      std::make_unique<OGRPoint>(center.getLng(), center.getLat()), bands,
-      radius, allocator);
-}
-
-// _____________________________________________________________________________
 PixelTable RasterFile::lookupGeometry(std::string_view wktLiteral,
-                                      ql::span<const int> bands,
-                                      std::optional<double> radius,
+                                      const LookupOptions& options,
                                       const qlm::Allocator<char>& allocator) {
   ad_utility::Timer timer{ad_utility::Timer::Started};
   std::optional<ad_utility::detail::ParsedWkt> geometry =
       ad_utility::detail::parseWkt(wktLiteral).parsedWkt_;
   if (!geometry.has_value()) {
-    return PixelTable(bands.size(), allocator);
+    return PixelTable(options.bands_.size(), allocator);
   }
 
   return std::visit(
-      [this, bands, radius, &allocator,
-       &timer](const auto& parsed) -> PixelTable {
+      [this, &options, &allocator, &timer](const auto& parsed) -> PixelTable {
         using T = std::decay_t<decltype(parsed)>;
         // A point without a radius is one pixel, read directly.
         if constexpr (std::is_same_v<T, ::util::geo::DPoint>) {
-          if (!radius.has_value()) {
+          if (!options.radius_.has_value()) {
             std::optional<GeoPoint> point;
             try {
               point = ad_utility::detail::utilPointToGeoPoint(parsed);
             } catch (const CoordinateOutOfRangeException&) {
-              return PixelTable(bands.size(), allocator);
+              return PixelTable(options.bands_.size(), allocator);
             }
-            return lookupPoint(point.value(), bands, allocator);
+            return lookupPoint(point.value(), options, allocator);
           }
         }
         // Lines, polygons, their multi types and collections, and every
         // geometry widened by a radius, each by the rule of `rasterizeMask`.
         std::unique_ptr<OGRGeometry> ogrGeometry = ToOgrGeometry{}(parsed);
         impl_->statistics_.timeParsingGeometries_ += timer.value();
-        return impl_->lookupOgrGeometry(std::move(ogrGeometry), bands, radius,
+        return impl_->lookupOgrGeometry(std::move(ogrGeometry), options,
                                         allocator);
       },
       geometry.value());

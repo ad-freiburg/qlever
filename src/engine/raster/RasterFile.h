@@ -18,7 +18,6 @@
 #include <variant>
 #include <vector>
 
-#include "backports/span.h"
 #include "rdfTypes/GeoPoint.h"
 #include "util/ContainersWithAllocator.h"
 #include "util/Timer.h"
@@ -31,6 +30,15 @@ using PixelValue = std::variant<int64_t, double>;
 
 // The values of one band, one per pixel. Empty where the band is NoData.
 using BandValues = qlm::vector<std::optional<PixelValue>>;
+
+// What a lookup returns, the same for every geometry of a query.
+struct LookupOptions {
+  // The bands to return, numbered from 1 as in GDAL, in the order of the
+  // result columns.
+  std::vector<int> bands_;
+  // With a radius in metres, the geometry is first widened by that radius.
+  std::optional<double> radius_;
+};
 
 // Pixels with their centers and their values in several bands, stored column
 // by column. Entry `i` of every vector belongs to pixel `i`.
@@ -114,24 +122,20 @@ class RasterFile {
   // Return the statistics of all lookups since this file was opened.
   const LookupStatistics& statistics() const;
 
-  // All lookups return one column of values per entry of `bands`, in the same
-  // order. A pixel is left out if it is NoData in all of `bands`.
+  // All lookups return one column of values per entry of `options.bands_`, in
+  // the same order. A pixel is left out if it is NoData in all of these bands.
 
-  // The pixel under `point`, or nothing if the point is outside the grid.
-  PixelTable lookupPoint(const GeoPoint& point, ql::span<const int> bands,
+  // The pixel under `point`, or nothing if the point is outside the grid. With
+  // a radius, the pixels with their center inside the circle of that radius
+  // around `point`.
+  PixelTable lookupPoint(const GeoPoint& point, const LookupOptions& options,
                          const qlm::Allocator<char>& allocator);
 
-  // The pixels with their center inside the circle of `radius` metres around
-  // `center`.
-  PixelTable lookupCircle(const GeoPoint& center, ql::span<const int> bands,
-                          double radius, const qlm::Allocator<char>& allocator);
-
   // The pixels under a point, on a line, or with their center inside a polygon
-  // of `wktLiteral`, without duplicates. With a `radius` in metres, the
-  // geometry is first widened by that radius.
+  // of `wktLiteral`, without duplicates. With a radius, the geometry is first
+  // widened by that radius.
   PixelTable lookupGeometry(std::string_view wktLiteral,
-                            ql::span<const int> bands,
-                            std::optional<double> radius,
+                            const LookupOptions& options,
                             const qlm::Allocator<char>& allocator);
 };
 
