@@ -20,9 +20,9 @@
 #include "../util/LocalVocabTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
 #include "./LazyJoinTestHelpers.h"
-#include "engine/IndexScan.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
+#include "engine/operation/IndexScan.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "index/IndexImpl.h"
 #include "index/TripleComponentConversions.h"
@@ -1781,33 +1781,33 @@ TEST(IndexScan, clone) {
 }
 
 // _____________________________________________________________________________
-TEST(IndexScan, columnOriginatesFromGraphOrUndef) {
+TEST(IndexScan, columnContainsOnlyKnowledgeGraphNodes) {
   auto* qec = getQec();
   IndexScan scan1{qec, Permutation::PSO,
                   SparqlTripleSimple{Var{"?x"}, Var{"?y"}, Var{"?z"}}};
-  EXPECT_TRUE(scan1.columnOriginatesFromGraphOrUndef(Var{"?x"}));
-  EXPECT_FALSE(scan1.columnOriginatesFromGraphOrUndef(Var{"?y"}));
-  EXPECT_TRUE(scan1.columnOriginatesFromGraphOrUndef(Var{"?z"}));
-  EXPECT_THROW(scan1.columnOriginatesFromGraphOrUndef(Var{"?notExisting"}),
+  EXPECT_TRUE(scan1.columnContainsOnlyKnowledgeGraphNodes(Var{"?x"}));
+  EXPECT_FALSE(scan1.columnContainsOnlyKnowledgeGraphNodes(Var{"?y"}));
+  EXPECT_TRUE(scan1.columnContainsOnlyKnowledgeGraphNodes(Var{"?z"}));
+  EXPECT_THROW(scan1.columnContainsOnlyKnowledgeGraphNodes(Var{"?notExisting"}),
                ad_utility::Exception);
 
   IndexScan scan2{
       qec, Permutation::PSO,
       SparqlTripleSimple{
           Var{"?x"}, Var{"?y"}, Var{"?z"}, {std::pair{3, Var{"?g"}}}}};
-  EXPECT_TRUE(scan2.columnOriginatesFromGraphOrUndef(Var{"?x"}));
-  EXPECT_FALSE(scan2.columnOriginatesFromGraphOrUndef(Var{"?y"}));
-  EXPECT_TRUE(scan2.columnOriginatesFromGraphOrUndef(Var{"?z"}));
-  EXPECT_FALSE(scan2.columnOriginatesFromGraphOrUndef(Var{"?g"}));
-  EXPECT_THROW(scan2.columnOriginatesFromGraphOrUndef(Var{"?notExisting"}),
+  EXPECT_TRUE(scan2.columnContainsOnlyKnowledgeGraphNodes(Var{"?x"}));
+  EXPECT_FALSE(scan2.columnContainsOnlyKnowledgeGraphNodes(Var{"?y"}));
+  EXPECT_TRUE(scan2.columnContainsOnlyKnowledgeGraphNodes(Var{"?z"}));
+  EXPECT_FALSE(scan2.columnContainsOnlyKnowledgeGraphNodes(Var{"?g"}));
+  EXPECT_THROW(scan2.columnContainsOnlyKnowledgeGraphNodes(Var{"?notExisting"}),
                ad_utility::Exception);
 
   IndexScan scan3{qec, Permutation::OSP,
                   SparqlTripleSimple{iri("<a>"), Var{"?y"}, iri("<c>")}};
-  EXPECT_THROW(scan3.columnOriginatesFromGraphOrUndef(Var{"?x"}),
+  EXPECT_THROW(scan3.columnContainsOnlyKnowledgeGraphNodes(Var{"?x"}),
                ad_utility::Exception);
-  EXPECT_FALSE(scan3.columnOriginatesFromGraphOrUndef(Var{"?y"}));
-  EXPECT_THROW(scan3.columnOriginatesFromGraphOrUndef(Var{"?z"}),
+  EXPECT_FALSE(scan3.columnContainsOnlyKnowledgeGraphNodes(Var{"?y"}));
+  EXPECT_THROW(scan3.columnContainsOnlyKnowledgeGraphNodes(Var{"?z"}),
                ad_utility::Exception);
 }
 
@@ -2017,8 +2017,8 @@ TEST(IndexScanTest, StripColumns) {
 
     // Test column origin function for variables that exist in both scans
     for (const auto& var : varsToKeep) {
-      EXPECT_EQ(strippedScanOp.columnOriginatesFromGraphOrUndef(var),
-                baseScan.columnOriginatesFromGraphOrUndef(var));
+      EXPECT_EQ(strippedScanOp.columnContainsOnlyKnowledgeGraphNodes(var),
+                baseScan.columnContainsOnlyKnowledgeGraphNodes(var));
     }
   };
 

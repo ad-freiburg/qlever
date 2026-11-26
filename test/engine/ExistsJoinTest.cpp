@@ -11,10 +11,10 @@
 #include "../util/LocalVocabTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
-#include "engine/ExistsJoin.h"
-#include "engine/IndexScan.h"
 #include "engine/JoinHelpers.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/operation/ExistsJoin.h"
+#include "engine/operation/IndexScan.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
 
 using ad_utility::testing::makeLocalVocab;
@@ -785,7 +785,7 @@ TEST(ExistsJoin, repeatingMatchesDontProduceDuplicates) {
 }
 
 // _____________________________________________________________________________
-TEST(ExistsJoin, columnOriginatesFromGraphOrUndef) {
+TEST(ExistsJoin, columnContainsOnlyKnowledgeGraphNodes) {
   using ad_utility::triple_component::Iri;
   auto* qec = getQec();
   auto values1 = ad_utility::makeExecutionTree<ValuesForTesting>(
@@ -800,39 +800,49 @@ TEST(ExistsJoin, columnOriginatesFromGraphOrUndef) {
                          Iri::fromIriref("<c>")});
 
   ExistsJoin existJoin1{qec, values1, values1, Variable{"?z"}};
-  EXPECT_FALSE(existJoin1.columnOriginatesFromGraphOrUndef(Variable{"?a"}));
-  EXPECT_FALSE(existJoin1.columnOriginatesFromGraphOrUndef(Variable{"?b"}));
-  EXPECT_FALSE(existJoin1.columnOriginatesFromGraphOrUndef(Variable{"?z"}));
-  EXPECT_THROW(
-      existJoin1.columnOriginatesFromGraphOrUndef(Variable{"?notExisting"}),
-      ad_utility::Exception);
+  EXPECT_FALSE(
+      existJoin1.columnContainsOnlyKnowledgeGraphNodes(Variable{"?a"}));
+  EXPECT_FALSE(
+      existJoin1.columnContainsOnlyKnowledgeGraphNodes(Variable{"?b"}));
+  EXPECT_FALSE(
+      existJoin1.columnContainsOnlyKnowledgeGraphNodes(Variable{"?z"}));
+  EXPECT_THROW(existJoin1.columnContainsOnlyKnowledgeGraphNodes(
+                   Variable{"?notExisting"}),
+               ad_utility::Exception);
 
   ExistsJoin existJoin2{qec, values1, values2, Variable{"?z"}};
-  EXPECT_FALSE(existJoin2.columnOriginatesFromGraphOrUndef(Variable{"?a"}));
-  EXPECT_FALSE(existJoin2.columnOriginatesFromGraphOrUndef(Variable{"?b"}));
-  EXPECT_FALSE(existJoin2.columnOriginatesFromGraphOrUndef(Variable{"?z"}));
-  EXPECT_THROW(existJoin2.columnOriginatesFromGraphOrUndef(Variable{"?c"}),
+  EXPECT_FALSE(
+      existJoin2.columnContainsOnlyKnowledgeGraphNodes(Variable{"?a"}));
+  EXPECT_FALSE(
+      existJoin2.columnContainsOnlyKnowledgeGraphNodes(Variable{"?b"}));
+  EXPECT_FALSE(
+      existJoin2.columnContainsOnlyKnowledgeGraphNodes(Variable{"?z"}));
+  EXPECT_THROW(existJoin2.columnContainsOnlyKnowledgeGraphNodes(Variable{"?c"}),
                ad_utility::Exception);
-  EXPECT_THROW(
-      existJoin2.columnOriginatesFromGraphOrUndef(Variable{"?notExisting"}),
-      ad_utility::Exception);
+  EXPECT_THROW(existJoin2.columnContainsOnlyKnowledgeGraphNodes(
+                   Variable{"?notExisting"}),
+               ad_utility::Exception);
 
   ExistsJoin existJoin3{qec, index, values1, Variable{"?z"}};
-  EXPECT_TRUE(existJoin3.columnOriginatesFromGraphOrUndef(Variable{"?a"}));
-  EXPECT_THROW(existJoin3.columnOriginatesFromGraphOrUndef(Variable{"?b"}),
+  EXPECT_TRUE(existJoin3.columnContainsOnlyKnowledgeGraphNodes(Variable{"?a"}));
+  EXPECT_THROW(existJoin3.columnContainsOnlyKnowledgeGraphNodes(Variable{"?b"}),
                ad_utility::Exception);
-  EXPECT_FALSE(existJoin3.columnOriginatesFromGraphOrUndef(Variable{"?z"}));
-  EXPECT_THROW(
-      existJoin3.columnOriginatesFromGraphOrUndef(Variable{"?notExisting"}),
-      ad_utility::Exception);
+  EXPECT_FALSE(
+      existJoin3.columnContainsOnlyKnowledgeGraphNodes(Variable{"?z"}));
+  EXPECT_THROW(existJoin3.columnContainsOnlyKnowledgeGraphNodes(
+                   Variable{"?notExisting"}),
+               ad_utility::Exception);
 
   ExistsJoin existJoin4{qec, values1, index, Variable{"?z"}};
-  EXPECT_FALSE(existJoin4.columnOriginatesFromGraphOrUndef(Variable{"?a"}));
-  EXPECT_FALSE(existJoin4.columnOriginatesFromGraphOrUndef(Variable{"?b"}));
-  EXPECT_FALSE(existJoin4.columnOriginatesFromGraphOrUndef(Variable{"?z"}));
-  EXPECT_THROW(
-      existJoin4.columnOriginatesFromGraphOrUndef(Variable{"?notExisting"}),
-      ad_utility::Exception);
+  EXPECT_FALSE(
+      existJoin4.columnContainsOnlyKnowledgeGraphNodes(Variable{"?a"}));
+  EXPECT_FALSE(
+      existJoin4.columnContainsOnlyKnowledgeGraphNodes(Variable{"?b"}));
+  EXPECT_FALSE(
+      existJoin4.columnContainsOnlyKnowledgeGraphNodes(Variable{"?z"}));
+  EXPECT_THROW(existJoin4.columnContainsOnlyKnowledgeGraphNodes(
+                   Variable{"?notExisting"}),
+               ad_utility::Exception);
 }
 
 // _____________________________________________________________________________
