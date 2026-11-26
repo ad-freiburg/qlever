@@ -561,8 +561,8 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
   const auto loadedPermutations = index.loadedPermutations();
   size_t numNormalPermutations = loadedPermutations.size();
   // The statistics scan the PSO permutation, one permutation that starts with
-  // the subject and one that starts with the object (if loaded), plus the
-  // internal PSO permutation.
+  // the subject and one that starts with the object (if loaded, with the graph
+  // last), plus the internal PSO permutation.
   auto isLoaded = [&loadedPermutations](Permutation::Enum p) {
     return ad_utility::contains(loadedPermutations, p);
   };
@@ -669,20 +669,19 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
   // The pairs of which both permutations are loaded are written together, the
   // others one by one (see `createSinglePermutationWriterTask`).
   std::vector<Permutation::Enum> singlePermutations;
-  for (auto [a, b] : {std::pair{SPO, SOP}, std::pair{OPS, OSP}}) {
-    if (isLoaded(a) && isLoaded(b)) {
-      permutationSettings.push_back({{a, b}, false});
-    } else if (isLoaded(a)) {
-      singlePermutations.push_back(a);
-    } else if (isLoaded(b)) {
-      singlePermutations.push_back(b);
-    }
-  }
+  std::vector<Permutation::Enum> handled{PSO, POS};
   for (auto permutation : loadedPermutations) {
-    AD_CORRECTNESS_CHECK(Permutation::hasGraphLast(permutation),
-                         "The rebuilding of permutations that do not have "
-                         "the graph as their last column is not yet "
-                         "supported");
+    if (ad_utility::contains(handled, permutation)) {
+      continue;
+    }
+    auto twin = Permutation::twin(permutation);
+    handled.push_back(permutation);
+    handled.push_back(twin);
+    if (isLoaded(twin)) {
+      permutationSettings.push_back({{permutation, twin}, false});
+    } else {
+      singlePermutations.push_back(permutation);
+    }
   }
 
   for (auto permutation : singlePermutations) {

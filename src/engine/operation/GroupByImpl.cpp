@@ -885,9 +885,11 @@ std::optional<IdTable> GroupByImpl::computeGroupByForSingleIndexScan() const {
     return std::nullopt;
   }
 
+  // The scans on a permutation that doesn't have the graph as its last column
+  // are not supported by the following optimizations.
   if (indexScan->numVariables() <= 1 ||
       !indexScan->graphsToFilter().areAllGraphsAllowed() ||
-      !isImplicitGroupBy_) {
+      !indexScan->graph().isUndef() || !isImplicitGroupBy_) {
     return std::nullopt;
   }
 
@@ -986,7 +988,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByObjectWithCount() const {
   auto indexScan =
       std::dynamic_pointer_cast<IndexScan>(_subtree->getRootOperation());
   if (!indexScan || !indexScan->graphsToFilter().areAllGraphsAllowed() ||
-      indexScan->numVariables() != 2) {
+      !indexScan->graph().isUndef() || indexScan->numVariables() != 2) {
     return std::nullopt;
   }
   const auto& permutedTriple = indexScan->getPermutedTriple();
@@ -1110,7 +1112,7 @@ GroupByImpl::getPermutationForThreeVariableTriple(
       std::dynamic_pointer_cast<const IndexScan>(tree.getRootOperation());
 
   if (!indexScan || !indexScan->graphsToFilter().areAllGraphsAllowed() ||
-      indexScan->numVariables() != 3) {
+      !indexScan->graph().isUndef() || indexScan->numVariables() != 3) {
     return {};
   }
   {

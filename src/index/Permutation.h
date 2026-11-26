@@ -134,6 +134,13 @@ class Permutation {
   // Return true iff the graph is the last column of the `permutation`.
   static bool hasGraphLast(Enum permutation);
 
+  // Return the twin of the `permutation`, which has the same first and last
+  // column, and the second and third column swapped (e.g. `SOP` for `SPO` and
+  // `GPSO` for `GSPO`). The two are always written together, because the
+  // multiplicities of the third column of a permutation are those of the
+  // second column of its twin.
+  static Enum twin(Enum permutation);
+
   // Return the paths of the files that store `permutation` for the index with
   // the given `onDiskBase` (the permutation file and its `.meta` file). For the
   // files of an internal permutation, pass the base name with the

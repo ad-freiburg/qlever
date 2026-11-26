@@ -745,21 +745,22 @@ TEST(IndexRebuilder, materializeToIndex) {
   }
 }
 
-// Rebuild an index that only has some of the permutations, in particular
-// permutations without their twin (see `createSinglePermutationWriterTask`).
-// The rebuilt index must have the same permutations with the same contents
-// (including the delta triples) and multiplicities as an index that is built
-// from scratch.
-TEST(IndexRebuilder, materializeToIndexWithSomePermutations) {
+namespace {
+// Rebuild an index that only has the `expectedPermutations` (and check that
+// the rebuilt index has them as well, with the same contents and
+// multiplicities as an index that is built from scratch).
+void materializeToIndexWithPermutations(
+    const std::vector<Permutation::Enum>& expectedPermutations) {
+  SCOPED_TRACE(Permutation::toString(expectedPermutations.back()));
   auto cancellationHandle =
       std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
-  std::string baseFolder = absl::StrCat(gtestCurrentTestName(), "-new");
+  std::string name =
+      absl::StrCat(gtestCurrentTestName(), "-", expectedPermutations.size());
+  std::string baseFolder = absl::StrCat(name, "-new");
   std::string newIndexName = baseFolder + "/index";
   const std::string originalTriples =
       "<a> <b> <c> . <a> <b> <d> . <a> <e> <c> . <d> <e> <a> . ";
   const std::string insertedTriples = "<c> <b> <a> . <a> <b> <a> . ";
-  const std::vector expectedPermutations{Permutation::PSO, Permutation::POS,
-                                         Permutation::SOP, Permutation::OSP};
   auto makeIndex = [&expectedPermutations](std::string name,
                                            std::string turtle) {
     ad_utility::testing::TestIndexConfig config{std::move(turtle)};
@@ -767,10 +768,10 @@ TEST(IndexRebuilder, materializeToIndexWithSomePermutations) {
     config.usePatterns = false;
     return ad_utility::testing::makeTestIndex(name, std::move(config));
   };
-  auto index = makeIndex(gtestCurrentTestName(), originalTriples);
+  auto index = makeIndex(name, originalTriples);
   // An index that is built from scratch from all the triples, for reference.
-  auto reference = makeIndex(absl::StrCat(gtestCurrentTestName(), "-ref"),
-                             originalTriples + insertedTriples);
+  auto reference =
+      makeIndex(absl::StrCat(name, "-ref"), originalTriples + insertedTriples);
   ASSERT_THAT(index.loadedPermutations(),
               ::testing::ElementsAreArray(expectedPermutations));
 
@@ -806,7 +807,10 @@ TEST(IndexRebuilder, materializeToIndexWithSomePermutations) {
               ::testing::ElementsAreArray(expectedPermutations));
   // Neither the permutations that were not loaded nor the temporary twins
   // exist.
-  for (auto permutation : {Permutation::SPO, Permutation::OPS}) {
+  for (auto permutation : Permutation::ALL) {
+    if (ad_utility::contains(expectedPermutations, permutation)) {
+      continue;
+    }
     for (const auto& file : Permutation::fileNames(permutation, newIndexName)) {
       EXPECT_FALSE(ql::filesystem::exists(file)) << file;
     }
@@ -817,8 +821,10 @@ TEST(IndexRebuilder, materializeToIndexWithSomePermutations) {
         ql::filesystem::exists(absl::StrCat(file.string(), ".twin-tmp")));
   }
   EXPECT_EQ(newIndex.numTriples().normal, 6);
-  EXPECT_EQ(newIndex.numDistinctSubjects().normal, 3);
-  EXPECT_EQ(newIndex.numDistinctObjects().normal, 3);
+  if (newIndex.hasPermutation(Permutation::SOP)) {
+    EXPECT_EQ(newIndex.numDistinctSubjects().normal, 3);
+    EXPECT_EQ(newIndex.numDistinctObjects().normal, 3);
+  }
 
   // Compare the contents and the metadata of the relations of each
   // permutation with those of the `reference`. The vocabularies are the same,
@@ -853,6 +859,22 @@ TEST(IndexRebuilder, materializeToIndexWithSomePermutations) {
       EXPECT_EQ(actualMetadata->getCol2Multiplicity(),
                 expectedMetadata->getCol2Multiplicity());
     }
+  }
+}
+}  // namespace
+
+// Rebuild an index that only has some of the permutations, in particular
+// permutations without their twin (see `createSinglePermutationWriterTask`).
+// The rebuilt index must have the same permutations with the same contents
+// (including the delta triples) and multiplicities as an index that is built
+// from scratch.
+TEST(IndexRebuilder, materializeToIndexWithSomePermutations) {
+  for (const auto& expectedPermutations :
+       {std::vector{Permutation::PSO, Permutation::POS, Permutation::SOP,
+                    Permutation::OSP},
+        std::vector{Permutation::PSO, Permutation::POS, Permutation::Enum::GSPO,
+                    Permutation::Enum::GPSO, Permutation::Enum::GOPS}}) {
+    materializeToIndexWithPermutations(expectedPermutations);
   }
 }
 

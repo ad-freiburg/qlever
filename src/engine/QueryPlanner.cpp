@@ -787,10 +787,11 @@ void QueryPlanner::indexScanThreeVarsCase(
 }
 
 // _____________________________________________________________________________
-template <typename AddedIndexScanFunction, typename AddFilter>
+template <typename AddedIndexScanFunction, typename AddFilter,
+          typename AddPlanFunction>
 void QueryPlanner::seedFromOrdinaryTriple(
     const TripleGraph::Node& node, const AddedIndexScanFunction& addIndexScan,
-    const AddFilter& addFilter) {
+    const AddFilter& addFilter, const AddPlanFunction& addPlan) {
   auto triple = node.triple_.getSimple();
   const size_t numVars = static_cast<size_t>(triple.s_.isVariable()) +
                          static_cast<size_t>(triple.p_.isVariable()) +
@@ -840,9 +841,105 @@ void QueryPlanner::seedFromOrdinaryTriple(
         addIndexScan(permutation, std::move(scanTriple));
       }
     }
+  } else {
+    seedWithoutSuitablePermutation(triple, addIndexScan, addFilter);
+  }
+  seedWithGraphAsKeyColumn(triple, addIndexScan, addPlan);
+}
+
+// _____________________________________________________________________________
+template <typename AddedIndexScanFunction, typename AddPlanFunction>
+void QueryPlanner::seedWithGraphAsKeyColumn(
+    const SparqlTripleSimple& triple,
+    const AddedIndexScanFunction& addIndexScan,
+    const AddPlanFunction& addPlan) const {
+  if (_qec == nullptr) {
     return;
   }
-  seedWithoutSuitablePermutation(triple, addIndexScan, addFilter);
+  // Determine the graph of the scan, which is either the graph variable (if
+  // all graphs are allowed) or one or a few fixed graphs.
+  auto activeGraphs = getActiveGraphs();
+  std::optional<TripleComponent> graph;
+  std::vector<TripleComponent> fixedGraphs;
+  if (activeGraphVariable_.has_value()) {
+    if (activeGraphs.areAllGraphsAllowed()) {
+      graph = activeGraphVariable_.value();
+    }
+  } else if (const auto* whitelist = activeGraphs.whitelistIfPresent();
+             whitelist != nullptr && !whitelist->empty() &&
+             whitelist->size() <= MAX_NUM_GRAPHS_FOR_UNION_OF_GRAPH_SCANS) {
+    fixedGraphs.assign(whitelist->begin(), whitelist->end());
+    // Sort the graphs, such that the plan is deterministic.
+    ql::ranges::sort(fixedGraphs, std::less<>{},
+                     [](const TripleComponent& tc) { return tc.toString(); });
+    graph = fixedGraphs.front();
+  }
+  if (!graph.has_value()) {
+    return;
+  }
+
+  // Repeated variables (including the graph variable) are handled by the
+  // permutations that have the graph as their last column.
+  std::array<const TripleComponent*, 4> components{&triple.s_, &triple.p_,
+                                                   &triple.o_, &graph.value()};
+  ad_utility::HashSet<Variable> variables;
+  for (const auto* component : components) {
+    if (component->isVariable() &&
+        !variables.insert(component->getVariable()).second) {
+      return;
+    }
+  }
+
+  // Add a scan for each loaded permutation that doesn't have the graph as its
+  // last column, for which the fixed columns are a prefix of its columns.
+  for (auto permutation : _qec->getIndex().loadedPermutations()) {
+    if (Permutation::hasGraphLast(permutation)) {
+      continue;
+    }
+    const auto& keys = Permutation::toKeyOrder(permutation).keys();
+    auto isVariable = [&components, &keys](size_t i) {
+      return components.at(keys.at(i))->isVariable();
+    };
+    bool fixedColumnsArePrefix = true;
+    for (size_t i = 1; i < keys.size(); ++i) {
+      if (isVariable(i - 1) && !isVariable(i)) {
+        fixedColumnsArePrefix = false;
+      }
+    }
+    // The last column must be a variable (see `IndexScan`).
+    if (!fixedColumnsArePrefix || !isVariable(3)) {
+      continue;
+    }
+    if (fixedGraphs.size() <= 1) {
+      addIndexScan(permutation);
+      continue;
+    }
+    // For several fixed graphs, merge the (equally sorted) scans for the
+    // single graphs and remove the duplicates (a triple that is contained in
+    // several of the graphs is contained only once in their union).
+    std::shared_ptr<QueryExecutionTree> tree;
+    for (const auto& fixedGraph : fixedGraphs) {
+      auto scan = ad_utility::makeExecutionTree<IndexScan>(
+          _qec,
+          qlever::getPermutationForTriple(permutation, _qec->getIndex(),
+                                          triple),
+          _qec->locatedTriplesSharedState(), triple,
+          IndexScan::Graphs::Whitelist({fixedGraph}));
+      if (tree == nullptr) {
+        tree = std::move(scan);
+        continue;
+      }
+      auto allColumns =
+          ad_utility::integerRange(ColumnIndex{tree->getResultWidth()}) |
+          ::ranges::to<qlm::vector>(allocator());
+      tree = ad_utility::makeExecutionTree<Union>(_qec, tree, scan,
+                                                  std::move(allColumns));
+    }
+    auto allColumns =
+        ad_utility::integerRange(ColumnIndex{tree->getResultWidth()}) |
+        ::ranges::to<std::vector>();
+    addPlan(makeSubtreePlan<Distinct>(_qec, std::move(tree), allColumns));
+  }
 }
 
 // _____________________________________________________________________________
@@ -1103,7 +1200,7 @@ auto QueryPlanner::seedWithScansAndText(
                                           _qec->locatedTriplesSharedState(),
                                           std::move(triple), relevantGraphs));
     };
-    seedFromOrdinaryTriple(node, addIndexScan, addFilter);
+    seedFromOrdinaryTriple(node, addIndexScan, addFilter, pushPlan);
   }
 
   // If there is no score variable, there is no ql:contains-entity for this text

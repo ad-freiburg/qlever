@@ -77,9 +77,12 @@ void Permutation::loadFromDisk(
   }
   ad_utility::File metaFile{filename + META_FILE_SUFFIX, "r"};
   meta_.readFromFile(file, metaFile);
-  // Materialized views never use graph post-processing, while normal and
-  // internal permutations always use it.
-  bool useGraphPostProcessing = permutationType != Type::MATERIALIZED_VIEW;
+  // Materialized views never use graph post-processing, and neither do the
+  // permutations that don't have the graph as their last column (for them,
+  // the fourth column is an ordinary key column, see `IndexScan`). Normal and
+  // internal permutations with the graph last always use it.
+  bool useGraphPostProcessing =
+      permutationType != Type::MATERIALIZED_VIEW && hasGraphLast(permutation_);
   reader_.emplace(allocator_, std::move(file), useGraphPostProcessing);
   if (logRegistration) {
     AD_LOG_INFO << "Registered " << readableName_
@@ -215,6 +218,12 @@ Permutation::Enum Permutation::fromKeyOrder(const KeyOrder& keyOrder) {
 // _____________________________________________________________________
 bool Permutation::hasGraphLast(Enum permutation) {
   return toKeyOrder(permutation).keys()[3] == 3;
+}
+
+// _____________________________________________________________________
+Permutation::Enum Permutation::twin(Enum permutation) {
+  auto [a, b, c, d] = toKeyOrder(permutation).keys();
+  return fromKeyOrder(KeyOrder{a, c, b, d});
 }
 
 // _____________________________________________________________________

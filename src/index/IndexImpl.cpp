@@ -226,6 +226,66 @@ static auto fixBlockAfterPatternJoin(T block) {
 }
 }  // namespace
 
+namespace {
+// An adapter for an external `Sorter` that pushes only the given `columns` of
+// each block (in the given order) to the `Sorter`. It has the same interface
+// for the creation of the push callbacks as the sorter (see
+// `toSequentialBlockCallback` and `toConcurrentBlockCallback` below), so it can
+// be used as the next sorter of a pair of permutations. It is used to push the
+// triples in the column order of a permutation that doesn't have the graph as
+// its last column, see `IndexImpl::createPermutationsWithoutGraphLast`.
+template <typename Sorter>
+class PushInColumnOrder {
+ private:
+  Sorter& sorter_;
+  std::vector<ColumnIndex> columns_;
+
+ public:
+  PushInColumnOrder(Sorter& sorter, std::vector<ColumnIndex> columns)
+      : sorter_{sorter}, columns_{std::move(columns)} {}
+
+  // Return a callback that synchronously pushes a block.
+  auto makePushBlockCallback() {
+    return [this](const IdTableStatic<0>& block) {
+      sorter_.pushBlock(block.asColumnSubsetView(columns_));
+    };
+  }
+
+  // Return a callback that asynchronously pushes a block (see
+  // `CompressedExternalIdTableSorter::makeAsyncPushBlockCallback`).
+  auto makeAsyncPushBlockCallback() {
+    return [this](auto block, auto done) {
+      // The view (and the rows that it refers to) has to stay alive until the
+      // push has completed, which the aliasing `shared_ptr` guarantees.
+      using Holder = std::pair<decltype(block), IdTableView<0>>;
+      auto holder =
+          std::make_shared<Holder>(block, block->asColumnSubsetView(columns_));
+      auto* viewPtr = &holder->second;
+      std::shared_ptr<const IdTableView<0>> view{std::move(holder), viewPtr};
+      sorter_.asyncPushBlock(
+          std::move(view),
+          [done = std::move(done)](std::exception_ptr e) mutable {
+            std::move(done)(std::move(e));
+          });
+    };
+  }
+};
+
+// Return the indices of the columns that reorder a block, the columns of which
+// are in the order of the key order `from`, into the order of the key order
+// `to`.
+std::vector<ColumnIndex> columnsToReorder(const qlever::KeyOrder& from,
+                                          const qlever::KeyOrder& to) {
+  std::vector<ColumnIndex> result;
+  for (auto key : to.keys()) {
+    auto it = ql::ranges::find(from.keys(), key);
+    AD_CORRECTNESS_CHECK(it != from.keys().end());
+    result.push_back(static_cast<ColumnIndex>(it - from.keys().begin()));
+  }
+  return result;
+}
+}  // namespace
+
 // ____________________________________________________________________________
 template <typename InternalTripleSorter>
 std::unique_ptr<ExternalSorter<SortByPSO, NumColumnsIndexBuilding + 2>>
@@ -530,6 +590,31 @@ void IndexImpl::createFromFilesAfterPreparation(
   const auto permutations = permutationsToBuild();
   const bool buildSubjectPair = buildsSubjectPair(permutations);
   const bool buildObjectPair = buildsObjectPair(permutations);
+  // The permutations that don't have the graph as their last column are built
+  // last, from the triples that the PSO and POS permutations push to them (see
+  // `createPermutationsWithoutGraphLast`).
+  const auto pairsWithoutGraphLast = getPairsWithoutGraphLast(permutations);
+  std::unique_ptr<ExternalSorter<SortBySPO>> sorterWithoutGraphLast;
+  std::optional<PushInColumnOrder<ExternalSorter<SortBySPO>>>
+      pushToSorterWithoutGraphLast;
+  if (!pairsWithoutGraphLast.empty()) {
+    sorterWithoutGraphLast =
+        makeSorterPtr<SortBySPO>("permutations-without-graph-last-0");
+    pushToSorterWithoutGraphLast.emplace(
+        *sorterWithoutGraphLast,
+        columnsToReorder(
+            qlever::KeyOrder{0, 1, 2, 3},
+            Permutation::toKeyOrder(pairsWithoutGraphLast.front().first)));
+  }
+  auto createPsoAndPos = [this, &pushToSorterWithoutGraphLast](
+                             size_t numColumns, auto sortedTriples) {
+    if (pushToSorterWithoutGraphLast.has_value()) {
+      createPSOAndPOS(numColumns, std::move(sortedTriples),
+                      pushToSorterWithoutGraphLast.value());
+    } else {
+      createPSOAndPOS(numColumns, std::move(sortedTriples));
+    }
+  };
   if (usePatterns_) {
     // Load all permutations and also load the patterns. In this case the
     // `createSPOAndSOP` function returns the next sorter, already enriched
@@ -550,7 +635,7 @@ void IndexImpl::createFromFilesAfterPreparation(
         buildOspWithPatterns(std::move(patternOutput.value()),
                              *indexBuilderData.sorter_.internalTriplesPso_);
     createInternalPsoAndPosAndSetMetadata();
-    createPSOAndPOS(NumColumnsIndexBuilding + 2,
+    createPsoAndPos(NumColumnsIndexBuilding + 2,
                     ChunkwiseInput{*thirdSorterPtr, RemoveDuplicates::False});
   } else {
     createInternalPsoAndPosAndSetMetadata();
@@ -585,22 +670,26 @@ void IndexImpl::createFromFilesAfterPreparation(
       firstSorter.clearUnderlying();
     }
     if (buildSubjectPair || buildObjectPair) {
-      createPSOAndPOS(NumColumnsIndexBuilding,
+      createPsoAndPos(NumColumnsIndexBuilding,
                       ChunkwiseInput{psoSorter, RemoveDuplicates::False});
     } else {
-      // Only the PSO and POS permutations are built, so the `firstSorter` is a
-      // PSO sorter.
-      createPSOAndPOS(
+      // Only the PSO and POS permutations are built (with the graph last), so
+      // the `firstSorter` is a PSO sorter.
+      createPsoAndPos(
           NumColumnsIndexBuilding,
           ChunkwiseInput{dynamic_cast<ExternalSorter<SortByPSO>&>(firstSorter),
                          RemoveDuplicates::True});
     }
   }
+  if (sorterWithoutGraphLast) {
+    createPermutationsWithoutGraphLast(std::move(sorterWithoutGraphLast),
+                                       pairsWithoutGraphLast);
+  }
   // A pair of permutations is always built completely, so delete those
   // permutations that were not requested.
   //
   // TODO<joka921> Don't write them in the first place.
-  for (auto permutation : Permutation::GRAPH_LAST) {
+  for (auto permutation : Permutation::ALL) {
     if (!ad_utility::contains(permutations, permutation)) {
       for (const auto& file :
            Permutation::fileNames(permutation, onDiskBase_)) {
@@ -1009,6 +1098,74 @@ inline void atomicMax(std::atomic<uint64_t>& maximum, uint64_t value) {
   }
 }
 }  // namespace
+
+// _____________________________________________________________________________
+auto IndexImpl::getPairsWithoutGraphLast(
+    const std::vector<Permutation::Enum>& permutations)
+    -> std::vector<PermutationPair> {
+  std::vector<PermutationPair> result;
+  std::vector<Permutation::Enum> handled;
+  for (auto permutation : permutations) {
+    if (Permutation::hasGraphLast(permutation) ||
+        ad_utility::contains(handled, permutation)) {
+      continue;
+    }
+    auto twin = Permutation::twin(permutation);
+    result.emplace_back(permutation, twin);
+    handled.push_back(permutation);
+    handled.push_back(twin);
+  }
+  return result;
+}
+
+// _____________________________________________________________________________
+void IndexImpl::createPermutationsWithoutGraphLast(
+    std::unique_ptr<ExternalSorter<SortBySPO>> sorter,
+    const std::vector<PermutationPair>& pairs) {
+  for (size_t i = 0; i < pairs.size(); ++i) {
+    const auto& p1 = getPermutation(pairs.at(i).first);
+    const auto& p2 = getPermutation(pairs.at(i).second);
+    // The triples are pushed to the sorter of the next pair while this pair
+    // is written.
+    std::unique_ptr<ExternalSorter<SortBySPO>> nextSorter;
+    std::optional<PushInColumnOrder<ExternalSorter<SortBySPO>>> pushToNext;
+    if (i + 1 < pairs.size()) {
+      nextSorter = makeSorterPtr<SortBySPO>(
+          absl::StrCat("permutations-without-graph-last-", i + 1));
+      pushToNext.emplace(
+          *nextSorter,
+          columnsToReorder(p1.keyOrder(),
+                           Permutation::toKeyOrder(pairs.at(i + 1).first)));
+    }
+    AD_LOG_INFO << "Creating permutations " << p1.readableName() << " and "
+                << p2.readableName() << " ..." << std::endl;
+    // The triples of the `sorter` are already in the column order of `p1`
+    // (and sorted lexicographically), so they are written with the identity
+    // as the key order. Its twin `p2` is then derived by the writer as usual.
+    ChunkwiseInput<ExternalSorter<SortBySPO>> input{*sorter,
+                                                    RemoveDuplicates::False};
+    qlever::KeyOrder identity{0, 1, 2, 3};
+    auto fileName1 = getFilenameForPermutation(p1, false);
+    auto fileName2 = getFilenameForPermutation(p2, false);
+    auto [numDistinctCol0, meta1, meta2] =
+        pushToNext.has_value()
+            ? createPermutationPairImpl(NumColumnsIndexBuilding, fileName1,
+                                        fileName2, input, identity,
+                                        pushToNextSorter(pushToNext.value()))
+            : createPermutationPairImpl(NumColumnsIndexBuilding, fileName1,
+                                        fileName2, input, identity);
+    meta1.calculateStatistics(numDistinctCol0);
+    meta2.calculateStatistics(numDistinctCol0);
+    AD_LOG_INFO << "Statistics for " << p1.readableName() << ": "
+                << meta1.statistics() << std::endl;
+    AD_LOG_INFO << "Statistics for " << p2.readableName() << ": "
+                << meta2.statistics() << std::endl;
+    writeMetaData(meta1, fileName1);
+    writeMetaData(meta2, fileName2);
+    sorter->clear();
+    sorter = std::move(nextSorter);
+  }
+}
 
 // _____________________________________________________________________________
 std::string IndexImpl::getFilenameForPermutation(const Permutation& permutation,
@@ -2277,14 +2434,6 @@ std::vector<Permutation::Enum> IndexImpl::permutationsToBuild() const {
         }
         return ad_utility::contains(requested.value(), permutation);
       });
-  for (auto permutation : result) {
-    if (!Permutation::hasGraphLast(permutation)) {
-      throw std::runtime_error{absl::StrCat(
-          "The permutation ", Permutation::toString(permutation),
-          " does not have the graph as its last column, such permutations "
-          "are not yet supported")};
-    }
-  }
   return result;
 }
 
@@ -2392,13 +2541,17 @@ std::vector<float> IndexImpl::getMultiplicities(
     }
     return numTriples / std::invoke(getNumDistinct, this).normal;
   };
+  // The number of distinct graphs is not known, so we (pessimistically) assume
+  // that there is only one.
   std::array multiplicities{multiplicity({Permutation::SPO, Permutation::SOP},
                                          &IndexImpl::numDistinctSubjects),
                             numTriples / numDistinctPredicates().normal,
                             multiplicity({Permutation::OSP, Permutation::OPS},
-                                         &IndexImpl::numDistinctObjects)};
-  auto permuted = permutation.keyOrder().permuteTriple(multiplicities);
-  return {permuted.begin(), permuted.end()};
+                                         &IndexImpl::numDistinctObjects),
+                            numTriples};
+  // The multiplicities of the first three columns of the `permutation`.
+  auto permuted = permutation.keyOrder().permuteTuple(multiplicities);
+  return {permuted.begin(), permuted.begin() + 3};
 }
 
 // _____________________________________________________________________________

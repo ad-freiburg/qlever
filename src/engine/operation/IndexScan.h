@@ -35,6 +35,12 @@ class IndexScan final : public Operation {
   TripleComponent subject_;
   TripleComponent predicate_;
   TripleComponent object_;
+  // For a permutation that doesn't have the graph as its last column, the
+  // graph is an ordinary key column of the scan, and `graph_` is either a
+  // fixed graph or the graph variable (see `normalizeForPermutation`). For all
+  // other permutations, it is `UNDEF` and the graphs are filtered via
+  // `graphsToFilter_`.
+  TripleComponent graph_ = TripleComponent::UNDEF{};
   Graphs graphsToFilter_;
   ScanSpecAndBlocks scanSpecAndBlocks_;
   bool scanSpecAndBlocksIsPrefiltered_;
@@ -94,14 +100,44 @@ class IndexScan final : public Operation {
             ConstantColumns constantColumns, Graphs graphsToFilter,
             ScanSpecAndBlocks scanSpecAndBlocks,
             bool scanSpecAndBlocksIsPrefiltered, VarsToKeep varsToKeep,
-            bool sizeEstimateIsExact, size_t sizeEstimate);
+            bool sizeEstimateIsExact, size_t sizeEstimate,
+            TripleComponent graph = TripleComponent::UNDEF{});
 
+ private:
+  // The triple, graph, and graph filter of a scan after
+  // `normalizeForPermutation` (defined in the `.cpp` file).
+  struct NormalizedTriple;
+
+  // For a `permutation` that doesn't have the graph as its last column, turn
+  // the graph of the scan into an ordinary key column: If the `triple` has an
+  // additional column for the graph (inside of `GRAPH ?g`), the graph is that
+  // variable, and `graphsToFilter` must allow all graphs. Otherwise,
+  // `graphsToFilter` must be a whitelist of a single graph, which is then the
+  // (fixed) graph. The fourth column of the `permutation` (which must be a
+  // variable) becomes the first additional column, and the graph filter is
+  // replaced by `Graphs::All()`. For all other permutations, return the
+  // arguments unchanged.
+  static NormalizedTriple normalizeForPermutation(
+      const Permutation& permutation, SparqlTripleSimple triple,
+      Graphs graphsToFilter);
+
+  // The constructor that does the actual work for the first public
+  // constructor.
+  IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
+            LocatedTriplesSharedState locatedTriplesSharedState,
+            NormalizedTriple normalizedTriple,
+            std::optional<ScanSpecAndBlocks> scanSpecAndBlocks,
+            VarsToKeep varsToKeep);
+
+ public:
   ~IndexScan() override = default;
 
   // Const getters for testing.
   const TripleComponent& predicate() const { return predicate_; }
   const TripleComponent& subject() const { return subject_; }
   const TripleComponent& object() const { return object_; }
+  // See `graph_`.
+  const TripleComponent& graph() const { return graph_; }
   const auto& graphsToFilter() const { return graphsToFilter_; }
   const std::vector<Variable>& additionalVariables() const {
     return additionalVariables_;

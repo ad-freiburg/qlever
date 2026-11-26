@@ -58,7 +58,15 @@ TEST(Permutation, namesAndKeyOrders) {
     EXPECT_EQ(P::hasGraphLast(permutation), name.size() == 3);
     EXPECT_EQ(P::hasGraphLast(permutation),
               ad_utility::contains(P::GRAPH_LAST, permutation));
+    // The twin has the same first and last column, and is different.
+    auto twin = P::twin(permutation);
+    EXPECT_NE(twin, permutation);
+    EXPECT_EQ(P::twin(twin), permutation);
+    EXPECT_EQ(P::toKeyOrder(twin).keys().at(0), keys.at(0));
+    EXPECT_EQ(P::toKeyOrder(twin).keys().at(3), keys.at(3));
   }
+  EXPECT_EQ(P::twin(P::SPO), P::SOP);
+  EXPECT_EQ(P::twin(P::Enum::GSPO), P::Enum::GPSO);
   EXPECT_EQ(names.size(), 24);
 
   EXPECT_EQ(P::toString(P::PSO), "PSO");

@@ -628,6 +628,24 @@ class IndexImpl {
   static bool buildsObjectPair(
       const std::vector<Permutation::Enum>& permutations);
 
+  // A permutation and its twin (see `Permutation::twin`).
+  using PermutationPair = std::pair<Permutation::Enum, Permutation::Enum>;
+
+  // Return the pairs of the `permutations` that don't have the graph as their
+  // last column, as pairs of a requested permutation and its twin (which may
+  // or may not be requested). Each permutation occurs at most once.
+  static std::vector<PermutationPair> getPairsWithoutGraphLast(
+      const std::vector<Permutation::Enum>& permutations);
+
+  // Write the `pairs` of permutations that don't have the graph as their last
+  // column one after the other. The `sorter` contains the triples in the
+  // column order of the first permutation of the first pair, and the writing
+  // of each pair pushes them to the sorter of the next pair in its column
+  // order.
+  void createPermutationsWithoutGraphLast(
+      std::unique_ptr<ExternalSorter<SortBySPO>> sorter,
+      const std::vector<PermutationPair>& pairs);
+
   // Store the `permutations` that were built in the configuration and write
   // it.
   void setPermutationsInConfiguration(
