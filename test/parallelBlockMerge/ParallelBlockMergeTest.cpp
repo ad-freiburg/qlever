@@ -36,6 +36,7 @@
 #include "backports/asio.h"
 #include "util/CancellationHandle.h"
 #include "util/SourceLocation.h"
+#include "util/Synchronized.h"
 #include "util/memorySize/MemorySize.h"
 #include "util/parallelBlockMerge/InMemoryBlockStorage.h"
 #include "util/parallelBlockMerge/ParallelBlockMerge.h"
@@ -652,16 +653,12 @@ TEST(ParallelBlockMerge, outputBlockMemoryLimit) {
 // `numElements` of every call. The recorded state is shared between all
 // copies, because the merge takes the input by value.
 struct ReservingInput : public SizeInput {
-  struct State {
-    std::mutex mutex_{};
-    std::vector<size_t> reservedNumElements_{};
-  };
+  using State = ad_utility::Synchronized<std::vector<size_t>>;
   std::shared_ptr<State> state_ = std::make_shared<State>();
 
   void reserveBlock(Block& block, size_t numElements) const {
     block.reserve(numElements);
-    std::lock_guard<std::mutex> lock{state_->mutex_};
-    state_->reservedNumElements_.push_back(numElements);
+    state_->wlock()->push_back(numElements);
   }
 };
 static_assert(InputConcept<ReservingInput>);
@@ -683,8 +680,8 @@ TEST(ParallelBlockMerge, reserveBlockOfTheInputIsCalled) {
       EXPECT_GE(block.capacity(), 10u);
     }
     EXPECT_EQ(numElements, 400u);
-    EXPECT_EQ(state->reservedNumElements_.size(), numBlocks);
-    EXPECT_THAT(state->reservedNumElements_, ::testing::Each(10u));
+    EXPECT_EQ(state->rlock()->size(), numBlocks);
+    EXPECT_THAT(*state->rlock(), ::testing::Each(10u));
   }
   // If only the memory of an output block is bounded, nothing is reserved.
   {
@@ -699,7 +696,7 @@ TEST(ParallelBlockMerge, reserveBlockOfTheInputIsCalled) {
       numElements += block.size();
     }
     EXPECT_EQ(numElements, 400u);
-    EXPECT_THAT(state->reservedNumElements_, ::testing::IsEmpty());
+    EXPECT_THAT(*state->rlock(), ::testing::IsEmpty());
   }
 }
 

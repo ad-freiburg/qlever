@@ -23,6 +23,7 @@
 #include "../../util/AllocatorTestHelpers.h"
 #include "../../util/GTestHelpers.h"
 #include "../../util/IdTableHelpers.h"
+#include "../../util/IndexTestHelpers.h"
 #include "./AsyncPushTestHelpers.h"
 #include "engine/idTable/AsyncIdTablePusher.h"
 
@@ -234,7 +235,6 @@ TEST(AsyncIdTablePusher, completionHandlerRunsOnItsExecutor) {
 // _____________________________________________________________________________
 TEST(AsyncIdTablePusher, sinkThatRecyclesBlocks) {
   auto alloc = ad_utility::testing::makeAllocator();
-  net::thread_pool pool{4};
   constexpr size_t blocksize = 64;
   // The sink keeps the block that it was handed last, and hands back the one
   // before (like the sorter, which hands back the block that its background
@@ -245,7 +245,7 @@ TEST(AsyncIdTablePusher, sinkThatRecyclesBlocks) {
   std::set<const Id*> buffers;
   std::optional<IdTableStatic<0>> previous;
   size_t numBlocks = 0;
-  Pusher pusher{pool.get_executor(), 3, blocksize, alloc,
+  Pusher pusher{ad_utility::testing::multiThreadExecutor(), 3, blocksize, alloc,
                 [&](IdTableStatic<0> block) -> std::optional<IdTableStatic<0>> {
                   EXPECT_EQ(block.numRows(), blocksize);
                   ++numBlocks;
@@ -275,13 +275,12 @@ TEST(AsyncIdTablePusher, sinkThatRecyclesBlocks) {
 // _____________________________________________________________________________
 TEST(AsyncIdTablePusher, recycledBlockWithWrongNumberOfColumnsIsIgnored) {
   auto alloc = ad_utility::testing::makeAllocator();
-  net::thread_pool pool{4};
   constexpr size_t blocksize = 16;
   IdTable actual{2, alloc};
   size_t numBlocks = 0;
   // The sink hands back a nonempty block with a different number of columns,
   // which the pusher must not use as its next block.
-  Pusher pusher{pool.get_executor(), 2, blocksize, alloc,
+  Pusher pusher{ad_utility::testing::multiThreadExecutor(), 2, blocksize, alloc,
                 [&](IdTableStatic<0> block) -> std::optional<IdTableStatic<0>> {
                   EXPECT_EQ(block.numRows(), blocksize);
                   ++numBlocks;
@@ -309,9 +308,8 @@ TEST(AsyncIdTablePusher, sinkThatReturnsNothing) {
   // A sink that has the signature of `Pusher::Sink`, but never hands back a
   // block, behaves like a sink that returns `void`.
   auto alloc = ad_utility::testing::makeAllocator();
-  net::thread_pool pool{2};
   size_t numBlocks = 0;
-  Pusher pusher{pool.get_executor(), 2, 10, alloc,
+  Pusher pusher{ad_utility::testing::multiThreadExecutor(), 2, 10, alloc,
                 Pusher::Sink{[&numBlocks](IdTableStatic<0> block)
                                  -> std::optional<IdTableStatic<0>> {
                   EXPECT_EQ(block.numRows(), 10u);

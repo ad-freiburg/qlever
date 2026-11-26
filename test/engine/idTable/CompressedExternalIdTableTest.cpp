@@ -29,6 +29,7 @@
 #include "index/ConstantsIndexBuilding.h"
 #include "index/ExternalSortFunctors.h"
 #include "util/ConstexprUtils.h"
+#include "util/Views.h"
 #include "util/jthread.h"
 
 namespace net = boost::asio;
@@ -577,7 +578,6 @@ TEST(CompressedExternalIdTable, blockBuffersAreRecycled) {
   EXPECT_NE(buffers->at(0), buffers->at(1));
 }
 
-// _____________________________________________________________________________
 // Test that the blocks of `asyncPushBlock` are recycled in the same way as the
 // blocks of `pushBlock` (see the previous test): the sink of the
 // `AsyncIdTablePusher` hands each complete block to the background thread and
@@ -604,7 +604,7 @@ TEST(CompressedExternalIdTable, asyncPushBlockBuffersAreRecycled) {
     // See the previous test for the purpose of the `blockers`.
     std::vector<std::vector<Id>> blockers;
     auto block = createRandomlyFilledIdTable(blockSize, NUM_COLS);
-    for ([[maybe_unused]] size_t i : ql::views::iota(size_t{0}, numBlocks)) {
+    for ([[maybe_unused]] size_t i : ad_utility::integerRange(numBlocks)) {
       table.asyncPushAndWait(block);
       blockers.emplace_back(blockSize);
     }
