@@ -13,7 +13,6 @@
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "engine/CallFixedSize.h"
-#include "engine/ExportQueryExecutionTrees.h"
 #include "engine/VariableToColumnMap.h"
 #include "engine/binaryExport/BinaryImport.h"
 #include "engine/operation/Sort.h"
@@ -435,6 +434,18 @@ std::optional<std::string> Service::getSiblingValuesClause() const {
 
   checkCancellation();
 
+  const auto& idTable = siblingResult->idTableView();
+  // Columns that contain `UNDEF` are not pushed down (see the loop below).
+  //
+  // NOTE: A row with `UNDEF` matches the same remote rows as a row with a value
+  // in that column, so the remote endpoint would return these rows more than
+  // once (see #4010). This is conservative, only rows that can match the same
+  // remote row cause duplicates, and can be refined if there is a concrete
+  // need for it.
+  auto containsUndef = [&idTable](ColumnIndex columnIdx) {
+    return ql::ranges::any_of(idTable.getColumn(columnIdx), Id::isUndefinedL);
+  };
+
   std::vector<ColumnIndex> commonColumnIndices;
   std::string vars = "(";
   for (const auto& localVar : parsedServiceClause_.visibleVariables_) {
@@ -442,8 +453,18 @@ std::optional<std::string> Service::getSiblingValuesClause() const {
     if (it == siblingVars.end()) {
       continue;
     }
+    const auto& [columnIdx, undefStatus] = it->second;
+    if (undefStatus == ColumnIndexAndTypeInfo::PossiblyUndefined &&
+        containsUndef(columnIdx)) {
+      continue;
+    }
     absl::StrAppend(&vars, it->first.name(), " ");
-    commonColumnIndices.push_back(it->second.columnIndex_);
+    commonColumnIndices.push_back(columnIdx);
+    checkCancellation();
+  }
+  if (commonColumnIndices.empty()) {
+    runtimeInfo().addDetail("optimized-with-sibling-result", "no");
+    return std::nullopt;
   }
   vars.back() = ')';
 
@@ -453,9 +474,9 @@ std::optional<std::string> Service::getSiblingValuesClause() const {
   auto createValueRow = [&](size_t rowIndex) -> std::string {
     std::string row = "(";
     for (const auto& columnIdx : commonColumnIndices) {
-      const auto& optStr = idToValueForValuesClause(
-          getIndex(), siblingResult->idTableView()(rowIndex, columnIdx),
-          siblingResult->localVocab());
+      const auto& optStr =
+          idToValueForValuesClause(getIndex(), idTable(rowIndex, columnIdx),
+                                   siblingResult->localVocab());
 
       if (!optStr.has_value()) {
         return "";
@@ -468,8 +489,7 @@ std::optional<std::string> Service::getSiblingValuesClause() const {
 
   ad_utility::HashSet<std::string> rowSet;
   std::string values = " { ";
-  for (size_t rowIndex = 0; rowIndex < siblingResult->idTableView().size();
-       ++rowIndex) {
+  for (size_t rowIndex = 0; rowIndex < idTable.size(); ++rowIndex) {
     std::string row = createValueRow(rowIndex);
     if (row.empty() || rowSet.contains(row)) {
       continue;

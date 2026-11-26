@@ -198,12 +198,12 @@ class Service : public Operation {
   FRIEND_TEST(ServiceTest, precomputeSiblingResult);
   FRIEND_TEST(ServiceTest, precomputeSiblingResultWithStripColumns);
   FRIEND_TEST(ServiceTest, pushDownValuesPlacesValuesAtEnd);
+  FRIEND_TEST(ServiceTest, siblingValuesClauseSkipsColumnsWithUndef);
 };
 #else
-// In the C++17 mode, where the If we disable the `Service` operation isled,
-// wemputeSiblingResult` function, which does still provide a dummy for the
-// `preco completely disabn completely in the C++17 mode, hen we canthen we
-// still can't// wffix  th
+// In the C++17 mode, the `Service` operation is disabled completely. This dummy
+// keeps the calls of `precomputeSiblingResult` in `Join`, `OptionalJoin` and
+// `Minus` compiling.
 struct Service {
   template <typename... Ts>
   static void precomputeSiblingResult(Ts&&...) {}
