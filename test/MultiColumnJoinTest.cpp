@@ -8,9 +8,9 @@
 #include <array>
 #include <vector>
 
-#include "engine/IndexScan.h"
-#include "engine/MultiColumnJoin.h"
-#include "engine/NeutralOptional.h"
+#include "engine/operation/IndexScan.h"
+#include "engine/operation/MultiColumnJoin.h"
+#include "engine/operation/NeutralOptional.h"
 #include "global/Constants.h"
 #include "util/AllocatorTestHelpers.h"
 #include "util/IdTableHelpers.h"

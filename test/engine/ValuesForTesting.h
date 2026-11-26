@@ -8,9 +8,9 @@
 
 #include "../util/AllocatorTestHelpers.h"
 #include "../util/LocalVocabTestHelpers.h"
-#include "engine/Operation.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/Result.h"
+#include "engine/operation/Operation.h"
 #include "util/Algorithm.h"
 #include "util/ContainersWithAllocator.h"
 #include "util/Random.h"
