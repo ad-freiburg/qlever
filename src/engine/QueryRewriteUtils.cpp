@@ -10,7 +10,6 @@
 #include "engine/filterFacts/Recognizers.h"
 #include "engine/operation/SpatialJoin.h"
 #include "engine/operation/Values.h"
-#include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/QueryRewriteExpressionHelpers.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 

@@ -11,7 +11,6 @@
 #include "engine/Result.h"
 #include "engine/operation/Sort.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
-#include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/ChunkedForLoop.h"
 #include "util/VectorWithMemoryLimit.h"
 #include "util/joinAlgorithms/IndexNestedLoopJoin.h"

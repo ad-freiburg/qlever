@@ -6,7 +6,6 @@
 #include "engine/operation/OptionalJoin.h"
 
 #include "engine/AddCombinedRowToTable.h"
-#include "engine/CallFixedSize.h"
 #include "engine/JoinHelpers.h"
 #include "engine/JoinWithIndexScanHelpers.h"
 #include "engine/operation/IndexScan.h"

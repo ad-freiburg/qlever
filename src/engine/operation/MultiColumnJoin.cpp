@@ -6,7 +6,6 @@
 #include "engine/operation/MultiColumnJoin.h"
 
 #include "engine/AddCombinedRowToTable.h"
-#include "engine/CallFixedSize.h"
 #include "engine/JoinHelpers.h"
 #include "engine/operation/ColumnStrippingHelpers.h"
 #include "global/Constants.h"

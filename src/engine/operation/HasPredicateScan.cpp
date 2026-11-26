@@ -5,15 +5,12 @@
 
 #include "engine/operation/HasPredicateScan.h"
 
-#include "engine/AddCombinedRowToTable.h"
 #include "engine/CallFixedSize.h"
 #include "engine/PermutationSelector.h"
 #include "engine/operation/IndexScan.h"
 #include "engine/operation/Join.h"
-#include "index/IndexImpl.h"
 #include "index/TripleComponentConversions.h"
 #include "util/ChunkedForLoop.h"
-#include "util/joinAlgorithms/JoinColumnMapping.h"
 
 // Assert that the `type` is a valid value for the `ScanType` enum.
 static void checkType(HasPredicateScan::ScanType type) {
