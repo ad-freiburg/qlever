@@ -13,6 +13,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <variant>
 
 #include "global/Id.h"
 #include "global/VocabIndex.h"
@@ -61,6 +62,24 @@ class IndexImpl;
 [[nodiscard]] Id toValueId(TripleComponent&& tripleComponent,
                            const IndexImpl& index, LocalVocab& localVocab);
 
+// An `Id` or a `LocalVocabEntry` that has not (yet) been added to a
+// `LocalVocab`.
+using IdOrLocalVocabEntry = std::variant<Id, LocalVocabEntry>;
+
+// Convert `word` to an `Id` if it is an IRI that can be encoded directly in an
+// `Id` (see `LocalVocabContext::encodeAsId`), and else wrap it in a
+// `LocalVocabEntry`. This is the only way to create a `LocalVocabEntry` that
+// stores an IRI (apart from `toValueId` above), which guarantees that no
+// `LocalVocabEntry` stores an encodable IRI. The index only contains the
+// encoded `Id` of such an IRI, so a `LocalVocabEntry` of it would not match it,
+// e.g. in joins.
+//
+// NOTE: This does not look up `word` in the vocabularies of the index, use
+// `toValueId` for that.
+[[nodiscard]] IdOrLocalVocabEntry toIdOrLocalVocabEntry(
+    ad_utility::triple_component::LiteralOrIri word,
+    const LocalVocabContext& context);
+
 // Convert `tripleComponent` to an RDF literal, where a `std::string` is emitted
 // directly, an `int64_t` becomes an `xsd:integer` literal, and a `double`
 // becomes an `xsd:double` literal.
@@ -87,6 +106,11 @@ class IndexImpl;
 // than the dispatch itself (measured: 0.8 ns vs 6.2 ns per call).
 [[nodiscard]] inline std::optional<std::string_view> toRdfLiteralView(
     const TripleComponent& tripleComponent) {
+  if (tripleComponent.isTripleTerm()) {
+    // TODO<Prashanth0703> Implement structural RDF export for triple terms.
+    AD_THROW(
+        "Converting parsed triple terms to RDF output is not yet supported");
+  }
   if (tripleComponent.isVariable()) {
     return tripleComponent.getVariable().name();
   } else if (tripleComponent.isString()) {

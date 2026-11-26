@@ -15,7 +15,6 @@
 #include "../benchmark/infrastructure/BenchmarkMetadata.h"
 #include "backports/concepts.h"
 #include "backports/functional.h"
-#include "util/ConfigManager/ConfigManager.h"
 #include "util/CopyableUniquePtr.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
@@ -24,6 +23,7 @@
 #include "util/SourceLocation.h"
 #include "util/Timer.h"
 #include "util/TypeTraits.h"
+#include "util/configManager/ConfigManager.h"
 #include "util/json.h"
 
 namespace ad_benchmark {
@@ -93,9 +93,10 @@ class BenchmarkResults {
    *  Most of the time a lambda, that calls the actual function to benchmark
    *  with the needed parameters.
    */
-  CPP_template(typename Function)(requires(ql::concepts::invocable<Function>))
-      ResultEntry& addMeasurement(const std::string& descriptor,
-                                  const Function& functionToMeasure) {
+  CPP_template(typename Function)(
+      requires(ql::concepts::invocable<Function>))
+  ResultEntry& addMeasurement(const std::string& descriptor,
+                              const Function& functionToMeasure) {
     return addEntryToContainerVector(singleMeasurements_, descriptor,
                                      functionToMeasure);
   }

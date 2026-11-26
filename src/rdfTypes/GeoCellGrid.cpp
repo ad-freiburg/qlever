@@ -24,8 +24,9 @@ GeoCellGrid::GeoCellGrid(uint8_t level, GeoCellGridScheme scheme)
     : level_{level}, scheme_{scheme} {
   // The `+ 2` accounts for the marker bit of the `SplitVocabulary` and at
   // least one bit for the position of a word; see `numPositionBits()`.
-  AD_CONTRACT_CHECK(level >= 1 && numCellBits() + 2 <= ValueId::numDataBits,
-                    "Invalid level for a geo cell grid");
+  AD_CONTRACT_CHECK(
+      level >= 1 && numCellBits() + 2 <= ValueId::numVocabIndexBits,
+      "Invalid level for a geo cell grid");
 }
 
 // ____________________________________________________________________________

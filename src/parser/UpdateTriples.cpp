@@ -7,6 +7,10 @@
 namespace updateClause {
 
 // _____________________________________________________________________________
+UpdateTriples::UpdateTriples(const qlever::Allocator<Id>& allocator)
+    : triples_{allocator} {}
+
+// _____________________________________________________________________________
 UpdateTriples::UpdateTriples(Vec triples, LocalVocab localVocab)
     : triples_{std::move(triples)}, localVocab_{std::move(localVocab)} {}
 

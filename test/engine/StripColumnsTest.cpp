@@ -13,10 +13,11 @@
 
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/LocalVocabEntryTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
 #include "./ValuesForTesting.h"
 #include "engine/QueryExecutionTree.h"
-#include "engine/StripColumns.h"
+#include "engine/operation/StripColumns.h"
 
 namespace {
 using Vars = std::vector<std::optional<Variable>>;
@@ -70,9 +71,9 @@ TEST(StripColumns, computeResult) {
   using V = Variable;
   auto qec = ad_utility::testing::getQec();
   auto makeOp = [&qec]() {
-    LocalVocab voc;
-    voc.getIndexAndAddIfNotContained(LocalVocabEntry::fromIriref(
-        "<kartoffel>", qec->getLocalVocabContext()));
+    LocalVocab voc{ad_utility::testing::makeAllocator()};
+    voc.getIndexAndAddIfNotContained(
+        iriLocalVocabEntry("<kartoffel>", qec->getLocalVocabContext()));
     qec->clearCacheUnpinnedOnly();
     std::vector<IdTable> children;
     children.push_back(makeIdTableFromVector({{1, 2, 3}, {4, 5, 6}}));
@@ -86,8 +87,8 @@ TEST(StripColumns, computeResult) {
 
   auto localVocabMatcher =
       ResultOf(std::mem_fn(&LocalVocab::getAllWordsForTesting),
-               ElementsAre(LocalVocabEntry::fromIriref(
-                   "<kartoffel>", qec->getLocalVocabContext())));
+               ElementsAre(iriLocalVocabEntry("<kartoffel>",
+                                              qec->getLocalVocabContext())));
   // Test materialized result.
   {
     auto strip = makeOp();

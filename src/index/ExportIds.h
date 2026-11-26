@@ -26,7 +26,7 @@
 #include "index/Index.h"
 #include "index/IndexImpl.h"
 #include "index/LocalVocab.h"
-#include "parser/LiteralOrIri.h"
+#include "rdfTypes/LiteralOrIri.h"
 #include "util/Algorithm.h"
 #include "util/CompilerExtensions.h"
 #include "util/Exception.h"
@@ -59,7 +59,8 @@ using Literal = ad_utility::triple_component::Literal;
 // `idToLiteralForEncodedValue`, which turns the value that the `Id` stores
 // into a plain literal (`Bool`, `Int`, `Double`, `Date`, `GeoPoint`), returns
 // the label of the blank node (`BlankNodeIndex`), or returns `std::nullopt`
-// (`Undefined`).
+// (`Undefined`). Triple-term references have no literal representation and
+// return `std::nullopt`.
 std::optional<Literal> idToLiteral(
     const IndexImpl& index, Id id, const LocalVocab& localVocab,
     bool onlyReturnLiteralsWithXsdString = false);
@@ -139,10 +140,10 @@ CPP_template(bool removeQuotesAndAngleBrackets = false,
              typename LiteralOrIriType = LiteralOrIri,
              typename EscapeFunction = ql::identity)(
     requires ad_utility::SameAsAny<LiteralOrIriType, LiteralOrIri,
-                                   LiteralOrIriView>) std::
-    optional<std::pair<std::string, const char*>> literalOrIriToStringAndType(
-        const LiteralOrIriType& word,
-        EscapeFunction&& escapeFunction = EscapeFunction{}) {
+                                   LiteralOrIriView>)
+std::optional<std::pair<std::string, const char*>> literalOrIriToStringAndType(
+    const LiteralOrIriType& word,
+    EscapeFunction&& escapeFunction = EscapeFunction{}) {
   if constexpr (returnOnlyLiterals) {
     if (!word.isLiteral()) {
       return std::nullopt;

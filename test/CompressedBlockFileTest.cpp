@@ -12,9 +12,10 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <array>
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
-#include <fstream>
 #include <range/v3/view/cartesian_product.hpp>
 #include <string>
 #include <vector>
@@ -24,6 +25,7 @@
 #include "backports/filesystem.h"
 #include "util/CompressedBlockFile.h"
 #include "util/File.h"
+#include "util/FilesystemHelpers.h"
 #include "util/Random.h"
 #include "util/Views.h"
 #include "util/jthread.h"
@@ -61,15 +63,6 @@ std::vector<char> readBytes(
   EXPECT_EQ(result.back(), 'X');
   result.pop_back();
   return result;
-}
-
-// The raw bytes of the file with the given `filename`, straight from disk and
-// without going through the `CompressedBlockFile`.
-std::vector<char> rawFileContents(const std::string& filename) {
-  std::ifstream stream{filename, std::ios::binary};
-  EXPECT_TRUE(stream.good());
-  return std::vector<char>{std::istreambuf_iterator<char>{stream},
-                           std::istreambuf_iterator<char>{}};
 }
 
 // The blocks that a round trip has appended: the bytes that went in, and the
@@ -162,6 +155,62 @@ TEST(CompressedBlockFile, appendAndReadBlocksWithExplicitCompression) {
   }
 }
 
+// Test blocks of two chunks (like the payloads and the datatypes of a column of
+// the split layout), which several threads append at the same time, like the
+// parallel merge: each block comes back unchanged into buffers of the same
+// sizes, with and without compression, so the chunks of a block stay together.
+TEST(CompressedBlockFile, blocksOfSeveralChunks) {
+  static constexpr size_t numThreads = 8;
+  static constexpr size_t numBlocksPerThread = 20;
+  for (auto compression : {ad_utility::NO_BLOCK_COMPRESSION,
+                           CompressedBlockFile::CompressionLevel{
+                               ad_utility::ZSTD_DEFAULT_LEVEL}}) {
+    SCOPED_TRACE(compression.has_value());
+    CompressedBlockFile file{gtestCurrentTestName(), compression};
+    // The payloads and the datatypes of a block, which differ between the
+    // blocks in their sizes and their contents.
+    auto payloadsOf = [](size_t t, size_t i) {
+      return std::vector<std::byte>(400 + i, std::byte(t));
+    };
+    auto datatypesOf = [](size_t t, size_t i) {
+      return std::vector<std::byte>(50 + t, std::byte(i));
+    };
+    std::vector<std::vector<CompressedBlockFile::BlockMetadata>> metadata(
+        numThreads,
+        std::vector<CompressedBlockFile::BlockMetadata>(numBlocksPerThread));
+    std::vector<ad_utility::JThread> threads;
+    for (size_t t : integerRange(numThreads)) {
+      threads.emplace_back([&, t]() {
+        for (size_t i : integerRange(numBlocksPerThread)) {
+          auto payloads = payloadsOf(t, i);
+          auto datatypes = datatypesOf(t, i);
+          std::array<ql::span<const std::byte>, 2> chunks{payloads, datatypes};
+          metadata.at(t).at(i) = file.appendBlockFromChunks(chunks);
+        }
+      });
+    }
+    threads.clear();
+
+    // Each block comes back unchanged into buffers of the sizes of its chunks.
+    for (auto [t, i] : cartesian_product(integerRange(numThreads),
+                                         integerRange(numBlocksPerThread))) {
+      std::vector<std::byte> payloads(400 + i);
+      std::vector<std::byte> datatypes(50 + t);
+      std::array<ql::span<std::byte>, 2> buffers{payloads, datatypes};
+      file.readBlockIntoChunks(metadata.at(t).at(i), buffers);
+      EXPECT_EQ(payloads, payloadsOf(t, i)) << t << " " << i;
+      EXPECT_EQ(datatypes, datatypesOf(t, i)) << t << " " << i;
+    }
+
+    // Buffers that don't have the sizes of the chunks are rejected.
+    std::vector<std::byte> tooSmall(400 - 1);
+    std::vector<std::byte> datatypes(50);
+    std::array<ql::span<std::byte>, 2> wrongBuffers{tooSmall, datatypes};
+    EXPECT_ANY_THROW(
+        file.readBlockIntoChunks(metadata.at(0).at(0), wrongBuffers));
+  }
+}
+
 // _____________________________________________________________________________
 // A file that was created with `NO_BLOCK_COMPRESSION` stores its blocks exactly
 // as they are: the two sizes of a block are equal, and the bytes at the
@@ -172,7 +221,9 @@ TEST(CompressedBlockFile, uncompressedBlocksAreStoredVerbatim) {
     CompressedBlockFile file{filename, ad_utility::NO_BLOCK_COMPRESSION};
     EXPECT_EQ(file.compressionLevel(), ad_utility::NO_BLOCK_COMPRESSION);
     RoundTrip roundTrip = checkRoundTrip(file);
-    std::vector<char> contents = rawFileContents(filename);
+    // The raw bytes of the file, straight from disk and without going through
+    // the `CompressedBlockFile`.
+    std::vector<char> contents = qlever::util::readBinaryFile(filename);
     for (size_t i : integerRange(roundTrip.metadata_.size())) {
       const auto& metadata = roundTrip.metadata_.at(i);
       const std::vector<char>& expected = roundTrip.expected_.at(i);

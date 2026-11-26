@@ -48,8 +48,7 @@ BlankNodeBlocks flattenBlankNodeBlocks(const OwnedBlocks& ownedBlocks);
 // where all local vocab `Id`s are remapped according to `localVocabMapping`
 // and all vocab `Id`s are remapped according to `insertInfo` to create a new
 // index where all of these values are all vocab `Id`s in the new vocabulary.
-// The blocks are read on the `executor`, by at most
-// `rebuild-index-scan-num-threads` threads at the same time.
+// The blocks are read on the `executor`.
 ad_utility::InputRangeTypeErased<IdTableStatic<0>> readIndexAndRemap(
     const Permutation& permutation,
     const BlockMetadataRanges& blockMetadataRanges,

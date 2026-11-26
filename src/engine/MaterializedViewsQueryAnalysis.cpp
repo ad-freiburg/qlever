@@ -14,10 +14,10 @@
 #include <variant>
 
 #include "backports/algorithm.h"
-#include "engine/IndexScan.h"
 #include "engine/MaterializedViews.h"
 #include "engine/MaterializedViewsPatternMatcher.h"
 #include "engine/VariableToColumnMap.h"
+#include "engine/operation/IndexScan.h"
 #include "global/Constants.h"
 #include "global/RuntimeParameters.h"
 #include "parser/GraphPatternOperation.h"
@@ -98,7 +98,7 @@ void PatternMatcherLimits::subtract(PatternMatcherLimits used) {
 
 // _____________________________________________________________________________
 std::optional<std::vector<PatternEdge>> QueryPatternCache::buildPatternEdges(
-    const ViewPtr& view, const std::vector<SparqlTriple>& triples) {
+    const ViewPtr& view, ql::span<const SparqlTriple> triples) {
   const auto& viewCols = view->variableToColumnMap();
   std::vector<PatternEdge> edges;
   edges.reserve(triples.size());
@@ -305,7 +305,7 @@ bool QueryPatternCache::analyzeView(ViewPtr view,
     explainIgnore(std::get<RewriteIgnoreReason>(triplesForRewrite));
     return cacheKeyAdded;
   }
-  const auto& triples = std::get<std::vector<SparqlTriple>>(triplesForRewrite);
+  const auto& triples = std::get<qlm::vector<SparqlTriple>>(triplesForRewrite);
   bool patternFound = false;
 
   // A single triple has no join to eliminate, so a pattern needs at least two.
@@ -352,7 +352,7 @@ std::vector<parsedQuery::GraphPatternOperation> graphPatternInvariantFilter(
 }
 
 // _____________________________________________________________________________
-std::variant<RewriteIgnoreReason, std::vector<SparqlTriple>>
+std::variant<RewriteIgnoreReason, qlm::vector<SparqlTriple>>
 getTriplesForPatternRewrite(const ParsedQuery& parsed) {
   if (parsed.isAggregatingQuery()) {
     return "The view's query aggregates (GROUP BY, either explicit or "
@@ -422,9 +422,8 @@ void QueryPatternCache::removeView(ViewPtr view) {
     ql::erase_if(views, [&view](ViewPtr pView) { return pView == view; });
   }
 
-  // Remove `view` from cache key hash map. We use `absl::erase_if` here as it
-  // works natively with our hash map unlike `ql::erase_if`.
-  absl::erase_if(byCacheKey_, [&view](const auto& pair) {
+  // Remove `view` from cache key hash map.
+  ql::erase_if(byCacheKey_, [&view](const auto& pair) {
     AD_CORRECTNESS_CHECK(pair.second != nullptr);
     return pair.second->view_ == view;
   });
@@ -463,7 +462,7 @@ BindExpressionAndTargetCol extractBindExpressions(
 
 // _____________________________________________________________________________
 ByCacheKeyInfoPtr QueryPatternCache::lookupByCacheKey(
-    const std::string& cacheKey) const {
+    std::string_view cacheKey) const {
   if (auto info = ad_utility::findOptional(byCacheKey_, cacheKey)) {
     return info.value();
   }

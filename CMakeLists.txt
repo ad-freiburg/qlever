@@ -17,7 +17,23 @@ if (APPLE)
         message(STATUS "Found Homebrew at: ${HOMEBREW_PREFIX}")
         list(APPEND CMAKE_PREFIX_PATH "${HOMEBREW_PREFIX}")
         link_directories(${HOMEBREW_PREFIX}/lib)
-        include_directories(${HOMEBREW_PREFIX}/include)
+        # Search Homebrew's include directory after all other include
+        # directories (`-idirafter`), like `/usr/include` on Linux. Otherwise
+        # the headers of the dependencies that QLever fetches itself (e.g.
+        # abseil) are shadowed by different versions of the same libraries
+        # installed via Homebrew.
+        #
+        # NOTE 1: The directory is also marked as an implicit include
+        # directory, so that CMake never passes it explicitly, also not when
+        # an imported target like `Boost::headers` requests it.
+        #
+        # NOTE 2: `-idirafter` directories are searched after the SDK's
+        # `/usr/include`, so for headers that ship both in the SDK and in
+        # Homebrew, the SDK headers win.
+        foreach (lang C CXX)
+            list(APPEND CMAKE_${lang}_IMPLICIT_INCLUDE_DIRECTORIES "${HOMEBREW_PREFIX}/include")
+        endforeach ()
+        add_compile_options(-idirafter "${HOMEBREW_PREFIX}/include")
     else()
         message(WARNING "Homebrew not found. You may need to manually set CMAKE_PREFIX_PATH to locate dependencies (Boost, ICU, OpenSSL, etc.)")
     endif()
@@ -317,7 +333,7 @@ FetchContent_Declare(
         GIT_REPOSITORY https://github.com/joka921/range-v3
         # This branch removes some differences in the interface between `range-v3` and `std::ranges` s.t.
         # the former can be used as an (almost) drop-in replacement for the latter.
-        GIT_TAG 4ec7405bcc0639f93a0b9435d29859ef0770c080 # branch fork-for-qlever
+        GIT_TAG aee9ae4edf86f9795697d51e07b184c4129a1777 # branch fork-for-qlever
         SYSTEM
         EXCLUDE_FROM_ALL
 )
@@ -328,7 +344,7 @@ FetchContent_Declare(
 FetchContent_Declare(
         spatialjoin
         GIT_REPOSITORY https://github.com/ad-freiburg/spatialjoin
-        GIT_TAG b05b342a0aa48279bf66030205e432b2d43cb93f
+        GIT_TAG 17a7cfd817e1189a8a27562a03e176cda98ae872
         SYSTEM
         EXCLUDE_FROM_ALL
 )
@@ -499,6 +515,21 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND
     add_compile_options(-Wno-maybe-uninitialized)
     # Unreliable on large translation units; formatting is enforced by clang-format anyway.
     add_compile_options(-Wno-misleading-indentation)
+endif()
+# Enable C++26 static reflection (P2996) if the compiler supports it. QLever
+# doesn't require reflection, but uses it (see `backports/reflection.h`) to
+# check some invariants that the C++17/C++20 code has to state redundantly.
+# Currently, only GCC 16 in C++26 mode supports reflection (behind the
+# `-freflection` flag).
+option(QLEVER_USE_REFLECTION "Use C++26 reflection for additional compile-time checks if the compiler supports it" ON)
+if (QLEVER_USE_REFLECTION AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND
+    CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "16" AND
+    CMAKE_CXX_STANDARD GREATER_EQUAL 26)
+    MESSAGE(STATUS "C++26 reflection is enabled via `-freflection`")
+    # GCC rejects `-freflection` for C++ standards before C++26, which some of
+    # the dependencies explicitly set for their targets.
+    add_compile_options(
+        "$<$<AND:$<COMPILE_LANGUAGE:CXX>,$<VERSION_GREATER_EQUAL:$<TARGET_PROPERTY:CXX_STANDARD>,26>>:-freflection>")
 endif()
 # Enable the specification of additional compiler flags manually from the commandline
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ADDITIONAL_COMPILER_FLAGS}")
@@ -811,6 +842,19 @@ target_compile_options(s2 PRIVATE -Wno-sign-compare -Wno-unused-parameter -Wno-c
 target_compile_options(re2 PRIVATE -Wno-unused-parameter -Wno-deprecated-declarations)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_compile_options(gtest PRIVATE -Wno-maybe-uninitialized)
+    # Disable `-Wuninitialized` for all targets that use `gmock`, only for
+    # GCC 16 and newer in C++26 mode.
+    #
+    # NOTE: In that mode, GCC wrongly reports the temporary that is bound to the
+    # `const&` in `PropertyMatcher::MatchAndExplainImpl` (`gmock-matchers.h`)
+    # as used uninitialized, for every use of `::testing::Property`. The
+    # warning is emitted in the translation units of the tests, not of `gmock`
+    # itself. This is a bug in GCC, not in `googletest`, see
+    # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=124380.
+    if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "16" AND
+        CMAKE_CXX_STANDARD GREATER_EQUAL 26)
+        target_compile_options(gmock INTERFACE -Wno-uninitialized)
+    endif ()
 endif ()
 include_directories(SYSTEM ${ctre_SOURCE_DIR}/single-header)
 target_compile_options(fsst PRIVATE -Wno-extra -Wno-all -Wno-error)
@@ -907,6 +951,23 @@ if (COVERAGE_FRIENDLY_CHECKS)
     add_compile_definitions(QLEVER_COVERAGE_FRIENDLY_CHECKS)
 endif ()
 
+# Use the `SplitLayoutId` (a full 64-bit payload and a datatype byte) instead of
+# the legacy `ValueId` as `Id`, see `src/global/Id.h`.
+# TODO<pas-kes> Make this an `option()` once the split layout is usable.
+if (USE_SPLIT_LAYOUT)
+    message(WARNING "USE_SPLIT_LAYOUT is experimental and not usable yet")
+    add_compile_definitions(QLEVER_USE_SPLIT_LAYOUT)
+    # `LocalVocabEntry` caches its position in the vocabulary in atomics of the
+    # bit representation of an `Id`, which has 16 bytes in the split layout.
+    # On Linux (for example with GCC), atomics of 16 bytes are calls into
+    # `libatomic`. Apple Clang inlines them, so no library is needed there.
+    # This is only needed until these atomics are replaced (see the TODO at
+    # `LocalVocabEntry::lowerBoundInVocab_`).
+    if (NOT APPLE)
+        link_libraries(atomic)
+    endif ()
+endif ()
+
 ##################################################
 # Warnings about incorrect combination of CMake variables
 
@@ -951,7 +1012,7 @@ set(PRECOMPILED_HEADER_FILES_WITH_BEAST
 
 set(PRECOMPILED_HEADER_FILES_ENGINE
     src/util/HashMap.h
-    src/engine/Operation.h
+    src/engine/operation/Operation.h
     src/engine/QueryExecutionTree.h
     ${PRECOMPILED_HEADER_FILES_WITH_BEAST})
 

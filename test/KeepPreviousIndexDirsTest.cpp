@@ -15,7 +15,6 @@
 #include <chrono>
 #include <cstdio>
 #include <fstream>
-#include <iterator>
 #include <string>
 #include <type_traits>
 #include <vector>
@@ -24,6 +23,7 @@
 #include "engine/KeepPreviousIndexDirs.h"
 #include "global/FileSuffixConstants.h"
 #include "libqlever/Qlever.h"
+#include "util/FilesystemHelpers.h"
 #include "util/GTestHelpers.h"
 
 using qlever::keepPreviousIndexDir;
@@ -209,8 +209,8 @@ TEST(KeepPreviousIndexDirs, cleanUpPreviousIndexDirs) {
   // The decisions are written to the `rebuild-index` log of the index (not to
   // the server log), one line per directory.
   {
-    std::ifstream logStream{(testDir / logName).string()};
-    std::string logContent{std::istreambuf_iterator<char>{logStream}, {}};
+    auto logContent =
+        qlever::util::readBinaryFile<std::string>(testDir / logName);
     EXPECT_THAT(logContent,
                 HasSubstr("Checking which previous index directories to keep "
                           "or delete (original-and-most-recent)"));
@@ -261,8 +261,8 @@ TEST(KeepPreviousIndexDirs, cleanUpPreviousIndexDirsFailures) {
   std::string logName = absl::StrCat("index", REBUILD_INDEX_LOG_SUFFIX);
   EXPECT_THAT(entryNames(testDir),
               ElementsAre(logName, "other.dir", "previous.b", "previous.file"));
-  std::ifstream logStream{(testDir / logName).string()};
-  std::string logContent{std::istreambuf_iterator<char>{logStream}, {}};
+  auto logContent =
+      qlever::util::readBinaryFile<std::string>(testDir / logName);
   EXPECT_THAT(logContent, HasSubstr("previous.b -> DELETE"));
   EXPECT_THAT(logContent, HasSubstr("Failed to delete \"previous.b\""));
 }

@@ -15,12 +15,13 @@
 
 #include "backports/keywords.h"
 #include "util/Algorithm.h"
+#include "util/EnumSize.h"
 #include "util/Exception.h"
 
 // The different datatypes that an `Id` (see `Id.h`) can encode.
 //
-// NOTE: If you add a datatype, keep `MaxValue` equal to the last member and
-// check whether the new datatype belongs into `isDatatypeTrivial` below.
+// NOTE: If you add a datatype, update the `QLEVER_ENUM_SIZE` below and check
+// whether the new datatype belongs into `isDatatypeTrivial` below.
 enum struct Datatype {
   Undefined = 0,
   Bool,
@@ -43,10 +44,15 @@ enum struct Datatype {
   WordVocabIndex,
   BlankNodeIndex,
   EncodedVal,
-  // Always the last member (there is no easy way to get the number of members
-  // of an enum, and other code sizes its arrays by `MaxValue`).
-  MaxValue = EncodedVal
+  // The index of an RDF 1.2 triple term.
+  //
+  // TODO<Prashanth0703> Before triple terms are stored, decide how a
+  // query-local triple term is represented (a marker bit in the payload rather
+  // than another datatype), for both `Id` layouts, including its ownership
+  // and its equality with a stored triple term.
+  TripleTermIndex
 };
+QLEVER_ENUM_SIZE(Datatype, 14);
 
 // Return true iff `datatype` is trivial, that is, IDs with this datatype
 // directly encode the value they represent and do not point to an external
@@ -62,6 +68,23 @@ constexpr bool isDatatypeTrivial(Datatype datatype) {
   constexpr std::array trivialDatatypes{Undefined, Bool, Int,
                                         Double,    Date, GeoPoint};
   return ad_utility::contains(trivialDatatypes, datatype);
+}
+
+// Return true iff `datatypes` contains all datatypes, each exactly once, in the
+// order of their numeric values. This can be used to detect changes of the
+// numeric values, for example in `static_assert`s for serialization formats.
+template <size_t N>
+constexpr bool isListOfAllDatatypesInOrder(
+    const std::array<Datatype, N>& datatypes) {
+  if (N != qlever::enumSize<Datatype>) {
+    return false;
+  }
+  for (size_t i = 0; i < N; ++i) {
+    if (static_cast<size_t>(datatypes[i]) != i) {
+      return false;
+    }
+  }
+  return true;
 }
 
 // Convert the `Datatype` enum to the corresponding string.
@@ -93,6 +116,8 @@ inline QL_CONSTEXPR std::string_view toString(Datatype type) {
       return "BlankNodeIndex";
     case Datatype::SecondaryVocabIndex:
       return "SecondaryVocabIndex";
+    case Datatype::TripleTermIndex:
+      return "TripleTermIndex";
   }
   // This line is reachable if we cast an arbitrary invalid int to this enum
   AD_FAIL();

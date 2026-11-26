@@ -14,6 +14,7 @@
 #include <set>
 
 #include "backports/three_way_comparison.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/Exception.h"
 #include "util/VectorWithMemoryLimit.h"
 
@@ -21,7 +22,7 @@ using namespace BoostGeometryNamespace;
 
 // ____________________________________________________________________________
 bool BoundingBoxAlgorithm::isContainedInBoundingBoxes(
-    const std::vector<Box>& boundingBox, Point point) const {
+    ql::span<const Box> boundingBox, Point point) const {
   // correct lon and lat bounds if necessary
   while (point.get<0>() < -180) {
     point.set<0>(point.get<0>() + 360);
@@ -41,7 +42,7 @@ bool BoundingBoxAlgorithm::isContainedInBoundingBoxes(
 }
 
 // ____________________________________________________________________________
-std::vector<Box> BoundingBoxAlgorithm::computeQueryBox(
+qlm::vector<Box> BoundingBoxAlgorithm::computeQueryBox(
     const Point& startPoint, double additionalDist) const {
   const auto& maxDist = maxDist_;
   AD_CORRECTNESS_CHECK(maxDist.has_value(),
@@ -78,7 +79,8 @@ std::vector<Box> BoundingBoxAlgorithm::computeQueryBox(
   auto northPoleReached = isAPoleTouched(upperLatBound).at(0);
 
   if (southPoleReached || northPoleReached) {
-    return {Box(Point(-180.0f, lowerLatBound), Point(180.0f, upperLatBound))};
+    return {{Box(Point(-180.0f, lowerLatBound), Point(180.0f, upperLatBound))},
+            qec_->getAllocator()};
   }
 
   // compute longitude bound. For an explanation of the calculation and the
@@ -105,21 +107,22 @@ std::vector<Box> BoundingBoxAlgorithm::computeQueryBox(
         Box(Point(-180, lowerLatBound), Point(rightLonBound, upperLatBound));
     auto box2 = Box(Point(leftLonBound + 360, lowerLatBound),
                     Point(180, upperLatBound));
-    return {box1, box2};
+    return {{box1, box2}, qec_->getAllocator()};
   } else if (rightLonBound > 180) {
     auto box1 =
         Box(Point(leftLonBound, lowerLatBound), Point(180, upperLatBound));
     auto box2 = Box(Point(-180, lowerLatBound),
                     Point(rightLonBound - 360, upperLatBound));
-    return {box1, box2};
+    return {{box1, box2}, qec_->getAllocator()};
   }
   // default case, when no bound has an "overflow"
-  return {Box(Point(leftLonBound, lowerLatBound),
-              Point(rightLonBound, upperLatBound))};
+  return {{Box(Point(leftLonBound, lowerLatBound),
+               Point(rightLonBound, upperLatBound))},
+          qec_->getAllocator()};
 }
 
 // ____________________________________________________________________________
-std::vector<Box> BoundingBoxAlgorithm::computeQueryBoxForLargeDistances(
+qlm::vector<Box> BoundingBoxAlgorithm::computeQueryBoxForLargeDistances(
     const Point& startPoint) const {
   const auto& maxDist = maxDist_;
   AD_CORRECTNESS_CHECK(maxDist.has_value(),
@@ -164,7 +167,7 @@ std::vector<Box> BoundingBoxAlgorithm::computeQueryBoxForLargeDistances(
     boxCrosses180Longitude = true;
   }
   // compute bounding boxes using the anti bounding box from above
-  std::vector<Box> boxes;
+  qlm::vector<Box> boxes{qec_->getAllocator()};
   if (!northPoleTouched) {
     // add upper bounding box(es)
     if (boxCrosses180Longitude) {
@@ -224,7 +227,7 @@ double BoundingBoxAlgorithm::getMaxDistFromMidpointToAnyPointInsideTheBox(
 }
 
 // ____________________________________________________________________________
-std::vector<Box> BoundingBoxAlgorithm::getQueryBox(
+qlm::vector<Box> BoundingBoxAlgorithm::getQueryBox(
     const std::optional<RtreeEntry>& entry) const {
   if (!entry.value().geoPoint_) {
     auto midpoint = calculateMidpointOfBox(entry.value().boundingBox_.value());
@@ -279,6 +282,9 @@ Result BoundingBoxAlgorithm::run() {
              bgi::equal_to<Value>, ad_utility::AllocatorWithLimit<Value> >
       rtree(bgi::quadratic<16>{}, bgi::indexable<Value>{},
             bgi::equal_to<Value>{}, qec_->getAllocator());
+  // Rows skipped because their value is not a supported geometry.
+  size_t numSkippedSmaller = 0;
+  size_t numSkippedOther = 0;
   for (size_t i = 0; i < smallerResult->numRows(); i++) {
     throwIfCancelled();
 
@@ -286,9 +292,7 @@ Result BoundingBoxAlgorithm::run() {
     std::optional<RtreeEntry> entry =
         getRtreeEntry(smallerResult, i, smallerResJoinCol);
     if (!entry) {
-      // nothing to do. When parsing a point or an area fails, a warning
-      // message gets printed at another place and the point/area just gets
-      // skipped
+      ++numSkippedSmaller;
       continue;
     }
     rtree.insert(std::pair(entry.value().boundingBox_.value(),
@@ -303,12 +307,10 @@ Result BoundingBoxAlgorithm::run() {
     std::optional<RtreeEntry> entry =
         getRtreeEntry(otherResult, i, otherResJoinCol);
     if (!entry) {
-      // nothing to do. When parsing a point or an area fails, a warning
-      // message gets printed at another place and the point/area just gets
-      // skipped
+      ++numSkippedOther;
       continue;
     }
-    std::vector<Box> queryBox = getQueryBox(entry);
+    auto queryBox = getQueryBox(entry);
 
     results.clear();
 
@@ -316,7 +318,7 @@ Result BoundingBoxAlgorithm::run() {
       rtree.query(bgi::intersects(bbox), std::back_inserter(results));
     });
 
-    std::set<AddedPair> pairs;
+    qlm::set<AddedPair> pairs{qec_->getAllocator()};
     ql::ranges::for_each(results, [&](Value& res) {
       size_t rowLeft = res.second.row_;
       size_t rowRight = i;
@@ -341,8 +343,10 @@ Result BoundingBoxAlgorithm::run() {
       }
     });
   }
+  addSkippedRowsWarning(leftResSmaller ? numSkippedSmaller : numSkippedOther,
+                        leftResSmaller ? numSkippedOther : numSkippedSmaller);
   auto resTable =
-      Result(std::move(result), std::vector<ColumnIndex>{},
+      Result(std::move(result), qlm::vector<ColumnIndex>{qec_->getAllocator()},
              Result::getMergedLocalVocab(*resultLeft, *resultRight));
   return resTable;
 #endif

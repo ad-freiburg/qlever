@@ -409,4 +409,47 @@ TEST(SparqlParser, BlankNodesInUpdate) {
   expectUpdateFails("DELETE WHERE { _:b <p> _:b}");
   expectUpdateFails("DELETE DATA { _:b <p> _:b}");
 }
+
+// Test that the triples of an update count towards the memory limit of the
+// allocator that is passed to the parser. The memory of the parsed update has
+// to grow with the number of its triples by at least the size of the triples.
+TEST(SparqlParser, updateTriplesAllocationsCountTowardsMemoryLimit) {
+  // Parse the update that is created by `makeUpdate(n)` and return the memory
+  // (in bytes) that the resulting `ParsedQuery` has allocated from the
+  // allocator.
+  auto memoryUsedByParsedUpdate = [](const auto& makeUpdate, size_t n) {
+    ad_utility::BlankNodeManager blankNodeManager;
+    auto allocator = ad_utility::testing::makeAllocator(
+        ad_utility::MemorySize::megabytes(100));
+    const size_t memoryLeftBefore = allocator.amountMemoryLeft().getBytes();
+    auto parsed = SparqlParser::parseUpdate(
+        &blankNodeManager, ad_utility::testing::encodedIriManager(), allocator,
+        makeUpdate(n));
+    return memoryLeftBefore - allocator.amountMemoryLeft().getBytes();
+  };
+  auto expectGrowth = [&memoryUsedByParsedUpdate](const auto& makeUpdate) {
+    constexpr size_t numSmall = 10;
+    constexpr size_t numLarge = 1000;
+    EXPECT_GE(memoryUsedByParsedUpdate(makeUpdate, numLarge),
+              memoryUsedByParsedUpdate(makeUpdate, numSmall) +
+                  (numLarge - numSmall) * sizeof(SparqlTripleSimpleWithGraph));
+  };
+  // Create `n` different triples that can be used in all of the updates below.
+  auto triples = [](size_t n) {
+    std::string result;
+    for (size_t i = 0; i < n; ++i) {
+      absl::StrAppend(&result, "<s", i, "> <p> <o", i, "> . ");
+    }
+    return result;
+  };
+  expectGrowth([&triples](size_t n) {
+    return absl::StrCat("INSERT DATA { ", triples(n), "}");
+  });
+  expectGrowth([&triples](size_t n) {
+    return absl::StrCat("DELETE DATA { ", triples(n), "}");
+  });
+  expectGrowth([&triples](size_t n) {
+    return absl::StrCat("INSERT { ", triples(n), "} WHERE { ?s ?p ?o }");
+  });
+}
 }  // namespace

@@ -19,6 +19,7 @@
 #include "backports/algorithm.h"
 #include "engine/CallFixedSize.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/idTable/IdColumnByteIO.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "index/IdTableUtils.h"
@@ -92,6 +93,14 @@ IdTable makeIdTableFromVector(const VectorTable& content,
   return result;
 }
 
+// The address of the memory of the `column`, to check if two columns share
+// their memory: of its `Id`s for a `ql::span`, of its payloads for a column of
+// the split layout (which has no `data()`).
+inline const char* memoryOf(ConstIdColumnRef column) {
+  return reinterpret_cast<const char*>(
+      ad_utility::idColumnByteIO::chunksOf(column)[0].data());
+}
+
 // Create IdTables from a vector of VectorTables, where each VectorTable
 // represents a block
 inline std::vector<IdTable> createLazyIdTables(
@@ -121,8 +130,8 @@ static constexpr MatchesIdTableFromVector matchesIdTableFromVector;
 // workaround for GMock/GTest.
 struct MatchesIdTable {
   CPP_template(typename... Ts)(
-      requires(ql::concepts::constructible_from<IdTable, Ts&&...>)) auto
-  operator()(Ts&&... ts) const {
+      requires(ql::concepts::constructible_from<IdTable, Ts&&...>))
+  auto operator()(Ts&&... ts) const {
     return ::testing::Eq(CopyShield<IdTable>(IdTable{AD_FWD(ts)...}));
   }
 

@@ -10,7 +10,6 @@
 #include "backports/StartsWithAndEndsWith.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/SparqlTriple.h"
-#include "util/Exception.h"
 
 namespace parsedQuery {
 

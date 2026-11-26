@@ -13,7 +13,6 @@
 #include "backports/algorithm.h"
 #include "global/RuntimeParameters.h"
 #include "index/CompressedRelationMetadata.h"
-#include "index/ConstantsIndexBuilding.h"
 #include "index/GraphComputation.h"
 #include "index/Permutation.h"
 #include "util/ChunkedForLoop.h"
@@ -114,10 +113,9 @@ NumAddedAndDeleted LocatedTriplesPerBlock::numTriples(size_t blockIndex) const {
 // `numIndexColumns` and `includeGraphColumn`. For example, if `numIndexColumns`
 // is `2` and `includeGraphColumn` is `true`, the function returns
 // `ad_utility::tie(row[0], row[1], row[2])`.
-CPP_template(size_t numIndexColumns, bool includeGraphColumn,
-             typename T)(requires(numIndexColumns >= 1 &&
-                                  numIndexColumns <=
-                                      3)) auto tieIdTableRow(T& row) {
+CPP_template(size_t numIndexColumns, bool includeGraphColumn, typename T)(
+    requires(numIndexColumns >= 1 && numIndexColumns <= 3))
+auto tieIdTableRow(T& row) {
   return tieElementsByIndexSequence(
       row, std::make_index_sequence<numIndexColumns +
                                     static_cast<size_t>(includeGraphColumn)>{});
@@ -140,20 +138,18 @@ static constexpr auto tieLocatedTriplesIndices = []() {
 
 // Like `tieLocatedTriple`, but takes a `const LocatedTriple&` value instead of
 // an iterator. Needed for algorithms like `set_intersection` that pass values.
-CPP_template(size_t numIndexColumns, bool includeGraphColumn,
-             typename T)(requires(numIndexColumns >= 1 &&
-                                  numIndexColumns <=
-                                      3)) auto tieLocatedTripleValue(T& lt) {
+CPP_template(size_t numIndexColumns, bool includeGraphColumn, typename T)(
+    requires(numIndexColumns >= 1 && numIndexColumns <= 3))
+auto tieLocatedTripleValue(T& lt) {
   const auto& ids = lt.triple_.ids();
   return tieElementsByIndexSequence(
       ids,
       ad_utility::toIntegerSequenceRef<
           tieLocatedTriplesIndices<numIndexColumns, includeGraphColumn>>());
 }
-CPP_template(size_t numIndexColumns, bool includeGraphColumn,
-             typename T)(requires(numIndexColumns >= 1 &&
-                                  numIndexColumns <=
-                                      3)) auto tieLocatedTriple(T& lt) {
+CPP_template(size_t numIndexColumns, bool includeGraphColumn, typename T)(
+    requires(numIndexColumns >= 1 && numIndexColumns <= 3))
+auto tieLocatedTriple(T& lt) {
   return tieLocatedTripleValue<numIndexColumns, includeGraphColumn>(*lt);
 }
 
@@ -290,7 +286,7 @@ VacuumStatistics processBlockForVacuum(
   };
 
   auto ltProj = [](const LocatedTriple& lt)
-      -> std::tuple<const Id&, const Id&, const Id&, const Id&> {
+      -> std::tuple<ConstIdRef, ConstIdRef, ConstIdRef, ConstIdRef> {
     return tieLocatedTripleValue<3, true>(lt);
   };
   auto rowProj = [](const auto& row) { return tieIdTableRow<3, true>(row); };

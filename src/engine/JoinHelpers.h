@@ -13,21 +13,22 @@
 #include <optional>
 #include <vector>
 
+#include "backports/span.h"
 #include "engine/AddCombinedRowToTable.h"
-#include "engine/IndexScan.h"
-#include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/Result.h"
-#include "engine/Sort.h"
 #include "engine/idTable/IdTable.h"
+#include "engine/operation/IndexScan.h"
+#include "engine/operation/Operation.h"
+#include "engine/operation/Sort.h"
 #include "index/CompressedRelationReader.h"
 #include "index/Permutation.h"
 #include "util/Exception.h"
 #include "util/Generators.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
-#include "util/JoinAlgorithms/JoinColumnMapping.h"
 #include "util/TypeTraits.h"
+#include "util/joinAlgorithms/JoinColumnMapping.h"
 
 namespace qlever::joinHelpers {
 
@@ -56,8 +57,8 @@ using LazyInputView =
 // permutation to each table.
 CPP_template(typename Input, size_t numJoinColumns = 1)(
     requires SameAsAny<Input, Result::Generator, Result::LazyResult>)
-    LazyInputView<numJoinColumns> convertGenerator(
-        Input gen, OptionalPermutation permutation = {}) {
+LazyInputView<numJoinColumns> convertGenerator(
+    Input gen, OptionalPermutation permutation = {}) {
   auto transformer = [permutation = std::move(permutation)](auto& element) {
     auto& [table, localVocab] = element;
     applyPermutation(table, permutation);
@@ -98,8 +99,8 @@ IteratorWithSingleCol<numJoinColumns> convertGeneratorFromScan(
         sendPriority = SendPriority::IfDue;
         // IndexScans don't have a local vocabulary, so we can just use an empty
         // one.
-        return makeIdTableAndFirstCols<numJoinColumns>(std::move(table),
-                                                       LocalVocab{});
+        return makeIdTableAndFirstCols<numJoinColumns>(
+            std::move(table), LocalVocab{scan.allocator()});
       });
 
   return IteratorWithSingleCol<numJoinColumns>{std::move(range)};
@@ -177,7 +178,7 @@ Result::LazyResult
 // IdTableVocabPair. An optional permutation can be applied to the result.
 template <typename Action>
 inline Result createResultFromAction(bool requestLaziness, Action&& action,
-                                     std::vector<ColumnIndex> resultSortedOn,
+                                     qlm::vector<ColumnIndex> resultSortedOn,
                                      OptionalPermutation permutation) {
   if (requestLaziness) {
     return {runLazyJoinAndConvertToGenerator(std::forward<Action>(action),
@@ -199,37 +200,31 @@ inline auto getRowAdderForJoin(
     AddCombinedRowToIdTable::BlockwiseCallback yieldTable) {
   return AddCombinedRowToIdTable{numJoinColumns,
                                  IdTable{op.getResultWidth(), op.allocator()},
-                                 op.getCancellationHandle(),
+                                 op.cancellationHandle(),
                                  keepJoinColumns,
                                  CHUNK_SIZE,
                                  std::move(yieldTable)};
 }
 
-// Helper function to check if the join of two columns propagate the value
-// returned by `Operation::columnOriginatesFromGraphOrUndef`.
-inline bool doesJoinProduceGuaranteedGraphValuesOrUndef(
+// Return the value of `Operation::columnContainsOnlyKnowledgeGraphNodes` for
+// the join column `variable` of an (inner) join of `left` and `right`. If one
+// side contains only nodes, it contains no UNDEF, so every value of the join
+// column is a value of that side.
+inline bool joinColumnContainsOnlyKnowledgeGraphNodes(
     const std::shared_ptr<QueryExecutionTree>& left,
     const std::shared_ptr<QueryExecutionTree>& right,
     const Variable& variable) {
-  auto graphOrUndef = [&variable](const auto& tree) {
-    return tree->getRootOperation()->columnOriginatesFromGraphOrUndef(variable);
+  auto onlyNodes = [&variable](const auto& tree) {
+    return tree->getRootOperation()->columnContainsOnlyKnowledgeGraphNodes(
+        variable);
   };
-  auto hasUndef = [&variable](const auto& tree) {
-    return tree->getVariableColumns().at(variable).mightContainUndef_ !=
-           ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined;
-  };
-  bool leftInGraph = graphOrUndef(left);
-  bool rightInGraph = graphOrUndef(right);
-  bool leftUndef = hasUndef(left);
-  bool rightUndef = hasUndef(right);
-  return (leftInGraph && rightInGraph) || (leftInGraph && !leftUndef) ||
-         (rightInGraph && !rightUndef);
+  return onlyNodes(left) || onlyNodes(right);
 }
 
 // Helper function to check if any of the join columns could potentially contain
 // undef values.
 inline bool joinColumnsAreAlwaysDefined(
-    const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
+    ql::span<const std::array<ColumnIndex, 2>> joinColumns,
     const std::shared_ptr<QueryExecutionTree>& left,
     const std::shared_ptr<QueryExecutionTree>& right) {
   auto alwaysDefHelper = [](const auto& tree, ColumnIndex index) {
@@ -263,7 +258,7 @@ inline std::shared_ptr<const Result> computeResultSkipChild(
 inline bool rightIndexNestedLoopJoinIsPossible(
     const std::shared_ptr<QueryExecutionTree>& left,
     const std::shared_ptr<QueryExecutionTree>& right,
-    const std::vector<std::array<ColumnIndex, 2>>& matchedColumns) {
+    ql::span<const std::array<ColumnIndex, 2>> matchedColumns) {
   auto sort = std::dynamic_pointer_cast<Sort>(left->getRootOperation());
   return sort && left->getSizeEstimate() >= right->getSizeEstimate() &&
          joinColumnsAreAlwaysDefined(matchedColumns, left, right);

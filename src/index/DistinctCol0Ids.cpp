@@ -38,12 +38,16 @@ BlockSelector::BlockSelector(
     const CompressedRelationReader::FilterDuplicatesAndGraphs& filter,
     bool addGraphColumn, const std::optional<std::vector<Id>>& idFilter,
     const LocatedTriplesPerBlock& locatedTriples,
+    const CompressedRelationReader::CancellationHandle& cancellationHandle,
     const CompressedRelationReader::Allocator& allocator)
     : filter_{filter},
       addGraphColumn_{addGraphColumn},
       idFilter_{idFilter},
       locatedTriples_{locatedTriples},
-      result_{{}, IdTable{numResultColumns(addGraphColumn), allocator}} {}
+      cancellationHandle_{cancellationHandle},
+      result_{{}, IdTable{numResultColumns(addGraphColumn), allocator}} {
+  AD_CONTRACT_CHECK(cancellationHandle_ != nullptr);
+}
 
 // _____________________________________________________________________________
 SelectedBlocks BlockSelector::select(
@@ -142,6 +146,7 @@ void BlockSelector::forEachCandidateBlock(
     // called yet, such that each block is handled at most once.
     auto firstUnhandledBlockIt = blocks.begin();
     while (id != ids.end()) {
+      cancellationHandle_->throwIfCancelled();
       // Skip all the blocks that only contain smaller `col0Id`s.
       blockIt =
           ql::ranges::lower_bound(blockIt, blocks.end(), *id, {}, lastCol0Id);

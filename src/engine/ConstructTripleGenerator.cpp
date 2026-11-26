@@ -53,9 +53,9 @@ struct BatchEvalContext {
 // dropped as they are instantiated (see `instantiateBatch`'s
 // `DeduplicationParams`).
 CPP_template(typename ChunkView)(requires ranges::range<ChunkView>)
-    std::vector<EvaluatedTriple> computeBatch(
-        const TableConstRefWithVocab& tableWithVocab, ChunkView batch,
-        const BatchEvalContext& context, size_t tableRowOffset) {
+std::vector<EvaluatedTriple> computeBatch(
+    const TableConstRefWithVocab& tableWithVocab, ChunkView batch,
+    const BatchEvalContext& context, size_t tableRowOffset) {
   context.cancellationHandle_.get()->throwIfCancelled();
   AD_CORRECTNESS_CHECK(!ql::ranges::empty(batch));
 
@@ -110,7 +110,8 @@ InputRangeTypeErased<EvaluatedTriple> ConstructTripleGenerator::evaluateTables(
     InputRangeTypeErased<TableWithRange> rowIndices, size_t rowOffset,
     const EvaluationConfig& config) {
   auto preprocessedTemplate = ConstructTemplatePreprocessor::preprocess(
-      templateTriples, variableColumns, config.index_);
+      templateTriples, variableColumns, config.index_,
+      config.qec_.get().getAllocator());
   IdCache cache = makeIdCache(preprocessedTemplate);
 
   const QueryExecutionContext& qec = config.qec_;

@@ -79,12 +79,13 @@ class ProgressBar {
   // outside (and be incremented there). That is because the calling code
   // typically has such a variable anyway (also for other purposes) and it
   // would be unnatural to have it originally in this class.
-  CPP_template(typename SizeT)(requires ad_utility::SimilarTo<SizeT, size_t>)
-      ProgressBar(SizeT& numStepsProcessed, std::string displayStringPrefix,
-                  size_t statisticsBatchSize = DEFAULT_PROGRESS_BAR_BATCH_SIZE,
-                  SpeedDescriptionFunction getSpeedDescription =
-                      DEFAULT_SPEED_DESCRIPTION_FUNCTION,
-                  DisplayUpdateOptions displayUpdateOptions = ReuseLine)
+  CPP_template(typename SizeT)(
+              requires ad_utility::SimilarTo<SizeT, size_t>)
+  ProgressBar(SizeT& numStepsProcessed, std::string displayStringPrefix,
+              size_t statisticsBatchSize = DEFAULT_PROGRESS_BAR_BATCH_SIZE,
+              SpeedDescriptionFunction getSpeedDescription =
+                  DEFAULT_SPEED_DESCRIPTION_FUNCTION,
+              DisplayUpdateOptions displayUpdateOptions = ReuseLine)
       : numStepsProcessed_(numStepsProcessed),
         displayStringPrefix_(std::move(displayStringPrefix)),
         statisticsBatchSize_(statisticsBatchSize),
@@ -97,16 +98,27 @@ class ProgressBar {
   // IMPORTANT: This call is (and should) return `false` most of the time, in
   // which case it is (and should be) very cheap (namely, an increment and a
   // simple check).
+  //
+  // NOTE: If the number of steps has advanced by several batches since the
+  // last update, there is only one update for all of them, and the time since
+  // the last update is evenly distributed among them for the statistics.
   bool update() {
     if (numStepsProcessed_ < updateWhenThisManyStepsProcessed_) {
       return false;
     }
+    size_t numBatches =
+        statisticsBatchSize_ == 0
+            ? 1
+            : (numStepsProcessed_ - updateWhenThisManyStepsProcessed_) /
+                      statisticsBatchSize_ +
+                  1;
     Timer::Duration newDuration = timer_.value();
-    lastBatchDuration_ = newDuration - totalDuration_;
+    lastBatchDuration_ = (newDuration - totalDuration_) /
+                         static_cast<Timer::Duration::rep>(numBatches);
     minBatchDuration_ = std::min(minBatchDuration_, lastBatchDuration_);
     maxBatchDuration_ = std::max(maxBatchDuration_, lastBatchDuration_);
     totalDuration_ = newDuration;
-    updateWhenThisManyStepsProcessed_ += statisticsBatchSize_;
+    updateWhenThisManyStepsProcessed_ += numBatches * statisticsBatchSize_;
     return true;
   }
 

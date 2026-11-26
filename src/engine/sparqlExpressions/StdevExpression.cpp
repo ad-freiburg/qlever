@@ -7,6 +7,7 @@
 #include "engine/sparqlExpressions/StdevExpression.h"
 
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
+#include "util/ChunkedForLoop.h"
 
 namespace sparqlExpression::detail {
 
@@ -32,7 +33,7 @@ ExpressionResult DeviationExpression::evaluate(
     VectorWithMemoryLimit<double> childResults{context->_allocator};
 
     // Collect values as doubles
-    for (auto& inp : generator) {
+    for (auto&& inp : generator) {
       const auto& n = detail::NumericValueGetter{}(std::move(inp), context);
       auto v = numValToDouble(n);
       if (v.has_value()) {
@@ -49,10 +50,13 @@ ExpressionResult DeviationExpression::evaluate(
 
     // Calculate squared deviation and save for result
     double avg = sum / static_cast<double>(context->size());
-    for (size_t i = 0; i < childResults.size(); i++) {
-      exprResult.at(i) = IdOrLocalVocabEntry{
-          ValueId::makeFromDouble(std::pow(childResults.at(i) - avg, 2))};
-    }
+    ad_utility::chunkedForLoop<ad_utility::CANCELLATION_CHECK_CHUNK_SIZE>(
+        0, childResults.size(),
+        [&exprResult, &childResults, avg](size_t i) {
+          exprResult.at(i) = IdOrLocalVocabEntry{
+              ValueId::makeFromDouble(std::pow(childResults.at(i) - avg, 2))};
+        },
+        [context]() { context->cancellationHandle_->throwIfCancelled(); });
   };
 
   // Visitor for child expression result
