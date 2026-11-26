@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "../../util/GTestHelpers.h"
+#include "../../util/TestException.h"
 #include "index/chunkwisePermutationWriter/ConcurrentCallbackDispatcher.h"
 
 // NOTE: The dispatcher only exists in the C++20 mode of the build.
@@ -240,15 +241,15 @@ TEST(ConcurrentCallbackDispatcher, concurrentDispatchesAndDones) {
       maxCallbacksInFlight.store(
           std::max(maxCallbacksInFlight.load(), inFlight));
       bool reportsException = i == 0 && (*block)(0, 0).getInt() % 7 == 0;
-      boost::asio::post(
-          donePool, [&, done = std::move(done), reportsException]() mutable {
-            std::this_thread::sleep_for(std::chrono::microseconds{200});
-            callbacksInFlight.fetch_sub(1);
-            numDones.fetch_add(1);
-            std::move(done)(reportsException ? std::make_exception_ptr(
-                                                   std::runtime_error{"failed"})
-                                             : nullptr);
-          });
+      boost::asio::post(donePool, [&, done = std::move(done),
+                                   reportsException]() mutable {
+        std::this_thread::sleep_for(std::chrono::microseconds{200});
+        callbacksInFlight.fetch_sub(1);
+        numDones.fetch_add(1);
+        std::move(done)(reportsException
+                            ? std::make_exception_ptr(TestException{"failed"})
+                            : nullptr);
+      });
     });
   }
   auto dispatcher = std::make_shared<ConcurrentCallbackDispatcher>(

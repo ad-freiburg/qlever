@@ -14,6 +14,7 @@
 
 #include "util/AsyncStream.h"
 #include "util/GTestHelpers.h"
+#include "util/TestException.h"
 
 namespace {
 using ad_utility::streams::runStreamAsync;
@@ -68,7 +69,7 @@ TEST(AsyncStream, ExceptionsInTheRange) {
   auto generator = runStreamAsync(
       []() -> cppcoro::generator<std::string> {
         co_yield "A";
-        throw std::runtime_error("Test exception");
+        throw TestException{"Test exception"};
         co_yield "B";
       }(),
       1);
@@ -154,7 +155,7 @@ TEST(AsyncStream, ExceptionsInTheRangeOnExecutor) {
   auto generator = runStreamAsync(
       []() -> cppcoro::generator<std::string> {
         co_yield "A";
-        throw std::runtime_error("Test exception");
+        throw TestException{"Test exception"};
         co_yield "B";
       }(),
       1, pool.get_executor());

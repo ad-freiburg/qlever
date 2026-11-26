@@ -23,6 +23,7 @@
 #include "../../util/IdTableHelpers.h"
 #include "../../util/IndexTestHelpers.h"
 #include "../../util/ParallelBlockMergeTestHelpers.h"
+#include "../../util/TestException.h"
 #include "./AsyncPushTestHelpers.h"
 #include "backports/filesystem.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
@@ -2074,7 +2075,7 @@ static_assert(
     ad_utility::parallelBlockMerge::SinkConcept<GatedSink, SorterBlock>);
 
 // A `CollectingSink` whose `asyncFinishChunk` fails with a
-// `std::runtime_error`, to check that `mergeToSink` reports a sink that fails
+// `TestException`, to check that `mergeToSink` reports a sink that fails
 // to finish its chunk.
 class FailingSink : public ad_utility::NoCopyNoMove {
  public:
@@ -2103,8 +2104,7 @@ class FailingSink : public ad_utility::NoCopyNoMove {
   auto asyncFinishChunk([[maybe_unused]] size_t chunkIndex,
                         CompletionToken&& completionToken) {
     return ad_utility::runFunctionOnExecutor(
-        executor_,
-        []() -> bool { throw std::runtime_error{"finishChunk failed"}; },
+        executor_, []() -> bool { throw TestException{"finishChunk failed"}; },
         AD_FWD(completionToken));
   }
 
@@ -2266,7 +2266,7 @@ TEST(CompressedExternalIdTable, mergeToSinkRethrowsSinkFailure) {
     auto merged = sorter.mergeToSink([](size_t numChunks) {
       return std::make_shared<FailingSink>(sharedTestExecutor(), numChunks);
     });
-    EXPECT_THROW(merged.get(), std::runtime_error);
+    EXPECT_THROW(merged.get(), TestException);
     // The failed merge has been ended, so the result can be merged again.
     std::shared_ptr<CollectingSink> sink;
     sorter.mergeToSink(collectingSinkFactory(sharedTestExecutor(), sink)).get();

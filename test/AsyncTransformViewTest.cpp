@@ -26,6 +26,7 @@
 
 #include "util/GlobalExecutor.h"
 #include "util/Random.h"
+#include "util/TestException.h"
 #include "util/Views.h"
 #include "util/views/AsyncTransformView.h"
 
@@ -194,7 +195,7 @@ TEST(AsyncTransformView, exceptionInTransformation) {
   boost::asio::thread_pool pool{2};
   auto transformation = [](size_t i) {
     if (i == 5) {
-      throw std::runtime_error{"transformation failed"};
+      throw TestException{"transformation failed"};
     }
     return i;
   };
@@ -207,7 +208,7 @@ TEST(AsyncTransformView, exceptionInTransformation) {
       ASSERT_TRUE(element.has_value());
       EXPECT_EQ(element.value(), i);
     }
-    EXPECT_THROW(view.get(), std::runtime_error);
+    EXPECT_THROW(view.get(), TestException);
   }
 }
 
@@ -217,7 +218,7 @@ TEST(AsyncTransformView, exceptionInInput) {
   auto throwingInput = []() {
     return integerRange(10u) | ql::views::transform([](size_t i) {
              if (i == 4) {
-               throw std::runtime_error{"input failed"};
+               throw TestException{"input failed"};
              }
              return i;
            });
@@ -232,14 +233,14 @@ TEST(AsyncTransformView, exceptionInInput) {
       ASSERT_TRUE(element.has_value());
       EXPECT_EQ(element.value(), i);
     }
-    EXPECT_THROW(view.get(), std::runtime_error);
+    EXPECT_THROW(view.get(), TestException);
   }
   // With more elements in flight than there are elements before the failing
   // one, the input already throws when the first element is requested.
   {
     AsyncTransformView view{throwingInput(), std::identity{}, 10,
                             pool.get_executor()};
-    EXPECT_THROW(view.get(), std::runtime_error);
+    EXPECT_THROW(view.get(), TestException);
   }
 }
 

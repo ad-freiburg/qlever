@@ -6,6 +6,7 @@
 
 #include "util/AsioHelpers.h"
 #include "util/AsyncTestHelpers.h"
+#include "util/TestException.h"
 #include "util/http/beast.h"
 
 using namespace ad_utility;
@@ -219,7 +220,7 @@ TEST(AsioHelpers, coSpawnWithPostedCompletionAcrossThreads) {
   net::io_context ctx;
   auto workGuard = makeWorkGuard(ctx);
   auto throwing = []() -> net::awaitable<int> {
-    throw std::runtime_error{"blim"};
+    throw TestException{"blim"};
     co_return 0;
   };
 
@@ -231,8 +232,7 @@ TEST(AsioHelpers, coSpawnWithPostedCompletionAcrossThreads) {
     coSpawnWithPostedCompletion(
         pool.get_executor(), throwing(),
         net::bind_executor(ctx.get_executor(), [&](std::exception_ptr e, int) {
-          EXPECT_THROW(std::rethrow_exception(std::move(e)),
-                       std::runtime_error);
+          EXPECT_THROW(std::rethrow_exception(std::move(e)), TestException);
           ++numExceptions;
         }));
   }
