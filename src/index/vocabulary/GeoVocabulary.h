@@ -146,11 +146,13 @@ class GeoVocabulary {
   static std::unique_ptr<sj::GeometryStore> makeGeometryStoreForWriting(
       const std::string& filename);
 
-  // Parse the WKT literals `words` at the consecutive positions starting at
-  // `firstPosition` for the `store`, each under its `geometryStoreGid`.
-  // Skip the invalid geometries, whose `records` are the
-  // `invalidGeoInfoBuffer`. This is thread-safe, so that this expensive part
-  // of the work for the `store` can run on the thread pool.
+  // Return the parsed geometries of the valid WKT literals among the `words`
+  // (at the consecutive positions starting at `firstPosition`) for the
+  // `store`, each under its `geometryStoreGid`. A literal is invalid if its
+  // record in `records` is the `invalidGeoInfoBuffer`.
+  //
+  // NOTE: This only reads the `store`, so it is thread-safe and this expensive
+  // part of the work for the `store` can run on the thread pool.
   template <typename Words>
   static std::unique_ptr<sj::WriteBatch> parseGeometries(
       sj::GeometryStore& store, const Words& words, uint64_t firstPosition,
@@ -306,11 +308,12 @@ class GeoVocabulary {
   //
   // The `GeometryInfo` of a word (which for a large polygon costs a parse and
   // several s2 computations) is not computed on the calling thread, but in
-  // batches on the global thread pool (see `util/GlobalExecutor.h`): the
-  // position of a word in the `geoInfoFile_` is known as soon as the word
-  // arrives, so its record can be written whenever its batch is done. The
-  // calling thread only computes the cell of a word (with a grid), which
-  // needs no more than the bounding box.
+  // batches on the global thread pool (see `util/GlobalExecutor.h`), which
+  // also parse the words for the `geometryStore_`. The calling thread adds the
+  // parsed geometries of the batches to the `geometryStore_` and writes their
+  // records, in the order of the positions (see `writeOldestBatch`). It also
+  // computes the cell of a word (with a grid), which needs no more than the
+  // bounding box.
   class WordWriter : public WordWriterBase {
    private:
     // The writer of the underlying vocabulary, which stores the strings.
