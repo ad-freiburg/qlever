@@ -252,7 +252,8 @@ void writeFileAtomically(
   };
   writeTemporaryFile(temporary);
   // An existing file keeps its permissions (the temporary file is a new file
-  // and has the default permissions), if the file system supports that.
+  // and has the default permissions), if the file system supports that
+  // (otherwise only a warning is logged, see `copyPermissionsIfPossible`).
   detail::copyPermissionsIfPossible(target, temporary);
   fs::rename(temporary, target);
 }
