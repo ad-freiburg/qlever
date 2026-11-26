@@ -515,7 +515,11 @@ std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
       ql::ranges::subrange{beginBlock, endBlock}, [&](const auto& block) {
         const auto [ins, del] =
             locatedTriplesPerBlock.numTriples(block.blockIndex_);
-        if (!exactSize || (ins == 0 && del == 0)) {
+        // For the exact size, a block with delta triples or with a triple that
+        // occurs in several graphs (which the scan yields only once) has to be
+        // read.
+        if (!exactSize || (ins == 0 && del == 0 &&
+                           !block.containsDuplicatesWithDifferentGraphs_)) {
           inserted += ins;
           deleted += del;
           numResults += block.numRows_;
@@ -672,6 +676,7 @@ bool CompressedRelationReader::contentsAreKnownFromMetadata(
     const CompressedBlockMetadata& block, size_t numColumns,
     const LocatedTriplesPerBlock& locatedTriples) {
   return !block.containsInconsistentTriples(numColumns) &&
+         !block.containsDuplicatesWithDifferentGraphs_ &&
          !locatedTriples.containsTriples(block.blockIndex_);
 }
 

@@ -10,7 +10,6 @@
 #include "backports/StartsWithAndEndsWith.h"
 #include "util/Exception.h"
 #include "util/Log.h"
-#include "util/TransparentFunctors.h"
 
 using namespace std::chrono_literals;
 

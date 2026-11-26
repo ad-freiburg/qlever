@@ -9,9 +9,6 @@
 
 #include "engine/operation/Operation.h"
 
-#include <absl/cleanup/cleanup.h>
-#include <absl/container/inlined_vector.h>
-
 #include "engine/NamedResultCache.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoinCachedIndex.h"
@@ -21,7 +18,6 @@
 #include "util/Algorithm.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/ParseException.h"
-#include "util/TransparentFunctors.h"
 #include "util/Views.h"
 
 using namespace std::chrono_literals;
@@ -1044,19 +1040,20 @@ Operation::pushDownBindToAnyChild(
 }
 
 // _____________________________________________________________________________
-bool Operation::columnOriginatesFromGraphOrUndef(
+bool Operation::columnContainsOnlyKnowledgeGraphNodes(
     const Variable& variable) const {
   AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
-  // Returning false does never lead to a wrong result, but it might be
+  // Returning false never leads to a wrong result, but it might be
   // inefficient.
-  if (ql::ranges::none_of(getChildren(), [&variable](const auto* child) {
+  if (!isVariableAlwaysDefined(variable) ||
+      ql::ranges::none_of(getChildren(), [&variable](const auto* child) {
         return child->getVariableColumnOrNullopt(variable).has_value();
       })) {
     return false;
   }
   return ql::ranges::all_of(getChildren(), [&variable](const auto* child) {
     return !child->getVariableColumnOrNullopt(variable).has_value() ||
-           child->getRootOperation()->columnOriginatesFromGraphOrUndef(
+           child->getRootOperation()->columnContainsOnlyKnowledgeGraphNodes(
                variable);
   });
 }

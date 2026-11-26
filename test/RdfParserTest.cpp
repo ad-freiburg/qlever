@@ -17,6 +17,7 @@
 #include <mutex>
 #include <sstream>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include "./util/AsyncParserDriver.h"
@@ -38,6 +39,7 @@
 #include "parser/TokenizerCtre.h"
 #include "parser/TripleComponent.h"
 #include "util/Log.h"
+#include "util/SourceLocation.h"
 #include "util/memorySize/MemorySize.h"
 
 using std::string;
@@ -54,6 +56,52 @@ auto lit = ad_utility::testing::tripleComponentLiteral;
 auto iri = [](std::string_view s) {
   return TripleComponent::Iri::fromIriref(s);
 };
+
+// Match the components of a `TripleComponent` holding a triple term, checking
+// the alternative before accessing its contents. `subjectM`, `predicateM`, and
+// `objectM` specify component matchers; plain values are matched for equality.
+// `IsTripleTerm()` can be nested.
+template <typename SubjectM, typename PredicateM, typename ObjectM>
+auto IsTripleTerm(SubjectM subjectM, PredicateM predicateM, ObjectM objectM) {
+  return ::testing::AllOf(
+      AD_PROPERTY(TripleComponent, isTripleTerm, ::testing::IsTrue()),
+      AD_PROPERTY(
+          TripleComponent, getTripleTerm,
+          ::testing::AllOf(AD_PROPERTY(ParsedTripleTerm, subject, subjectM),
+                           AD_PROPERTY(ParsedTripleTerm, predicate, predicateM),
+                           AD_PROPERTY(ParsedTripleTerm, object, objectM))));
+}
+
+// Match a `TurtleTriple` using `subjectM`, `predicateM`, `objectM`, and
+// `graphM` as field matchers. Plain values are matched for equality; `graphM`
+// defaults to the default graph's ID.
+template <typename SubjectM, typename PredicateM, typename ObjectM,
+          typename GraphM = TripleComponent>
+auto IsRdfTriple(SubjectM subjectM, PredicateM predicateM, ObjectM objectM,
+                 GraphM graphM = qlever::specialIds().at(DEFAULT_GRAPH_IRI)) {
+  return ::testing::AllOf(AD_FIELD(TurtleTriple, subject_, subjectM),
+                          AD_FIELD(TurtleTriple, predicate_, predicateM),
+                          AD_FIELD(TurtleTriple, object_, objectM),
+                          AD_FIELD(TurtleTriple, graphIri_, graphM));
+}
+
+// Parse all triples from `input` using the existing settings of `parser`.
+template <typename Parser>
+auto parseAllTriples(Parser& parser, std::string_view input) {
+  parser.setInputStream(input);
+  return parser.parseAndReturnAllTriples();
+}
+
+// Expect parsing `input` to throw `ParseException` containing `message`.
+template <typename Parser>
+void expectParseFailure(
+    Parser& parser, std::string_view input, std::string_view message,
+    ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
+  auto trace = generateLocationTrace(loc);
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE((void)parseAllTriples(parser, input),
+                                        ::testing::HasSubstr(message),
+                                        ParseException);
+}
 
 auto re2Parser = []() { return Re2Parser{encodedIriManager()}; };
 auto ctreParser = []() { return CtreParser{encodedIriManager()}; };
@@ -565,29 +613,29 @@ TEST(RdfParserTest, numericLiteral) {
 }
 
 TEST(RdfParserTest, numericLiteralErrorBehavior) {
-  auto assertParsingFails = [](auto& parser, std::string input) {
-    parser.setInputStream(input);
-    ASSERT_THROW(parser.parseAndReturnAllTriples(), Re2Parser::ParseException);
+  auto assertParsingFails = [](auto& parser, std::string input,
+                               ad_utility::source_location loc =
+                                   AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(loc);
+    ASSERT_THROW(parseAllTriples(parser, input), Re2Parser::ParseException);
   };
 
-  auto parseAllTriples = [](auto& parser, std::string input) {
-    parser.setInputStream(input);
-    return parser.parseAndReturnAllTriples();
-  };
-
-  auto testTripleObjects = [&parseAllTriples](auto& parser,
-                                              std::vector<std::string> triples,
-                                              auto expectedObjects) {
-    for (size_t i = 0; i < triples.size(); ++i) {
-      const auto& triple = triples[i];
-      std::vector<TurtleTriple> result;
-      ASSERT_NO_THROW(result = parseAllTriples(parser, triple));
-      ASSERT_EQ(result.size(), 1ul);
-      ASSERT_EQ(result[0].object_, expectedObjects[i]);
-    }
-  };
-  auto runCommonTests = [&assertParsingFails, &testTripleObjects,
-                         &parseAllTriples](const auto& p) {
+  auto testTripleObjects =
+      [](auto& parser, std::vector<std::string> triples, auto expectedObjects,
+         ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
+        auto trace = generateLocationTrace(loc);
+        for (size_t i = 0; i < triples.size(); ++i) {
+          const auto& triple = triples[i];
+          std::vector<TurtleTriple> result;
+          ASSERT_NO_THROW(result = parseAllTriples(parser, triple));
+          ASSERT_EQ(result.size(), 1ul);
+          ASSERT_EQ(result[0].object_, expectedObjects[i]);
+        }
+      };
+  auto runCommonTests = [&assertParsingFails, &testTripleObjects](
+                            const auto& p, ad_utility::source_location loc =
+                                               AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(loc);
     using Parser = std::decay_t<decltype(p)>;
     {
       // Test the default mode (overflowing integers throw an exception).
@@ -1747,9 +1795,8 @@ TEST(RdfParserTest, parseErrorNamesTheInputFile) {
 // SPARQL query) keeps the shorter error message without a file name.
 TEST(RdfParserTest, parseErrorOfStringParserHasNoInputName) {
   Re2Parser parser{encodedIriManager()};
-  parser.setInputStream("<subject> <predicate> .");
   AD_EXPECT_THROW_WITH_MESSAGE(
-      parser.parseAndReturnAllTriples(),
+      parseAllTriples(parser, "<subject> <predicate> ."),
       ::testing::AllOf(::testing::HasSubstr("Parse error at byte position"),
                        ::testing::Not(::testing::HasSubstr("Parse error in"))));
 }
@@ -1817,12 +1864,14 @@ TEST(RdfParserTest, parallelParserGetParsePosition) {
 
 // _____________________________________________________________________________
 TEST(RdfParserTest, nQuadParser) {
-  auto runTestsForParser = [](auto parser) {
+  auto runTestsForParser = [](auto parser, ad_utility::source_location loc =
+                                               AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(loc);
     parser.setBlankNodePrefixOnlyForTesting(42);
-    parser.setInputStream(
+    auto triples = parseAllTriples(
+        parser,
         "<x> <y> <z> <g>. <x2> <y2> _:blank . <x2> <y2> \"literal\" _:blank2 "
         ".");
-    auto triples = parser.parseAndReturnAllTriples();
     auto iri = ad_utility::testing::iri;
     auto lit = ad_utility::testing::tripleComponentLiteral;
     std::vector<TurtleTriple> expected;
@@ -1837,11 +1886,13 @@ TEST(RdfParserTest, nQuadParser) {
                           "_:u_42_blank2");
     EXPECT_THAT(triples, ::testing::ElementsAreArray(expected));
 
-    auto expectParsingFails = [](const std::string& input) {
+    auto expectParsingFails = [](const std::string& input,
+                                 ad_utility::source_location loc =
+                                     AD_CURRENT_SOURCE_LOC()) {
+      auto trace = generateLocationTrace(loc);
       auto parser =
           RdfStringParser<NQuadParser<Tokenizer>>(encodedIriManager());
-      parser.setInputStream(input);
-      EXPECT_ANY_THROW(parser.parseAndReturnAllTriples());
+      EXPECT_ANY_THROW(parseAllTriples(parser, input));
     };
 
     expectParsingFails("<x> <y> <z> <g>");  // missing dot after last triple
@@ -2861,4 +2912,285 @@ TEST(RdfParserTest, findEndOfLastStatementIgnoresComments) {
   expectIsCompleteStatement("<s> <p> <unclosed .\n");
   expectIsCompleteStatement("<s> <p> \"unclosed .\n");
   expectIsCompleteStatement("<s> <p> 'unclosed .\n");
+}
+
+// Test that all four parsers turn a nested triple term with blank nodes and
+// literals into nested `ParsedTripleTerm`s and do not assert the embedded
+// triples.
+TEST(RdfParserTest, recursiveTripleTermContents) {
+  auto run = [](auto parser,
+                ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(loc);
+    parser.setBlankNodePrefixOnlyForTesting(42);
+    EXPECT_THAT(
+        parseAllTriples(
+            parser,
+            "<outer> <relation> <<( _:b <p> <<( <s> <q> \"hello\"@en )>> )>> . "
+            "<next> <r> <o> . "
+            "<blank> <relation> <<( _:b <p> _:b )>> ."),
+        ::testing::ElementsAre(
+            IsRdfTriple(iri("<outer>"), iri("<relation>"),
+                        IsTripleTerm("_:u_42_b", iri("<p>"),
+                                     IsTripleTerm(iri("<s>"), iri("<q>"),
+                                                  lit("hello", "@en")))),
+            IsRdfTriple(iri("<next>"), iri("<r>"), iri("<o>")),
+            IsRdfTriple(iri("<blank>"), iri("<relation>"),
+                        IsTripleTerm("_:u_42_b", iri("<p>"), "_:u_42_b"))));
+  };
+  run(Re2Parser{encodedIriManager()});
+  run(CtreParser{encodedIriManager()});
+  run(NQuadRe2Parser{encodedIriManager()});
+  run(NQuadCtreParser{encodedIriManager()});
+}
+
+// Test the Turtle-only syntax inside a triple term (`[]`, `a`, prefixed and
+// relative IRIs, numeric and boolean literals, object lists).
+TEST(RdfParserTest, turtleTripleTermContents) {
+  auto run = [](auto parser,
+                ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(loc);
+    parser.setBlankNodePrefixOnlyForTesting(42);
+    const auto outer = iri("<http://example.org/outer>");
+    const auto p = iri("<http://example.org/p>");
+    const auto next = iri("<http://example.org/next>");
+    EXPECT_THAT(
+        parseAllTriples(
+            parser,
+            "@base <http://example.org/> . @prefix ex: <http://example.org/> . "
+            "ex:outer ex:p <<( [] a 42 )>>, <<( <relative> ex:q true )>>, "
+            "<<( _:b ex:q _:b )>>; ex:next <<( ex:s ex:p ex:o )>> ."),
+        ::testing::ElementsAre(
+            IsRdfTriple(
+                outer, p,
+                IsTripleTerm(
+                    "_:g_42_0",
+                    iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"),
+                    int64_t{42})),
+            IsRdfTriple(outer, p,
+                        IsTripleTerm(iri("<http://example.org/relative>"),
+                                     iri("<http://example.org/q>"), true)),
+            IsRdfTriple(outer, p,
+                        IsTripleTerm("_:u_42_b", iri("<http://example.org/q>"),
+                                     "_:u_42_b")),
+            IsRdfTriple(outer, next,
+                        IsTripleTerm(iri("<http://example.org/s>"), p,
+                                     iri("<http://example.org/o>")))));
+  };
+  run(Re2Parser{encodedIriManager()});
+  run(CtreParser{encodedIriManager()});
+}
+
+// Test that the `predicate` rule sets the active predicate, fails on a
+// non-IRI, and rejects a triple term.
+TEST(RdfParserTest, predicate) {
+  auto run = [](auto parser) {
+    // An IRI is a predicate and becomes the active predicate.
+    parser.setInputStream("<p>");
+    ASSERT_TRUE(parser.predicate());
+    EXPECT_EQ(parser.activePredicate_, iri("<p>"));
+    EXPECT_EQ(parser.getLastParseResult(), iri("<p>"));
+
+    // A number is not a predicate, the active predicate stays unchanged.
+    parser.setInputStream("42");
+    EXPECT_FALSE(parser.predicate());
+    EXPECT_EQ(parser.activePredicate_, iri("<p>"));
+
+    // A triple term is not allowed as a predicate.
+    parser.setInputStream("<<( <s> <p> <o> )>>");
+    AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+        parser.predicate(),
+        ::testing::HasSubstr(
+            "Triple terms are only allowed as the object of a triple or quad"),
+        ParseException);
+  };
+  run(Re2Parser{encodedIriManager()});
+  run(CtreParser{encodedIriManager()});
+}
+
+// Test the error messages for malformed triple terms and for triple terms
+// outside the object position.
+TEST(RdfParserTest, tripleTermErrors) {
+  auto run = [](auto parser,
+                ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(loc);
+    for (const auto& subject :
+         {"\"literal\"", "42", "?s", "(<s>)", "[<p> <o>]"}) {
+      expectParseFailure(
+          parser, absl::StrCat("<s> <p> <<( ", subject, " <p> <o> )>> ."),
+          "Expected an IRI or blank node as triple-term subject");
+    }
+    const auto blankNodePredicateError =
+        std::is_same_v<decltype(parser), CtreParser>
+            ? "Prefix _ was not previously defined"
+            : "Expected an IRI as triple-term predicate";
+    expectParseFailure(parser, "<s> <p> <<( <s> _:b <o> )>> .",
+                       blankNodePredicateError);
+    expectParseFailure(parser, "<s> <p> <<( <s> <p> )>> .",
+                       "Expected an IRI, blank node, literal, or triple term");
+    expectParseFailure(parser, "<s> <p> <<( <s> <p> <o> .", "Expected )>>");
+    expectParseFailure(parser, "<s> <p> <<( <s> <p> <o> <extra> )>> .",
+                       "Expected )>>");
+    expectParseFailure(parser, "<s> <p> <<( <s> <p> (<o>) )>> .",
+                       "Expected an IRI, blank node, literal, or triple term");
+    expectParseFailure(parser, "<s> <p> <<( <s> <p> [<p> <o>] )>> .",
+                       "Expected an IRI, blank node, literal, or triple term");
+    expectParseFailure(
+        parser, "<s> <p> << <s> <p> <o> >> .",
+        "reification shorthand such as << <s> <p> <o> >> is not supported");
+    for (const auto& input :
+         {"<<( <s> <p> <o> )>> <p> <o> .", "<s> <<( <s> <p> <o> )>> <o> .",
+          "<s> <p> <<( <<( <s> <p> <o> )>> <p> <o> )>> .",
+          "<s> <p> <<( <s> <<( <s> <p> <o> )>> <o> )>> ."}) {
+      expectParseFailure(
+          parser, input,
+          "Triple terms are only allowed as the object of a triple or quad");
+    }
+  };
+  run(Re2Parser{encodedIriManager()});
+  run(CtreParser{encodedIriManager()});
+  run(NQuadRe2Parser{encodedIriManager()});
+  run(NQuadCtreParser{encodedIriManager()});
+}
+
+// Test that `MAX_TRIPLE_TERM_NESTING_DEPTH` nested triple terms are parsed,
+// one more is rejected, and the parser works again afterwards.
+TEST(RdfParserTest, tripleTermNestingLimit) {
+  auto makeInput = [](size_t depth) {
+    std::string input = "<s> <p> ";
+    for (size_t i = 0; i < depth; ++i) {
+      input += "<<( <s> <p> ";
+    }
+    input += "<o>";
+    for (size_t i = 0; i < depth; ++i) {
+      input += " )>>";
+    }
+    return input + " .";
+  };
+  auto run = [&makeInput](auto parser, ad_utility::source_location loc =
+                                           AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(loc);
+    auto checkAtLimit = [&parser, &makeInput](ad_utility::source_location loc =
+                                                  AD_CURRENT_SOURCE_LOC()) {
+      auto trace = generateLocationTrace(loc);
+      auto triples =
+          parseAllTriples(parser, makeInput(MAX_TRIPLE_TERM_NESTING_DEPTH));
+      ASSERT_THAT(triples, ::testing::ElementsAre(IsRdfTriple(
+                               iri("<s>"), iri("<p>"), ::testing::_)));
+      const TripleComponent* component = &triples[0].object_;
+      for (size_t i = 0; i < MAX_TRIPLE_TERM_NESTING_DEPTH; ++i) {
+        ASSERT_THAT(*component,
+                    IsTripleTerm(iri("<s>"), iri("<p>"), ::testing::_));
+        component = &component->getTripleTerm().object();
+      }
+      EXPECT_EQ(*component, iri("<o>"));
+    };
+    checkAtLimit();
+    expectParseFailure(
+        parser, makeInput(MAX_TRIPLE_TERM_NESTING_DEPTH + 1),
+        absl::StrCat("Triple-term nesting exceeds the supported limit of ",
+                     MAX_TRIPLE_TERM_NESTING_DEPTH));
+    checkAtLimit();
+  };
+  run(Re2Parser{encodedIriManager()});
+  run(CtreParser{encodedIriManager()});
+  run(NQuadRe2Parser{encodedIriManager()});
+  run(NQuadCtreParser{encodedIriManager()});
+}
+
+// Test that the N-Quads parser rejects the Turtle-only syntax inside a triple
+// term and parses a graph label after a triple term.
+TEST(RdfParserTest, nQuadTripleTermRestrictions) {
+  auto run = [](auto parser,
+                ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(loc);
+    for (const auto& object : {"42", "true", "[]", "ex:o"}) {
+      expectParseFailure(
+          parser, absl::StrCat("<s> <p> <<( <s> <p> ", object, " )>> ."),
+          "Expected an IRI, blank node, literal, or triple term");
+    }
+    expectParseFailure(parser, "<s> <p> <<( <s> a <o> )>> .",
+                       "Expected an IRI as triple-term predicate");
+    EXPECT_THAT(
+        parseAllTriples(parser, "<s> <p> <<( <s> <p> <o> )>> <graph> ."),
+        ::testing::ElementsAre(IsRdfTriple(
+            iri("<s>"), iri("<p>"),
+            IsTripleTerm(iri("<s>"), iri("<p>"), iri("<o>")), iri("<graph>"))));
+    expectParseFailure(parser, "42 <p> <<( <s> <p> <o> )>> .",
+                       "Parsing failed before end of input");
+    parser.setBlankNodePrefixOnlyForTesting(42);
+    EXPECT_THAT(parseAllTriples(parser, "_:subject <p> <<( <s> <p> <o> )>> ."),
+                ::testing::ElementsAre(IsRdfTriple(
+                    "_:u_42_subject", iri("<p>"),
+                    IsTripleTerm(iri("<s>"), iri("<p>"), iri("<o>")))));
+    expectParseFailure(
+        parser, "<s> <p> <o> <<( <s> <p> <o> )>> .",
+        "Triple terms are only allowed as the object of a triple or quad");
+  };
+  run(NQuadRe2Parser{encodedIriManager()});
+  run(NQuadCtreParser{encodedIriManager()});
+}
+
+// Test that encoded IRIs and typed literals inside a triple term are converted
+// like those outside one (the N-Quads parser does not encode IRIs).
+TEST(RdfParserTest, tripleTermEncodedIrisAndTypedLiterals) {
+  EncodedIriManager manager{std::vector<std::string>{"http://example.org/"}};
+  ASSERT_TRUE(manager.encode("<http://example.org/1>").has_value());
+  auto run = [](auto parser, const auto& expectedIri,
+                ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(loc);
+    EXPECT_THAT(
+        parseAllTriples(
+            parser,
+            "<http://example.org/1> <p> <<( <http://example.org/2> "
+            "<http://example.org/3> <http://example.org/4> )>> . "
+            "<s> <p> <<( <s> <p> "
+            "\"42\"^^<http://www.w3.org/2001/XMLSchema#integer> )>> . "
+            "<s> <p> <<( <s> <p> \"value\"^^<http://example.org/type> )>> ."),
+        ::testing::ElementsAre(
+            IsRdfTriple(expectedIri("<http://example.org/1>"), iri("<p>"),
+                        IsTripleTerm(expectedIri("<http://example.org/2>"),
+                                     expectedIri("<http://example.org/3>"),
+                                     expectedIri("<http://example.org/4>"))),
+            IsRdfTriple(iri("<s>"), iri("<p>"),
+                        IsTripleTerm(iri("<s>"), iri("<p>"), int64_t{42})),
+            IsRdfTriple(
+                iri("<s>"), iri("<p>"),
+                IsTripleTerm(iri("<s>"), iri("<p>"),
+                             lit("value", "^^<http://example.org/type>")))));
+  };
+  auto encodedIri = [&manager](std::string_view value) {
+    return manager.encode(value).value();
+  };
+  run(Re2Parser{&manager}, encodedIri);
+  run(CtreParser{&manager}, encodedIri);
+  run(NQuadRe2Parser{&manager}, iri);
+  run(NQuadCtreParser{&manager}, iri);
+}
+
+// Test that all parsers, including the parallel ones with small batches, parse
+// triple terms from a file.
+TEST(RdfParserTest, tripleTermsFromFile) {
+  std::string filename = "recursiveTripleTerms.ttl";
+  absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
+  std::vector<::testing::Matcher<TurtleTriple>> expected;
+  {
+    auto file = ad_utility::makeOfstream(filename);
+    for (size_t i = 0; i < 30; ++i) {
+      file << "<s> <p> <<( <inner> <q> <<( <nested> <r> " << i
+           << " )>> )>> .\n";
+      expected.push_back(
+          IsRdfTriple(iri("<s>"), iri("<p>"),
+                      IsTripleTerm(iri("<inner>"), iri("<q>"),
+                                   IsTripleTerm(iri("<nested>"), iri("<r>"),
+                                                static_cast<int64_t>(i)))));
+    }
+  }
+  auto run = [&](auto type,
+                 ad_utility::source_location loc = AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(loc);
+    using Parser = typename decltype(type)::type;
+    EXPECT_THAT(parseFromFile<Parser>(filename, 256_B),
+                ::testing::UnorderedElementsAreArray(expected));
+  };
+  forAllParsers(run);
 }
