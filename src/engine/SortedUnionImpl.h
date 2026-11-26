@@ -9,8 +9,8 @@
 
 #include "backports/span.h"
 #include "engine/Result.h"
-#include "engine/Union.h"
 #include "engine/idTable/IdTable.h"
+#include "engine/operation/Union.h"
 #include "index/LocalVocab.h"
 #include "util/CancellationHandle.h"
 #include "util/views/ChunkedIotaView.h"

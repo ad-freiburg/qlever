@@ -18,14 +18,14 @@
 #include "./util/JoinHelpers.h"
 #include "./util/LocalVocabTestHelpers.h"
 #include "engine/CallFixedSize.h"
-#include "engine/IndexScan.h"
-#include "engine/Join.h"
 #include "engine/JoinHelpers.h"
-#include "engine/NeutralOptional.h"
 #include "engine/QueryExecutionTree.h"
-#include "engine/Values.h"
 #include "engine/ValuesForTesting.h"
 #include "engine/idTable/IdTable.h"
+#include "engine/operation/IndexScan.h"
+#include "engine/operation/Join.h"
+#include "engine/operation/NeutralOptional.h"
+#include "engine/operation/Values.h"
 #include "index/IdTableUtils.h"
 #include "util/Forward.h"
 #include "util/IndexTestHelpers.h"
@@ -82,8 +82,8 @@ void removeJoinColFromVarColMap(const Variable& var, VariableToColumnMap& map) {
  * @param testSet is an array of JoinTestCases, that describe what tests to
  *  do. For an explanation, how to read JoinTestCase, see the definition.
  * @param func the function, that will be used for joining the two tables
- *  together. Look into src/engine/Join.h, or this file, for how it should look
- * like.
+ *  together. Look into src/engine/operation/Join.h, or this file, for how it
+ * should look like.
  */
 template <typename JOIN_FUNCTION>
 void goThroughSetOfTestsWithJoinFunction(
@@ -1037,7 +1037,7 @@ TEST(JoinTest, makeTreeWithBindColumnSkipsChildThatAlreadyHasTheTarget) {
 }
 
 // _____________________________________________________________________________
-TEST_P(JoinTestParametrized, columnOriginatesFromGraphOrUndef) {
+TEST_P(JoinTestParametrized, columnContainsOnlyKnowledgeGraphNodes) {
   auto keepJoinCol = GetParam();
   using ad_utility::triple_component::Iri;
   auto* qec = ad_utility::testing::getQec();
@@ -1086,31 +1086,31 @@ TEST_P(JoinTestParametrized, columnOriginatesFromGraphOrUndef) {
 
     Join join{qec, std::move(left), std::move(right), 0, 0, keepJoinCol, false};
     if (keepJoinCol) {
-      EXPECT_EQ(join.columnOriginatesFromGraphOrUndef(Variable{"?a"}), a);
+      EXPECT_EQ(join.columnContainsOnlyKnowledgeGraphNodes(Variable{"?a"}), a);
     } else {
-      EXPECT_THROW(join.columnOriginatesFromGraphOrUndef(Variable{"?a"}),
+      EXPECT_THROW(join.columnContainsOnlyKnowledgeGraphNodes(Variable{"?a"}),
                    ad_utility::Exception);
     }
-    EXPECT_EQ(join.columnOriginatesFromGraphOrUndef(Variable{"?b"}), b);
-    EXPECT_EQ(join.columnOriginatesFromGraphOrUndef(Variable{"?c"}), c);
+    EXPECT_EQ(join.columnContainsOnlyKnowledgeGraphNodes(Variable{"?b"}), b);
+    EXPECT_EQ(join.columnContainsOnlyKnowledgeGraphNodes(Variable{"?c"}), c);
     EXPECT_THROW(
-        join.columnOriginatesFromGraphOrUndef(Variable{"?notExisting"}),
+        join.columnContainsOnlyKnowledgeGraphNodes(Variable{"?notExisting"}),
         ad_utility::Exception);
   };
 
-  testWithTrees(index3, index4, true, true, true);
-  testWithTrees(index3, index2, true, true, true);
-  testWithTrees(index3, values4, false, false, true);
-  testWithTrees(index3, values2, false, false, true);
-  testWithTrees(index1, index4, true, true, true);
+  testWithTrees(index3, index4, false, false, false);
+  testWithTrees(index3, index2, true, true, false);
+  testWithTrees(index3, values4, false, false, false);
+  testWithTrees(index3, values2, false, false, false);
+  testWithTrees(index1, index4, true, false, true);
   testWithTrees(index1, index2, true, true, true);
   testWithTrees(index1, values4, true, false, true);
   testWithTrees(index1, values2, true, false, true);
-  testWithTrees(values4, index3, false, false, true);
+  testWithTrees(values4, index3, false, false, false);
   testWithTrees(values4, index1, true, false, true);
   testWithTrees(values4, values3, false, false, false);
   testWithTrees(values4, values1, false, false, false);
-  testWithTrees(values2, index3, false, false, true);
+  testWithTrees(values2, index3, false, false, false);
   testWithTrees(values2, index1, true, false, true);
   testWithTrees(values2, values3, false, false, false);
   testWithTrees(values2, values1, false, false, false);

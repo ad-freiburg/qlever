@@ -21,14 +21,14 @@
 #include "../util/TripleComponentTestHelpers.h"
 #include "./LazyJoinTestHelpers.h"
 #include "./ValuesForTesting.h"
-#include "engine/Bind.h"
 #include "engine/CallFixedSize.h"
-#include "engine/IndexScan.h"
 #include "engine/JoinHelpers.h"
-#include "engine/NeutralOptional.h"
-#include "engine/OptionalJoin.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/idTable/IdTable.h"
+#include "engine/operation/Bind.h"
+#include "engine/operation/IndexScan.h"
+#include "engine/operation/NeutralOptional.h"
+#include "engine/operation/OptionalJoin.h"
 #include "index/TripleComponentConversions.h"
 #include "util/joinAlgorithms/IndexNestedLoopJoin.h"
 
@@ -818,7 +818,7 @@ TEST(OptionalJoin, lazyOptionalJoinExceedingChunkSize) {
 }
 
 // _____________________________________________________________________________
-TEST(OptionalJoin, columnOriginatesFromGraphOrUndef) {
+TEST(OptionalJoin, columnContainsOnlyKnowledgeGraphNodes) {
   using ad_utility::triple_component::Iri;
   auto* qec = getQec();
   auto values1 = ad_utility::makeExecutionTree<ValuesForTesting>(
@@ -848,27 +848,31 @@ TEST(OptionalJoin, columnOriginatesFromGraphOrUndef) {
         auto trace = generateLocationTrace(location);
 
         OptionalJoin optional{qec, std::move(left), std::move(right)};
-        EXPECT_EQ(optional.columnOriginatesFromGraphOrUndef(Variable{"?a"}), a);
-        EXPECT_EQ(optional.columnOriginatesFromGraphOrUndef(Variable{"?b"}), b);
-        EXPECT_EQ(optional.columnOriginatesFromGraphOrUndef(Variable{"?c"}), c);
-        EXPECT_THROW(
-            optional.columnOriginatesFromGraphOrUndef(Variable{"?notExisting"}),
-            ad_utility::Exception);
+        EXPECT_EQ(
+            optional.columnContainsOnlyKnowledgeGraphNodes(Variable{"?a"}), a);
+        EXPECT_EQ(
+            optional.columnContainsOnlyKnowledgeGraphNodes(Variable{"?b"}), b);
+        EXPECT_EQ(
+            optional.columnContainsOnlyKnowledgeGraphNodes(Variable{"?c"}), c);
+        EXPECT_THROW(optional.columnContainsOnlyKnowledgeGraphNodes(
+                         Variable{"?notExisting"}),
+                     ad_utility::Exception);
       };
 
   OptionalJoin optional{qec, values1, values1};
-  EXPECT_FALSE(optional.columnOriginatesFromGraphOrUndef(Variable{"?a"}));
-  EXPECT_FALSE(optional.columnOriginatesFromGraphOrUndef(Variable{"?b"}));
+  EXPECT_FALSE(optional.columnContainsOnlyKnowledgeGraphNodes(Variable{"?a"}));
+  EXPECT_FALSE(optional.columnContainsOnlyKnowledgeGraphNodes(Variable{"?b"}));
   EXPECT_THROW(
-      optional.columnOriginatesFromGraphOrUndef(Variable{"?notExisting"}),
+      optional.columnContainsOnlyKnowledgeGraphNodes(Variable{"?notExisting"}),
       ad_utility::Exception);
 
   testWithTrees(values1, values2, false, false, false);
   testWithTrees(index1, values1, true, false, true);
-  testWithTrees(values1, index1, false, false, true);
-  testWithTrees(index1, index2, true, true, true);
-  testWithTrees(index3, index2, true, true, true);
-  testWithTrees(index3, values1, false, false, true);
+  // Variables that only occur on the right side might be UNDEF.
+  testWithTrees(values1, index1, false, false, false);
+  testWithTrees(index1, index2, true, false, true);
+  testWithTrees(index3, index2, false, false, false);
+  testWithTrees(index3, values1, false, false, false);
 }
 
 // _____________________________________________________________________________

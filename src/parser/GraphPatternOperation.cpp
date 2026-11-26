@@ -9,14 +9,11 @@
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
 
-#include <string_view>
 #include <vector>
 
 #include "parser/ParsedQuery.h"
 #include "parser/TripleComponent.h"
-#include "util/Exception.h"
 #include "util/Forward.h"
-#include "util/VariantRangeFilter.h"
 
 namespace parsedQuery {
 

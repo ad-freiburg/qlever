@@ -6,10 +6,10 @@
 #include <cstdlib>
 
 #include "../util/IndexTestHelpers.h"
-#include "engine/IndexScan.h"
-#include "engine/Join.h"
 #include "engine/QueryExecutionTree.h"
-#include "engine/SpatialJoin.h"
+#include "engine/operation/IndexScan.h"
+#include "engine/operation/Join.h"
+#include "engine/operation/SpatialJoin.h"
 #include "engine/spatialJoinAlgorithms/BoundingBoxAlgorithm.h"
 #include "index/ExportIds.h"
 #include "index/vocabulary/VocabularyType.h"

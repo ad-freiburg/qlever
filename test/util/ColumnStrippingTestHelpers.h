@@ -15,8 +15,8 @@
 
 #include "./AllocatorTestHelpers.h"
 #include "backports/algorithm.h"
-#include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/operation/Operation.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
 
 namespace column_stripping_test_helpers {
