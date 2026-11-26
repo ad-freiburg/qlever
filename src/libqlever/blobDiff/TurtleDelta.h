@@ -37,16 +37,20 @@ struct TripleDelta {
 // built (they are not stored in the index): otherwise, the same triple can get
 // different `Id`s in the index and in the parsed files (for example, an integer
 // that was converted to a double during the index build), and the delta would
-// fail to delete it and insert it a second time. The difference is
-// computed on the level of the `Id`s, which are exact and normalized: a change
-// of a literal that only affects its lexical form (for example `"1"^^xsd:int`
-// to `"01"^^xsd:int`) gives the same `Id` and is thus no change, whereas a
-// change of the type (for example from `1` to `1.0`) is. A comparison of the
-// string representations of the parsed triples would get both cases wrong. The
-// `adder` gives the same `Id` to equal words (also to those that are not in the
-// vocabulary of the `index`, which become `LocalVocabIndex` `Id`s). The `adder`
-// (which contains a `LocalVocab`) keeps these words alive, so it has to outlive
-// the use of the result.
+// fail to delete it and insert it a second time.
+// TODO<joka921> Store the parser settings in the index (they are then also
+// available to all other users of the RDF parser, like `INSERT DATA` or
+// `LOAD`), and remove the `settings` argument again.
+//
+// The difference is computed on the level of the `Id`s, which are exact and
+// normalized: a change of a literal that only affects its lexical form (for
+// example `"1"^^xsd:int` to `"01"^^xsd:int`) gives the same `Id` and is thus no
+// change, whereas a change of the type (for example from `1` to `1.0`) is. A
+// comparison of the string representations of the parsed triples would get both
+// cases wrong. The `adder` gives the same `Id` to equal words (also to those
+// that are not in the vocabulary of the `index`, which become `LocalVocabIndex`
+// `Id`s). The `adder` (which contains a `LocalVocab`) keeps these words alive,
+// so it has to outlive the use of the result.
 //
 // NOTE: Both files are read and parsed completely in RAM, and their triples are
 // kept in RAM at the same time, so the files have to be small enough for that.

@@ -7,6 +7,7 @@
 #ifndef QLEVER_SRC_LIBQLEVER_QLEVER_H
 #define QLEVER_SRC_LIBQLEVER_QLEVER_H
 
+#include <absl/functional/function_ref.h>
 #include <gtest/gtest_prod.h>
 
 #include <algorithm>
@@ -402,6 +403,17 @@ class Qlever : public ad_utility::NoCopyNoMove {
   // Throw if `isLoadedFromBlob()`, with a message that says that the given
   // `operation` is not supported for such an instance.
   void throwIfLoadedFromBlob(std::string_view operation) const;
+
+  // The common part of `applyUpdate` and `applyTripleDelta`: throw if
+  // `isLoadedFromBlob()` (with the `operation` in the message), apply the
+  // `modification` to the `deltaTriples`, add the counts before and after to
+  // the `UpdateMetadata` it returns, and clear the query and named-result
+  // caches, because all their entries have been invalidated by the
+  // modification.
+  UpdateMetadata applyToDeltaTriplesImpl(
+      std::string_view operation, DeltaTriples& deltaTriples,
+      absl::FunctionRef<UpdateMetadata(DeltaTriples&)> modification,
+      ad_utility::timer::TimeTracer& tracer);
 
  public:
   // Build an index, using an `IndexBuilderConfig` as explained above.
