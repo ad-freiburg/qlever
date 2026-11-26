@@ -1453,9 +1453,11 @@ void QueryPlanner::applyFiltersIfPossible(
       // Apply only enforced substitutes to a single plan, because they are
       // complete as soon as `plan` is attached. The other substitutes connect
       // two plans and are applied by `merge`, see `createJoinsWithSubstitutes`.
-      const bool allowSubstitutes = (mode == FilterMode::KeepUnfiltered ||
-                                     mode == FilterMode::SeedSubstitutesOnly) &&
-                                    filterAndSubst.forceSubstitution_;
+      constexpr bool modeAllowsSubstitutes =
+          mode == FilterMode::KeepUnfiltered ||
+          mode == FilterMode::SeedSubstitutesOnly;
+      const bool allowSubstitutes =
+          modeAllowsSubstitutes && filterAndSubst.forceSubstitution_;
       if (allowSubstitutes && filterAndSubst.hasSubstitute() &&
           (filterAndSubst.filter_.expression_.containedVariables().empty() ||
            ql::ranges::any_of(
