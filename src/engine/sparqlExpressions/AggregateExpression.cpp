@@ -7,7 +7,6 @@
 
 #include "engine/sparqlExpressions/AggregateExpression.h"
 
-#include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
 
 namespace sparqlExpression::detail {
