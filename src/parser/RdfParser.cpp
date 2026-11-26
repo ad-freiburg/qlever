@@ -1032,19 +1032,17 @@ bool TurtleParser<T>::pnameLnRelaxed() {
   // skipped as a whole, so that an escaped delimiter does not end the local
   // name. The escape sequences are resolved later, when the local name is
   // unescaped.
-  size_t posEnd = pos + 1;
-  while (true) {
-    posEnd = ad_utility::findFirstOfWithLookupTable(
-        view, localNameDelimiterOrEscapeTable, posEnd);
-    if (posEnd == std::string::npos) {
-      // make tests work
-      posEnd = view.size();
-      break;
-    }
-    if (view[posEnd] != '\\') {
-      break;
-    }
-    posEnd = std::min(posEnd + 2, view.size());
+  auto findDelimiterOrEscape = [&view](size_t start) {
+    return ad_utility::findFirstOfWithLookupTable(
+        view, localNameDelimiterOrEscapeTable, start);
+  };
+  auto posEnd = findDelimiterOrEscape(pos + 1);
+  while (posEnd != std::string::npos && view[posEnd] == '\\') {
+    posEnd = findDelimiterOrEscape(std::min(posEnd + 2, view.size()));
+  }
+  if (posEnd == std::string::npos) {
+    // make tests work
+    posEnd = view.size();
   }
   // TODO<joka921>: Is it allowed to have no space between triples and the
   // dots? In this case we have to check something here.
