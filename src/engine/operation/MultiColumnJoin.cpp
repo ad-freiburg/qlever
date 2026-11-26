@@ -7,6 +7,7 @@
 
 #include "engine/AddCombinedRowToTable.h"
 #include "engine/JoinHelpers.h"
+#include "engine/operation/ColumnStrippingHelpers.h"
 #include "global/Constants.h"
 #include "index/IdTableUtils.h"
 #include "util/joinAlgorithms/JoinAlgorithms.h"
@@ -311,17 +312,17 @@ std::unique_ptr<Operation> MultiColumnJoin::cloneImpl() const {
 }
 
 // _____________________________________________________________________________
-bool MultiColumnJoin::columnOriginatesFromGraphOrUndef(
+bool MultiColumnJoin::columnContainsOnlyKnowledgeGraphNodes(
     const Variable& variable) const {
   AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
-  // For the join columns we don't union the elements, we intersect them so we
-  // can have a more efficient implementation.
+  // The values of a join column are intersected, not united, so one side
+  // suffices (see `joinColumnContainsOnlyKnowledgeGraphNodes`).
   if (_left->getVariableColumnOrNullopt(variable).has_value() &&
       _right->getVariableColumnOrNullopt(variable).has_value()) {
     using namespace qlever::joinHelpers;
-    return doesJoinProduceGuaranteedGraphValuesOrUndef(_left, _right, variable);
+    return joinColumnContainsOnlyKnowledgeGraphNodes(_left, _right, variable);
   }
-  return Operation::columnOriginatesFromGraphOrUndef(variable);
+  return Operation::columnContainsOnlyKnowledgeGraphNodes(variable);
 }
 
 // _____________________________________________________________________________
@@ -335,4 +336,30 @@ std::unique_ptr<Operation> MultiColumnJoin::cloneWithNewChildren(
     qlm::vector<std::shared_ptr<QueryExecutionTree>> children) const {
   return std::make_unique<MultiColumnJoin>(
       _executionContext, std::move(children.at(0)), std::move(children.at(1)));
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+MultiColumnJoin::makeTreeWithStrippedColumns(
+    const std::set<Variable>& requestedVariables) const {
+  // The subtrees have to provide the requested variables plus the join
+  // variables (the variables that both subtrees have, so collecting them from
+  // the left subtree suffices).
+  columnStrippingHelpers::VarsRequiredFromSubtree varsRequiredFromSubtree(
+      &requestedVariables);
+  for (const auto& joinColumn : _joinColumns) {
+    const auto& joinVar =
+        _left->getVariableAndInfoByColumnIndex(joinColumn[0]).first;
+    varsRequiredFromSubtree.add(joinVar);
+  }
+
+  // Strip the left and right subtree.
+  auto left = varsRequiredFromSubtree.stripSubtree(_left);
+  auto right = varsRequiredFromSubtree.stripSubtree(_right);
+
+  // The new `MultiColumnJoin` also exports the join variables that the parent
+  // did not request, the helper adds a `StripColumns` operation for them.
+  return columnStrippingHelpers::makeTreeWithOptionalStripOperation<
+      MultiColumnJoin>(getExecutionContext(), requestedVariables,
+                       std::move(left), std::move(right));
 }

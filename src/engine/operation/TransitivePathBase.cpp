@@ -537,7 +537,7 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::matchWithKnowledgeGraph(
   auto originalVar =
       leftOrRightOp->getVariableAndInfoByColumnIndex(inputCol).first;
   if (activeGraphs_.areAllGraphsAllowed() && !graphVariable_.has_value() &&
-      leftOrRightOp->getRootOperation()->columnOriginatesFromGraphOrUndef(
+      leftOrRightOp->getRootOperation()->columnContainsOnlyKnowledgeGraphNodes(
           originalVar)) {
     return leftOrRightOp;
   }
@@ -717,7 +717,7 @@ void TransitivePathBase::copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
 }
 
 // _____________________________________________________________________________
-bool TransitivePathBase::columnOriginatesFromGraphOrUndef(
+bool TransitivePathBase::columnContainsOnlyKnowledgeGraphNodes(
     const Variable& variable) const {
   AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
   if (variable != lhs_.value_ && variable != rhs_.value_) {
@@ -725,9 +725,9 @@ bool TransitivePathBase::columnOriginatesFromGraphOrUndef(
     // inherit the guarantee of that operation. The graph column ends up here
     // too (unless it is one of the two sides), but `subtree_` always provides
     // it and reports `false` for it, because in RDF only subjects and objects
-    // are nodes (see `IndexScan::columnOriginatesFromGraphOrUndef`), so the
-    // answer stays `false` for graphs as it has to.
-    return Operation::columnOriginatesFromGraphOrUndef(variable);
+    // are nodes (see `IndexScan::columnContainsOnlyKnowledgeGraphNodes`), so
+    // the answer stays `false` for graphs as it has to.
+    return Operation::columnContainsOnlyKnowledgeGraphNodes(variable);
   }
   // The empty path copies a hardcoded value over to the other side without
   // checking it against the knowledge graph (see the constructor), so in that

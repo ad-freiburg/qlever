@@ -325,9 +325,11 @@ std::optional<Result> Minus::tryIndexNestedLoopJoinIfSuitable(
 }
 
 // _____________________________________________________________________________
-bool Minus::columnOriginatesFromGraphOrUndef(const Variable& variable) const {
+bool Minus::columnContainsOnlyKnowledgeGraphNodes(
+    const Variable& variable) const {
   AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
-  return _left->getRootOperation()->columnOriginatesFromGraphOrUndef(variable);
+  return _left->getRootOperation()->columnContainsOnlyKnowledgeGraphNodes(
+      variable);
 }
 
 // _____________________________________________________________________________

@@ -49,13 +49,24 @@ bool Service::isDeterministicImpl() const {
 // ____________________________________________________________________________
 qlm::string Service::getCacheKeyImpl() const {
   if (getRuntimeParameter<&RuntimeParameters::cacheServiceResults_>()) {
+    // The visible variables are part of the key, because
+    // `makeTreeWithStrippedColumns` creates a `Service` with the same graph
+    // pattern but fewer variables.
     return qlm::StrCat(
         allocator(), "SERVICE ", parsedServiceClause_.silent_ ? "SILENT " : "",
         parsedServiceClause_.serviceIri_.toStringRepresentation(), " {\n",
-        parsedServiceClause_.prologue_, "\n",
-        parsedServiceClause_.graphPatternAsString_, "\n}");
+        parsedServiceClause_.prologue_, "\nSELECT ", getSelectClauseVariables(),
+        " \n", parsedServiceClause_.graphPatternAsString_, "\n}");
   }
   return qlm::StrCat(allocator(), "SERVICE ", cacheBreaker_);
+}
+
+// ____________________________________________________________________________
+std::string Service::getSelectClauseVariables() const {
+  const auto& variables = parsedServiceClause_.visibleVariables_;
+  return variables.empty()
+             ? "*"
+             : absl::StrJoin(variables, " ", Variable::AbslFormatter);
 }
 
 // ____________________________________________________________________________
@@ -191,14 +202,9 @@ Result Service::computeResultImpl(bool requestLaziness) {
       parsedServiceClause_.serviceIri_.getContent()};
 
   // Construct the query to be sent to the SPARQL endpoint.
-  const auto& variables = parsedServiceClause_.visibleVariables_;
-  std::string variablesForSelectClause =
-      variables.empty()
-          ? "*"
-          : absl::StrJoin(variables, " ", Variable::AbslFormatter);
   std::string serviceQuery =
       absl::StrCat(parsedServiceClause_.prologue_, "\nSELECT ",
-                   variablesForSelectClause, " ", getGraphPattern());
+                   getSelectClauseVariables(), " ", getGraphPattern());
   AD_LOG_INFO << "Sending SERVICE query to remote endpoint "
               << "(protocol: " << serviceUrl.protocolAsString()
               << ", host: " << serviceUrl.host()
@@ -825,6 +831,39 @@ std::unique_ptr<Operation> Service::cloneImpl() const {
       _executionContext, parsedServiceClause_, getResultFunction_);
   service->cacheBreaker_ = cacheBreaker_;
   return service;
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+Service::makeTreeWithStrippedColumns(
+    const std::set<Variable>& requestedVariables) const {
+  // Keep only the visible variables that the parent requests.
+  auto contained = [&](const auto& var) {
+    return ad_utility::contains(requestedVariables, var);
+  };
+  auto visibleVariables = parsedServiceClause_.visibleVariables_ |
+                          ql::views::filter(contained) | ::ranges::to_vector;
+  if (parsedServiceClause_.visibleVariables_.size() ==
+      visibleVariables.size()) {
+    return std::nullopt;
+  }
+
+  // If the parent requests none of the variables, keep the `Service` as is and
+  // let the caller add a `StripColumns` on top (a `Service` without visible
+  // variables sends `SELECT *` and then rejects the response, because it
+  // contains variables that the `Service` does not expect).
+  if (visibleVariables.empty()) {
+    return std::nullopt;
+  }
+
+  // The new `Service` requests only the remaining variables from the remote
+  // endpoint.
+  parsedQuery::Service parsedServiceClause = parsedServiceClause_;
+  parsedServiceClause.visibleVariables_ = std::move(visibleVariables);
+
+  return ad_utility::makeExecutionTree<Service>(getExecutionContext(),
+                                                std::move(parsedServiceClause),
+                                                getResultFunction_);
 }
 
 #endif

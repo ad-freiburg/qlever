@@ -1196,7 +1196,7 @@ std::unique_ptr<Operation> IndexScan::cloneImpl() const {
 }
 
 // _____________________________________________________________________________
-bool IndexScan::columnOriginatesFromGraphOrUndef(
+bool IndexScan::columnContainsOnlyKnowledgeGraphNodes(
     const Variable& variable) const {
   AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
   return permutation().permutationType() == Permutation::Type::NORMAL &&
