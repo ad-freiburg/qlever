@@ -151,7 +151,7 @@ TEST(DistinctGraphs, clone) {
 TEST(DistinctGraphs, computeVariableToColumnMap) {
   auto dg = makeDistinctGraphs();
 
-  VariableToColumnMap expected =
+  auto expected =
       makeVariableToColumnMap({{Variable{"?g"}, makeAlwaysDefinedColumn(0)}});
   EXPECT_EQ(dg.getExternallyVisibleVariableColumns(), expected);
 }

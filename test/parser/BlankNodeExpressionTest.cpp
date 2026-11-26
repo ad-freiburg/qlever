@@ -106,23 +106,24 @@ TEST(BlankNodeExpression, labelsAreCorrectlyEscaped) {
 
 // _____________________________________________________________________________
 TEST(BlankNodeExpression, uniqueCacheKey) {
+  const auto emptyMap = makeVariableToColumnMap();
   auto expression0 = makeUniqueBlankNodeExpression();
   auto expression1 = makeUniqueBlankNodeExpression();
-  EXPECT_EQ(expression0->getCacheKey(makeVariableToColumnMap()),
-            expression1->getCacheKey(makeVariableToColumnMap()));
-  EXPECT_NE(expression1->getCacheKey(makeVariableToColumnMap()),
-            expression1->getCacheKey(makeVariableToColumnMap()));
+  EXPECT_EQ(expression0->getCacheKey(emptyMap),
+            expression1->getCacheKey(emptyMap));
+  EXPECT_NE(expression1->getCacheKey(emptyMap),
+            expression1->getCacheKey(emptyMap));
 
   auto expression2 =
       makeBlankNodeExpression(std::make_unique<StringLiteralExpression>(
           Literal::literalWithoutQuotes("Test")));
-  EXPECT_THAT(expression2->getCacheKey(makeVariableToColumnMap()),
-              ::testing::HasSubstr(expression2->children()[0]->getCacheKey(
-                  makeVariableToColumnMap())));
-  EXPECT_NE(expression1->getCacheKey(makeVariableToColumnMap()),
-            expression2->getCacheKey(makeVariableToColumnMap()));
-  EXPECT_NE(expression2->getCacheKey(makeVariableToColumnMap()),
-            expression2->getCacheKey(makeVariableToColumnMap()));
+  EXPECT_THAT(
+      expression2->getCacheKey(emptyMap),
+      ::testing::HasSubstr(expression2->children()[0]->getCacheKey(emptyMap)));
+  EXPECT_NE(expression1->getCacheKey(emptyMap),
+            expression2->getCacheKey(emptyMap));
+  EXPECT_NE(expression2->getCacheKey(emptyMap),
+            expression2->getCacheKey(emptyMap));
 }
 
 // _____________________________________________________________________________
@@ -249,10 +250,10 @@ TEST(BlankNodeExpression, insideAggregateReturnsOnePerRow) {
 
 // _____________________________________________________________________________
 TEST(BlankNodeExpression, isResultAlwaysDefined) {
+  const auto emptyMap = makeVariableToColumnMap();
   EXPECT_FALSE(makeBlankNodeExpression(
                    std::make_unique<IdExpression>(Id::makeFromInt(42)))
-                   ->isResultAlwaysDefined(makeVariableToColumnMap()));
+                   ->isResultAlwaysDefined(emptyMap));
 
-  EXPECT_TRUE(makeUniqueBlankNodeExpression()->isResultAlwaysDefined(
-      makeVariableToColumnMap()));
+  EXPECT_TRUE(makeUniqueBlankNodeExpression()->isResultAlwaysDefined(emptyMap));
 }

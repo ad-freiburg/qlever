@@ -705,7 +705,7 @@ TEST_P(ResultDefinednessTest,
   if constexpr (!ad_utility::areExpensiveChecksEnabled) {
     GTEST_SKIP_("Expensive checks are disabled, skipping test.");
   }
-  VariableToColumnMap map = makeVariableToColumnMap(
+  auto map = makeVariableToColumnMap(
       {{Variable{"?a"}, {0, ColumnIndexAndTypeInfo::AlwaysDefined}},
        {Variable{"?b"}, {1, ColumnIndexAndTypeInfo::PossiblyUndefined}}});
 

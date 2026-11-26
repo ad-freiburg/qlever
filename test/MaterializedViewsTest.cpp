@@ -495,7 +495,7 @@ TEST_F(MaterializedViewsTest, ColumnPermutation) {
 
     // `UndefStatus` in `VariableToColumnMap`.
     auto map = view->variableToColumnMap();
-    VariableToColumnMap expected =
+    auto expected =
         makeVariableToColumnMap({{V{"?s"}, makeAlwaysDefinedColumn(0)},
                                  {V{"?o"}, makeAlwaysDefinedColumn(1)},
                                  {V{"?u"}, makePossiblyUndefinedColumn(2)}});
@@ -1675,6 +1675,7 @@ TEST_F(MaterializedViewsTestLarge, Multiplicities) {
 
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, BindToColumnMap) {
+  const auto emptyMap = makeVariableToColumnMap();
   qlv().writeMaterializedView("testView1", simpleWriteQuery_);
   MaterializedViewsManager manager{testIndexBase_};
   auto view = manager.getView("testView1", nullptr);
@@ -1686,7 +1687,7 @@ TEST_F(MaterializedViewsTest, BindToColumnMap) {
         std::make_shared<sparqlExpression::IdExpression>(
             ValueId::makeFromInt(1)),
         "1"};
-    auto cacheKey = expr.getCacheKey(makeVariableToColumnMap());
+    auto cacheKey = expr.getCacheKey(emptyMap);
     EXPECT_THAT(view->lookupBindTargetColumn(cacheKey),
                 ::testing::Optional(::testing::Eq(3)));
   }
@@ -1697,7 +1698,7 @@ TEST_F(MaterializedViewsTest, BindToColumnMap) {
         std::make_shared<sparqlExpression::IdExpression>(
             ValueId::makeFromDouble(5.0)),
         "5.0"};
-    auto cacheKey = expr.getCacheKey(makeVariableToColumnMap());
+    auto cacheKey = expr.getCacheKey(emptyMap);
     EXPECT_FALSE(view->lookupBindTargetColumn(cacheKey).has_value());
   }
 
@@ -1714,14 +1715,14 @@ TEST_F(MaterializedViewsTest, BindToColumnMap) {
         std::make_shared<sparqlExpression::VariableExpression>(V{"?x"}), "?x"};
 
     // `BIND` is found using correct mapping despite different variable name.
-    VariableToColumnMap correctVarToCol =
+    auto correctVarToCol =
         makeVariableToColumnMap({{V{"?x"}, makeAlwaysDefinedColumn(2)}});
     auto cacheKey1 = expr.getCacheKey(correctVarToCol);
     EXPECT_THAT(view2->lookupBindTargetColumn(cacheKey1),
                 ::testing::Optional(::testing::Eq(3)));
 
     // `BIND` is not found with different column index.
-    VariableToColumnMap wrongVarToCol =
+    auto wrongVarToCol =
         makeVariableToColumnMap({{V{"?x"}, makeAlwaysDefinedColumn(1)}});
     auto cacheKey2 = expr.getCacheKey(wrongVarToCol);
     EXPECT_FALSE(view2->lookupBindTargetColumn(cacheKey2).has_value());
@@ -2841,14 +2842,14 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
     auto indexScan = dynamic_cast<IndexScan&>(
         *plannedQuery.queryExecutionTree().getRootOperation());
 
-    VariableToColumnMap expectedVarToColResult = makeVariableToColumnMap({
+    auto expectedVarToColResult = makeVariableToColumnMap({
         {V{"?s"}, makeAlwaysDefinedColumn(0)},
         {V{"?b3"}, makePossiblyUndefinedColumn(1)},
     });
     EXPECT_THAT(indexScan.getExternallyVisibleVariableColumns(),
                 ::testing::UnorderedElementsAreArray(expectedVarToColResult));
 
-    VariableToColumnMap expectedVarToColPermutation = makeVariableToColumnMap({
+    auto expectedVarToColPermutation = makeVariableToColumnMap({
         {V{"?s"}, makeAlwaysDefinedColumn(0)},
         {V{"?b3"}, makePossiblyUndefinedColumn(4)},
     });
@@ -2870,14 +2871,14 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
     auto indexScan = dynamic_cast<IndexScan&>(
         *plannedQuery.queryExecutionTree().getRootOperation());
 
-    VariableToColumnMap expectedVarToColResult = makeVariableToColumnMap({
+    auto expectedVarToColResult = makeVariableToColumnMap({
         {V{"?x"}, makeAlwaysDefinedColumn(0)},
         {V{"?y"}, makePossiblyUndefinedColumn(1)},
     });
     EXPECT_THAT(indexScan.getExternallyVisibleVariableColumns(),
                 ::testing::UnorderedElementsAreArray(expectedVarToColResult));
 
-    VariableToColumnMap expectedVarToColPermutation = makeVariableToColumnMap({
+    auto expectedVarToColPermutation = makeVariableToColumnMap({
         {V{"?x"}, makeAlwaysDefinedColumn(1)},
         {V{"?y"}, makePossiblyUndefinedColumn(4)},
     });
@@ -2946,7 +2947,7 @@ TEST(MaterializedViewsSpatialJoinTest, BoundingBoxBindRewrite) {
   {
     auto plannedQuery =
         qlv.parseAndPlanQuery(std::string{geoBoundingBoxesViewQuery});
-    VariableToColumnMap expected = makeVariableToColumnMap(
+    auto expected = makeVariableToColumnMap(
         {{V{"?osm_id"}, makeAlwaysDefinedColumn(0)},
          {V{"?intermediate"}, makeAlwaysDefinedColumn(1)},
          {V{"?geometry"}, makeAlwaysDefinedColumn(2)},

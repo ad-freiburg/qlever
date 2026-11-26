@@ -216,7 +216,7 @@ auto testNaryExpressionImpl = [](auto&& makeExpression, auto const& expected,
              (SingleExpressionResult<decltype(operands)> && ...));
   ad_utility::AllocatorWithLimit<Id> alloc{
       ad_utility::testing::makeAllocator()};
-  VariableToColumnMap map = makeVariableToColumnMap();
+  auto map = makeVariableToColumnMap();
   LocalVocab localVocab{ad_utility::testing::makeAllocator()};
   IdTable table{alloc};
 
@@ -1353,23 +1353,24 @@ TEST(SparqlExpression, stringOperators) {
                                    ValueId::makeUndefined(), nullptr),
                                ::testing::HasSubstr("unreachable"));
 
+  const auto emptyMap = makeVariableToColumnMap();
   // A simple test for uniqueness of the cache key.
   auto c1a = makeStrlenExpression(std::make_unique<IriExpression>(iri("<bim>")))
-                 ->getCacheKey(makeVariableToColumnMap());
+                 ->getCacheKey(emptyMap);
   auto c1b = makeStrlenExpression(std::make_unique<IriExpression>(iri("<bim>")))
-                 ->getCacheKey(makeVariableToColumnMap());
+                 ->getCacheKey(emptyMap);
   auto c2a = makeStrExpression(std::make_unique<IriExpression>(iri("<bim>")))
-                 ->getCacheKey(makeVariableToColumnMap());
+                 ->getCacheKey(emptyMap);
   auto c2b = makeStrExpression(std::make_unique<IriExpression>(iri("<bim>")))
-                 ->getCacheKey(makeVariableToColumnMap());
+                 ->getCacheKey(emptyMap);
   auto c3a =
       makeStrlenExpression(
           makeStrExpression(std::make_unique<IriExpression>(iri("<bim>"))))
-          ->getCacheKey(makeVariableToColumnMap());
+          ->getCacheKey(emptyMap);
   auto c3b =
       makeStrlenExpression(
           makeStrExpression(std::make_unique<IriExpression>(iri("<bim>"))))
-          ->getCacheKey(makeVariableToColumnMap());
+          ->getCacheKey(emptyMap);
 
   EXPECT_EQ(c1a, c1b);
   EXPECT_EQ(c2a, c2b);
@@ -3211,8 +3212,8 @@ TEST(NaryExpressionTypeErased, basicTests) {
               ElementsAre(typeMatcher(ti<IdExpression>),
                           typeMatcher(ti<VariableExpression>)));
 
-  VariableToColumnMap varColMap = makeVariableToColumnMap();
-  varColMap[Variable{"?x"}] = makeAlwaysDefinedColumn(42);
+  auto varColMap =
+      makeVariableToColumnMap({{Variable{"?x"}, makeAlwaysDefinedColumn(42)}});
 
   auto getKey = [&varColMap](const SparqlExpression::Ptr& ptr) {
     return ptr->getCacheKey(varColMap);

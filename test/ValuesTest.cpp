@@ -49,7 +49,7 @@ TEST(Values, basicMethods) {
   EXPECT_FLOAT_EQ(valuesOp.getMultiplicity(4), 1.0f);
 
   using V = Variable;
-  VariableToColumnMap expectedVariables =
+  auto expectedVariables =
       makeVariableToColumnMap({{V{"?x"}, makeAlwaysDefinedColumn(0)},
                                {V{"?y"}, makeAlwaysDefinedColumn(1)},
                                {V{"?z"}, makePossiblyUndefinedColumn(2)}});

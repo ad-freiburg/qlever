@@ -31,7 +31,7 @@ TEST(NamedResultCache, basicWorkflow) {
   auto table = makeIdTableFromVector({{3, 7}, {9, 11}});
   auto table2 = makeIdTableFromVector({{3, 8}, {16, 11}, {39, 14}});
   using V = Variable;
-  VariableToColumnMap varColMap =
+  auto varColMap =
       makeVariableToColumnMap({{V{"?x"}, makeAlwaysDefinedColumn(0)},
                                {V{"?y"}, makeAlwaysDefinedColumn(1)}});
 
@@ -164,7 +164,7 @@ TEST(NamedResultCache, E2E) {
   EXPECT_THAT(result->localVocab().getAllWordsForTesting(),
               ::testing::ElementsAreArray(dummyVocab.getAllWordsForTesting()));
   EXPECT_THAT(result->sortedBy(), ::testing::ElementsAre(0));
-  VariableToColumnMap expectedVars =
+  auto expectedVars =
       makeVariableToColumnMap({{Variable{"?s"}, makeAlwaysDefinedColumn(0)}});
   EXPECT_THAT(qet->getVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVars));

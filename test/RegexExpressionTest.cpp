@@ -544,9 +544,9 @@ TEST(RegexExpression, getCacheKey) {
   auto exp1 = makeRegexExpression("?first", "alp");
   auto exp2 = makeRegexExpression("?first", "alp");
 
-  VariableToColumnMap map = makeVariableToColumnMap();
-  map[Variable{"?first"}] = makeAlwaysDefinedColumn(0);
-  map[Variable{"?second"}] = makeAlwaysDefinedColumn(1);
+  auto map = makeVariableToColumnMap(
+      {{Variable{"?first"}, makeAlwaysDefinedColumn(0)},
+       {Variable{"?second"}, makeAlwaysDefinedColumn(1)}});
   EXPECT_TRUE(isPrefixExpression(exp0));
   EXPECT_THAT(
       exp0->getCacheKey(map),

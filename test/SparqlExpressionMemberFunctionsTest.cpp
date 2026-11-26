@@ -40,7 +40,7 @@ TEST(SparqlExpressionMemberFunctions, isResultAlwaysDefined) {
   using namespace ::testing;
 
   // Setup VariableToColumnMap with different variable statuses
-  VariableToColumnMap varColMap = makeVariableToColumnMap();
+  auto varColMap = makeVariableToColumnMap();
   Variable alwaysDefinedVar{"?alwaysDefined"};
   Variable possiblyUndefVar{"?possiblyUndef"};
   Variable unboundVar{"?unbound"};

@@ -274,7 +274,7 @@ TEST(QueryExecutionTree, createSortedTreeKeepsHiddenVariablesHidden) {
   using Var = Variable;
   using Vars = std::vector<std::optional<Variable>>;
   auto* qec = getQec();
-  VariableToColumnMap expectedVariables =
+  auto expectedVariables =
       makeVariableToColumnMap({{Var{"?a"}, makeAlwaysDefinedColumn(0)}});
 
   // A `Union` whose root hides `?b`, re-sorted by `?a`.

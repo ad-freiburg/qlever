@@ -31,7 +31,7 @@ void expectIdsAreConcatenatedTo(
   LocalVocab localVocab = makeLocalVocab();
   ad_utility::SharedCancellationHandle cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
-  VariableToColumnMap map = makeVariableToColumnMap(
+  auto map = makeVariableToColumnMap(
       {{var, {0, ColumnIndexAndTypeInfo::PossiblyUndefined}}});
 
   EvaluationContext context{*qec,
@@ -143,7 +143,7 @@ TEST(GroupConcatExpression, concatenationWithLanguageTags) {
 // _____________________________________________________________________________
 TEST(GroupConcatExpression, getCacheKey) {
   Variable var{"?x"};
-  VariableToColumnMap map = makeVariableToColumnMap(
+  auto map = makeVariableToColumnMap(
       {{var, {0, ColumnIndexAndTypeInfo::PossiblyUndefined}}});
 
   std::string sep = "👻";

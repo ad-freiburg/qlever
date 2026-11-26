@@ -10,16 +10,26 @@
 #ifndef QLEVER_TEST_UTIL_VARIABLETOCOLUMNMAPTESTHELPERS_H
 #define QLEVER_TEST_UTIL_VARIABLETOCOLUMNMAPTESTHELPERS_H
 
-#include <initializer_list>
+#include <utility>
+#include <vector>
 
 #include "./AllocatorTestHelpers.h"
 #include "engine/VariableToColumnMap.h"
 
 // Return a `VariableToColumnMap` with the given `entries` that uses the
-// unlimited allocator of `ad_utility::testing::makeAllocator()`.
-inline VariableToColumnMap makeVariableToColumnMap(
-    std::initializer_list<VariableToColumnMap::value_type> entries = {}) {
-  return VariableToColumnMap{entries, ad_utility::testing::makeAllocator()};
-}
+// unlimited allocator of `ad_utility::testing::makeAllocator()`. A functor, so
+// that tests can bind it to a shorter name.
+struct MakeVariableToColumnMap {
+  VariableToColumnMap operator()(
+      std::vector<std::pair<Variable, ColumnIndexAndTypeInfo>> entries = {})
+      const {
+    VariableToColumnMap map{ad_utility::testing::makeAllocator()};
+    for (auto& [variable, column] : entries) {
+      map.try_emplace(std::move(variable), column);
+    }
+    return map;
+  }
+};
+inline constexpr MakeVariableToColumnMap makeVariableToColumnMap{};
 
 #endif  // QLEVER_TEST_UTIL_VARIABLETOCOLUMNMAPTESTHELPERS_H

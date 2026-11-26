@@ -117,8 +117,7 @@ TEST(RuntimeInformation, setColumnNames) {
 
   auto col = makeAlwaysDefinedColumn;
   using V = Variable;
-  VariableToColumnMap m =
-      makeVariableToColumnMap({{V{"?x"}, col(1)}, {V{"?y"}, col(0)}});
+  auto m = makeVariableToColumnMap({{V{"?x"}, col(1)}, {V{"?y"}, col(0)}});
   rti.setColumnNames(m);
   EXPECT_THAT(rti.columnNames_, ::testing::ElementsAre("?y", "?x"));
 }

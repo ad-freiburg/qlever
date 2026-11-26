@@ -309,7 +309,7 @@ TEST(NamedCacheSecondaryVocabRewriter, localVocabEntriesOfExistingWords) {
 TEST(NamedCacheSecondaryVocabRewriter, canonicalColumnOrder) {
   // Column 0 is `?z`, column 1 has no variable, column 2 is `?a`, column 3 is
   // `?m`.
-  VariableToColumnMap map =
+  auto map =
       makeVariableToColumnMap({{Variable{"?z"}, makeAlwaysDefinedColumn(0)},
                                {Variable{"?a"}, makeAlwaysDefinedColumn(2)},
                                {Variable{"?m"}, makeAlwaysDefinedColumn(3)}});
@@ -318,7 +318,7 @@ TEST(NamedCacheSecondaryVocabRewriter, canonicalColumnOrder) {
   EXPECT_THAT(canonicalColumnOrder(map, 5), ElementsAre(2, 3, 0));
   EXPECT_ANY_THROW(canonicalColumnOrder(map, 3));
   // A column that belongs to two variables is written only once.
-  VariableToColumnMap twoVariables =
+  auto twoVariables =
       makeVariableToColumnMap({{Variable{"?b"}, makeAlwaysDefinedColumn(1)},
                                {Variable{"?c"}, makeAlwaysDefinedColumn(1)},
                                {Variable{"?a"}, makeAlwaysDefinedColumn(0)}});

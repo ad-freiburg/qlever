@@ -119,7 +119,7 @@ TEST(SparqlExpressionParser, First) {
   EXPECT_EQ(resultofParse.remainingText_.length(), 6);
   auto resultAsExpression = std::move(resultofParse.resultOfParse_);
 
-  VariableToColumnMap map = makeVariableToColumnMap();
+  auto map = makeVariableToColumnMap();
   ad_utility::AllocatorWithLimit<Id> alloc{
       ad_utility::testing::makeAllocator()};
   IdTable table{alloc};

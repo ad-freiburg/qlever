@@ -355,20 +355,19 @@ TEST(AggregateExpression, CountStar) {
 
 // _____________________________________________________________________________
 TEST(AggregateExpression, CountStarSimpleMembers) {
+  const auto emptyMap = makeVariableToColumnMap();
   using namespace sparqlExpression;
   using enum SparqlExpression::AggregateStatus;
   auto m = makeCountStarExpression(false);
   const auto& exp = *m;
-  EXPECT_THAT(exp.getCacheKey(makeVariableToColumnMap()),
-              ::testing::HasSubstr("COUNT *"));
+  EXPECT_THAT(exp.getCacheKey(emptyMap), ::testing::HasSubstr("COUNT *"));
   EXPECT_THAT(exp.children(), ::testing::IsEmpty());
   EXPECT_THAT(m->getUnaggregatedVariables(), ::testing::IsEmpty());
   EXPECT_EQ(exp.isAggregate(), NonDistinctAggregate);
 
   auto m2 = makeCountStarExpression(true);
   EXPECT_EQ(m2->isAggregate(), DistinctAggregate);
-  EXPECT_NE(exp.getCacheKey(makeVariableToColumnMap()),
-            m2->getCacheKey(makeVariableToColumnMap()));
+  EXPECT_NE(exp.getCacheKey(emptyMap), m2->getCacheKey(emptyMap));
 }
 
 // _____________________________________________________________________________
@@ -409,6 +408,7 @@ TEST(AggregateExpression, SampleExpression) {
 
 // _____________________________________________________________________________
 TEST(AggregateExpression, SampleExpressionSimpleMembers) {
+  const auto emptyMap = makeVariableToColumnMap();
   using namespace sparqlExpression;
   auto makeSample = [](Id result, bool distinct = false) {
     return std::make_unique<SampleExpression>(
@@ -421,13 +421,12 @@ TEST(AggregateExpression, SampleExpressionSimpleMembers) {
   EXPECT_TRUE(sample->getUnaggregatedVariables().empty());
   EXPECT_EQ(sample->children().size(), 1u);
   using namespace ::testing;
-  EXPECT_THAT(sample->getCacheKey(makeVariableToColumnMap()),
+  EXPECT_THAT(sample->getCacheKey(emptyMap),
               AllOf(HasSubstr("SAMPLE"), HasSubstr("#valueId")));
 
   // DISTINCT makes no difference for sample, so the two SAMPLE s that only
   // differ in their distinctness even may have the same cache key.
   auto sample2 = makeSample(I(3478), true);
-  EXPECT_EQ(sample->getCacheKey(makeVariableToColumnMap()),
-            sample2->getCacheKey(makeVariableToColumnMap()));
+  EXPECT_EQ(sample->getCacheKey(emptyMap), sample2->getCacheKey(emptyMap));
   EXPECT_EQ(sample2->isAggregate(), NonDistinctAggregate);
 }

@@ -71,7 +71,7 @@ TEST(TextIndexScanForEntity, EntityScanBasic) {
             h::getEntityFromResultTable(qec, result, 2));
 
   using enum ColumnIndexAndTypeInfo::UndefStatus;
-  VariableToColumnMap expectedVariables = makeVariableToColumnMap(
+  auto expectedVariables = makeVariableToColumnMap(
       {{Variable{"?text2"}, {0, AlwaysDefined}},
        {Variable{"?entityVar2"}, {1, AlwaysDefined}},
        {Variable{"?ql_score_text2_var_entityVar2"}, {2, AlwaysDefined}}});
@@ -91,7 +91,7 @@ TEST(TextIndexScanForEntity, FixedEntityScan) {
   ASSERT_EQ(result.idTableView().size(), 1);
 
   using enum ColumnIndexAndTypeInfo::UndefStatus;
-  VariableToColumnMap expectedVariables = makeVariableToColumnMap(
+  auto expectedVariables = makeVariableToColumnMap(
       {{Variable{"?text3"}, {0, AlwaysDefined}},
        {Variable{
             "?ql_score_text3_fixedEntity__34_some_32_other_32_sentence_34_"},

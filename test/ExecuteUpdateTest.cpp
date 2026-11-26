@@ -506,32 +506,33 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
                                                     std::move(triples)),
             messageMatcher);
       };
+  const auto emptyMap = makeVariableToColumnMap();
   // Transforming an empty vector of template results in no `TransformedTriple`s
   // and leaves the `LocalVocab` empty.
-  expectTransformTriplesTemplate(makeVariableToColumnMap(), {}, {});
+  expectTransformTriplesTemplate(emptyMap, {}, {});
   // Resolve a `SparqlTripleSimpleWithGraph` without variables.
   expectTransformTriplesTemplate(
-      makeVariableToColumnMap(),
+      emptyMap,
       {SparqlTripleSimpleWithGraph{Literal("\"foo\""), Iri("<bar>"),
                                    Literal("\"foo\""), Graph{}}},
       {{Id("\"foo\""), Id("<bar>"), Id("\"foo\""), defaultGraphId}});
   // Literals in the template that are not in the index are added to the
   // `LocalVocab`.
   expectTransformTriplesTemplate(
-      makeVariableToColumnMap(),
+      emptyMap,
       {SparqlTripleSimpleWithGraph{Literal("\"foo\""), Iri("<bar>"),
                                    Literal("\"foo\""), Graph{Iri("<baz>")}}},
       {{Id("\"foo\""), Id("<bar>"), Id("\"foo\""), LocalVocab(Iri("<baz>"))}});
   // A variable in the template (`?f`) is not mapped in the
   // `VariableToColumnMap`.
   expectTransformTriplesTemplateFails(
-      makeVariableToColumnMap(),
+      emptyMap,
       {SparqlTripleSimpleWithGraph{Literal("\"foo\""), Iri("<bar>"),
                                    Variable("?f"), Graph{}}},
       HasSubstr("Assertion `variableColumns.contains(tc.getVariable())` "
                 "failed."));
   expectTransformTriplesTemplateFails(
-      makeVariableToColumnMap(),
+      emptyMap,
       {SparqlTripleSimpleWithGraph{Literal("\"foo\""), Iri("<bar>"),
                                    Literal("\"foo\""), Graph{Variable("?f")}}},
       HasSubstr("Assertion `variableColumns.contains(var)` failed."));
@@ -549,7 +550,7 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
                                    Literal("\"foo\""), Graph{Variable("?f")}}},
       {{Id("\"foo\""), Id("<bar>"), Id("\"foo\""), uint64_t{0}}});
   expectTransformTriplesTemplate(
-      makeVariableToColumnMap(),
+      emptyMap,
       {SparqlTripleSimpleWithGraph{Iri("<http://example.org/123>"),
                                    Iri("<http://qlever.dev/1>"),
                                    Literal("\"baz\""), Graph{}}},

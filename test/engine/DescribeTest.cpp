@@ -197,10 +197,9 @@ TEST(Describe, simpleMembers) {
                     HasSubstr("Filtered by Graphs:<default-graph-1>")));
 
   auto col = makeAlwaysDefinedColumn;
-  VariableToColumnMap expected =
-      makeVariableToColumnMap({{Variable{"?subject"}, col(0)},
-                               {Variable{"?predicate"}, col(1)},
-                               {Variable{"?object"}, col(2)}});
+  auto expected = makeVariableToColumnMap({{Variable{"?subject"}, col(0)},
+                                           {Variable{"?predicate"}, col(1)},
+                                           {Variable{"?object"}, col(2)}});
 
   auto children = describe.getChildren();
   ASSERT_EQ(children.size(), 1);

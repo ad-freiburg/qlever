@@ -52,7 +52,7 @@ std::shared_ptr<IdTable> createTestIdTable(size_t numRows, size_t numCols) {
 
 // Helper function to create VariableToColumnMap
 VariableToColumnMap createTestVariableMap(size_t numVars) {
-  VariableToColumnMap map = makeVariableToColumnMap();
+  auto map = makeVariableToColumnMap();
   for (size_t i = 0; i < numVars; ++i) {
     map[Variable("?var" + std::to_string(i))] = makeAlwaysDefinedColumn(i);
   }
@@ -291,9 +291,9 @@ TEST_P(ExplicitIdTableOperationTest, DifferentTableSizes) {
 
 // Test variable to column mapping
 TEST_P(ExplicitIdTableOperationTest, VariableToColumnMapping) {
-  VariableToColumnMap customVars = makeVariableToColumnMap();
-  customVars[Variable("?subject")] = makeAlwaysDefinedColumn(0);
-  customVars[Variable("?predicate")] = makeAlwaysDefinedColumn(1);
+  auto customVars = makeVariableToColumnMap(
+      {{Variable("?subject"), makeAlwaysDefinedColumn(0)},
+       {Variable("?predicate"), makeAlwaysDefinedColumn(1)}});
 
   ExplicitIdTableOperation op(qec_, wrapTable(testTable_), customVars,
                               colIndices({}), LocalVocab{qec_->getAllocator()},

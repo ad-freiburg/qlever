@@ -448,11 +448,10 @@ TEST(IndexScan, additionalColumn) {
   auto scan = IndexScan{qec, Permutation::PSO, triple};
   ASSERT_EQ(scan.getResultWidth(), 4);
   auto col = makeAlwaysDefinedColumn;
-  VariableToColumnMap expected =
-      makeVariableToColumnMap({{V{"?x"}, col(0)},
-                               {V{"?z"}, col(1)},
-                               {V("?xpattern"), col(2)},
-                               {V("?ypattern"), col(3)}});
+  auto expected = makeVariableToColumnMap({{V{"?x"}, col(0)},
+                                           {V{"?z"}, col(1)},
+                                           {V("?xpattern"), col(2)},
+                                           {V("?ypattern"), col(3)}});
   ASSERT_THAT(scan.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expected));
   ASSERT_THAT(scan.getCacheKey(),
@@ -1885,7 +1884,7 @@ TEST(IndexScanTest, StripColumns) {
         getVarsAndColumnIndices(varsToKeep, baseScan);
     // Build expected variable to column mapping with dense, ordered column
     // indices
-    VariableToColumnMap expected = makeVariableToColumnMap();
+    auto expected = makeVariableToColumnMap();
     std::vector<ColumnIndex> originalColumnIndices;
     for (size_t i = 0; i < columnOrigins.size(); ++i) {
       expected[columnOrigins[i].first] = def(i);
