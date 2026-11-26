@@ -7,6 +7,7 @@
 
 #include "engine/AddCombinedRowToTable.h"
 #include "engine/JoinHelpers.h"
+#include "engine/operation/ColumnStrippingHelpers.h"
 #include "global/Constants.h"
 #include "index/IdTableUtils.h"
 #include "util/joinAlgorithms/JoinAlgorithms.h"
@@ -335,4 +336,30 @@ std::unique_ptr<Operation> MultiColumnJoin::cloneWithNewChildren(
     qlm::vector<std::shared_ptr<QueryExecutionTree>> children) const {
   return std::make_unique<MultiColumnJoin>(
       _executionContext, std::move(children.at(0)), std::move(children.at(1)));
+}
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+MultiColumnJoin::makeTreeWithStrippedColumns(
+    const std::set<Variable>& requestedVariables) const {
+  // The subtrees have to provide the requested variables plus the join
+  // variables (the variables that both subtrees have, so collecting them from
+  // the left subtree suffices).
+  columnStrippingHelpers::VarsRequiredFromSubtree varsRequiredFromSubtree(
+      &requestedVariables);
+  for (const auto& joinColumn : _joinColumns) {
+    const auto& joinVar =
+        _left->getVariableAndInfoByColumnIndex(joinColumn[0]).first;
+    varsRequiredFromSubtree.add(joinVar);
+  }
+
+  // Strip the left and right subtree.
+  auto left = varsRequiredFromSubtree.stripSubtree(_left);
+  auto right = varsRequiredFromSubtree.stripSubtree(_right);
+
+  // The new `MultiColumnJoin` also exports the join variables that the parent
+  // did not request, the helper adds a `StripColumns` operation for them.
+  return columnStrippingHelpers::makeTreeWithOptionalStripOperation<
+      MultiColumnJoin>(getExecutionContext(), requestedVariables,
+                       std::move(left), std::move(right));
 }
