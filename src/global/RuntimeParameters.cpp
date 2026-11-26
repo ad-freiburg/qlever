@@ -40,6 +40,7 @@ RuntimeParameters::RuntimeParameters() {
   add(serviceMaxValueRows_);
   add(serviceMaxRedirects_);
   add(queryPlanningBudget_);
+  add(queryPlanningMaxCandidatePlans_);
   add(throwOnUnboundVariables_);
   add(cacheMaxSizeLazyResult_);
   add(websocketUpdatesEnabled_);

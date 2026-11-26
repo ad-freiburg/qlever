@@ -121,6 +121,10 @@ struct RuntimeParameters {
   SizeT serviceMaxValueRows_{10'000, "service-max-value-rows"};
   SizeT serviceMaxRedirects_{1, "service-max-redirects"};
   SizeT queryPlanningBudget_{1500, "query-planning-budget"};
+  // The dynamic programming query planner falls back to the greedy planner if
+  // it creates more candidate plans than this for one connected component.
+  SizeT queryPlanningMaxCandidatePlans_{100'000,
+                                        "query-planning-max-candidate-plans"};
   Bool throwOnUnboundVariables_{false, "throw-on-unbound-variables"};
 
   // Control up until which size lazy results should be cached. Caching

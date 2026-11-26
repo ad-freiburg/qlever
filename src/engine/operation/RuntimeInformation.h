@@ -170,7 +170,9 @@ NLOHMANN_JSON_SERIALIZE_ENUM(PlanningAlgorithm,
 // is, of a set of triples (and filters) of one group graph pattern that are
 // connected by shared variables.
 struct ConnectedComponentPlanningInfo {
-  // The algorithm that planned the component.
+  // The algorithm that planned the component. This is `GREEDY` also when the
+  // dynamic programming planner was tried first, but exceeded the runtime
+  // parameter `query-planning-max-candidate-plans`.
   PlanningAlgorithm algorithm_ = PlanningAlgorithm::DYNAMIC_PROGRAMMING;
   // The number of nodes of the component. A node is a triple, or an operation
   // like a text search that the planner treats like a triple.
