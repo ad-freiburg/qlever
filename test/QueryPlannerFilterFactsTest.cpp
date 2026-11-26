@@ -15,9 +15,9 @@
 #include "./QueryPlannerTestHelpers.h"
 #include "./util/IndexTestHelpers.h"
 #include "engine/ExportQueryExecutionTrees.h"
-#include "engine/Filter.h"
-#include "engine/IndexScan.h"
-#include "engine/SpatialJoin.h"
+#include "engine/operation/Filter.h"
+#include "engine/operation/IndexScan.h"
+#include "engine/operation/SpatialJoin.h"
 
 // Tests for the rewrite of FILTERs with facts, in particular of those that are
 // facts only with the definitions of their group (from `VALUES` and `BIND`),

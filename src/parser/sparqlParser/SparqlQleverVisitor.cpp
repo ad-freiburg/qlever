@@ -48,7 +48,6 @@
 #include "parser/PathQuery.h"
 #include "parser/Quads.h"
 #include "parser/RdfParser.h"
-#include "parser/SparqlParser.h"
 #include "parser/SpatialQuery.h"
 #include "parser/TextSearchQuery.h"
 #include "parser/TokenizerCtre.h"

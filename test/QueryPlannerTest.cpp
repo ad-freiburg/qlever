@@ -13,7 +13,7 @@
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "QueryPlannerTestHelpers.h"
 #include "engine/QueryPlanner.h"
-#include "engine/RowNumber.h"
+#include "engine/operation/RowNumber.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/MagicServiceQuery.h"
 #include "rdfTypes/Variable.h"
@@ -4021,6 +4021,24 @@ TEST(QueryPlanner, PropertyPathWithGraphIri) {
                     "?_QLever_internal_variable_qp_0",
                     "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>",
                     "?_QLever_internal_variable_qp_1", {}, HS{"<abc>"})));
+}
+
+// Test that the bound side of a `*` path in a `GRAPH <g1>` clause is matched
+// against `<g1>` via an `EmptyPath`, although its values are nodes of the
+// knowledge graph (because they come from an index scan of `<g2>`).
+TEST(QueryPlanner, PropertyPathWithGraphIriBoundByOtherGraph) {
+  using HS = ad_utility::HashSet<std::string>;
+  TransitivePathSide left{std::nullopt, 0, Variable("?x"), 0};
+  TransitivePathSide right{std::nullopt, 1, Variable("?y"), 1};
+  h::expect("SELECT * { GRAPH <g2> { ?x <q> ?z } GRAPH <g1> { ?x <p>* ?y } }",
+            h::transitivePath(
+                left, right, 0, std::numeric_limits<size_t>::max(),
+                h::EmptyPath(
+                    Variable{"?x"}, std::nullopt,
+                    h::IndexScanFromStrings("?x", "<q>", "?z", {}, HS{"<g2>"})),
+                h::IndexScanFromStrings(
+                    "?_QLever_internal_variable_qp_0", "<p>",
+                    "?_QLever_internal_variable_qp_1", {}, HS{"<g1>"})));
 }
 
 // _____________________________________________________________________________

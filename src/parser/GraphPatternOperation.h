@@ -12,7 +12,7 @@
 #include <vector>
 
 #include "backports/concepts.h"
-#include "engine/PathSearch.h"
+#include "engine/operation/PathSearch.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "global/Id.h"
 #include "parser/DatasetClauses.h"

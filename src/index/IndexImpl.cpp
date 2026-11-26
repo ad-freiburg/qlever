@@ -2461,6 +2461,11 @@ void IndexImpl::loadConfigFromOldIndex(const std::string& newName,
       static_cast<NumNormalAndInternal>(newStats.at("num-predicates"));
   numSubjects_ = newStats.value("num-subjects", NumNormalAndInternal{});
   numObjects_ = newStats.value("num-objects", NumNormalAndInternal{});
+  avgNumDistinctPredicatesPerSubject_ =
+      other.avgNumDistinctPredicatesPerSubject_;
+  avgNumDistinctSubjectsPerPredicate_ =
+      other.avgNumDistinctSubjectsPerPredicate_;
+  numDistinctSubjectPredicatePairs_ = other.numDistinctSubjectPredicatePairs_;
   writeConfiguration();
 }
 

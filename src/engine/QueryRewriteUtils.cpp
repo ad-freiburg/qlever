@@ -7,11 +7,10 @@
 #include <stdexcept>
 
 #include "engine/QueryExecutionTree.h"
-#include "engine/SpatialJoin.h"
-#include "engine/Values.h"
 #include "engine/filterFacts/Recognizers.h"
+#include "engine/operation/SpatialJoin.h"
+#include "engine/operation/Values.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
-#include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/QueryRewriteExpressionHelpers.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "parser/GraphPattern.h"
