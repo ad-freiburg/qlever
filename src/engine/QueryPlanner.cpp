@@ -73,6 +73,7 @@
 #include "parser/MaterializedViewQuery.h"
 #include "parser/SparqlParserHelpers.h"
 #include "rdfTypes/Variable.h"
+#include "util/Algorithm.h"
 #include "util/CompilerWarnings.h"
 #include "util/Exception.h"
 #include "util/Log.h"
@@ -1452,8 +1453,9 @@ void QueryPlanner::applyFiltersIfPossible(
       // complete as soon as `plan` is attached. The other substitutes connect
       // two plans and are applied by `merge`, see `createJoinsWithSubstitutes`.
       constexpr bool modeAllowsSubstitutes =
-          mode == FilterMode::KeepUnfiltered ||
-          mode == FilterMode::SeedSubstitutesOnly;
+          ad_utility::contains(std::array{FilterMode::KeepUnfiltered,
+                                          FilterMode::SeedSubstitutesOnly},
+                               mode);
       const bool allowSubstitutes =
           modeAllowsSubstitutes && filterAndSubst.forceSubstitution_;
       if (allowSubstitutes && filterAndSubst.hasSubstitute() &&
