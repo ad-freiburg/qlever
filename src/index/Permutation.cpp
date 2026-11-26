@@ -132,17 +132,21 @@ std::pair<size_t, size_t> Permutation::getSizeEstimateForScan(
 }
 
 // ____________________________________________________________________________
-std::optional<IdTable> Permutation::getDistinctCol1IdsAndCounts(
+IdTable Permutation::getDistinctCol1IdsAndCounts(
     Id col0Id, const CancellationHandle& cancellationHandle,
     const LocatedTriplesState& locatedTriplesState,
-    const LimitOffsetClause& limitOffset, double minPercentKnownBlocks) const {
-  return reader().getDistinctColIdsAndCounts(
-      1,
-      getScanSpecAndBlocks(
-          ScanSpecification{col0Id, std::nullopt, std::nullopt},
-          locatedTriplesState),
-      cancellationHandle, getLocatedTriplesForPermutation(locatedTriplesState),
-      limitOffset, minPercentKnownBlocks);
+    const LimitOffsetClause& limitOffset) const {
+  // NOTE: With a `minPercentKnownBlocks` of 0, the result is never
+  // `std::nullopt`.
+  return reader()
+      .getDistinctColIdsAndCounts(
+          1,
+          getScanSpecAndBlocks(
+              ScanSpecification{col0Id, std::nullopt, std::nullopt},
+              locatedTriplesState),
+          cancellationHandle,
+          getLocatedTriplesForPermutation(locatedTriplesState), limitOffset, 0)
+      .value();
 }
 
 // ____________________________________________________________________________

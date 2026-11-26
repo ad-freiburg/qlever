@@ -1019,21 +1019,17 @@ std::optional<IdTable> GroupByImpl::computeGroupByObjectWithCount() const {
   }
 
   // Compute the result and update the runtime information (we don't actually
-  // do the index scan, but something smarter). Evaluate the GROUP BY normally
-  // if too few blocks are known from their metadata (see the runtime parameter
-  // `group-by-index-scan-min-percent-known-blocks`).
+  // do the index scan, but something smarter).
   //
   // NOTE: Use the `LocatedTriplesState` of the `IndexScan` (see
   // `computeGroupByForSingleIndexScan` for details).
   const auto& permutation = indexScan->permutation();
   auto result = permutation.getDistinctCol1IdsAndCounts(
       col0Id.value(), cancellationHandle(), indexScan->locatedTriplesState(),
-      indexScan->getLimitOffset(),
-      getRuntimeParameter<
-          &RuntimeParameters::groupByIndexScanMinPercentKnownBlocks_>());
-  if (result.has_value()) {
-    indexScan->updateRuntimeInformationWhenOptimizedOut({});
-  }
+      indexScan->getLimitOffset());
+
+  indexScan->updateRuntimeInformationWhenOptimizedOut({});
+
   return result;
 }
 
@@ -1082,18 +1078,24 @@ std::optional<IdTable> GroupByImpl::computeGroupByForFullIndexScan() const {
   }
 
   // Compute the distinct values of the first column and their counts directly
-  // from the blocks of the permutation. Evaluate the GROUP BY normally if too
-  // few blocks are known from their metadata (see the runtime parameter
-  // `group-by-index-scan-min-percent-known-blocks`).
+  // from the blocks of the permutation. Without a COUNT, evaluate the GROUP BY
+  // normally if too few blocks are known from their metadata (see the runtime
+  // parameter `group-by-index-scan-min-percent-known-blocks`).
   //
-  // NOTE: Use the `LocatedTriplesState` of the `IndexScan` (see
+  // NOTE 1: With a COUNT, the normal evaluation is much slower, because it
+  // evaluates the COUNT for each group separately.
+  //
+  // NOTE 2: Use the `LocatedTriplesState` of the `IndexScan` (see
   // `computeGroupByForSingleIndexScan` for details).
   const auto& operation = _subtree->getRootOperation();
+  double minPercentKnownBlocks =
+      numCounts == 0
+          ? getRuntimeParameter<
+                &RuntimeParameters::groupByIndexScanMinPercentKnownBlocks_>()
+          : 0.0;
   auto optionalTable = permutation.value().getDistinctCol0IdsAndCounts(
       cancellationHandle(), operation->locatedTriplesState(),
-      operation->getLimitOffset(),
-      getRuntimeParameter<
-          &RuntimeParameters::groupByIndexScanMinPercentKnownBlocks_>());
+      operation->getLimitOffset(), minPercentKnownBlocks);
   if (!optionalTable.has_value()) {
     return std::nullopt;
   }

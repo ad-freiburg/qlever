@@ -128,14 +128,15 @@ class Permutation {
 
   // For a given relation, determine the `col1Id`s and their counts. This is
   // used for `computeGroupByObjectWithCount`. The `col0Id` must have metadata
-  // in `meta_`. See `CompressedRelationReader::getDistinctColIdsAndCounts` for
-  // the `minPercentKnownBlocks` and when `std::nullopt` is returned.
-  std::optional<IdTable> getDistinctCol1IdsAndCounts(
+  // in `meta_`.
+  IdTable getDistinctCol1IdsAndCounts(
       Id col0Id, const CancellationHandle& cancellationHandle,
       const LocatedTriplesState& locatedTriplesState,
-      const LimitOffsetClause& limitOffset, double minPercentKnownBlocks) const;
+      const LimitOffsetClause& limitOffset) const;
 
-  // The same for the `col0Id`s of a full scan of this permutation.
+  // The same for the `col0Id`s of a full scan of this permutation. See
+  // `CompressedRelationReader::getDistinctColIdsAndCounts` for the
+  // `minPercentKnownBlocks` and when `std::nullopt` is returned.
   std::optional<IdTable> getDistinctCol0IdsAndCounts(
       const CancellationHandle& cancellationHandle,
       const LocatedTriplesState& locatedTriplesState,
