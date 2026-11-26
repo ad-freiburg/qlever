@@ -72,36 +72,24 @@ TEST(GeoSparqlHelpers, ParseWktPoint) {
       0.0);
   testParseWktPointCorrect(
       "<http://www.opengis.net/def/crs/OGC/1.3/CRS84> pOiNt(7 -0.0)", 7.0, 0.0);
-  testParseWktPointCorrect(
-      "<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(1.5 2.0)", 2.0, 1.5);
-  testParseWktPointCorrect(
-      "<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(-1.5 2.0)", 2.0,
-      -1.5);
-  testParseWktPointCorrect(
-      "<http://www.opengis.net/def/crs/EPSG/0/4326> PoInT(0.0   3)", 3.0, 0.0);
-  testParseWktPointCorrect(
-      "<http://www.opengis.net/def/crs/EPSG/0/4326> pOiNt(-0.0 7)", 7.0, 0.0);
-  testParseWktPointCorrect(
-      "<http://www.opengis.net/def/crs/EPSG/0/3857> POINT(222638.9815865 "
-      "166998.31375)",
-      2.0, 1.5);
-  testParseWktPointCorrect(
-      "<http://www.opengis.net/def/crs/EPSG/0/3857> POINT(222638.9815865 "
-      "-166998.31375)",
-      2.0, -1.5);
-  testParseWktPointCorrect(
-      "<http://www.opengis.net/def/crs/EPSG/0/3857> PoInT(333958.4723798   "
-      "0.0)",
-      3.0, 0.0);
-  testParseWktPointCorrect(
-      "<http://www.opengis.net/def/crs/EPSG/0/3857> pOiNt(779236.4355529 -0.0)",
-      7.0, 0.0);
 
   // Some WKT points with other the number formats.
   testParseWktPointCorrect("POINT(42. 7.)", 42.0, 7.0);
   testParseWktPointCorrect("POINT(.42 .8)", 0.42, 0.8);
   testParseWktPointCorrect("POINT(+42.0 7.8)", 42.0, 7.8);
   testParseWktPointCorrect("POINT(42.0 +7.8)", 42.0, 7.8);
+
+  // Valid WKT points that are in non-default CRS (here WGS84 and Web Mercator).
+  testWktPointInvalid(
+      "<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(1.5 2.0)");
+  testWktPointInvalid(
+      "<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(-1.5 2.0)");
+  testWktPointInvalid(
+      "<http://www.opengis.net/def/crs/EPSG/0/3857> POINT(222638.9815865 "
+      "166998.31375)");
+  testWktPointInvalid(
+      "<http://www.opengis.net/def/crs/EPSG/0/3857> POINT(222638.9815865 "
+      "-166998.31375)");
 
   // Invalid WKT points because of issues unrelated to the number format (one of
   // the quotes missing, one of the parentheses missing, it must be exactly two

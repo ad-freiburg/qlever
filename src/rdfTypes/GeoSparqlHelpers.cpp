@@ -54,29 +54,26 @@ namespace detail {
 // projecting it to Web Mercator.
 static constexpr double webMercatorMaxLatitude = 85.05112878;
 
-// Parse a single WKT point and return a pair of longitude and latitude. If
-// the given string does not parse as a WKT point, a pair of `invalidCoordinate`
-// is returned.
+// Parse a single WKT point and return a pair of longitude and latitude. This
+// function only accepts point in `defaultCrs` (CRS84). If the given string does
+// not parse as a WKT point, a pair of `invalidCoordinate` is returned.
 std::pair<double, double> parseWktPoint(const std::string_view point) {
   double lng = invalidCoordinate, lat = invalidCoordinate;
 
   const std::string strPoint{point};
   auto c = strPoint.c_str();
   ::util::geo::CRSType sourceCrs = ::util::geo::getCRSType(c, &c);
-  ::util::geo::WKTType wktType = ::util::geo::getWKTType(c, &c);
-  auto projFunc = [](const ::util::geo::Point<double>& p,
-                     ::util::geo::CRSType sourceCrs) {
-    return projectToCRS(p, sourceCrs, defaultCrs);
-  };
-  if (wktType == ::util::geo::WKTType::POINT) {
-    try {
-      auto utilPoint = ::util::geo::pointFromWKTProj<double>(c, &c, projFunc,
-                                                             sourceCrs, true);
-      lng = utilPoint.getX();
-      lat = utilPoint.getY();
-    } catch (const ::util::geo::WKTParseException&) {
-      // Strict `util` parsing in `pointFromWKTProj` will cause an exception for
-      // invalid WKTs. In that case return `invalidCoordinate`.
+  if (sourceCrs == defaultCrs) {
+    ::util::geo::WKTType wktType = ::util::geo::getWKTType(c, &c);
+    if (wktType == ::util::geo::WKTType::POINT) {
+      try {
+        auto utilPoint = ::util::geo::pointFromWKT<double>(c, &c, true);
+        lng = utilPoint.getX();
+        lat = utilPoint.getY();
+      } catch (const ::util::geo::WKTParseException&) {
+        // Strict `util` parsing in `pointFromWKTProj` will cause an exception
+        // for invalid WKTs. In that case return `invalidCoordinate`.
+      }
     }
   }
   return std::pair(lng, lat);
