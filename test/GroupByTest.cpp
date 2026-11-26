@@ -2294,9 +2294,9 @@ TEST(GroupByOptimizationsDeltaTriples, fullIndexScanManyDistinctPerBlock) {
     return GroupByImpl{&qec, {varX}, aliases, std::move(scan)};
   };
 
-  // The optimization (forced, although most blocks have several subjects)
-  // yields the result of the GROUP BY without it, also when the LIMIT and
-  // OFFSET start or end in the middle of a block or of a group.
+  // The optimization (used because of the COUNT, although most blocks have
+  // several subjects) yields the result of the GROUP BY without it, also when
+  // the LIMIT and OFFSET start or end in the middle of a block or of a group.
   for (LimitOffsetClause limitOffset :
        {LimitOffsetClause{}, LimitOffsetClause{5, 3},
         LimitOffsetClause{9, 13}}) {
