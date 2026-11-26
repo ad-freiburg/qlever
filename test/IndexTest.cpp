@@ -530,6 +530,43 @@ TEST(IndexTest, parserIntegerOverflowBehaviorFromSettingsFile) {
   }
 }
 
+// Test that the settings of the RDF parser of the index build are stored in the
+// configuration of the index and are available after loading it, and that an
+// index without them (built before they were stored) gets the default
+// settings.
+TEST(IndexTest, rdfParserSettingsAreStoredInTheIndex) {
+  std::string basename = gtestCurrentTestName();
+  absl::Cleanup cleanup = [&basename] { deleteTestIndexFiles(basename); };
+  TestIndexConfig config{"<a> <c> 42 ."};
+  config.additionalSettings = {
+      {"parser-integer-overflow-behavior", "\"all-integers-become-doubles\""},
+      {"ascii-prefixes-only", "true"}};
+  RdfParserSettings expected{TurtleParserIntegerOverflowBehavior::AllToDouble,
+                             false, true};
+  EXPECT_EQ(makeTestIndex(basename, config).rdfParserSettings(), expected);
+
+  auto load = [&basename]() {
+    Index index{ad_utility::makeUnlimitedAllocator<Id>()};
+    index.createFromOnDiskIndex(basename, false);
+    return index.rdfParserSettings();
+  };
+  EXPECT_EQ(load(), expected);
+
+  // Remove the settings from the configuration.
+  auto configFilename = absl::StrCat(basename, CONFIGURATION_FILE);
+  nlohmann::json configuration;
+  {
+    std::ifstream in{configFilename};
+    in >> configuration;
+  }
+  ASSERT_EQ(configuration.erase(std::string{RDF_PARSER_SETTINGS_KEY}), 1u);
+  {
+    auto out = ad_utility::makeOfstream(configFilename);
+    out << configuration;
+  }
+  EXPECT_EQ(load(), RdfParserSettings{});
+}
+
 // Regression test for https://github.com/ad-freiburg/qlever/issues/2768
 TEST(IndexTest, emptyTextIndex) {
   std::array<std::string, 2> inputs = {

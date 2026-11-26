@@ -20,6 +20,7 @@
 #include "index/vocabulary/EncodedIriManager.h"
 #include "index/vocabulary/StringSortComparator.h"
 #include "index/vocabulary/Vocabulary.h"
+#include "parser/RdfParserSettings.h"
 #include "parser/TripleComponent.h"
 #include "util/CancellationHandle.h"
 #include "util/json.h"
@@ -117,6 +118,10 @@ class Index {
   using Vocab = RdfsVocabulary;
   const Vocab& getVocab() const;
   const EncodedIriManager& encodedIriManager() const;
+
+  // Return the settings of the RDF parser with which this index was built, see
+  // `IndexImpl::rdfParserSettings`.
+  RdfParserSettings rdfParserSettings() const;
   Vocab& getNonConstVocabForTesting();
 
   using TextVocab = TextVocabulary;

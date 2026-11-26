@@ -86,9 +86,12 @@ class GraphStoreProtocol {
                         ad_utility::truncateOperationString(request.body()));
   }
 
-  // Parse the triples from the request body according to the content type.
+  // Parse the triples from the request body according to the content type,
+  // using the `settings` (which are typically the settings of the index build,
+  // see `Index::rdfParserSettings`).
   static std::vector<TurtleTriple> parseTriples(
-      const std::string& body, ad_utility::MediaType contentType);
+      const std::string& body, ad_utility::MediaType contentType,
+      const RdfParserSettings& settings);
   FRIEND_TEST(GraphStoreProtocolTest, parseTriples);
 
   // Transforms the triples from `TurtleTriple` to `SparqlTripleSimpleWithGraph`
@@ -139,8 +142,8 @@ class GraphStoreProtocol {
                     const Index& index,
                     const qlever::Allocator<Id>& allocator) {
     throwIfRequestBodyEmpty(rawRequest);
-    auto triples =
-        parseTriples(rawRequest.body(), extractMediatype(rawRequest));
+    auto triples = parseTriples(rawRequest.body(), extractMediatype(rawRequest),
+                                index.rdfParserSettings());
     BlankNodeAdder bn{index.getBlankNodeManager()};
     auto insertIntoNewGraph = mustInsertIntoNewGraph(rawRequest, graph);
     const GraphOrDefault effectiveGraph =
@@ -176,8 +179,8 @@ class GraphStoreProtocol {
                     const Index& index,
                     const qlever::Allocator<Id>& allocator) {
     throwIfRequestBodyEmpty(rawRequest);
-    auto triples =
-        parseTriples(rawRequest.body(), extractMediatype(rawRequest));
+    auto triples = parseTriples(rawRequest.body(), extractMediatype(rawRequest),
+                                index.rdfParserSettings());
     BlankNodeAdder bn{index.getBlankNodeManager()};
     auto convertedTriples =
         convertTriples(graph, std::move(triples), bn, allocator);
@@ -230,8 +233,8 @@ class GraphStoreProtocol {
         getDrop()));
     drop._originalString = stringRepresentation;
 
-    auto triples =
-        parseTriples(rawRequest.body(), extractMediatype(rawRequest));
+    auto triples = parseTriples(rawRequest.body(), extractMediatype(rawRequest),
+                                index.rdfParserSettings());
     BlankNodeAdder bn{index.getBlankNodeManager()};
     auto convertedTriples =
         convertTriples(graph, std::move(triples), bn, allocator);

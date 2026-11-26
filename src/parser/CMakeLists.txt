@@ -7,7 +7,8 @@ add_subdirectory(data)
 # `sparqlParser` -> `index` -> `basicParser`. They therefore have to live in
 # their own library instead of in `sparqlParser`.
 add_library(basicParser Tokenizer.cpp WordsAndDocsFileParser.cpp AsyncBlockSource.cpp
-        TripleComponent.cpp ParsedTripleTerm.cpp PropertyPath.cpp PayloadVariables.cpp)
+        TripleComponent.cpp ParsedTripleTerm.cpp PropertyPath.cpp PayloadVariables.cpp
+        RdfParserSettings.cpp)
 # Comparing `TripleComponent`s can call into `localVocab` through `Id` equality.
 qlever_target_link_libraries(basicParser qlever_util rdfTypes parserData localVocab)
 

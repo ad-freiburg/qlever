@@ -114,9 +114,7 @@ std::unique_ptr<AsyncRdfParserBase> IndexImpl::makeRdfParser(
       " memory limit for index building must be greater than zero");
   // NOTE: The settings have to be passed to the constructor, because the
   // parsers start parsing immediately when they are constructed.
-  RdfParserSettings parserSettings{turtleParserIntegerOverflowBehavior_,
-                                   turtleParserSkipIllegalLiterals_,
-                                   onlyAsciiTurtlePrefixes_};
+  RdfParserSettings parserSettings = rdfParserSettings();
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   // The reduced feature set has no coroutines (and only Boost 1.71), so the
   // asynchronous multifile parser is not available. Fall back to the
@@ -485,6 +483,10 @@ void IndexImpl::prepareIndexBuild() {
   vocab_.resetToType(vocabularyTypeForIndexBuilding_);
 
   readIndexBuilderSettingsFromFile();
+  // The parser settings are stored, so that everything that later parses RDF
+  // data for this index parses it in the same way as this build.
+  configurationJson_[std::string{RDF_PARSER_SETTINGS_KEY}] =
+      rdfParserSettings();
 }
 
 // _____________________________________________________________________________
@@ -1734,6 +1736,15 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
   loadDataMember(ad_utility::HAS_WORD_NORMALIZATION_KEY, hasWordNormalization_,
                  ad_utility::HasWordNormalization::Lowercase);
 
+  // The settings of the RDF parser of the index build (an index built before
+  // this key existed gets the default settings).
+  RdfParserSettings parserSettings;
+  loadDataMember(RDF_PARSER_SETTINGS_KEY, parserSettings, RdfParserSettings{});
+  turtleParserIntegerOverflowBehavior_ =
+      parserSettings.integerOverflowBehavior_;
+  turtleParserSkipIllegalLiterals_ = parserSettings.invalidLiteralsAreSkipped_;
+  onlyAsciiTurtlePrefixes_ = parserSettings.useRelaxedParsing_;
+
   // Whether this index has `ql:has-word` triples (an index built before this
   // key existed is treated as having none).
   loadDataMember(ad_utility::ADD_HAS_WORD_TRIPLES_KEY, addHasWordTriples_,
@@ -1985,10 +1996,10 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
         << std::endl;
   }
 
-  std::string overflowingIntegersThrow = "overflowing-integers-throw";
-  std::string overflowingIntegersBecomeDoubles =
-      "overflowing-integers-become-doubles";
-  std::string allIntegersBecomeDoubles = "all-integers-become-doubles";
+  std::string_view overflowingIntegersThrow = OVERFLOWING_INTEGERS_THROW;
+  std::string_view overflowingIntegersBecomeDoubles =
+      OVERFLOWING_INTEGERS_BECOME_DOUBLES;
+  std::string_view allIntegersBecomeDoubles = ALL_INTEGERS_BECOME_DOUBLES;
   std::vector<std::string_view> allModes{overflowingIntegersThrow,
                                          overflowingIntegersBecomeDoubles,
                                          allIntegersBecomeDoubles};

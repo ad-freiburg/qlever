@@ -145,7 +145,9 @@ Result Load::computeResultImpl([[maybe_unused]] bool requestLaziness) {
   }
   using Re2Parser = RdfStringParser<TurtleParser<Tokenizer>>;
   const auto& encodedIriManager = getIndex().encodedIriManager();
-  auto parser = Re2Parser(&encodedIriManager);
+  // Parse with the settings of the index build, so that the loaded data gets
+  // the same `Id`s as the data of the index.
+  auto parser = Re2Parser(&encodedIriManager, getIndex().rdfParserSettings());
   std::string body;
   for (const auto& bytes : response.body_) {
     body.append(reinterpret_cast<const char*>(bytes.data()), bytes.size());

@@ -289,6 +289,25 @@ TEST_F(LoadTest, blankNodes) {
   EXPECT_THAT(res2.idTableView()(0, 0), testing::Ne(idTable(0, 0)));
 }
 
+// Test that `LOAD` parses the loaded data with the RDF parser settings of the
+// index build, here with `all-integers-become-doubles`.
+TEST_F(LoadTest, usesRdfParserSettingsOfTheIndex) {
+  auto loadObject = [this](QueryExecutionContext* qec) {
+    Load load{qec, pqLoad("https://mundhahs.dev"),
+              getResultFunctionFactory("<a> <b> 42 .")};
+    auto res = load.computeResultOnlyForTesting();
+    EXPECT_EQ(res.idTableView().numRows(), 1u);
+    return res.idTableView()(0, 2);
+  };
+  EXPECT_EQ(loadObject(testQec), Id::makeFromInt(42));
+
+  ad_utility::testing::TestIndexConfig config;
+  config.additionalSettings = {
+      {"parser-integer-overflow-behavior", "\"all-integers-become-doubles\""}};
+  EXPECT_EQ(loadObject(ad_utility::testing::getQec(std::move(config))),
+            Id::makeFromDouble(42.0));
+}
+
 TEST_F(LoadTest, getCacheKey) {
   {
     auto cleanup =

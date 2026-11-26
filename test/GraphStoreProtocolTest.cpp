@@ -366,25 +366,34 @@ TEST(GraphStoreProtocolTest, extractMediatype) {
 TEST(GraphStoreProtocolTest, parseTriples) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       GraphStoreProtocol::parseTriples("<a> <b> <c>",
-                                       ad_utility::MediaType::json),
+                                       ad_utility::MediaType::json, {}),
       testing::HasSubstr(
           "Mediatype \"application/json\" is not supported for SPARQL "
           "Graph Store HTTP Protocol in QLever."));
   const auto expectedTriples =
       std::vector<TurtleTriple>{{{iri("<a>")}, {iri("<b>")}, {iri("<c>")}}};
-  EXPECT_THAT(GraphStoreProtocol::parseTriples("<a> <b> <c> .",
-                                               ad_utility::MediaType::ntriples),
+  EXPECT_THAT(GraphStoreProtocol::parseTriples(
+                  "<a> <b> <c> .", ad_utility::MediaType::ntriples, {}),
               testing::Eq(expectedTriples));
-  EXPECT_THAT(GraphStoreProtocol::parseTriples("<a> <b> <c> .",
-                                               ad_utility::MediaType::turtle),
+  EXPECT_THAT(GraphStoreProtocol::parseTriples(
+                  "<a> <b> <c> .", ad_utility::MediaType::turtle, {}),
               testing::Eq(expectedTriples));
   EXPECT_THAT(
-      GraphStoreProtocol::parseTriples("", ad_utility::MediaType::ntriples),
+      GraphStoreProtocol::parseTriples("", ad_utility::MediaType::ntriples, {}),
       testing::Eq(std::vector<TurtleTriple>{}));
   AD_EXPECT_THROW_WITH_MESSAGE(
       GraphStoreProtocol::parseTriples("<a> <b>",
-                                       ad_utility::MediaType::ntriples),
+                                       ad_utility::MediaType::ntriples, {}),
       testing::HasSubstr(" Parse error at byte position 7"));
+
+  // The `settings` are passed to the parser.
+  RdfParserSettings allToDouble;
+  allToDouble.integerOverflowBehavior_ =
+      TurtleParserIntegerOverflowBehavior::AllToDouble;
+  EXPECT_THAT(GraphStoreProtocol::parseTriples(
+                  "<a> <b> 42 .", ad_utility::MediaType::ntriples, allToDouble),
+              testing::Eq(std::vector<TurtleTriple>{
+                  {{iri("<a>")}, {iri("<b>")}, TripleComponent{42.0}}}));
 }
 
 // _____________________________________________________________________________________________

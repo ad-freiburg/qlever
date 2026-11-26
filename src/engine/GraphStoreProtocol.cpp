@@ -33,7 +33,8 @@ void GraphStoreProtocol::throwNotYetImplementedHTTPMethod(
 
 // ____________________________________________________________________________
 std::vector<TurtleTriple> GraphStoreProtocol::parseTriples(
-    const std::string& body, ad_utility::MediaType contentType) {
+    const std::string& body, ad_utility::MediaType contentType,
+    const RdfParserSettings& settings) {
   using Re2Parser = RdfStringParser<TurtleParser<Tokenizer>>;
   switch (contentType) {
     case ad_utility::MediaType::turtle:
@@ -44,7 +45,7 @@ std::vector<TurtleTriple> GraphStoreProtocol::parseTriples(
       // of the underlying index more consistently to all parsing and update
       // functions.
       EncodedIriManager encodedIriManager;
-      auto parser = Re2Parser(&encodedIriManager);
+      auto parser = Re2Parser(&encodedIriManager, settings);
       parser.setInputStream(body);
       return parser.parseAndReturnAllTriples();
     }
