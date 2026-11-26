@@ -756,7 +756,6 @@ TEST(CompressedExternalIdTable, clearResetsBoundaryMetadata) {
   checkBlockContents(writer, secondBatch, rowsPerBlockFor(blockSize));
 }
 
-// _____________________________________________________________________________
 // The compression level of the writer is a pure trade-off between CPU and bytes
 // on disk. Check that it doesn't change the stored blocks, and that it really
 // is applied.
@@ -1509,7 +1508,6 @@ TEST(CompressedExternalIdTable, sorterMergeSpillCompression) {
   EXPECT_GT(uncompressed.spillFileSize_, fast.spillFileSize_);
 }
 
-// _____________________________________________________________________________
 // The compression level of the presorted runs (see `setRunCompressionLevel`)
 // must not change the sorted output, but it must be applied to the file of the
 // runs.
