@@ -12,8 +12,6 @@
 
 #include <unistd.h>
 
-#include <stdexcept>
-
 #include "util/Exception.h"
 #include "util/Log.h"
 

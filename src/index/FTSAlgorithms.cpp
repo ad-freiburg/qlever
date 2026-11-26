@@ -4,9 +4,6 @@
 
 #include "index/FTSAlgorithms.h"
 
-#include <utility>
-
-#include "util/HashSet.h"
 // _____________________________________________________________________________
 IdTable FTSAlgorithms::filterByRange(const IdRange<WordVocabIndex>& idRange,
                                      const IdTable& idTablePreFilter) {

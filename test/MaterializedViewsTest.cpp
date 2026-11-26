@@ -525,11 +525,11 @@ TEST_F(MaterializedViewsTest, ColumnPermutation) {
     // should be equal to that of the `MaterializedView` itself.
     EXPECT_THAT(scanMap, ::testing::UnorderedElementsAreArray(expected));
 
-    // Check that `columnOriginatesFromGraphOrUndef` of `IndexScan` is disabled
-    // for the materialized view.
+    // Check that `columnContainsOnlyKnowledgeGraphNodes` of `IndexScan` is
+    // disabled for the materialized view.
     for (const auto& var : expected | ql::views::keys) {
       EXPECT_FALSE(
-          qet.getRootOperation()->columnOriginatesFromGraphOrUndef(var));
+          qet.getRootOperation()->columnContainsOnlyKnowledgeGraphNodes(var));
     }
   }
 

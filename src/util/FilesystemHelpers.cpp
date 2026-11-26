@@ -1,6 +1,7 @@
 //  Copyright 2026 The QLever Authors, in particular:
 //
-//  2026 Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>, UFR
+//  2026 Robin Textor-Falconi <textorr@cs.uni-freiburg.de>, UFR
+//  2026 Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>, UFR
 //
 //  UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
@@ -12,6 +13,7 @@
 #include <absl/cleanup/cleanup.h>
 #include <absl/strings/str_cat.h>
 #include <fcntl.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include <algorithm>
@@ -27,6 +29,7 @@
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
 #include "backports/filesystem.h"
+#include "util/Coverage.h"
 #include "util/File.h"
 #include "util/Random.h"
 
@@ -170,10 +173,10 @@ fs::path resolveSymlinks(const fs::path& path) {
   return resolved;
 }
 
-// Return the path of a fresh temporary file in the same directory as `path`:
-// the file name of `path`, followed by a random component and the suffix
-// `.tmp`. If that name would exceed the maximal length of a file name, the
-// part that stems from the file name of `path` is shortened.
+// Return a fresh temporary path in the same directory as `path`: the file name
+// of `path`, followed by a random component and the suffix `.tmp`. If that name
+// would exceed the maximal length of a file name, the part that stems from the
+// file name of `path` is shortened.
 fs::path temporaryPathFor(const fs::path& path) {
   // The maximal length of a file name in bytes (`NAME_MAX`) on Linux and macOS.
   constexpr size_t maxFilenameLength = 255;
@@ -213,15 +216,38 @@ void writeFileAtomically(
     absl::FunctionRef<void(const fs::path& temporaryPath)> writeTemporaryFile) {
   // Replace the file a symbolic link points to, not the link itself.
   fs::path target = resolveSymlinks(path);
-  // The random component makes the name unique, so that two concurrent writers
-  // of the same `path` never write to the same temporary file.
-  fs::path temporary = temporaryPathFor(target);
-  // Remove the temporary file if writing or renaming it fails. This runs while
-  // an exception is propagated, so it must not throw itself; a temporary file
-  // that cannot be removed is harmless.
-  absl::Cleanup removeTemporary = [&temporary] {
+  // Create a fresh directory with a random name next to the target that only
+  // the owner can access (mode `0700`), and write the temporary file inside it.
+  //
+  // NOTE 1: `writeTemporaryFile` creates the temporary file with the default
+  // permissions (typically readable by everyone), and the permissions of a
+  // replaced file can only be applied to it after it has been written. Without
+  // the private directory, the new contents of a file that is readable only by
+  // its owner would therefore be readable by everyone while they are written.
+  //
+  // NOTE 2: The directory is next to the target, so that the final `rename`
+  // stays on the same file system and is atomic. The random component of its
+  // name makes it unique, so that two concurrent writers of the same `path`
+  // never collide.
+  fs::path temporaryDirectory = temporaryPathFor(target);
+  if (::mkdir(temporaryDirectory.string().c_str(), 0700) != 0) {
+    throwFileError("create a temporary directory for", target, errno);
+  }
+  fs::path temporary = temporaryDirectory / target.filename();
+  // Remove the temporary directory in the end (with the temporary file, if
+  // writing or renaming it failed). This also runs while an exception is
+  // propagated, so it must not throw itself; a leftover temporary directory is
+  // harmless.
+  //
+  // NOTE: The file and the directory are removed directly, which (unlike
+  // `remove_all`) works without a free file descriptor; `remove_all` is only
+  // the fallback for other files that `writeTemporaryFile` might have created.
+  absl::Cleanup removeTemporaryDirectory = [&temporaryDirectory, &temporary] {
     ql::error_code ignored;
     fs::remove(temporary, ignored);
+    if (!fs::remove(temporaryDirectory, ignored)) {
+      fs::remove_all(temporaryDirectory, ignored);
+    }
   };
   writeTemporaryFile(temporary);
   // An existing file keeps its permissions (the temporary file is a new file
@@ -234,7 +260,6 @@ void writeFileAtomically(
     fs::permissions(temporary, status.permissions());
   }
   fs::rename(temporary, target);
-  std::move(removeTemporary).Cancel();
 }
 
 // _____________________________________________________________________________
@@ -254,16 +279,15 @@ void writeFileAtomically(const fs::path& path, ql::span<const char> bytes) {
     while (numBytesLeft > 0) {
       // Retry a `write` that is interrupted by a signal. This practically never
       // happens for a regular file and cannot be provoked reliably in a unit
-      // test, so the retry is excluded from the coverage instrumentation (Clang
-      // attributes the lines of the lambda to the enclosing code region).
-      auto writeRetryingOnInterrupt = [ fd, data, numBytesLeft ]()
-          __attribute__((no_profile_instrument_function)) {
-        ssize_t result;
-        do {
-          result = ::write(fd, data, numBytesLeft);
-        } while (result < 0 && errno == EINTR);
-        return result;
-      };
+      // test, so the retry is excluded from the coverage instrumentation.
+      auto writeRetryingOnInterrupt =
+          [fd, data, numBytesLeft]() QL_EXCLUDE_FROM_COVERAGE {
+            ssize_t result;
+            do {
+              result = ::write(fd, data, numBytesLeft);
+            } while (result < 0 && errno == EINTR);
+            return result;
+          };
       ssize_t numBytesWritten = writeRetryingOnInterrupt();
       if (numBytesWritten < 0) {
         throwFileError("write", temporary, errno);
@@ -275,14 +299,12 @@ void writeFileAtomically(const fs::path& path, ql::span<const char> bytes) {
     // `close` only fails on rare errors of the file system (e.g. a deferred
     // write error of a network file system), which cannot be provoked in a unit
     // test without mocking the POSIX functions, so the check is excluded from
-    // the coverage instrumentation (see the retry of `write` above).
-    auto closeOrThrow =
-        [ fd, &temporary ]() __attribute__((no_profile_instrument_function)) {
+    // the coverage instrumentation.
+    [fd, &temporary]() QL_EXCLUDE_FROM_COVERAGE {
       if (::close(fd) != 0) {
         throwFileError("close", temporary, errno);
       }
-    };
-    closeOrThrow();
+    }();
   });
 }
 
