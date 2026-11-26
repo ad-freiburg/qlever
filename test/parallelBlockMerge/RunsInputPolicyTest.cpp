@@ -23,9 +23,9 @@ using namespace ad_utility::parallelBlockMerge;
 using namespace parallelBlockMergeTestHelpers;
 
 namespace {
-// A minimal type that fulfills the `InputConcept`. It is only used to check
-// that the concept is satisfiable, the actual data are irrelevant.
-struct DummyInput {
+// A type that has everything that the `InputConcept` requires except
+// `reserveBlock`. The actual data are irrelevant.
+struct InputWithoutReserveBlock {
   using Element = int;
   using Block = std::vector<int>;
 
@@ -48,9 +48,6 @@ struct DummyInput {
     return {};
   }
   Block makeEmptyBlock() const { return {}; }
-  void reserveBlock(Block& block, size_t numElements) const {
-    block.reserve(numElements);
-  }
   void appendToBlock(Block& block, int el) const { block.push_back(el); }
   ad_utility::MemorySize memorySizeOfElement([[maybe_unused]] int el) const {
     return ad_utility::MemorySize::bytes(sizeof(int));
@@ -58,6 +55,14 @@ struct DummyInput {
 
  private:
   Element element_ = 0;
+};
+
+// A minimal type that fulfills the `InputConcept`. It is only used to check
+// that the concept is satisfiable.
+struct DummyInput : public InputWithoutReserveBlock {
+  void reserveBlock(Block& block, size_t numElements) const {
+    block.reserve(numElements);
+  }
 };
 
 // The same, but `getBlock` returns a reference instead of a value, which the
@@ -70,35 +75,6 @@ struct DummyInputWithReferenceToBlock : public DummyInput {
 
  private:
   Block block_{};
-};
-
-// A type that has everything except the required `reserveBlock`.
-struct InputWithoutReserveBlock {
-  using Element = int;
-  using Block = std::vector<int>;
-  size_t numRuns() const { return 0; }
-  size_t numBlocks([[maybe_unused]] size_t runIdx) const { return 0; }
-  size_t numElementsInBlock([[maybe_unused]] size_t runIdx,
-                            [[maybe_unused]] size_t blockIdx) const {
-    return 0;
-  }
-  Element firstElement([[maybe_unused]] size_t runIdx,
-                       [[maybe_unused]] size_t blockIdx) const {
-    return 0;
-  }
-  Element lastElement([[maybe_unused]] size_t runIdx,
-                      [[maybe_unused]] size_t blockIdx) const {
-    return 0;
-  }
-  Block getBlock([[maybe_unused]] size_t runIdx,
-                 [[maybe_unused]] size_t blockIdx) const {
-    return {};
-  }
-  Block makeEmptyBlock() const { return {}; }
-  void appendToBlock(Block& block, int el) const { block.push_back(el); }
-  ad_utility::MemorySize memorySizeOfElement([[maybe_unused]] int el) const {
-    return ad_utility::MemorySize::bytes(sizeof(int));
-  }
 };
 
 // A type that is missing several of the required member functions.
