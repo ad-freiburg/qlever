@@ -125,7 +125,7 @@ class EmptyPath : public Operation {
   size_t getCostEstimate() override;
   float getMultiplicity(size_t col) override;
   bool knownEmptyResult() override;
-  bool columnOriginatesFromGraphOrUndef(
+  bool columnContainsOnlyKnowledgeGraphNodes(
       const Variable& variable) const override;
 
  protected:

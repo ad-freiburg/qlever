@@ -32,9 +32,6 @@
 #include "parser/data/SolutionModifiers.h"
 #include "parser/data/SparqlFilter.h"
 #include "util/ContainersWithAllocator.h"
-#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
-#include "util/http/ResponseMiddleware.h"
-#endif
 
 // Defined in `util/http/ResponseMiddleware.h`. Only forward-declared here, so
 // that the parser doesn't depend on the HTTP library (Boost.Beast etc.).

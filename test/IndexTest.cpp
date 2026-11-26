@@ -1429,6 +1429,9 @@ TEST(IndexImpl, loadConfigFromOldIndex) {
   auto onDiskBase = directory + "/index";
   IndexImpl other{ad_utility::makeUnlimitedAllocator<Id>()};
   other.rowsPerBlock() = 1337;
+  other.avgNumDistinctPredicatesPerSubject_ = 3.14;
+  other.avgNumDistinctSubjectsPerPredicate_ = 1337.5;
+  other.numDistinctSubjectPredicatePairs_ = 42;
   nlohmann::json stats;
 
   Index::NumNormalAndInternal numTriples{42, 1337};
@@ -1451,6 +1454,9 @@ TEST(IndexImpl, loadConfigFromOldIndex) {
   EXPECT_EQ(index.numSubjects_, numSubjects);
   EXPECT_EQ(index.numObjects_, numObjects);
   EXPECT_EQ(index.rowsPerBlock(), other.rowsPerBlock());
+  EXPECT_EQ(index.avgNumDistinctPredicatesPerSubject_, 3.14);
+  EXPECT_EQ(index.avgNumDistinctSubjectsPerPredicate_, 1337.5);
+  EXPECT_EQ(index.numDistinctSubjectPredicatePairs_, 42);
   EXPECT_EQ(index.configurationJson_, stats);
 
   // The version written to disk will also have these fields.

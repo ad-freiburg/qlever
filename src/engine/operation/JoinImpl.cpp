@@ -30,7 +30,6 @@
 #include "global/RuntimeParameters.h"
 #include "util/Algorithm.h"
 #include "util/Exception.h"
-#include "util/Generators.h"
 #include "util/HashMap.h"
 #include "util/Iterators.h"
 #include "util/Math.h"
@@ -815,15 +814,15 @@ std::unique_ptr<Operation> JoinImpl::cloneImpl() const {
 }
 
 // _____________________________________________________________________________
-bool JoinImpl::columnOriginatesFromGraphOrUndef(
+bool JoinImpl::columnContainsOnlyKnowledgeGraphNodes(
     const Variable& variable) const {
   AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
-  // For the join column we don't union the elements, we intersect them so we
-  // can have a more efficient implementation.
+  // The values of a join column are intersected, not united, so one side
+  // suffices (see `joinColumnContainsOnlyKnowledgeGraphNodes`).
   if (variable == joinVar_) {
-    return doesJoinProduceGuaranteedGraphValuesOrUndef(left_, right_, variable);
+    return joinColumnContainsOnlyKnowledgeGraphNodes(left_, right_, variable);
   }
-  return Operation::columnOriginatesFromGraphOrUndef(variable);
+  return Operation::columnContainsOnlyKnowledgeGraphNodes(variable);
 }
 
 // _____________________________________________________________________________
