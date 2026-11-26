@@ -9,10 +9,8 @@
 
 #include <absl/strings/str_cat.h>
 
-#include <boost/url/url.hpp>
 #include <string>
 
-#include "global/Constants.h"
 #include "util/AsioHelpers.h"
 #include "util/TypeIdentity.h"
 #include "util/http/HttpUtils.h"

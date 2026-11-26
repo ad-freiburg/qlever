@@ -9,9 +9,6 @@
 
 #include "engine/operation/Operation.h"
 
-#include <absl/cleanup/cleanup.h>
-#include <absl/container/inlined_vector.h>
-
 #include "engine/NamedResultCache.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoinCachedIndex.h"
@@ -21,7 +18,6 @@
 #include "util/Algorithm.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/ParseException.h"
-#include "util/TransparentFunctors.h"
 #include "util/Views.h"
 
 using namespace std::chrono_literals;

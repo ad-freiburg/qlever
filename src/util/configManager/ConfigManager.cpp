@@ -10,10 +10,7 @@
 #include <CommonTokenStream.h>
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_replace.h>
-#include <antlr4-runtime.h>
 
-#include <iostream>
-#include <regex>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -28,7 +25,6 @@
 #include "backports/iterator.h"
 #include "backports/type_traits.h"
 #include "util/Algorithm.h"
-#include "util/ComparisonWithNan.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
 #include "util/StringUtils.h"

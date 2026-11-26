@@ -8,7 +8,6 @@
 
 #include <absl/strings/str_cat.h>
 
-#include "engine/CallFixedSize.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/operation/ColumnStrippingHelpers.h"
 #include "engine/operation/ExistsJoin.h"

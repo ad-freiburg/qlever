@@ -12,13 +12,9 @@
 
 #include "index/DeltaTriples.h"
 
-#include <absl/strings/str_cat.h>
-
 #include "Permutation.h"
 #include "backports/algorithm.h"
 #include "backports/filesystem.h"
-#include "engine/ExecuteUpdate.h"
-#include "engine/ExportQueryExecutionTrees.h"
 #include "index/ExportIds.h"
 #include "index/Index.h"
 #include "index/IndexImpl.h"
