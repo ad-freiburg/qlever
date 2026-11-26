@@ -81,6 +81,14 @@ size_t sizeOfRegularFile(const ql::filesystem::path& path);
 // message), or if it holds fewer bytes.
 void readFileIntoBuffer(const ql::filesystem::path& path,
                         ql::span<char> buffer);
+
+// Give the file `to` the permissions of the file `from`. Do nothing if `from`
+// cannot be examined (in particular if it does not exist). If setting the
+// permissions fails (for example because the file system of `to` does not
+// support permissions), only log a warning: the permissions are a nicety, and
+// not being able to keep them must not make the whole operation fail.
+void copyPermissionsIfPossible(const ql::filesystem::path& from,
+                               const ql::filesystem::path& to);
 }  // namespace detail
 
 // Read the whole file `path` into a `Container` of bytes (a contiguous

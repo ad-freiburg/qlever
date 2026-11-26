@@ -31,6 +31,7 @@
 #include "backports/filesystem.h"
 #include "util/Coverage.h"
 #include "util/File.h"
+#include "util/Log.h"
 #include "util/Random.h"
 
 namespace qlever::util {
@@ -251,15 +252,31 @@ void writeFileAtomically(
   };
   writeTemporaryFile(temporary);
   // An existing file keeps its permissions (the temporary file is a new file
-  // and has the default permissions). `status` reports an error (instead of
-  // throwing) if the file cannot be examined, in particular if it does not
-  // exist, so without an error the file exists and its permissions are known.
-  ql::error_code statusError;
-  auto status = fs::status(target, statusError);
-  if (!statusError) {
-    fs::permissions(temporary, status.permissions());
-  }
+  // and has the default permissions), if the file system supports that.
+  detail::copyPermissionsIfPossible(target, temporary);
   fs::rename(temporary, target);
+}
+
+// _____________________________________________________________________________
+void detail::copyPermissionsIfPossible(const fs::path& from,
+                                       const fs::path& to) {
+  // `status` reports an error (instead of throwing) if the file cannot be
+  // examined, in particular if it does not exist, so without an error the file
+  // exists and its permissions are known.
+  ql::error_code statusError;
+  auto status = fs::status(from, statusError);
+  if (statusError) {
+    return;
+  }
+  // Not all file systems support setting permissions (for example some network
+  // or FAT file systems), so a failure is only reported, but not propagated.
+  ql::error_code permissionsError;
+  fs::permissions(to, status.permissions(), permissionsError);
+  if (permissionsError) {
+    AD_LOG_WARN << "Could not give the file " << to
+                << " the permissions of the file " << from << ": "
+                << permissionsError.message() << std::endl;
+  }
 }
 
 // _____________________________________________________________________________
