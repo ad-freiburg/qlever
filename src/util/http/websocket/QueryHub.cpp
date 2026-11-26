@@ -4,8 +4,6 @@
 
 #include "util/http/websocket/QueryHub.h"
 
-#include "util/AsioHelpers.h"
-
 namespace ad_utility::websocket {
 
 // Return a lambda that deletes the `queryId` from the `socketDistributors`, but

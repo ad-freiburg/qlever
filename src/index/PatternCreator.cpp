@@ -8,8 +8,6 @@
 
 #include <ostream>
 
-#include "global/SpecialIds.h"
-
 using PatternId = Pattern::PatternId;
 
 // _________________________________________________________________________

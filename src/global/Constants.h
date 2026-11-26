@@ -26,6 +26,8 @@ using namespace ad_utility::memory_literals;
 constexpr inline ad_utility::MemorySize DEFAULT_MEMORY_LIMIT_INDEX_BUILDING =
     5_GB;
 constexpr inline ad_utility::MemorySize DEFAULT_PARSER_BUFFER_SIZE = 10_MB;
+// Maximum recursive nesting of RDF 1.2 triple terms accepted by the RDF parser.
+constexpr inline size_t MAX_TRIPLE_TERM_NESTING_DEPTH = 128;
 
 constexpr inline ad_utility::MemorySize DEFAULT_MEM_FOR_QUERIES = 4_GB;
 

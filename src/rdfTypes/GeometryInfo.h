@@ -201,9 +201,10 @@ struct MetricArea {
   bool isValid() const { return !std::isnan(area_); }
 };
 
-// The ID of a parsed geometry in the `sj::GeometryStore` of the
-// `GeoVocabulary` (see `GeometryInfo::getGeometryStoreId`). It has at most 60
-// bits (the upper bits are the type of the geometry, see `sj::ID_TYPE_SHIFT`).
+// The typed ID of a parsed geometry in the `sj::GeometryStore` of the
+// `GeoVocabulary` (see `GeometryInfo::getGeometryStoreId`). Its upper 8 bits
+// hold the type of the geometry and its lower 56 bits the ID in the store (see
+// `sj::ID_TYPE_SHIFT` and `sj::typedId`).
 struct GeometryStoreId {
   uint64_t id_;
 
@@ -260,7 +261,7 @@ using GeoPointOrWkt = std::variant<GeoPoint, std::string>;
 //    zeroed explicitly in later builds of this version).
 // 6: The bytes `[28, 32)` are the two 16-bit fields `sourceCrs_` (initially
 //    reserved and zero) and `serializationType_`, see below.
-// 7: Append the 64-bit field `geometryStoreId_`, see below.
+// 7: The bytes `[48, 56)` are the 64-bit field `geometryStoreId_`, see below.
 //
 // From version 6 on, the binary representation is append-only, so that adding
 // a field does not invalidate existing indices:
@@ -343,9 +344,9 @@ class GeometryInfo {
   MetricLength metricLength_;
   MetricArea metricArea_;
   // The ID of the parsed geometry in the `sj::GeometryStore` of the
-  // `GeoVocabulary` offset by one, as zero is required to mean "not computed"
-  // for records added after version 5. See the documentation of
-  // `GEOMETRY_INFO_VERSION` for more details.
+  // `GeoVocabulary` plus one, see `getGeometryStoreId`. Zero means "not
+  // computed", as the rules at `GEOMETRY_INFO_VERSION` require for a field
+  // added after version 5.
   uint64_t geometryStoreId_ = 0;
 
   static constexpr uint64_t bitMaskGeometryType =

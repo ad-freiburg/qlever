@@ -10,7 +10,6 @@
 
 #include <memory>
 
-#include "engine/CallFixedSize.h"
 #include "engine/operation/TransitivePathBase.h"
 
 // _____________________________________________________________________________

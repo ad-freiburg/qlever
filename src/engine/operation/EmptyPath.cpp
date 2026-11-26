@@ -256,7 +256,7 @@ VariableToColumnMap EmptyPath::computeVariableToColumnMap() const {
 }
 
 // _____________________________________________________________________________
-bool EmptyPath::columnOriginatesFromGraphOrUndef(
+bool EmptyPath::columnContainsOnlyKnowledgeGraphNodes(
     const Variable& variable) const {
   AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
   // The values of this column are subjects or objects of the knowledge graph.
@@ -264,11 +264,11 @@ bool EmptyPath::columnOriginatesFromGraphOrUndef(
   // read from the index, but in RDF only subjects and objects are considered
   // nodes, so a graph name that occurs neither as a subject nor as an object
   // still has to be matched against the knowledge graph (see
-  // `IndexScan::columnOriginatesFromGraphOrUndef`).
+  // `IndexScan::columnContainsOnlyKnowledgeGraphNodes`).
   if (variable == variable_) {
     return true;
   }
-  return Operation::columnOriginatesFromGraphOrUndef(variable);
+  return Operation::columnContainsOnlyKnowledgeGraphNodes(variable);
 }
 
 // _____________________________________________________________________________

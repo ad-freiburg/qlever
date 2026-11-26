@@ -302,7 +302,8 @@ TEST(GeoVocabularyTest, InvalidGeometryInfoVersion) {
 }
 
 // Test that a geoinfo file of version 5, whose padding bytes may hold arbitrary
-// content, is read with the source CRS zeroed and the serialization type `WKT`.
+// content, is read with the source CRS zeroed, the serialization type `WKT` and
+// no geometry store ID.
 TEST(GeoVocabularyTest, ReadVersion5) {
   // Write a `GeoVocabulary` of the current version.
   const std::string filename = absl::StrCat(gtestCurrentTestName(), ".dat");

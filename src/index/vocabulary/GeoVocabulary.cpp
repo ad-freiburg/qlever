@@ -23,7 +23,6 @@
 #include "index/vocabulary/VocabularyConstraints.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
-#include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "util/Exception.h"
 #include "util/File.h"
