@@ -113,25 +113,66 @@ constexpr Comparison getComparisonForSwappedArguments(Comparison comp) {
 // usage see below.
 template <typename S>
 CPP_concept StoresStringOrId =
-    ad_utility::SimilarToAny<S, ValueId, LocalVocabEntry, IdOrLocalVocabEntry>;
-// Convert a `LocalVocabEntry` or `IdOrLocalVocabEntry` value into the
-// corresponding `ValueId`. This function also takes `ValueId`s which are simply
-// returned unchanged. This makes the usage of this function easier.
-CPP_template(typename S)(requires StoresStringOrId<S>)
-Id makeValueId(const S& value, const EvaluationContext* context) {
+    ad_utility::SimilarToAny<S, ValueId, LocalVocabEntry, LocalVocabEntryView,
+                             IdOrLocalVocabEntry>;
+
+// Convert a `LocalVocabEntryView` into the corresponding `ValueId`, which is
+// only valid as long as the `value` itself. This function also takes
+// `ValueId`s which are simply returned unchanged. This makes the usage of this
+// function easier.
+//
+// NOTE: There is no overload for a `LocalVocabEntry`, as an `Id` can only
+// point to a `LocalVocabEntryView`, use `withValueId` below.
+CPP_template(typename S)(
+    requires ad_utility::SimilarToAny<S, ValueId, LocalVocabEntryView>)
+Id makeValueId(const S& value, const EvaluationContext*) {
   if constexpr (ad_utility::isSimilar<S, ValueId>) {
     return value;
-  } else if constexpr (ad_utility::isSimilar<S, IdOrLocalVocabEntry>) {
-    auto visitor = [context](const auto& x) {
-      auto res = makeValueId(x, context);
-      return res;
-    };
-    return std::visit(visitor, value);
-
   } else {
-    static_assert(ad_utility::isSimilar<S, LocalVocabEntry>);
     return Id::makeFromLocalVocabIndex(&value);
   }
+}
+
+// Call `function` with the `ValueId` that corresponds to the `value` (see
+// `StoresStringOrId`), and return the result. If the `value` is (or holds) a
+// `LocalVocabEntry`, then that `ValueId` points to a `LocalVocabEntryView` of
+// it, which is only valid during the call.
+CPP_template(typename S, typename F)(requires StoresStringOrId<S>)
+decltype(auto) withValueId(const S& value, const EvaluationContext* context,
+                           const F& function) {
+  if constexpr (ad_utility::isSimilar<S, IdOrLocalVocabEntry>) {
+    return std::visit(
+        [context, &function](const auto& x) -> decltype(auto) {
+          return withValueId(x, context, function);
+        },
+        value);
+  } else if constexpr (ad_utility::isSimilar<S, LocalVocabEntry>) {
+    LocalVocabEntryView view{value};
+    return function(makeValueId(view, context));
+  } else {
+    return function(makeValueId(value, context));
+  }
+}
+
+// Call `function` with the `ValueId`s that correspond to the `values` (in the
+// same order), see `withValueId` above for the details and the lifetime of
+// these `ValueId`s.
+template <typename F>
+decltype(auto) withValueIds(const EvaluationContext*, const F& function) {
+  return function();
+}
+template <typename F, typename S, typename... Ss>
+decltype(auto) withValueIds(const EvaluationContext* context, const F& function,
+                            const S& value, const Ss&... values) {
+  return withValueId(value, context,
+                     [context, &function, &values...](Id id) -> decltype(auto) {
+                       return withValueIds(
+                           context,
+                           [&function, id](auto... ids) -> decltype(auto) {
+                             return function(id, ids...);
+                           },
+                           values...);
+                     });
 }
 
 // Compare two elements that are either strings or IDs in some way (see the
@@ -150,8 +191,12 @@ inline const auto compareIdsOrStrings =
                 ad_utility::isSimilar<LocalVocabEntry, U>) {
     return valueIdComparators::fromBool(applyComparison<Comp>(a, b));
   } else {
-    return valueIdComparators::compareIds(makeValueId(a, ctx),
-                                          makeValueId(b, ctx), Comp);
+    return withValueIds(
+        ctx,
+        [](Id idA, Id idB) {
+          return valueIdComparators::compareIds(idA, idB, Comp);
+        },
+        a, b);
   }
 };
 }  // namespace sparqlExpression

@@ -13,7 +13,6 @@
 #include "backports/algorithm.h"
 #include "global/RuntimeParameters.h"
 #include "index/CompressedRelationMetadata.h"
-#include "index/ConstantsIndexBuilding.h"
 #include "index/GraphComputation.h"
 #include "index/Permutation.h"
 #include "util/ChunkedForLoop.h"
@@ -287,7 +286,7 @@ VacuumStatistics processBlockForVacuum(
   };
 
   auto ltProj = [](const LocatedTriple& lt)
-      -> std::tuple<const Id&, const Id&, const Id&, const Id&> {
+      -> std::tuple<ConstIdRef, ConstIdRef, ConstIdRef, ConstIdRef> {
     return tieLocatedTripleValue<3, true>(lt);
   };
   auto rowProj = [](const auto& row) { return tieIdTableRow<3, true>(row); };

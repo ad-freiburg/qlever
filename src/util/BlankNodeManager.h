@@ -25,9 +25,9 @@
 #include "util/HashMap.h"
 #include "util/HashSet.h"
 #include "util/Random.h"
-#include "util/Serializer/SerializeVector.h"
-#include "util/Serializer/Serializer.h"
 #include "util/Synchronized.h"
+#include "util/serializer/SerializeVector.h"
+#include "util/serializer/Serializer.h"
 
 namespace ad_utility {
 /*

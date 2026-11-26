@@ -13,38 +13,39 @@
 
 #include "./util/GTestHelpers.h"
 #include "./util/ParsedQueryTestHelpers.h"
+#include "./util/RuntimeParametersTestHelpers.h"
 #include "backports/StartsWithAndEndsWith.h"
-#include "engine/Bind.h"
-#include "engine/CartesianProductJoin.h"
-#include "engine/CountAvailablePredicates.h"
-#include "engine/Describe.h"
-#include "engine/Distinct.h"
-#include "engine/DistinctGraphs.h"
-#include "engine/EmptyPath.h"
-#include "engine/ExistsJoin.h"
-#include "engine/ExplicitIdTableOperation.h"
-#include "engine/Filter.h"
-#include "engine/GroupBy.h"
-#include "engine/IndexScan.h"
-#include "engine/Join.h"
 #include "engine/MaterializedViews.h"
-#include "engine/Minus.h"
-#include "engine/MultiColumnJoin.h"
-#include "engine/NeutralElementOperation.h"
-#include "engine/NeutralOptional.h"
-#include "engine/OptionalJoin.h"
-#include "engine/OrderBy.h"
-#include "engine/PathSearch.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryPlanner.h"
-#include "engine/Sort.h"
-#include "engine/SpatialJoin.h"
-#include "engine/TextIndexScanForEntity.h"
-#include "engine/TextIndexScanForWord.h"
-#include "engine/TextLimit.h"
-#include "engine/TransitivePathBase.h"
-#include "engine/Union.h"
-#include "engine/Values.h"
+#include "engine/operation/Bind.h"
+#include "engine/operation/CartesianProductJoin.h"
+#include "engine/operation/CountAvailablePredicates.h"
+#include "engine/operation/Describe.h"
+#include "engine/operation/Distinct.h"
+#include "engine/operation/DistinctGraphs.h"
+#include "engine/operation/EmptyPath.h"
+#include "engine/operation/ExistsJoin.h"
+#include "engine/operation/ExplicitIdTableOperation.h"
+#include "engine/operation/Filter.h"
+#include "engine/operation/GroupBy.h"
+#include "engine/operation/IndexScan.h"
+#include "engine/operation/Join.h"
+#include "engine/operation/Minus.h"
+#include "engine/operation/MultiColumnJoin.h"
+#include "engine/operation/NeutralElementOperation.h"
+#include "engine/operation/NeutralOptional.h"
+#include "engine/operation/OptionalJoin.h"
+#include "engine/operation/OrderBy.h"
+#include "engine/operation/PathSearch.h"
+#include "engine/operation/Sort.h"
+#include "engine/operation/SpatialJoin.h"
+#include "engine/operation/TextIndexScanForEntity.h"
+#include "engine/operation/TextIndexScanForWord.h"
+#include "engine/operation/TextLimit.h"
+#include "engine/operation/TransitivePathBase.h"
+#include "engine/operation/Union.h"
+#include "engine/operation/Values.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "global/RuntimeParameters.h"
 #include "rdfTypes/Iri.h"
@@ -426,7 +427,7 @@ constexpr inline PathSearch pathSearch;
 
 inline auto ValuesClause = [](std::string cacheKey) {
   return RootOperation<::Values>(
-      AllOf(AD_PROPERTY(Values, getCacheKey, cacheKey)));
+      AllOf(AD_PROPERTY(Values, getCacheKey, ::testing::StrEq(cacheKey))));
 };
 
 // Match a SpatialJoin operation, set arguments to ignore to -1
@@ -602,8 +603,8 @@ class QueryPlannerWithMockFilterSubstitute : public QueryPlanner {
   using QueryPlanner::QueryPlanner;
 
   FiltersAndOptionalSubstitutes seedFilterSubstitutes(
-      const std::vector<SparqlFilter>& filters) override {
-    FiltersAndOptionalSubstitutes plans;
+      ql::span<const SparqlFilter> filters) override {
+    FiltersAndOptionalSubstitutes plans{getQec()->getAllocator()};
     plans.reserve(filters.size());
 
     const auto equalTo =
@@ -666,13 +667,9 @@ void expectWithGivenBudget(std::string query, MatcherT matcher,
                            std::optional<QueryExecutionContext*> optQec,
                            size_t queryPlanningBudget,
                            source_location l = AD_CURRENT_SOURCE_LOC()) {
-  auto budgetBackup =
-      getRuntimeParameter<&RuntimeParameters::queryPlanningBudget_>();
-  setRuntimeParameter<&RuntimeParameters::queryPlanningBudget_>(
-      queryPlanningBudget);
-  auto cleanup = absl::Cleanup{[budgetBackup]() {
-    setRuntimeParameter<&RuntimeParameters::queryPlanningBudget_>(budgetBackup);
-  }};
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::queryPlanningBudget_>(
+          queryPlanningBudget);
   auto trace = generateLocationTrace(
       l, absl::StrCat("expect with budget ", queryPlanningBudget));
   // Note: we cannot use `value_or` here, because it eagerly evaluates `getQec`

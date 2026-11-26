@@ -11,9 +11,9 @@
 #include "../test/engine/ValuesForTesting.h"
 #include "../test/util/IdTableHelpers.h"
 #include "../test/util/IndexTestHelpers.h"
-#include "engine/GroupBy.h"
-#include "engine/Sort.h"
-#include "engine/Values.h"
+#include "engine/operation/GroupBy.h"
+#include "engine/operation/Sort.h"
+#include "engine/operation/Values.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
@@ -73,7 +73,7 @@ auto generateSortedGroupVec = [](size_t n, size_t g) {
 // indices.
 auto generateRandomLocalVocabAndIndicesVec =
     [](const LocalVocabContext& context, size_t n, size_t m) {
-      LocalVocab localVocab;
+      LocalVocab localVocab{ad_utility::testing::getQec()->getAllocator()};
       std::vector<LocalVocabIndex> indices;
 
       std::string alphanum =
@@ -386,7 +386,7 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
 
     // Create entries of second column
     decltype(auto) otherValues = table.getColumn(1);
-    auto localVocab = LocalVocab{};
+    auto localVocab = LocalVocab{qec->getAllocator()};
     if (valueTypes != ValueIdType::Strings) {
       auto secondColumn = generateRandomDoubleVec(numInputRows);
       ql::ranges::transform(

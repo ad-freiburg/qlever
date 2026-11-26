@@ -10,6 +10,7 @@
 
 #include "parser/RdfParser.h"
 
+#include <absl/cleanup/cleanup.h>
 #include <absl/functional/bind_front.h>
 #include <absl/strings/charconv.h>
 
@@ -169,6 +170,7 @@ void TurtleParser<Tokenizer_T>::clear() {
   tok_.reset(nullptr, 0);
   triples_.clear();
   numBlankNodes_ = 0;
+  tripleTermDepth_ = 0;
   isParserExhausted_ = false;
 }
 
@@ -333,14 +335,25 @@ bool TurtleParser<T>::objectList() {
 // ______________________________________________________
 template <class T>
 bool TurtleParser<T>::verb() {
-  return predicate() || predicateSpecialA();
+  if (!verbImpl()) {
+    return false;
+  }
+  activePredicate_ = lastParseResult_;
+  return true;
+}
+
+// ____________________________________________________________________
+template <class T>
+bool TurtleParser<T>::verbImpl() {
+  rejectTripleTermInNonObjectPosition();
+  return iri() || predicateSpecialA();
 }
 
 // ___________________________________________________________________
 template <class T>
 bool TurtleParser<T>::predicateSpecialA() {
   if (parseTerminal<TurtleTokenId::A>()) {
-    activePredicate_ = TripleComponent::Iri::fromIriref(
+    lastParseResult_ = TripleComponent::Iri::fromIriref(
         "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>");
     return true;
   } else {
@@ -350,7 +363,17 @@ bool TurtleParser<T>::predicateSpecialA() {
 
 // ____________________________________________________________________
 template <class T>
+void TurtleParser<T>::rejectTripleTermInNonObjectPosition() {
+  tok_.skipWhitespaceAndComments();
+  if (ql::starts_with(tok_.view(), "<<")) {
+    raise("Triple terms are only allowed as the object of a triple or quad");
+  }
+}
+
+// ____________________________________________________________________
+template <class T>
 bool TurtleParser<T>::subject() {
+  rejectTripleTermInNonObjectPosition();
   if (blankNode() || iri() || collection()) {
     activeSubject_ = lastParseResult_;
     return true;
@@ -362,6 +385,7 @@ bool TurtleParser<T>::subject() {
 // ____________________________________________________________________
 template <class T>
 bool TurtleParser<T>::predicate() {
+  rejectTripleTermInNonObjectPosition();
   if (iri()) {
     activePredicate_ = lastParseResult_;
     return true;
@@ -372,11 +396,73 @@ bool TurtleParser<T>::predicate() {
 
 // ____________________________________________________________________
 template <class T>
+bool TurtleParser<T>::ttSubject(TripleTermSyntax syntax) {
+  rejectTripleTermInNonObjectPosition();
+  return syntax == TripleTermSyntax::NQuads ? (blankNodeLabel() || iriref())
+                                            : (blankNode() || iri());
+}
+
+// ____________________________________________________________________
+template <class T>
+bool TurtleParser<T>::ttObject(TripleTermSyntax syntax) {
+  return tripleTerm(syntax) ||
+         (syntax == TripleTermSyntax::NQuads
+              ? (blankNodeLabel() || rdfLiteralImpl(false) || iriref())
+              : (blankNode() || literal() || iri()));
+}
+
+// ____________________________________________________________________
+template <class T>
+bool TurtleParser<T>::tripleTerm(TripleTermSyntax syntax) {
+  tok_.skipWhitespaceAndComments();
+  if (!ql::starts_with(tok_.view(), "<<")) {
+    return false;
+  }
+  if (!ql::starts_with(tok_.view(), "<<(")) {
+    raise(
+        "Expected <<( for a triple term; reification shorthand "
+        "such as << <s> <p> <o> >> is not supported");
+  }
+  // Bound recursion to avoid exhausting the stack on deeply nested input.
+  if (tripleTermDepth_ >= MAX_TRIPLE_TERM_NESTING_DEPTH) {
+    raise(absl::StrCat("Triple-term nesting exceeds the supported limit of ",
+                       MAX_TRIPLE_TERM_NESTING_DEPTH));
+  }
+  ++tripleTermDepth_;
+  absl::Cleanup restoreDepth = [this] { --tripleTermDepth_; };
+  tok_.remove_prefix(3);
+  if (!ttSubject(syntax)) {
+    raise("Expected an IRI or blank node as triple-term subject");
+  }
+  auto subject = std::move(lastParseResult_);
+  rejectTripleTermInNonObjectPosition();
+  if (!(syntax == TripleTermSyntax::NQuads ? iriref() : verbImpl())) {
+    raise("Expected an IRI as triple-term predicate");
+  }
+  auto predicate = std::move(lastParseResult_);
+  if (!ttObject(syntax)) {
+    raise(
+        "Expected an IRI, blank node, literal, or triple term as triple-term "
+        "object");
+  }
+  auto object = std::move(lastParseResult_);
+  tok_.skipWhitespaceAndComments();
+  if (!ql::starts_with(tok_.view(), ")>>")) {
+    raise("Expected )>> after the three triple-term components");
+  }
+  tok_.remove_prefix(3);
+  lastParseResult_ = TripleComponent::TripleTerm{
+      std::move(subject), std::move(predicate), std::move(object)};
+  return true;
+}
+
+// ____________________________________________________________________
+template <class T>
 bool TurtleParser<T>::object() {
   // these produce a single object that becomes part of a triple
   // check blank Node first because _: also could look like a prefix
-  if (blankNode() || literal() || iri() || collection() ||
-      blankNodePropertyList()) {
+  if (tripleTerm(TripleTermSyntax::Turtle) || blankNode() || literal() ||
+      iri() || collection() || blankNodePropertyList()) {
     emitTriple();
     return true;
   } else {
@@ -584,6 +670,7 @@ bool NQuadParser<T>::nQuadLiteral() {
 // _____________________________________________________________________________
 template <typename T>
 bool NQuadParser<T>::nQuadSubject() {
+  this->rejectTripleTermInNonObjectPosition();
   if (Base::iriref() || Base::blankNodeLabel()) {
     this->activeSubject_ = std::move(this->lastParseResult_);
     return true;
@@ -595,6 +682,7 @@ bool NQuadParser<T>::nQuadSubject() {
 
 template <typename T>
 bool NQuadParser<T>::nQuadPredicate() {
+  this->rejectTripleTermInNonObjectPosition();
   if (Base::iriref()) {
     this->activePredicate_ = std::move(this->lastParseResult_);
     return true;
@@ -604,7 +692,8 @@ bool NQuadParser<T>::nQuadPredicate() {
 
 template <typename T>
 bool NQuadParser<T>::nQuadObject() {
-  if (Base::iriref() || Base::blankNodeLabel() || nQuadLiteral()) {
+  if (Base::tripleTerm(TripleTermSyntax::NQuads) || Base::iriref() ||
+      Base::blankNodeLabel() || nQuadLiteral()) {
     this->activeObject_ = std::move(this->lastParseResult_);
     return true;
   }
@@ -614,6 +703,7 @@ bool NQuadParser<T>::nQuadObject() {
 // _____________________________________________________________________________
 template <typename T>
 bool NQuadParser<T>::nQuadGraphLabel() {
+  this->rejectTripleTermInNonObjectPosition();
   if (Base::iriref() || Base::blankNodeLabel()) {
     activeGraphLabel_ = std::move(this->lastParseResult_);
     return true;

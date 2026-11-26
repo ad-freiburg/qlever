@@ -223,7 +223,8 @@ TEST(ServerTest, createResponseMetadata) {
   DeltaTriples deltaTriples{index};
   const std::string update = "INSERT DATA { <b> <c> <d> }";
   ad_utility::BlankNodeManager bnm;
-  auto pqs = SparqlParser::parseUpdate(&bnm, encodedIriManager(), update);
+  auto pqs = SparqlParser::parseUpdate(&bnm, encodedIriManager(),
+                                       makeAllocator(), update);
   EXPECT_THAT(pqs, testing::SizeIs(1));
   ParsedQuery pq = std::move(pqs[0]);
   QueryPlanner qp(qec, handle);
@@ -868,8 +869,10 @@ TEST(ServerTest, gspGet) {
     if (accept.has_value()) {
       get.set(http::field::accept, accept.value());
     }
-    auto response =
-        makeServerForTesting(qec->getIndex().getOnDiskBase()).process(get);
+    // The body of the response is computed lazily and refers to the server,
+    // so the server has to outlive the response.
+    auto server = makeServerForTesting(qec->getIndex().getOnDiskBase());
+    auto response = server.process(get);
     EXPECT_THAT(response, ContentTypeIs(accept.value_or("text/turtle")));
     EXPECT_THAT(responseBodyToString(std::move(response.body())), bodyMatcher);
   };

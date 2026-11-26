@@ -23,7 +23,7 @@
 #include "index/CompressedRelationMetadata.h"
 #include "index/MetaDataHandler.h"
 #include "util/File.h"
-#include "util/Serializer/Serializer.h"
+#include "util/serializer/Serializer.h"
 
 // An exception is thrown when an index in an old, no longer supported binary
 // format is read.

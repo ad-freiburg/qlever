@@ -24,20 +24,21 @@
 #endif
 #include "./util/FileTestHelpers.h"
 #include "./util/HttpRequestHelpers.h"
+#include "./util/OperationTestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
-#include "engine/GroupByImpl.h"
-#include "engine/IndexScan.h"
 #include "engine/MaterializedViews.h"
 #include "engine/MaterializedViewsQueryAnalysis.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/operation/GroupByImpl.h"
+#include "engine/operation/IndexScan.h"
 #ifndef __EMSCRIPTEN__
 #include "engine/Server.h"
 #endif
 #include "engine/SpatialJoinConfig.h"
-#include "engine/StripColumns.h"
 #include "engine/VariableToColumnMap.h"
+#include "engine/operation/StripColumns.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "global/Constants.h"
@@ -54,6 +55,7 @@
 #include "util/AllocatorWithLimit.h"
 #include "util/CancellationHandle.h"
 #include "util/CompilerWarnings.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 
@@ -230,7 +232,8 @@ TEST_F(MaterializedViewsTest, ParserConfigChecks) {
     auto trace = generateLocationTrace(location);
     EncodedIriManager encodedIriManager;
     AD_EXPECT_THROW_WITH_MESSAGE(
-        SparqlParser::parseQuery(&encodedIriManager, std::move(query), {}),
+        SparqlParser::parseQuery(&encodedIriManager, makeAllocator(),
+                                 std::move(query), {}),
         ::testing::HasSubstr(expectedError));
   };
 
@@ -265,8 +268,8 @@ TEST_F(MaterializedViewsTest, MetadataDependentConfigChecks) {
 
     // Parse query.
     EncodedIriManager encodedIriManager;
-    auto parsed =
-        SparqlParser::parseQuery(&encodedIriManager, std::move(query), {});
+    auto parsed = SparqlParser::parseQuery(&encodedIriManager, makeAllocator(),
+                                           std::move(query), {});
     ASSERT_TRUE(parsed.hasSelectClause());
     ASSERT_EQ(parsed.children().size(), 1);
 
@@ -441,7 +444,7 @@ TEST_F(MaterializedViewsTest, ColumnPermutation) {
     clearLog();
     const std::string presortedQuery =
         "SELECT * { SELECT ?p ?o (?s AS ?x) ?g { ?s ?p ?o . BIND(3 AS ?g) } "
-        "INTERNAL SORT BY ?p ?o ?x }";
+        "INTERNAL SORT BY ?p ?o ?x ?g }";
     manager.writeViewToDisk("testView4",
                             qlv().parseAndPlanQuery(presortedQuery));
     EXPECT_THAT(log_.str(),
@@ -522,12 +525,47 @@ TEST_F(MaterializedViewsTest, ColumnPermutation) {
     // should be equal to that of the `MaterializedView` itself.
     EXPECT_THAT(scanMap, ::testing::UnorderedElementsAreArray(expected));
 
-    // Check that `columnOriginatesFromGraphOrUndef` of `IndexScan` is disabled
-    // for the materialized view.
+    // Check that `columnContainsOnlyKnowledgeGraphNodes` of `IndexScan` is
+    // disabled for the materialized view.
     for (const auto& var : expected | ql::views::keys) {
       EXPECT_FALSE(
-          qet.getRootOperation()->columnOriginatesFromGraphOrUndef(var));
+          qet.getRootOperation()->columnContainsOnlyKnowledgeGraphNodes(var));
     }
+  }
+
+  // Test that an `IndexScan` with a fixed first column or a skipped additional
+  // column takes the `UndefStatus` from the view column of each variable.
+  {
+    // In this view, ?s, ?o and ?d are always defined, but ?u and ?v are
+    // undefined for one of the two rows in the view.
+    manager.writeViewToDisk("testView7", qlv().parseAndPlanQuery(R"(
+      SELECT ?s ?o ?u ?d ?v {
+        ?s <p1> ?o .
+        BIND(1 AS ?d)
+        OPTIONAL { ?s <p2> ?u }
+        BIND(?u AS ?v)
+      }
+    )"));
+    auto scanMap = [this](std::string_view triple) {
+      return qlv()
+          .parseAndPlanQuery(
+              absl::StrCat("PREFIX view: <https://qlever.cs.uni-freiburg.de/"
+                           "materializedView/> SELECT * { ",
+                           triple, " }"))
+          .queryExecutionTree()
+          .getVariableColumns();
+    };
+
+    // The first column is fixed, the view column of `?u` is 2.
+    EXPECT_THAT(scanMap("<s1> view:testView7-u ?u"),
+                ::testing::UnorderedElementsAre(
+                    ::testing::Pair(V{"?u"}, makePossiblyUndefinedColumn(0))));
+
+    // The additional column 3 is skipped, the view column of `?v` is 4.
+    EXPECT_THAT(scanMap("?s view:testView7-v ?v"),
+                ::testing::UnorderedElementsAre(
+                    ::testing::Pair(V{"?s"}, makeAlwaysDefinedColumn(0)),
+                    ::testing::Pair(V{"?v"}, makePossiblyUndefinedColumn(1))));
   }
 }
 
@@ -571,7 +609,7 @@ TEST_F(MaterializedViewsTest, InvalidInputToWriter) {
                              "may not contain a `LIMIT` or `OFFSET` clause");
 
   // An explicit `ORDER BY` clause is always rejected, because a view is
-  // always stored in the internal order of its first three columns.
+  // always stored in the internal order of its columns.
   expectWriteViewToDiskError(simpleWriteQuery_ + " ORDER BY ?p",
                              "may not contain an `ORDER BY` clause");
   expectWriteViewToDiskError(simpleWriteQuery_ + " ORDER BY DESC(?s)",
@@ -652,6 +690,9 @@ TEST_F(MaterializedViewsTest, ScansAllocateThroughTheGivenAllocator) {
   qlever::EngineConfig config;
   config.baseName_ = testIndexBase_;
   config.memoryLimit_ = ad_utility::MemorySize::megabytes(1);
+  // The engine sets `memory-for-queries` to its memory limit.
+  auto restoreMemoryForQueries = restoreRuntimeParameterOnScopeExit<
+      &RuntimeParameters::memoryForQueries_>();
   qlever::Qlever limitedEngine{config};
   auto viewFromLimitedEngine =
       limitedEngine.indexAndViewsSnapshot()->materializedViewsManager_.getView(
@@ -1761,6 +1802,120 @@ TEST_F(MaterializedViewsTest, NoDuplicateRemovalOnScan) {
   }
 }
 
+// Test that a view whose defining query is sorted on the first three columns
+// only is still stored sorted on its fourth column, which a scan of the view
+// reports as sorted.
+TEST_F(MaterializedViewsTest, FourthColumnSortedForResultSortedOnThree) {
+  // A view with four columns, the defining query of which is sorted on the
+  // first three columns only, with each row repeated for `?x` = 2, 1, 2.
+  qlv().writeMaterializedView(
+      "sortedOnThree",
+      "SELECT * { SELECT ?s ?p ?o ?x { ?s ?p ?o . VALUES ?x { 2 1 2 } } "
+      "INTERNAL SORT BY ?s ?p ?o }");
+
+  // A scan of all columns of the view returns the rows sorted by all four
+  // columns.
+  auto expected = getQueryResultAsIdTable(
+      "SELECT ?s ?p ?o ?x { ?s ?p ?o . VALUES ?x { 2 1 2 } } "
+      "INTERNAL SORT BY ?s ?p ?o ?x");
+  auto result = getQueryResultAsIdTable(R"(
+    PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+    SELECT * {
+      SERVICE view:sortedOnThree {
+        _:config view:column-s ?s ;
+                 view:column-p ?p ;
+                 view:column-o ?o ;
+                 view:column-x ?x .
+      }
+    }
+  )");
+  EXPECT_THAT(result, matchesIdTable(expected));
+}
+
+// Test that a view is stored sorted by all its columns and that a scan of the
+// view reports the longest sorted prefix of its columns.
+TEST_F(MaterializedViewsTest, SortedOnAllColumns) {
+  // A view with five columns, the defining query of which is sorted on the
+  // first four columns only, with each row repeated for `?y` = 2, 1, 2.
+  MaterializedViewsManager manager{testIndexBase_};
+  manager.writeViewToDisk(
+      "sortedOnAll", qlv().parseAndPlanQuery(
+                         "SELECT ?s ?p ?o ?x ?y { ?s ?p ?o . VALUES ?x { 1 } "
+                         "VALUES ?y { 2 1 2 } } INTERNAL SORT BY ?s ?p ?o ?x"));
+  auto qec = getQec();
+  using ViewQuery = parsedQuery::MaterializedViewQuery;
+  const ViewQuery::RequestedColumns allColumns{{V{"?s"}, V{"?S"}},
+                                               {V{"?p"}, V{"?P"}},
+                                               {V{"?o"}, V{"?O"}},
+                                               {V{"?x"}, V{"?X"}},
+                                               {V{"?y"}, V{"?Y"}}};
+
+  // Return the variables by which the result of `scan` is sorted, in order.
+  auto sortedOn = [](const IndexScan& scan) {
+    const auto& varToCol = scan.getExternallyVisibleVariableColumns();
+    std::vector<V> result;
+    for (ColumnIndex col : scan.getResultSortedOn()) {
+      auto it = ql::ranges::find(varToCol, col, [](const auto& varAndCol) {
+        return varAndCol.second.columnIndex_;
+      });
+      result.push_back(it->first);
+    }
+    return result;
+  };
+
+  // A scan of all columns returns the rows sorted by all five columns.
+  auto expected = getQueryResultAsIdTable(
+      "SELECT ?s ?p ?o ?x ?y { ?s ?p ?o . VALUES ?x { 1 } "
+      "VALUES ?y { 2 1 2 } } INTERNAL SORT BY ?s ?p ?o ?x ?y");
+  auto result = getQueryResultAsIdTable(R"(
+    PREFIX view: <https://qlever.cs.uni-freiburg.de/materializedView/>
+    SELECT * {
+      SERVICE view:sortedOnAll {
+        _:config view:column-s ?s ;
+                 view:column-p ?p ;
+                 view:column-o ?o ;
+                 view:column-x ?x ;
+                 view:column-y ?y .
+      }
+    }
+  )");
+  EXPECT_THAT(result, matchesIdTable(expected));
+
+  // A scan of all columns is sorted by all of them.
+  auto scan =
+      manager.makeIndexScan(qec.get(), ViewQuery{"sortedOnAll", allColumns});
+  EXPECT_THAT(sortedOn(*scan), ::testing::ElementsAre(V{"?S"}, V{"?P"}, V{"?O"},
+                                                      V{"?X"}, V{"?Y"}));
+
+  // A scan without the fourth column is only sorted by the first three.
+  scan = manager.makeIndexScan(qec.get(), ViewQuery{"sortedOnAll",
+                                                    {{V{"?s"}, V{"?S"}},
+                                                     {V{"?p"}, V{"?P"}},
+                                                     {V{"?o"}, V{"?O"}},
+                                                     {V{"?y"}, V{"?Y"}}}});
+  EXPECT_THAT(sortedOn(*scan),
+              ::testing::ElementsAre(V{"?S"}, V{"?P"}, V{"?O"}));
+
+  // A view written by an older version of QLever (without the
+  // `sorted_on_all_columns` entry in its info JSON) is only sorted by the first
+  // four columns.
+  auto filename =
+      absl::StrCat(testIndexBase_, ".view.sortedOnAll", VIEW_INFO_SUFFIX);
+  nlohmann::json viewInfo;
+  ad_utility::makeIfstream(filename) >> viewInfo;
+  EXPECT_TRUE(viewInfo.at("sorted_on_all_columns").get<bool>());
+  viewInfo.erase("sorted_on_all_columns");
+  ad_utility::makeOfstream(filename) << viewInfo.dump();
+  auto oldView =
+      std::make_shared<MaterializedView>(testIndexBase_, "sortedOnAll");
+  oldView->connectPermutationBackReference();
+  EXPECT_FALSE(oldView->isSortedOnAllColumns());
+  scan =
+      oldView->makeIndexScan(qec.get(), ViewQuery{"sortedOnAll", allColumns});
+  EXPECT_THAT(sortedOn(*scan),
+              ::testing::ElementsAre(V{"?S"}, V{"?P"}, V{"?O"}, V{"?X"}));
+}
+
 // _____________________________________________________________________________
 TEST_F(MaterializedViewsTest, DistinctIsNotDroppedForViewScan) {
   // For a regular `IndexScan`, a `DISTINCT` over all of the scan's columns is a
@@ -2213,7 +2368,8 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
   {
     auto plan = qlv().parseAndPlanQuery("SELECT * { ?s <p1> ?o }");
     AD_EXPECT_THROW_WITH_MESSAGE(
-        plan.queryExecutionTree().getRootOperation()->cloneWithNewChildren({}),
+        plan.queryExecutionTree().getRootOperation()->cloneWithNewChildren(
+            {{}, plan.queryExecutionContext().getAllocator()}),
         ::testing::HasSubstr("`cloneWithNewChildren` is not implemented"));
   }
 
@@ -2507,8 +2663,9 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
       return makeExecutionTree<Union>(qec, left, right);
     };
     auto cartesian = [qec](auto left, auto right) {
-      return makeExecutionTree<CartesianProductJoin>(qec,
-                                                     std::vector{left, right});
+      return makeExecutionTree<CartesianProductJoin>(
+          qec,
+          CartesianProductJoin::Children{{left, right}, qec->getAllocator()});
     };
 
     // Push the `BIND` into `tree` (like the query planner does) and check the
@@ -2570,8 +2727,7 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
         bindUnion->getRootOperation()->makeTreeWithBindColumn(bind));
     expectPush(unionOf(view(), sharesS()), std::nullopt);
     expectPush(unionOf(sharesSAndO(), view()), std::nullopt);
-    expectPush(makeExecutionTree<Union>(qec, view(), view(),
-                                        std::vector<ColumnIndex>{0}),
+    expectPush(makeExecutionTree<Union>(qec, view(), view(), colIndices({0})),
                std::nullopt);
 
     // `NeutralOptional` refuses: for an empty child it fabricates an
@@ -2712,14 +2868,14 @@ TEST_F(MaterializedViewsTest, BindRewrite) {
 
     VariableToColumnMap expectedVarToColResult{
         {V{"?x"}, makeAlwaysDefinedColumn(0)},
-        {V{"?y"}, makeAlwaysDefinedColumn(1)},
+        {V{"?y"}, makePossiblyUndefinedColumn(1)},
     };
     EXPECT_THAT(indexScan.getExternallyVisibleVariableColumns(),
                 ::testing::UnorderedElementsAreArray(expectedVarToColResult));
 
     VariableToColumnMap expectedVarToColPermutation{
         {V{"?x"}, makeAlwaysDefinedColumn(1)},
-        {V{"?y"}, makeAlwaysDefinedColumn(4)},
+        {V{"?y"}, makePossiblyUndefinedColumn(4)},
     };
     EXPECT_THAT(
         indexScan.computePermutationColumnIndices(),

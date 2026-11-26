@@ -15,6 +15,7 @@
 
 #include "../util/GTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/LocalVocabTestHelpers.h"
 #include "backports/algorithm.h"
 #include "backports/filesystem.h"
 #include "engine/MaterializedViews.h"
@@ -262,7 +263,7 @@ TEST_F(IndexFormatConverterTest, convertedIndexHasTheSameContent) {
             absl::StrCat("_:bn", id.getBlankNodeIndex().get()));
         continue;
       }
-      LocalVocab emptyLocalVocab{};
+      LocalVocab emptyLocalVocab = ad_utility::testing::makeLocalVocab();
       auto word =
           ql::exportIds::idToLiteralOrIri(index.getImpl(), id, emptyLocalVocab);
       components.push_back(word.has_value()

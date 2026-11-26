@@ -16,11 +16,11 @@
 #include "global/Constants.h"
 #include "rdfTypes/Iri.h"
 #include "util/CopyableSynchronization.h"
-#include "util/Serializer/SerializeAtomic.h"
-#include "util/Serializer/SerializeString.h"
-#include "util/Serializer/Serializer.h"
 #include "util/Synchronized.h"
 #include "util/json.h"
+#include "util/serializer/SerializeAtomic.h"
+#include "util/serializer/SerializeString.h"
+#include "util/serializer/Serializer.h"
 
 // Generates new graphs with a fixed prefix that don't exist yet. Currently,
 // the graphs are of the form `{prefix}/{ascending number}`.

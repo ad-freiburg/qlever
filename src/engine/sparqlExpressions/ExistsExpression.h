@@ -9,6 +9,7 @@
 
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "parser/ParsedQuery.h"
+#include "util/ContainersWithAllocator.h"
 
 // The `SparqlExpression` for `EXISTS`. The implementation is straightforward
 // because it only reads the value computed by the special `ExistsJoin`
@@ -87,14 +88,15 @@ class ExistsExpression : public SparqlExpression {
   // Set the `SELECT` of the argument of this exists expression to all the
   // variables that are visible in the argument AND contained in variables.
   void selectVariables(ql::span<const Variable> variables) {
-    std::vector<parsedQuery::SelectClause::VarOrAlias> intersection;
     const auto& visibleVariables = argument_.getVisibleVariables();
+    qlm::vector<parsedQuery::SelectClause::VarOrAlias> intersection{
+        visibleVariables.get_allocator()};
     for (const auto& var : variables) {
       if (ad_utility::contains(visibleVariables, var)) {
         intersection.emplace_back(var);
       }
     }
-    argument_.selectClause().setSelected(intersection);
+    argument_.selectClause().setSelected(std::move(intersection));
   }
 
   // The result of `EXISTS` is always a valid bool.

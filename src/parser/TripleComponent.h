@@ -16,7 +16,8 @@
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "global/SpecialIds.h"
-#include "parser/LiteralOrIri.h"
+#include "parser/ParsedTripleTerm.h"
+#include "rdfTypes/LiteralOrIri.h"
 #include "rdfTypes/RdfEscaping.h"
 #include "rdfTypes/Variable.h"
 #include "util/Date.h"
@@ -36,13 +37,13 @@ CPP_concept MoveAssignableWith =
 
 // A wrapper around a `std::variant` that can hold the different types that the
 // subject, predicate, or object of a triple can have in the Turtle Parser.
-// Those currently are `double` (xsd:double and xsd:decimal), `int64_t`
-// (xsd:int and xsd:integer) and `std::string` (variables, IRIs, and literals
-// of any other type).
+// This includes scalar RDF terms, variables, encoded values, and recursive
+// parsed triple terms.
 class TripleComponent {
  public:
   using Literal = ad_utility::triple_component::Literal;
   using Iri = ad_utility::triple_component::Iri;
+  using TripleTerm = ParsedTripleTerm;
   // Own class for the UNDEF value.
   struct UNDEF {
     // Default equality operator.
@@ -59,7 +60,7 @@ class TripleComponent {
   // The underlying variant type.
   using Variant =
       std::variant<Id, std::string, double, int64_t, bool, UNDEF, Variable,
-                   Literal, Iri, DateYearOrDuration, GeoPoint>;
+                   Literal, Iri, DateYearOrDuration, GeoPoint, TripleTerm>;
   Variant _variant;
 
  public:
@@ -89,6 +90,13 @@ class TripleComponent {
   TripleComponent(std::string_view sv) : _variant{std::string{sv}} {
     checkThatStringIsValid();
   }
+
+  // Construct from a `LiteralOrIri`, which becomes a `Literal` or an `Iri`.
+  explicit TripleComponent(
+      ad_utility::triple_component::LiteralOrIri literalOrIri)
+      : _variant{literalOrIri.isIri()
+                     ? Variant{std::move(literalOrIri.getIri())}
+                     : Variant{std::move(literalOrIri.getLiteral())}} {}
 
   /// Defaulted copy and move constructors.
   TripleComponent(const TripleComponent&) = default;
@@ -175,6 +183,13 @@ class TripleComponent {
   Iri& getIri() { return std::get<Iri>(_variant); }
   const Iri& getIri() const { return std::get<Iri>(_variant); }
 
+  bool isTripleTerm() const {
+    return std::holds_alternative<TripleTerm>(_variant);
+  }
+  const TripleTerm& getTripleTerm() const {
+    return std::get<TripleTerm>(_variant);
+  }
+
   bool isUndef() const { return std::holds_alternative<UNDEF>(_variant); }
 
   /// Access the value. If one of those methods is called but the variant
@@ -201,6 +216,22 @@ class TripleComponent {
   bool isId() const { return std::holds_alternative<Id>(_variant); }
   const Id& getId() const { return std::get<Id>(_variant); }
   Id& getId() { return std::get<Id>(_variant); }
+
+  // Return the value if this is a number (an `int64_t` or `double`, or an `Int`
+  // or `Double` `Id`), and `std::nullopt` otherwise (e.g. for the string
+  // "500").
+  std::optional<double> getNumber() const {
+    if (isInt()) {
+      return static_cast<double>(getInt());
+    } else if (isDouble()) {
+      return getDouble();
+    } else if (isId() && getId().getDatatype() == Datatype::Int) {
+      return static_cast<double>(getId().getInt());
+    } else if (isId() && getId().getDatatype() == Datatype::Double) {
+      return getId().getDouble();
+    }
+    return std::nullopt;
+  }
 
   // Access the underlying variant (mostly used for testing)
   const auto& getVariant() const { return _variant; }

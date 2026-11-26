@@ -14,14 +14,17 @@
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/LocalVocabEntryTestHelpers.h"
+#include "../util/LocalVocabTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
 #include "./ValuesForTesting.h"
-#include "engine/EmptyPath.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/operation/EmptyPath.h"
 #include "index/DeltaTriples.h"
 #include "util/Tie.h"
+
+using ad_utility::testing::makeLocalVocab;
 
 static constexpr auto executor = &ad_utility::testing::singleThreadExecutor;
 
@@ -401,7 +404,7 @@ TEST(EmptyPath, clone) {
 }
 
 // _____________________________________________________________________________
-TEST(EmptyPath, columnOriginatesFromGraphOrUndef) {
+TEST(EmptyPath, columnContainsOnlyKnowledgeGraphNodes) {
   auto* qec = makeQec(kg);
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
   auto emptyPath = makeExistenceCheck(
@@ -410,10 +413,10 @@ TEST(EmptyPath, columnOriginatesFromGraphOrUndef) {
 
   // The checked column always originates from the knowledge graph, even though
   // the values of the child don't.
-  EXPECT_TRUE(emptyPath.columnOriginatesFromGraphOrUndef(Variable{"?x"}));
-  EXPECT_FALSE(emptyPath.columnOriginatesFromGraphOrUndef(Variable{"?y"}));
+  EXPECT_TRUE(emptyPath.columnContainsOnlyKnowledgeGraphNodes(Variable{"?x"}));
+  EXPECT_FALSE(emptyPath.columnContainsOnlyKnowledgeGraphNodes(Variable{"?y"}));
   EXPECT_THROW(
-      emptyPath.columnOriginatesFromGraphOrUndef(Variable{"?notThere"}),
+      emptyPath.columnContainsOnlyKnowledgeGraphNodes(Variable{"?notThere"}),
       ad_utility::Exception);
 }
 
@@ -438,7 +441,7 @@ TEST(EmptyPath, theResultOfTheExistenceCheckCanBeFullyMaterialized) {
   // Use a child with two tables and a local vocab, such that the materialized
   // result is the concatenation of several chunks and the local vocabs of
   // those chunks have to be merged.
-  LocalVocab localVocab;
+  LocalVocab localVocab = makeLocalVocab();
   localVocab.getIndexAndAddIfNotContained(
       ad_utility::testing::iriLocalVocabEntry("<notInTheIndex>",
                                               qec->getLocalVocabContext()));
@@ -631,14 +634,14 @@ TEST(EmptyPath, estimatesAndMultiplicities) {
 }
 
 // _____________________________________________________________________________
-TEST(EmptyPath, theGraphColumnDoesNotOriginateFromTheKnowledgeGraph) {
+TEST(EmptyPath, graphColumnDoesNotQualifyAsKnowledgeGraphNodes) {
   auto* qec = makeQec(nquads, true);
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
   EmptyPath emptyPath{qec, Variable{"?x"}, Graphs::All(), Variable{"?g"}};
-  EXPECT_TRUE(emptyPath.columnOriginatesFromGraphOrUndef(Variable{"?x"}));
+  EXPECT_TRUE(emptyPath.columnContainsOnlyKnowledgeGraphNodes(Variable{"?x"}));
   // Graph names are not necessarily subjects or objects of the knowledge graph,
   // so the graph column does not qualify (just like for `IndexScan`).
-  EXPECT_FALSE(emptyPath.columnOriginatesFromGraphOrUndef(Variable{"?g"}));
+  EXPECT_FALSE(emptyPath.columnContainsOnlyKnowledgeGraphNodes(Variable{"?g"}));
 
   // The same holds if the graph column is checked instead of added, because
   // then the values are only a subset of those of the child.
@@ -646,8 +649,10 @@ TEST(EmptyPath, theGraphColumnDoesNotOriginateFromTheKnowledgeGraph) {
       makeExistenceCheck(qec, Variable{"?g"},
                          makeIdTableFromVector({{getId("<a>"), getId("<g1>")}}),
                          {Variable{"?x"}, Variable{"?g"}});
-  EXPECT_TRUE(withGraphChild.columnOriginatesFromGraphOrUndef(Variable{"?x"}));
-  EXPECT_FALSE(withGraphChild.columnOriginatesFromGraphOrUndef(Variable{"?g"}));
+  EXPECT_TRUE(
+      withGraphChild.columnContainsOnlyKnowledgeGraphNodes(Variable{"?x"}));
+  EXPECT_FALSE(
+      withGraphChild.columnContainsOnlyKnowledgeGraphNodes(Variable{"?g"}));
 }
 
 // _____________________________________________________________________________
@@ -656,7 +661,7 @@ TEST(EmptyPath, fullyMaterializedChildrenAreSupported) {
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
   auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{getId("<a>")}, {getId("<p>")}}),
-      Vars{Variable{"?x"}}, false, std::vector<ColumnIndex>{}, LocalVocab{},
+      Vars{Variable{"?x"}}, false, std::vector<ColumnIndex>{}, makeLocalVocab(),
       std::nullopt, true);
   EmptyPath emptyPath{qec, Variable{"?x"}, Graphs::All(), std::nullopt,
                       EmptyPath::CheckedChild{std::move(child), 0}};

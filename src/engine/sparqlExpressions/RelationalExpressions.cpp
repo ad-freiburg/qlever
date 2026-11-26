@@ -10,7 +10,6 @@
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressionHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
-#include "rdfTypes/GeoSparqlHelpers.h"
 #include "util/TypeTraits.h"
 
 using namespace sparqlExpression;
@@ -27,12 +26,34 @@ using valueIdComparators::Comparison;
 // input types.
 
 // For the various `SingleExpressionResult`s the `idGenerator` function returns
-// a generator that yields `targetSize` many `ValueId`s.
+// a generator that yields `targetSize` many `ValueId`s. The only exception are
+// the `LocalVocabEntry`s of the `input`: A `ValueId` can only point to a
+// `LocalVocabEntryView`, but never to a `LocalVocabEntry`. Such an entry is
+// therefore yielded as a `LocalVocabEntryView` of it (if the `input` is an
+// `IdOrLocalVocabEntry`, as a `std::variant<ValueId, LocalVocabEntryView>`),
+// which `compareIdsOrStrings` then converts to a `ValueId` (see
+// `withValueIds`). The `ValueId` must only be used as long as that
+// `LocalVocabEntryView` (and the `LocalVocabEntry` in the `input`) are alive.
 CPP_template(typename S)(requires SingleExpressionResult<S>)
 auto idGenerator(S&& input, size_t targetSize,
                  const EvaluationContext* context) {
   [[maybe_unused]] auto makeId = [context](const auto& el) {
-    return makeValueId(el, context);
+    using T = std::decay_t<decltype(el)>;
+    if constexpr (ad_utility::isSimilar<T, LocalVocabEntry>) {
+      return LocalVocabEntryView{el};
+    } else if constexpr (ad_utility::isSimilar<T, IdOrLocalVocabEntry>) {
+      return std::visit(
+          [](const auto& x) -> std::variant<Id, LocalVocabEntryView> {
+            if constexpr (ad_utility::isSimilar<decltype(x), Id>) {
+              return x;
+            } else {
+              return LocalVocabEntryView{x};
+            }
+          },
+          el);
+    } else {
+      return makeValueId(el, context);
+    }
   };
   if constexpr (isConstantResult<S>) {
     return ::ranges::views::repeat_n(makeId(input), targetSize);
@@ -79,7 +100,7 @@ auto getGenerators(S1&& value1, S2&& value2, size_t targetSize,
 // for comparisons other than `EQ` and `NE` with an encoded IRI (see below).
 template <Comparison Comp>
 std::optional<ad_utility::SetOfIntervals> evaluateWithBinarySearch(
-    ql::span<const Id> column, ValueId valueId) {
+    ConstIdColumnRef column, ValueId valueId) {
   // The binary search orders encoded IRIs by their encoding, which differs from
   // the semantic (string) order of the IRIs, see issue #2448. Only `EQ` and
   // `NE` are therefore safe to evaluate via binary search.
@@ -166,16 +187,19 @@ ExpressionResult
   // stuff.
   if constexpr (ad_utility::isSimilar<S1, Variable> && isConstantResult<S2>) {
     auto impl = [&](const auto& value2) -> std::optional<ExpressionResult> {
-      auto valueId = makeValueId(value2, context);
-      if (auto column = context->getSortedColumnOrNullopt(value1);
-          column.has_value()) {
-        auto result = evaluateWithBinarySearch<Comp>(column.value(), valueId);
-        if (result.has_value()) {
-          return std::move(result.value());
-        }
-      }
-      context->cancellationHandle_->throwIfCancelled();
-      return std::nullopt;
+      return withValueId(
+          value2, context, [&](Id valueId) -> std::optional<ExpressionResult> {
+            if (auto column = context->getSortedColumnOrNullopt(value1);
+                column.has_value()) {
+              auto result =
+                  evaluateWithBinarySearch<Comp>(column.value(), valueId);
+              if (result.has_value()) {
+                return std::move(result.value());
+              }
+            }
+            context->cancellationHandle_->throwIfCancelled();
+            return std::nullopt;
+          });
     };
     std::optional<ExpressionResult> resultFromBinarySearch;
     if constexpr (ad_utility::isSimilar<S2, IdOrLocalVocabEntry>) {
@@ -302,6 +326,28 @@ ql::span<SparqlExpression::Ptr> RelationalExpression<Comp>::childrenImpl() {
   return {children_.data(), children_.size()};
 }
 
+namespace {
+// Return the language of `LANG(?x) = expression` if `expression` is a literal
+// with neither a language tag nor a datatype (e.g. "en"), and `std::nullopt`
+// otherwise.
+//
+// NOTE 1: `LANG(?x)` never equals a literal with a language tag or a datatype
+// (e.g. "en"@de or "en"^^<x>), so such a FILTER must not become a language
+// filter on the triple of `?x`.
+//
+// NOTE 2: A literal with the datatype `xsd:string` (e.g. "en"^^xsd:string) is
+// the same RDF term as the plain literal, and `hasDatatype()` is false for it.
+std::optional<std::string> getLanguage(const SparqlExpression* expression) {
+  const auto* literal =
+      dynamic_cast<const StringLiteralExpression*>(expression);
+  if (literal == nullptr || literal->value().hasLanguageTag() ||
+      literal->value().hasDatatype()) {
+    return std::nullopt;
+  }
+  return std::string{literal->value().getContent()};
+}
+}  // namespace
+
 // _____________________________________________________________________________
 template <Comparison Comp>
 std::optional<SparqlExpression::LangFilterData>
@@ -314,18 +360,12 @@ RelationalExpression<Comp>::getLanguageFilterExpression() const {
   auto getLangFilterData =
       [](const auto& left, const auto& right) -> std::optional<LangFilterData> {
     std::optional<Variable> optVar = getVariableFromLangExpression(left.get());
-    const auto* langPtr =
-        dynamic_cast<const StringLiteralExpression*>(right.get());
-
-    if (!optVar.has_value() || !langPtr) {
+    auto language = getLanguage(right.get());
+    if (!optVar.has_value() || !language.has_value()) {
       return std::nullopt;
     }
-
-    // TODO<joka921> Check that the language string doesn't contain a datatype
-    // etc.
-    // TODO<joka921> Is this even allowed by the grammar?
     return LangFilterData{std::move(optVar.value()),
-                          {std::string{langPtr->value().getContent()}}};
+                          {std::move(language).value()}};
   };
 
   const auto& child1 = children_[0];
@@ -592,12 +632,11 @@ InExpression::getLanguageFilterExpression() const {
   }
   ad_utility::HashSet<std::string> languages;
   for (const auto& child : children_ | ql::views::drop(1)) {
-    const auto* langPtr =
-        dynamic_cast<const StringLiteralExpression*>(child.get());
-    if (!langPtr) {
+    auto language = getLanguage(child.get());
+    if (!language.has_value()) {
       return std::nullopt;
     }
-    languages.emplace(langPtr->value().getContent());
+    languages.emplace(std::move(language).value());
   }
 
   return LangFilterData{std::move(optVar.value()), std::move(languages)};
@@ -614,57 +653,32 @@ template class RelationalExpression<Comparison::GE>;
 
 namespace sparqlExpression {
 
+namespace {
+// Return true iff `expr` is a `T`.
+template <typename T>
+bool isExpressionOfType(const SparqlExpression& expr) {
+  return dynamic_cast<const T*>(&expr) != nullptr;
+}
+}  // namespace
+
 // _____________________________________________________________________________
-std::optional<std::pair<sparqlExpression::GeoFunctionCall, double>>
-getGeoDistanceFilter(const SparqlExpression& expr) {
-  // TODO<ullingerc> Add support for more optimizable filters:
-  // * `geof:distance() < constant`
-  // * `constant > geof:distance()`
-  // * `constant >= geof:distance()`
-  // The supported patterns are documented in the header declaration of this
-  // function.
-
-  // Supported comparison operator
-  auto compareExpr = dynamic_cast<const LessEqualExpression*>(&expr);
-  if (compareExpr == nullptr) {
-    return std::nullopt;
+std::optional<valueIdComparators::Comparison> getComparison(
+    const SparqlExpression& expression) {
+  using enum valueIdComparators::Comparison;
+  if (isExpressionOfType<LessThanExpression>(expression)) {
+    return LT;
+  } else if (isExpressionOfType<LessEqualExpression>(expression)) {
+    return LE;
+  } else if (isExpressionOfType<EqualExpression>(expression)) {
+    return EQ;
+  } else if (isExpressionOfType<NotEqualExpression>(expression)) {
+    return NE;
+  } else if (isExpressionOfType<GreaterThanExpression>(expression)) {
+    return GT;
+  } else if (isExpressionOfType<GreaterEqualExpression>(expression)) {
+    return GE;
   }
-
-  // Left child must be distance function
-  auto children = compareExpr->children();
-  const auto& leftChild = *children[0];
-
-  // Right child must be constant
-  auto rightChild = children[1].get();
-  auto literalExpr =
-      dynamic_cast<detail::LiteralExpression<ValueId>*>(rightChild);
-  if (literalExpr == nullptr) {
-    return std::nullopt;
-  }
-  ValueId constant = literalExpr->value();
-  // Extract distance. Here we don't know the unit of this number yet. It is
-  // extracted from the function call in the next step.
-  double maxDistAnyUnit = 0;
-  if (constant.getDatatype() == Datatype::Double) {
-    maxDistAnyUnit = constant.getDouble();
-  } else if (constant.getDatatype() == Datatype::Int) {
-    maxDistAnyUnit = static_cast<double>(constant.getInt());
-  } else {
-    return std::nullopt;
-  }
-
-  // Extract variables and distance unit from function call
-  auto geoFuncCall = getGeoDistanceExpressionParameters(leftChild);
-  if (!geoFuncCall.has_value()) {
-    return std::nullopt;
-  }
-
-  // Convert unit to meters
-  double maxDist = ad_utility::detail::valueInUnitToKilometer(
-                       maxDistAnyUnit, geoFuncCall.value().unit_) *
-                   1000;
-
-  return std::pair<GeoFunctionCall, double>{geoFuncCall.value(), maxDist};
+  return std::nullopt;
 }
 
 }  // namespace sparqlExpression

@@ -6,10 +6,10 @@
 #include <cstdlib>
 
 #include "../util/IndexTestHelpers.h"
-#include "engine/IndexScan.h"
-#include "engine/Join.h"
 #include "engine/QueryExecutionTree.h"
-#include "engine/SpatialJoin.h"
+#include "engine/operation/IndexScan.h"
+#include "engine/operation/Join.h"
+#include "engine/operation/SpatialJoin.h"
 #include "engine/spatialJoinAlgorithms/BoundingBoxAlgorithm.h"
 #include "index/ExportIds.h"
 #include "index/vocabulary/VocabularyType.h"
@@ -299,7 +299,8 @@ inline std::vector<std::string> printTable(const QueryExecutionContext* qec,
     std::string line = "";
     for (size_t k = 0; k < table->idTableView().numColumns(); k++) {
       auto test = ql::exportIds::idToStringAndType(
-          qec->getIndex(), table->idTableView().at(i, k), {});
+          qec->getIndex(), table->idTableView().at(i, k),
+          LocalVocab{qec->getAllocator()});
       line += test.value().first;
       line += " ";
     }
