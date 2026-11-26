@@ -1444,8 +1444,12 @@ void IndexImpl::writeConfiguration() const {
   // interchangeable; `readConfiguration` throws if the configuration of the
   // loaded index does not match the current binary.
   configuration["has-icu-support"] = ad_utility::useICUDefault;
-  auto f = ad_utility::makeOfstream(onDiskBase_ + CONFIGURATION_FILE);
-  f << configuration;
+  // Write the file atomically, so that a failure while it is written (for
+  // example when it is rewritten for an existing index that a text index is
+  // added to) does not leave an index that cannot be loaded anymore.
+  std::string serialized = configuration.dump();
+  qlever::util::writeFileAtomically(onDiskBase_ + CONFIGURATION_FILE,
+                                    serialized);
 }
 
 // ____________________________________________________________________________
@@ -2461,6 +2465,11 @@ void IndexImpl::loadConfigFromOldIndex(const std::string& newName,
       static_cast<NumNormalAndInternal>(newStats.at("num-predicates"));
   numSubjects_ = newStats.value("num-subjects", NumNormalAndInternal{});
   numObjects_ = newStats.value("num-objects", NumNormalAndInternal{});
+  avgNumDistinctPredicatesPerSubject_ =
+      other.avgNumDistinctPredicatesPerSubject_;
+  avgNumDistinctSubjectsPerPredicate_ =
+      other.avgNumDistinctSubjectsPerPredicate_;
+  numDistinctSubjectPredicatePairs_ = other.numDistinctSubjectPredicatePairs_;
   writeConfiguration();
 }
 

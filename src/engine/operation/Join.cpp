@@ -66,8 +66,9 @@ qlm::vector<QueryExecutionTree*> Join::getChildrenImpl() const {
 }
 
 // _____________________________________________________________________________
-bool Join::columnOriginatesFromGraphOrUndef(const Variable& variable) const {
-  return impl_->columnOriginatesFromGraphOrUndef(variable);
+bool Join::columnContainsOnlyKnowledgeGraphNodes(
+    const Variable& variable) const {
+  return impl_->columnContainsOnlyKnowledgeGraphNodes(variable);
 }
 
 // _____________________________________________________________________________

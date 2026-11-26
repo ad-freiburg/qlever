@@ -8,7 +8,6 @@
 #include <cassert>
 
 #include "util/Exception.h"
-#include "util/StringUtils.h"
 
 // _____________________________________________________________________________
 WordsAndDocsFileParser::WordsAndDocsFileParser(

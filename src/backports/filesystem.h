@@ -83,6 +83,17 @@ static constexpr auto filesystem_perms_none =
 static constexpr auto filesystem_perms_none = ::std::filesystem::perms::none;
 #endif
 
+// The `perms` value for the execute/search permission of the owner, spelled
+// `perms::owner_exec` in `std::filesystem` and `perms::owner_exe` in
+// `boost::filesystem`.
+#ifdef QLEVER_CPP_17
+static constexpr auto filesystem_perms_owner_exec =
+    ::boost::filesystem::perms::owner_exe;
+#else
+static constexpr auto filesystem_perms_owner_exec =
+    ::std::filesystem::perms::owner_exec;
+#endif
+
 // A range over the entries of a directory. Prefer this over using a
 // `ql::filesystem::directory_iterator` directly as a range (for example in a
 // `ql::ranges` algorithm). In the C++17 backports mode `directory_iterator` is

@@ -7,10 +7,7 @@
 #include "index/IndexImpl.h"
 
 #include <absl/strings/str_cat.h>
-#include <absl/strings/str_split.h>
 
-#include <charconv>
-#include <tuple>
 #include <utility>
 
 #include "backports/StartsWithAndEndsWith.h"
@@ -19,7 +16,6 @@
 #include "index/FTSAlgorithms.h"
 #include "index/SortConfig.h"
 #include "index/TextIndexReadWrite.h"
-#include "parser/WordsAndDocsFileParser.h"
 #include "util/TransparentFunctors.h"
 
 // _____________________________________________________________________________
