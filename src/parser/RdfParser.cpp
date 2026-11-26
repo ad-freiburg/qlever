@@ -1121,14 +1121,18 @@ bool TurtleParser<T>::pnameLnRelaxed() {
   // sequence like `\;` or `\,` (see `PN_LOCAL_ESC` in the Turtle grammar) is
   // skipped as a whole, so that an escaped delimiter does not end the local
   // name. The escape sequences are resolved later, when the local name is
-  // unescaped.
+  // unescaped. A `\` at the end of the input is a `ParseException`, so that
+  // `RdfStreamParser` retries with more input when its buffer ends there.
   auto findDelimiterOrEscape = [&view](size_t start) {
     return ad_utility::findFirstOfWithLookupTable(
         view, localNameDelimiterOrEscapeTable, start);
   };
   auto posEnd = findDelimiterOrEscape(pos + 1);
   while (posEnd != std::string::npos && view[posEnd] == '\\') {
-    posEnd = findDelimiterOrEscape(std::min(posEnd + 2, view.size()));
+    if (posEnd + 1 == view.size()) {
+      raise("Prefixed name ends with an incomplete escape sequence");
+    }
+    posEnd = findDelimiterOrEscape(posEnd + 2);
   }
   if (posEnd == std::string::npos) {
     // make tests work
