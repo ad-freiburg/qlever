@@ -383,6 +383,7 @@ Result RasterLookup::computeResult([[maybe_unused]] bool requestLaziness) {
       options.bands_.push_back(band.number_);
     }
     options.radius_ = config_.radius_;
+    options.wantCenters_ = config_.center_.has_value();
     // A fixed dataset is opened once and used for all rows, so GDAL's cache of
     // read blocks stays warm. Closed at the end of this block.
     std::optional<qlever::raster::RasterFile> fixedRasterFile;
@@ -453,7 +454,7 @@ Result RasterLookup::computeResult([[maybe_unused]] bool requestLaziness) {
       qlever::raster::PixelTable pixels = lookupPixels(
           *rasterFile, options, input(inputRow, geometryColumn), getIndex(),
           subResult->localVocab(), allocator(), timeFetchingGeometries);
-      if (pixels.numPixels() == 0) {
+      if (pixels.numPixels_ == 0) {
         ++numRowsWithoutPixels;
         continue;
       }
@@ -463,7 +464,7 @@ Result RasterLookup::computeResult([[maybe_unused]] bool requestLaziness) {
       // stores each column contiguously. `resize` grows the table
       // geometrically, like `std::vector::resize`.
       size_t firstRow = output.numRows();
-      output.resize(firstRow + pixels.numPixels());
+      output.resize(firstRow + pixels.numPixels_);
       // The columns of the child hold the same `Id` in all new rows.
       for (size_t column = 0; column < input.numColumns(); ++column) {
         ad_utility::chunkedFill(output.getColumn(column).subspan(firstRow),
@@ -487,7 +488,7 @@ Result RasterLookup::computeResult([[maybe_unused]] bool requestLaziness) {
         auto column = output.getColumn(firstBandColumn + options.bands_.size())
                           .subspan(firstRow);
         ad_utility::chunkedForLoop<CHUNK_SIZE>(
-            0, pixels.numPixels(),
+            0, pixels.numPixels_,
             [&](size_t pixelIndex) {
               column[pixelIndex] =
                   Id::makeFromGeoPoint(pixels.centers_[pixelIndex]);

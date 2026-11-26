@@ -38,12 +38,18 @@ struct LookupOptions {
   std::vector<int> bands_;
   // With a radius in metres, the geometry is first widened by that radius.
   std::optional<double> radius_;
+  // Whether to return the center of each pixel. Computing the centers is
+  // expensive, so a query without `raster:center` skips them.
+  bool wantCenters_ = true;
 };
 
-// Pixels with their centers and their values in several bands, stored column
-// by column. Entry `i` of every vector belongs to pixel `i`.
+// Pixels with their values in several bands and, if requested, their centers,
+// stored column by column. Entry `i` of every vector belongs to pixel `i`.
 // The vectors use the given allocator, so they count towards its memory limit.
 struct PixelTable {
+  // The number of pixels, which is the length of every column.
+  size_t numPixels_ = 0;
+  // Empty if the lookup did not ask for centers.
   qlm::vector<GeoPoint> centers_;
   // One entry per requested band, in the order of the request.
   std::vector<BandValues> valuesPerBand_;
@@ -51,11 +57,10 @@ struct PixelTable {
   // An empty table for `numBands` bands.
   PixelTable(size_t numBands, const qlm::Allocator<char>& allocator);
 
-  // A table from complete columns, which must all have the same length.
-  PixelTable(qlm::vector<GeoPoint> centers,
+  // A table from complete columns. Every band must have `numPixels` values,
+  // and `centers` must have `numPixels` entries or none.
+  PixelTable(size_t numPixels, qlm::vector<GeoPoint> centers,
              std::vector<BandValues> valuesPerBand);
-
-  size_t numPixels() const { return centers_.size(); }
 };
 
 // How much work the lookups of one `RasterFile` did, summed over all lookups.

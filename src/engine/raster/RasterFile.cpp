@@ -173,11 +173,14 @@ PixelTable::PixelTable(size_t numBands, const qlm::Allocator<char>& allocator)
     : centers_{allocator}, valuesPerBand_(numBands, BandValues{allocator}) {}
 
 // _____________________________________________________________________________
-PixelTable::PixelTable(qlm::vector<GeoPoint> centers,
+PixelTable::PixelTable(size_t numPixels, qlm::vector<GeoPoint> centers,
                        std::vector<BandValues> valuesPerBand)
-    : centers_{std::move(centers)}, valuesPerBand_{std::move(valuesPerBand)} {
+    : numPixels_{numPixels},
+      centers_{std::move(centers)},
+      valuesPerBand_{std::move(valuesPerBand)} {
+  AD_CONTRACT_CHECK(centers_.empty() || centers_.size() == numPixels_);
   for (const BandValues& values : valuesPerBand_) {
-    AD_CONTRACT_CHECK(values.size() == centers_.size());
+    AD_CONTRACT_CHECK(values.size() == numPixels_);
   }
 }
 
@@ -585,6 +588,9 @@ PixelTable RasterFile::Impl::lookupOgrGeometry(
   // allocate.
   std::vector<std::optional<PixelValue>> pixelValues(bands.size());
   size_t numPixelsInsideGeometry = 0;
+  // The number of pixels in the result, which leaves out the pixels that are
+  // NoData in all bands.
+  size_t numPixels = 0;
   for (int row = 0; row < window->height_; ++row) {
     for (int column = 0; column < window->width_; ++column) {
       size_t index = static_cast<size_t>(row) * window->width_ + column;
@@ -603,13 +609,16 @@ PixelTable RasterFile::Impl::lookupOgrGeometry(
       for (size_t bandIndex = 0; bandIndex < bands.size(); ++bandIndex) {
         valuesPerBand[bandIndex].push_back(pixelValues[bandIndex]);
       }
-      double x = 0.0;
-      double y = 0.0;
-      GDALApplyGeoTransform(pixelToRaster_.data(),
-                            window->column_ + column + 0.5,
-                            window->row_ + row + 0.5, &x, &y);
-      centersX.push_back(x);
-      centersY.push_back(y);
+      ++numPixels;
+      if (options.wantCenters_) {
+        double x = 0.0;
+        double y = 0.0;
+        GDALApplyGeoTransform(pixelToRaster_.data(),
+                              window->column_ + column + 0.5,
+                              window->row_ + row + 0.5, &x, &y);
+        centersX.push_back(x);
+        centersY.push_back(y);
+      }
     }
   }
   statistics_.numPixelsInsideGeometry_ += numPixelsInsideGeometry;
@@ -630,7 +639,7 @@ PixelTable RasterFile::Impl::lookupOgrGeometry(
   }
   // Record the time to convert the centers to longitude and latitude.
   addTimeTo(statistics_.timeConvertingCenters_);
-  return PixelTable{std::move(centers), std::move(valuesPerBand)};
+  return PixelTable{numPixels, std::move(centers), std::move(valuesPerBand)};
 }
 
 // _____________________________________________________________________________
@@ -709,15 +718,17 @@ PixelTable RasterFile::lookupPoint(const GeoPoint& point,
     return noPixels();
   }
 
-  // A table with one row.
-  qlm::vector<GeoPoint> centers({impl.pixelCenter(pixelColumn, pixelRow)},
-                                allocator);
+  // A table with one row, with its center only if the lookup asked for it.
+  qlm::vector<GeoPoint> centers{allocator};
+  if (options.wantCenters_) {
+    centers.push_back(impl.pixelCenter(pixelColumn, pixelRow));
+  }
   std::vector<BandValues> valuesPerBand;
   valuesPerBand.reserve(bands.size());
   for (const std::optional<PixelValue>& value : pixelValues) {
     valuesPerBand.push_back(BandValues({value}, allocator));
   }
-  return PixelTable{std::move(centers), std::move(valuesPerBand)};
+  return PixelTable{1, std::move(centers), std::move(valuesPerBand)};
 }
 
 // _____________________________________________________________________________
