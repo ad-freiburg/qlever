@@ -739,6 +739,18 @@ TEST(IndexRebuilder, materializeToIndex) {
         EXPECT_EQ(newIndex.numDistinctObjects().normal, 4);
         EXPECT_EQ(newIndex.numDistinctObjects().internal, 0);
       }
+      // The patterns are copied from the old index, and so are their
+      // statistics.
+      if (usePatterns) {
+        const auto& oldImpl = index.getImpl();
+        EXPECT_EQ(newIndex.getNumDistinctSubjectPredicatePairs(),
+                  oldImpl.getNumDistinctSubjectPredicatePairs());
+        EXPECT_EQ(newIndex.getAvgNumDistinctPredicatesPerSubject(),
+                  oldImpl.getAvgNumDistinctPredicatesPerSubject());
+        EXPECT_EQ(newIndex.getAvgNumDistinctSubjectsPerPredicate(),
+                  oldImpl.getAvgNumDistinctSubjectsPerPredicate());
+        EXPECT_EQ(newIndex.getNumDistinctSubjectPredicatePairs(), 2);
+      }
     }
   }
 }

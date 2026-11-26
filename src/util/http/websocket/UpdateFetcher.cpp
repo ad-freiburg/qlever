@@ -4,8 +4,6 @@
 
 #include "util/http/websocket/UpdateFetcher.h"
 
-#include "util/AsioHelpers.h"
-
 namespace ad_utility::websocket {
 
 net::awaitable<UpdateFetcher::PayloadType> UpdateFetcher::waitForEvent() {

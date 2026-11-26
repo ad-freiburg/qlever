@@ -8,16 +8,12 @@
 #include <absl/strings/charconv.h>
 #include <s2/s2earth.h>
 #include <s2/s2point.h>
-#include <s2/util/units/length-units.h>
 
 #include <cmath>
 #include <ctre-unicode.hpp>
-#include <limits>
 #include <string_view>
-#include <type_traits>
 
 #include "backports/algorithm.h"
-#include "global/Constants.h"
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
 #include "util/Exception.h"
