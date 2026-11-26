@@ -232,15 +232,18 @@ TEST(AsyncIdTablePusher, completionHandlerRunsOnItsExecutor) {
   EXPECT_TRUE(future.get());
 }
 
-// _____________________________________________________________________________
+// Test that a block that the sink hands back becomes the next block of the
+// pusher, so that only two buffers are ever allocated.
 TEST(AsyncIdTablePusher, sinkThatRecyclesBlocks) {
   auto alloc = ad_utility::testing::makeAllocator();
   constexpr size_t blocksize = 64;
   // The sink keeps the block that it was handed last, and hands back the one
   // before (like the sorter, which hands back the block that its background
   // thread is done with). It records the contents of each block and the
-  // address of its first column. NOTE: The sink runs on the strand of the
-  // pusher, so its state needs no further synchronization.
+  // address of its first column.
+  //
+  // NOTE: The sink runs on the strand of the pusher, so its state needs no
+  // further synchronization.
   IdTable actual{3, alloc};
   std::set<const Id*> buffers;
   std::optional<IdTableStatic<0>> previous;
@@ -266,13 +269,15 @@ TEST(AsyncIdTablePusher, sinkThatRecyclesBlocks) {
   EXPECT_EQ(sortedRows(actual), sortedRows(expected));
   // The first block is allocated by the constructor, the second one after the
   // sink has handed back nothing, and from then on the two blocks alternate.
+  //
   // NOTE: Both blocks stay alive (one in the pusher, one in `previous`), so
   // a fresh allocation can never have the address of one of them.
   ASSERT_GT(numBlocks, 2u);
   EXPECT_EQ(buffers.size(), 2u);
 }
 
-// _____________________________________________________________________________
+// Test that a block with the wrong number of columns that the sink hands back
+// is ignored.
 TEST(AsyncIdTablePusher, recycledBlockWithWrongNumberOfColumnsIsIgnored) {
   auto alloc = ad_utility::testing::makeAllocator();
   constexpr size_t blocksize = 16;
@@ -303,10 +308,9 @@ TEST(AsyncIdTablePusher, recycledBlockWithWrongNumberOfColumnsIsIgnored) {
   EXPECT_EQ(sortedRows(actual), sortedRows(expected));
 }
 
-// _____________________________________________________________________________
+// Test that a sink with the signature of `Pusher::Sink` that never hands back
+// a block behaves like a sink that returns `void`.
 TEST(AsyncIdTablePusher, sinkThatReturnsNothing) {
-  // A sink that has the signature of `Pusher::Sink`, but never hands back a
-  // block, behaves like a sink that returns `void`.
   auto alloc = ad_utility::testing::makeAllocator();
   size_t numBlocks = 0;
   Pusher pusher{ad_utility::testing::multiThreadExecutor(), 2, 10, alloc,

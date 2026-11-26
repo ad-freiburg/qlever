@@ -663,7 +663,8 @@ struct ReservingInput : public SizeInput {
 };
 static_assert(InputConcept<ReservingInput>);
 
-// _____________________________________________________________________________
+// Test that the merge calls `reserveBlock` once per output block if and only
+// if the number of elements per output block is bounded.
 TEST(ParallelBlockMerge, reserveBlockOfTheInputIsCalled) {
   auto runs = makeRandomRuns(4, 100, 100);
   // If the number of elements per output block is bounded, every output block

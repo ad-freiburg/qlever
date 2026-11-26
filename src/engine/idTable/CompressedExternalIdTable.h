@@ -900,11 +900,10 @@ class CompressedExternalIdTableBase {
                          });
   }
 
-  // Clear the current block. If `reserve` is `true`, we subsequently also
-  // reserve the `blocksize_`.
-  // If `reserve` is `false`, the memory of the block is released, because
-  // this is the end of the input phase (and a sorter whose runs are all on
-  // disk should not keep a block's worth of memory).
+  // Clear the current block. If `reserve` is `true`, reserve the `blocksize_`
+  // for it. Otherwise release its memory (this is the end of the input phase,
+  // and a sorter whose runs are all on disk should not keep the memory of a
+  // block).
   void resetCurrentBlock(bool reserve) {
     currentBlock_.clear();
     if (reserve) {

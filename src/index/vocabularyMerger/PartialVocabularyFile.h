@@ -301,8 +301,9 @@ class PartialVocabularyRunsInput : public ad_utility::NoCopy {
   // `pools_`.
   OutputBlock makeEmptyBlock() const { return OutputBlock{pools_}; }
 
-  // A no-op: equal words are folded, so `numElements` would only be an upper
-  // bound, and the vocabulary merge bounds its blocks by memory, not by count.
+  // Do nothing (the buffers that the words are copied into come from the
+  // `pools_` with their full capacity, and `numElements` would only be an
+  // upper bound for the rest, because equal words are folded).
   void reserveBlock([[maybe_unused]] OutputBlock& block,
                     [[maybe_unused]] size_t numElements) const {}
 

@@ -60,11 +60,13 @@ class AsyncIdTablePusher {
   using Block = IdTableStatic<NumStaticCols>;
   // Receive a complete block. It is called on the strand of this class, so the
   // calls never overlap, but a call delays all the pushes that wait for the
-  // next block, so it should be cheap or hand its work off. It may return an
-  // empty block (e.g. a block that it is done with, cleared, but with its
-  // memory still allocated), which then becomes the next block, so that its
-  // memory is reused instead of allocating (and faulting in) a new block. A
-  // sink that returns `void` is also accepted, see the constructor.
+  // next block, so it should be cheap or hand its work off. A sink that
+  // returns `void` is also accepted, see the constructor.
+  //
+  // NOTE: The sink may hand back a block that it is done with (typically an
+  // earlier block). That block is cleared and becomes the next block, so that
+  // its memory is reused instead of allocating (and faulting in) a new block.
+  // A block with the wrong number of columns is ignored.
   using Sink = absl::AnyInvocable<std::optional<Block>(Block)>;
   // The type-erased completion handler of `asyncPushBlock`, see there.
   using Handler = absl::AnyInvocable<void(std::exception_ptr)>;
@@ -141,8 +143,8 @@ class AsyncIdTablePusher {
   // `blocksize` rows with `numColumns` columns (which are allocated via the
   // `allocator`) to the `sink`. The execution context behind the `executor`
   // has to outlive this object, which holds a strand on the `executor`. The
-  // `sink` is either a `Sink` (see there), which may hand back an empty block
-  // for reuse, or a callable with the signature `void(Block)`, which is wrapped
+  // `sink` is either a `Sink` (see there), which may hand back a block for
+  // reuse, or a callable with the signature `void(Block)`, which is wrapped
   // into a `Sink` that never hands back a block (see `wrapSink`).
   template <typename SinkFunction>
   AsyncIdTablePusher(ql::any_io_executor executor, size_t numColumns,
