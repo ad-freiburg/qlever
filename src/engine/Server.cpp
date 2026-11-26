@@ -1374,7 +1374,7 @@ nlohmann::ordered_json Server::createResponseMetadataForUpdate(
                        updateMetadata.countBefore_.value());
   }
   response["time"] = tracer.getJSONShort()["update"];
-  for (auto permutation : Permutation::ALL) {
+  for (auto permutation : plannedQuery.getIndex().loadedPermutations()) {
     response["located-triples"][Permutation::toString(
         permutation)]["blocks-affected"] =
         locatedTriples.getLocatedTriplesForPermutation<false>(permutation)

@@ -700,8 +700,8 @@ TEST(IndexRebuilder, materializeToIndex) {
 
       IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>()};
       newIndex.usePatterns() = usePatterns;
-      newIndex.loadAllPermutations() = loadAllPermutations;
       newIndex.createFromOnDiskIndex(newIndexName, false);
+      EXPECT_EQ(newIndex.hasAllPermutations(), loadAllPermutations);
 
       // The rebuilt index gets its own, more recent build date. Both dates are
       // recorded with second resolution, so the rebuild may happen within the
@@ -723,7 +723,7 @@ TEST(IndexRebuilder, materializeToIndex) {
       EXPECT_EQ(newIndex.numTriples().internal, usePatterns ? 2 : 0);
       EXPECT_EQ(newIndex.numDistinctPredicates().normal, 3);
       EXPECT_EQ(newIndex.numDistinctPredicates().internal, usePatterns ? 1 : 0);
-      if (newIndex.loadAllPermutations()) {
+      if (newIndex.hasAllPermutations()) {
         EXPECT_EQ(newIndex.numDistinctSubjects().normal, 4);
         EXPECT_EQ(newIndex.numDistinctSubjects().internal, 0);
         EXPECT_EQ(newIndex.numDistinctObjects().normal, 4);
@@ -741,6 +741,117 @@ TEST(IndexRebuilder, materializeToIndex) {
                   oldImpl.getAvgNumDistinctSubjectsPerPredicate());
         EXPECT_EQ(newIndex.getNumDistinctSubjectPredicatePairs(), 2);
       }
+    }
+  }
+}
+
+// Rebuild an index that only has some of the permutations, in particular
+// permutations without their twin (see `createSinglePermutationWriterTask`).
+// The rebuilt index must have the same permutations with the same contents
+// (including the delta triples) and multiplicities as an index that is built
+// from scratch.
+TEST(IndexRebuilder, materializeToIndexWithSomePermutations) {
+  auto cancellationHandle =
+      std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
+  std::string baseFolder = absl::StrCat(gtestCurrentTestName(), "-new");
+  std::string newIndexName = baseFolder + "/index";
+  const std::string originalTriples =
+      "<a> <b> <c> . <a> <b> <d> . <a> <e> <c> . <d> <e> <a> . ";
+  const std::string insertedTriples = "<c> <b> <a> . <a> <b> <a> . ";
+  const std::vector expectedPermutations{Permutation::PSO, Permutation::POS,
+                                         Permutation::SOP, Permutation::OSP};
+  auto makeIndex = [&expectedPermutations](std::string name,
+                                           std::string turtle) {
+    ad_utility::testing::TestIndexConfig config{std::move(turtle)};
+    config.permutations = expectedPermutations;
+    config.usePatterns = false;
+    return ad_utility::testing::makeTestIndex(name, std::move(config));
+  };
+  auto index = makeIndex(gtestCurrentTestName(), originalTriples);
+  // An index that is built from scratch from all the triples, for reference.
+  auto reference = makeIndex(absl::StrCat(gtestCurrentTestName(), "-ref"),
+                             originalTriples + insertedTriples);
+  ASSERT_THAT(index.loadedPermutations(),
+              ::testing::ElementsAreArray(expectedPermutations));
+
+  index.deltaTriplesManager().modify<void>(
+      [&cancellationHandle, &index](DeltaTriples& deltaTriples) {
+        auto id = [&index](std::string iri) {
+          return toValueId(
+                     TripleComponent{
+                         ad_utility::triple_component::Iri::fromIriref(iri)},
+                     index)
+              .value();
+        };
+        auto g = id(std::string{DEFAULT_GRAPH_IRI});
+        deltaTriples.insertTriples(
+            cancellationHandle,
+            {IdTriple<0>{std::array{id("<a>"), id("<b>"), id("<a>"), g}},
+             IdTriple<0>{std::array{id("<c>"), id("<b>"), id("<a>"), g}}});
+      });
+  auto [state, vocab, blankNodes] =
+      index.deltaTriplesManager()
+          .getCurrentLocatedTriplesSharedStateWithVocab();
+
+  ql::filesystem::create_directory(baseFolder);
+  absl::Cleanup removeIndexFiles{
+      [&baseFolder] { ql::filesystem::remove_all(baseFolder); }};
+  qlever::materializeToIndex(index.getImpl(), newIndexName, state, vocab,
+                             blankNodes, cancellationHandle, executor(),
+                             newIndexName + ".log");
+
+  IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>()};
+  newIndex.createFromOnDiskIndex(newIndexName, false);
+  EXPECT_THAT(newIndex.loadedPermutations(),
+              ::testing::ElementsAreArray(expectedPermutations));
+  // Neither the permutations that were not loaded nor the temporary twins
+  // exist.
+  for (auto permutation : {Permutation::SPO, Permutation::OPS}) {
+    for (const auto& file : Permutation::fileNames(permutation, newIndexName)) {
+      EXPECT_FALSE(ql::filesystem::exists(file)) << file;
+    }
+  }
+  for (auto permutation : expectedPermutations) {
+    auto file = Permutation::fileNames(permutation, newIndexName).at(0);
+    EXPECT_FALSE(
+        ql::filesystem::exists(absl::StrCat(file.string(), ".twin-tmp")));
+  }
+  EXPECT_EQ(newIndex.numTriples().normal, 6);
+  EXPECT_EQ(newIndex.numDistinctSubjects().normal, 3);
+  EXPECT_EQ(newIndex.numDistinctObjects().normal, 3);
+
+  // Compare the contents and the metadata of the relations of each
+  // permutation with those of the `reference`. The vocabularies are the same,
+  // so are the IDs.
+  const auto& referenceImpl = reference.getImpl();
+  auto emptyState =
+      newIndex.deltaTriplesManager().getCurrentLocatedTriplesSharedState();
+  auto referenceState =
+      reference.deltaTriplesManager().getCurrentLocatedTriplesSharedState();
+  for (auto permutation : expectedPermutations) {
+    SCOPED_TRACE(Permutation::toString(permutation));
+    const auto& referencePermutation =
+        referenceImpl.getPermutation(permutation);
+    const auto& newPermutation = newIndex.getPermutation(permutation);
+    ScanSpecification fullScan{std::nullopt, std::nullopt, std::nullopt};
+    auto expected = referencePermutation.scan(
+        referencePermutation.getScanSpecAndBlocks(fullScan, *referenceState),
+        {}, cancellationHandle, *referenceState, executor());
+    auto actual = newPermutation.scan(
+        newPermutation.getScanSpecAndBlocks(fullScan, *emptyState), {},
+        cancellationHandle, *emptyState, executor());
+    EXPECT_EQ(actual, expected);
+    for (Id col0 : expected.getColumn(0)) {
+      auto expectedMetadata =
+          referencePermutation.getMetadata(col0, *referenceState);
+      auto actualMetadata = newPermutation.getMetadata(col0, *emptyState);
+      ASSERT_TRUE(expectedMetadata.has_value());
+      ASSERT_TRUE(actualMetadata.has_value());
+      EXPECT_EQ(actualMetadata->numRows_, expectedMetadata->numRows_);
+      EXPECT_EQ(actualMetadata->getCol1Multiplicity(),
+                expectedMetadata->getCol1Multiplicity());
+      EXPECT_EQ(actualMetadata->getCol2Multiplicity(),
+                expectedMetadata->getCol2Multiplicity());
     }
   }
 }

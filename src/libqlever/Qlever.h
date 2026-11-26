@@ -81,13 +81,20 @@ struct CommonConfig {
   // } GROUP BY ?p
   bool noPatterns_ = false;
 
-  // Option to build only the PSO and POS permutations of the triples. These
-  // two permutations are sufficient to answer queries, where the predicate is
-  // fixed in all triple patterns.
-  //
-  // TODO: We have not tested this mode in a while. In particular, it is
-  // unlikely to work when updates are involved.
+  // Option to build (or load) only the PSO and POS permutations of the
+  // triples. These two permutations are sufficient to efficiently answer
+  // queries, where the predicate is fixed in all triple patterns. Other
+  // queries are answered with a full scan and a filter (see
+  // `permutations_`).
   bool onlyPsoAndPos_ = false;
+
+  // The permutations to build (for an index build) or to load (when an index
+  // is loaded), by name (e.g. "SPO" or "PSO", see `Permutation::fromString`).
+  // The PSO and POS permutations are always built and loaded. If empty, all
+  // six permutations that have the graph as their last column are built, and
+  // all permutations that the index has are loaded. Must not be combined with
+  // `onlyPsoAndPos_`.
+  std::vector<std::string> permutations_;
 
   // Option to add `ql:has-word` triples for each word in each literal. For
   // each literal, a triple `<literal> ql:has-word "word"` is added for each
