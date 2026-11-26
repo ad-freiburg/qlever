@@ -16,7 +16,6 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/operation/ColumnStrippingHelpers.h"
 #include "engine/operation/IndexScan.h"
-#include "global/RuntimeParameters.h"
 #include "global/ValueIdComparators.h"
 #include "index/IdTableUtils.h"
 #include "util/TransparentFunctors.h"

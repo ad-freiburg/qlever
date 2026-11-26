@@ -4,7 +4,6 @@
 
 #include "engine/operation/Minus.h"
 
-#include "engine/CallFixedSize.h"
 #include "engine/JoinHelpers.h"
 #include "engine/MinusRowHandler.h"
 #include "engine/operation/Service.h"

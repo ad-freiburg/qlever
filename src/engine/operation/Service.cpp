@@ -13,7 +13,6 @@
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "engine/CallFixedSize.h"
-#include "engine/ExportQueryExecutionTrees.h"
 #include "engine/VariableToColumnMap.h"
 #include "engine/binaryExport/BinaryImport.h"
 #include "engine/operation/Sort.h"

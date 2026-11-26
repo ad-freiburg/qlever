@@ -17,7 +17,6 @@
 #include "engine/VariableToColumnMap.h"
 #include "index/IndexImpl.h"
 #include "index/TripleComponentConversions.h"
-#include "parser/ParsedQuery.h"
 #include "util/Exception.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"

@@ -526,28 +526,28 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::matchWithKnowledgeGraph(
     return leftOrRightOp;
   }
 
+  // Skip the matching if all graphs are active, there is no graph variable, and
+  // the values of the join column are already guaranteed to be nodes of the
+  // knowledge graph.
+  //
+  // NOTE: This guarantee does not say in which graphs the values occur. So in
+  // a `GRAPH <g> { ... }` or `GRAPH ?g { ... }` clause or with a `FROM` clause,
+  // a value may be a node of the knowledge graph, but not of the active graphs
+  // (or not of the graph in the same row), and still has to be matched.
   auto originalVar =
       leftOrRightOp->getVariableAndInfoByColumnIndex(inputCol).first;
-  // If we join on the graph variable itself, we cannot reuse it for the graph
-  // column, so we use an internal helper variable instead (which takes
-  // precedence in `getActualGraphColumnIndex`). Note that the values of the
-  // join column are not necessarily valid graph names, so this case always
-  // requires matching against the knowledge graph.
-  bool graphIsJoinColumn = originalVar == graphVariable_;
-  std::optional<Variable> graphVariable =
-      graphIsJoinColumn ? std::optional{internalGraphHelper_} : graphVariable_;
-
-  // If the graph column is missing we have to add it, even if the values of the
-  // join column are already guaranteed to be part of the knowledge graph.
-  bool graphColumnIsMissing =
-      graphVariable.has_value() &&
-      !leftOrRightOp->getVariableColumnOrNullopt(graphVariable.value())
-           .has_value();
-  if (!graphColumnIsMissing &&
+  if (activeGraphs_.areAllGraphsAllowed() && !graphVariable_.has_value() &&
       leftOrRightOp->getRootOperation()->columnContainsOnlyKnowledgeGraphNodes(
           originalVar)) {
     return leftOrRightOp;
   }
+
+  // If we join on the graph variable itself, we cannot reuse it for the graph
+  // column, so we use an internal helper variable instead (which takes
+  // precedence in `getActualGraphColumnIndex`).
+  std::optional<Variable> graphVariable =
+      originalVar == graphVariable_ ? std::optional{internalGraphHelper_}
+                                    : graphVariable_;
 
   leftOrRightOp = ad_utility::makeExecutionTree<EmptyPath>(
       getExecutionContext(), originalVar, activeGraphs_,
