@@ -137,6 +137,9 @@ class CompressedRelationReader {
     std::optional<ColumnIndices> columnSubset_;
     FilterDuplicatesAndGraphs graphFilter_;
     const LocatedTriplesPerBlock& locatedTriples_;
+    // The `Id`s of the fixed columns of the scan (see
+    // `LocatedTriplesPerBlock::mergeTriples`).
+    std::array<std::optional<Id>, 3> fixedColumns_{};
   };
 
   // The specification of scan, together with the blocks on which this scan is

@@ -939,6 +939,14 @@ ParsedQuery Visitor::makeClear(const GraphRefAll& graph) {
   using GVB = parsedQuery::GroupGraphPattern::GraphVariableBehaviour;
   using P =
       std::pair<GraphPatternOperation, SparqlTripleSimpleWithGraph::Graph>;
+  // A single graph to clear (for `CLEAR GRAPH <g>` and `CLEAR DEFAULT`).
+  std::optional<GraphRef> graphToClear;
+  if (const auto* graphRef = std::get_if<GraphRef>(&graph)) {
+    graphToClear = *graphRef;
+  } else if (std::holds_alternative<DEFAULT>(graph)) {
+    graphToClear =
+        ad_utility::triple_component::Iri::fromIriref(DEFAULT_GRAPH_IRI);
+  }
   auto [graphPattern, updatePattern] = std::visit(
       ad_utility::OverloadCallOperator{
           [this](const GraphRef& graph) -> P {
@@ -962,12 +970,13 @@ ParsedQuery Visitor::makeClear(const GraphRefAll& graph) {
       graph);
   parsedQuery_._rootGraphPattern._graphPatterns.push_back(
       std::move(graphPattern));
-  parsedQuery_._clause = parsedQuery::UpdateClause{
-      allocator(),
-      GraphUpdate{
-          updateClause::UpdateTriples{allocator()},
-          {{{makeAllTripleTemplate(std::move(updatePattern))}, allocator()},
-           LocalVocab{ad_utility::makeUnlimitedAllocator<Id>()}}}};
+  GraphUpdate graphUpdate{
+      updateClause::UpdateTriples{allocator()},
+      {{{makeAllTripleTemplate(std::move(updatePattern))}, allocator()},
+       LocalVocab{ad_utility::makeUnlimitedAllocator<Id>()}}};
+  graphUpdate.graphToClear_ = std::move(graphToClear);
+  parsedQuery_._clause =
+      parsedQuery::UpdateClause{allocator(), std::move(graphUpdate)};
   parsedQuery_.datasetClauses_ = activeDatasetClauses_;
   return parsedQuery_;
 }

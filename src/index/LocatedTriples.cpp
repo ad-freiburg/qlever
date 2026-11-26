@@ -100,13 +100,112 @@ void LocatedTriplesPerBlock::consolidateAllBlocks() {
 
 // ____________________________________________________________________________
 NumAddedAndDeleted LocatedTriplesPerBlock::numTriples(size_t blockIndex) const {
+  NumAddedAndDeleted result{0, 0};
   if (auto blockUpdateTriples = getUpdatesIfPresent(blockIndex)) {
     // Simply return the number of located triples twice. See the comment in the
     // header file for the reasons and potential improvements.
-    return {blockUpdateTriples->sizeUpperBound(),
-            blockUpdateTriples->sizeUpperBound()};
+    result = {blockUpdateTriples->sizeUpperBound(),
+              blockUpdateTriples->sizeUpperBound()};
   }
-  return {0, 0};
+  // All the original triples of a block with dropped graphs might be deleted.
+  if (blockMayContainDroppedGraphs(blockIndex)) {
+    result.numDeleted_ += originalMetadata_.value()->at(blockIndex).numRows_;
+  }
+  return result;
+}
+
+// ____________________________________________________________________________
+void DroppedGraphs::add(Id graph) {
+  auto bits = graph.getBits();
+  if (!hashed_.insert(bits).second) {
+    return;
+  }
+  sorted_.insert(ql::ranges::lower_bound(sorted_, bits), bits);
+}
+
+// ____________________________________________________________________________
+bool DroppedGraphs::containsGraphInRange(Id first, Id last) const {
+  auto it = ql::ranges::lower_bound(sorted_, first.getBits());
+  return it != sorted_.end() && *it <= last.getBits();
+}
+
+// ____________________________________________________________________________
+std::vector<Id> DroppedGraphs::graphs() const {
+  return ::ranges::to<std::vector>(
+      sorted_ |
+      ql::views::transform([](Id::T bits) { return Id::fromBits(bits); }));
+}
+
+// ____________________________________________________________________________
+bool LocatedTriplesPerBlock::blockMayContainDroppedGraphs(
+    size_t blockIndex) const {
+  if (!hasDroppedGraphs() || !originalMetadata_.has_value()) {
+    return false;
+  }
+  const auto& blocks = *originalMetadata_.value();
+  // A block that purely consists of delta triples has no original triples.
+  if (blockIndex >= blocks.size()) {
+    return false;
+  }
+  const auto& block = blocks.at(blockIndex);
+  if (graphKeyPosition_ == 3) {
+    // The graphs of the block are only known if there are few of them.
+    if (!block.graphInfo_.has_value()) {
+      return true;
+    }
+    return ql::ranges::any_of(block.graphInfo_.value(), [this](Id graph) {
+      return droppedGraphs_->contains(graph);
+    });
+  }
+  if (graphKeyPosition_ == 0) {
+    // The graph is the first column, so the block contains the graphs in the
+    // range from its first to its last triple.
+    return droppedGraphs_->containsGraphInRange(block.firstTriple_.col0Id_,
+                                                block.lastTriple_.col0Id_);
+  }
+  // In all other cases, the graphs of a block are not known.
+  return true;
+}
+
+// ____________________________________________________________________________
+void LocatedTriplesPerBlock::removeRowsOfDroppedGraphs(
+    IdTable& block, size_t numIndexColumns,
+    const std::array<std::optional<Id>, 3>& fixedColumns) const {
+  // The block contains the last `numIndexColumns` of the first three columns
+  // of the permutation, followed by its fourth column.
+  size_t firstIndexColumn = 3 - numIndexColumns;
+  if (graphKeyPosition_ < firstIndexColumn) {
+    // The graph is fixed by the scan, so either all or no rows are removed.
+    const auto& graph = fixedColumns.at(graphKeyPosition_);
+    AD_CORRECTNESS_CHECK(graph.has_value());
+    if (droppedGraphs_->contains(graph.value())) {
+      block.clear();
+    }
+    return;
+  }
+  size_t graphColumn = graphKeyPosition_ == 3
+                           ? numIndexColumns
+                           : graphKeyPosition_ - firstIndexColumn;
+  AD_CORRECTNESS_CHECK(graphColumn < block.numColumns());
+  const auto& graphs = block.getColumn(graphColumn);
+  auto isDropped = [this](Id graph) { return droppedGraphs_->contains(graph); };
+  if (ql::ranges::none_of(graphs, isDropped)) {
+    return;
+  }
+  // Keep the rows whose graph is not dropped (the order is preserved).
+  size_t numKept = 0;
+  for (size_t row = 0; row < block.numRows(); ++row) {
+    if (isDropped(block(row, graphColumn))) {
+      continue;
+    }
+    if (numKept != row) {
+      for (size_t col = 0; col < block.numColumns(); ++col) {
+        block(numKept, col) = block(row, col);
+      }
+    }
+    ++numKept;
+  }
+  block.resize(numKept);
 }
 
 // Return an `ad_utility::tie` of the relevant entries of a row, according to
@@ -243,10 +342,24 @@ IdTable LocatedTriplesPerBlock::mergeTriplesImpl(size_t blockIndex,
 }
 
 // ____________________________________________________________________________
-IdTable LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
-                                             const IdTable& block,
-                                             size_t numIndexColumns,
-                                             bool includeGraphColumn) const {
+IdTable LocatedTriplesPerBlock::mergeTriples(
+    size_t blockIndex, const IdTable& originalBlock, size_t numIndexColumns,
+    bool includeGraphColumn,
+    const std::array<std::optional<Id>, 3>& fixedColumns) const {
+  // First remove the rows of dropped graphs from (a copy of) the block.
+  std::optional<IdTable> blockWithoutDroppedGraphs;
+  if (blockMayContainDroppedGraphs(blockIndex)) {
+    AD_CORRECTNESS_CHECK(includeGraphColumn || graphKeyPosition_ != 3);
+    blockWithoutDroppedGraphs = originalBlock.clone();
+    removeRowsOfDroppedGraphs(blockWithoutDroppedGraphs.value(),
+                              numIndexColumns, fixedColumns);
+    if (!map_.contains(blockIndex)) {
+      return std::move(blockWithoutDroppedGraphs).value();
+    }
+  }
+  const IdTable& block = blockWithoutDroppedGraphs.has_value()
+                             ? blockWithoutDroppedGraphs.value()
+                             : originalBlock;
   // The following code does nothing more than turn `numIndexColumns` and
   // `includeGraphColumn` into template parameters of `mergeTriplesImpl`.
   auto mergeTriplesImplHelper = [numIndexColumns, blockIndex, &block,
@@ -457,6 +570,11 @@ size_t LocatedTriplesPerBlock::numTriplesForTesting() const {
 bool LocatedTriplesPerBlock::containsLocatedTriplesInBlockRange(
     size_t firstBlockIndex, size_t lastBlockIndex) const {
   AD_CONTRACT_CHECK(firstBlockIndex <= lastBlockIndex);
+  if (hasDroppedGraphs()) {
+    return ql::ranges::any_of(
+        ql::views::iota(firstBlockIndex, lastBlockIndex + 1),
+        [this](size_t blockIndex) { return containsTriples(blockIndex); });
+  }
   if (map_.size() <= lastBlockIndex - firstBlockIndex) {
     return ql::ranges::any_of(map_ | ql::views::keys, [&](size_t blockIndex) {
       return blockIndex >= firstBlockIndex && blockIndex <= lastBlockIndex;

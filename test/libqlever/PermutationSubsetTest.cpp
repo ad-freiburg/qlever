@@ -356,3 +356,98 @@ TEST(PermutationSubset, permutationsWithGraphAsKeyColumn) {
                          ad_utility::MediaType::tsv),
             "?s\t?o\n<a>\t<b>\n<a>\t<c>\n<b>\t<a>\n<d>\t<a>\n");
 }
+
+namespace {
+// Apply the `update`, which may consist of several operations (like `MOVE`),
+// to the `engine`.
+void applyUpdates(Qlever& engine, const std::string& update) {
+  ad_utility::BlankNodeManager blankNodeManager;
+  auto parsedUpdates = SparqlParser::parseUpdate(
+      &blankNodeManager, ad_utility::testing::encodedIriManager(),
+      engine.allocator(), update);
+  for (auto& parsedUpdate : parsedUpdates) {
+    auto plannedUpdate =
+        engine.planQuery(engine.bindParsedQuery(std::move(parsedUpdate)));
+    auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+    auto snapshot = engine.indexAndViewsSnapshot();
+    snapshot->index_.deltaTriplesManager().modify<UpdateMetadata>(
+        [&](DeltaTriples& deltaTriples) {
+          return engine.applyUpdate(plannedUpdate, handle, deltaTriples);
+        });
+  }
+}
+}  // namespace
+
+// Dropping a graph (see `DeltaTriples::dropGraph`) gives the same results as
+// deleting its triples one by one, for various permutations, also when triples
+// are inserted into the dropped graph again, and when the updates are
+// persisted and read again.
+TEST(DropGraph, sameResultsAsDeletingTheTriples) {
+  const std::vector<std::vector<std::string>> subsets{
+      {}, {"PSO", "POS"}, {"GSPO", "GPOS"}, {"SGPO", "OPGS"}};
+  for (const auto& subset : subsets) {
+    auto name = absl::StrJoin(subset, "_");
+    SCOPED_TRACE(name);
+    auto config = buildIndexWithPermutations(subset, name, namedGraphs,
+                                             qlever::Filetype::NQuad);
+    // The `reference` deletes the triples one by one.
+    Qlever reference{config};
+    config.persistUpdates_ = true;
+    std::optional<Qlever> engine;
+    engine.emplace(config);
+    auto applyToBoth = [&](std::string_view fastUpdate,
+                           std::string_view referenceUpdate) {
+      applyUpdates(*engine, std::string{fastUpdate});
+      applyUpdates(reference, std::string{referenceUpdate});
+      expectResults(*engine, runQueries(reference, graphQueries), graphQueries);
+    };
+    // Return the number of dropped graphs of the `qlever` instance.
+    auto numDroppedGraphs = [](Qlever& qlever) {
+      size_t result = 0;
+      qlever.indexAndViewsSnapshot()->index_.deltaTriplesManager().modify<void>(
+          [&result](DeltaTriples& deltaTriples) {
+            result = deltaTriples.droppedGraphs().size();
+          },
+          false, false);
+      return result;
+    };
+    applyToBoth("DROP GRAPH <g1>", "DELETE WHERE { GRAPH <g1> { ?s ?p ?o } }");
+    // The graph was dropped without deleting its triples one by one.
+    EXPECT_EQ(numDroppedGraphs(*engine), 1);
+    EXPECT_EQ(numDroppedGraphs(reference), 0);
+    // Inserting into the dropped graph and dropping it again.
+    applyToBoth("INSERT DATA { GRAPH <g1> { <a> <p> <b> . <new> <p> <a> } }",
+                "INSERT DATA { GRAPH <g1> { <a> <p> <b> . <new> <p> <a> } }");
+    applyToBoth("DELETE DATA { GRAPH <g1> { <new> <p> <a> } }",
+                "DELETE DATA { GRAPH <g1> { <new> <p> <a> } }");
+    // Delta triples of a graph are erased when it is dropped.
+    applyToBoth("INSERT DATA { GRAPH <g2> { <x> <p> <y> } }",
+                "INSERT DATA { GRAPH <g2> { <x> <p> <y> } }");
+    applyToBoth("CLEAR GRAPH <g2>", "DELETE WHERE { GRAPH <g2> { ?s ?p ?o } }");
+    applyToBoth("DROP DEFAULT",
+                "DELETE WHERE { GRAPH "
+                "<http://qlever.cs.uni-freiburg.de/builtin-functions/"
+                "default-graph> { ?s ?p ?o } }");
+    // A graph that doesn't exist and a graph that only has delta triples.
+    applyToBoth("DROP SILENT GRAPH <doesNotExist>",
+                "DELETE WHERE { GRAPH <doesNotExist> { ?s ?p ?o } }");
+    applyToBoth("INSERT DATA { GRAPH <onlyDelta> { <a> <p> <b> } }",
+                "INSERT DATA { GRAPH <onlyDelta> { <a> <p> <b> } }");
+    applyToBoth("DROP GRAPH <onlyDelta>",
+                "DELETE WHERE { GRAPH <onlyDelta> { ?s ?p ?o } }");
+    applyToBoth("MOVE <g3> TO <g1>", "MOVE <g3> TO <g1>");
+
+    // The dropped graphs are persisted together with the delta triples.
+    auto expected = runQueries(*engine, graphQueries);
+    auto numDropped = numDroppedGraphs(*engine);
+    EXPECT_EQ(numDropped, 4);
+    engine.reset();
+    engine.emplace(config);
+    EXPECT_EQ(numDroppedGraphs(*engine), numDropped);
+    expectResults(*engine, expected, graphQueries);
+    engine.reset();
+    for (const auto& file : IndexImpl::allIndexFiles(config.baseName_)) {
+      ad_utility::deleteFile(file, false);
+    }
+  }
+}

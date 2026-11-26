@@ -1637,3 +1637,77 @@ TEST_F(DeltaTriplesTest, addFromSnapshotDiffReanchorsLocalVocabEntries) {
   EXPECT_EQ(*carried, fresh);
 }
 #endif
+
+// Test `DeltaTriples::dropGraph`: the delta triples of the graph are erased,
+// the graph is recorded as dropped, and `clear` resets that.
+TEST_F(DeltaTriplesTest, dropGraph) {
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  DeltaTriples deltaTriples(testQec->getIndex());
+  auto& index = testQec->getIndex();
+  auto getId = ad_utility::testing::makeGetId(index);
+  Id a = getId("<a>");
+  Id b = getId("<b>");
+  Id graph = getId("<x>");
+  Id defaultGraph = getId(std::string{DEFAULT_GRAPH_IRI});
+  deltaTriples.insertTriples(cancellationHandle,
+                             {IdTriple<0>{std::array{a, b, a, graph}},
+                              IdTriple<0>{std::array{a, b, b, defaultGraph}}});
+  deltaTriples.deleteTriples(cancellationHandle,
+                             {IdTriple<0>{std::array{b, b, b, graph}}});
+  EXPECT_THAT(deltaTriples, NumTriples(2, 1, 3));
+  EXPECT_THAT(deltaTriples.droppedGraphs(), ::testing::IsEmpty());
+
+  deltaTriples.dropGraph(cancellationHandle, graph);
+  deltaTriples.consolidateAll();
+  // Only the triple of the other graph is left.
+  EXPECT_THAT(deltaTriples, NumTriples(1, 0, 1));
+  EXPECT_THAT(deltaTriples.droppedGraphs(), ::testing::ElementsAre(graph));
+  for (auto permutation : Permutation::GRAPH_LAST) {
+    const auto& locatedTriples =
+        deltaTriples.getLocatedTriplesForPermutation(permutation);
+    EXPECT_TRUE(locatedTriples.hasDroppedGraphs());
+    EXPECT_FALSE(locatedTriples.isEmpty());
+  }
+  // Dropping the same graph twice or a graph from the local vocabulary has no
+  // further effect on the dropped graphs.
+  deltaTriples.dropGraph(cancellationHandle, graph);
+  LocalVocab localVocab = makeLocalVocab();
+  deltaTriples.dropGraph(
+      cancellationHandle,
+      Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
+          ad_utility::testing::iriLocalVocabEntry(
+              "<new>", index.getLocalVocabContext()))));
+  EXPECT_THAT(deltaTriples.droppedGraphs(), ::testing::ElementsAre(graph));
+
+  deltaTriples.clear();
+  EXPECT_THAT(deltaTriples.droppedGraphs(), ::testing::IsEmpty());
+  EXPECT_FALSE(deltaTriples.getLocatedTriplesForPermutation(Permutation::PSO)
+                   .hasDroppedGraphs());
+}
+
+// After an index rebuild, only the graphs that were dropped after the snapshot
+// of the rebuild are dropped again (see `addFromSnapshotDiff`).
+TEST_F(DeltaTriplesTest, addFromSnapshotDiffWithDroppedGraphs) {
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  DeltaTriples deltaTriples(testQec->getIndex());
+  auto& index = testQec->getIndex();
+  auto getId = ad_utility::testing::makeGetId(index);
+  Id graphBefore = getId("<x>");
+  Id graphAfter = getId("<a>");
+  deltaTriples.dropGraph(cancellationHandle, graphBefore);
+  auto originalSnapshot = deltaTriples.getLocatedTriplesSharedStateCopy();
+  deltaTriples.dropGraph(cancellationHandle, graphAfter);
+  auto newSnapshot = deltaTriples.getLocatedTriplesSharedStateCopy();
+
+  DeltaTriples newDeltaTriples(testQec->getIndex());
+  ad_utility::timer::TimeTracer tracer{"test"};
+  // There is no local vocabulary, so the `Id`s are not changed by the rebuild.
+  qlever::indexRebuilder::IndexRebuildMapping idMapping;
+  idMapping.minBlankNodeIndex_ = index.getBlankNodeManager()->minIndex_;
+  newDeltaTriples.addFromSnapshotDiff(*originalSnapshot, *newSnapshot,
+                                      idMapping, cancellationHandle, tracer);
+  EXPECT_THAT(newDeltaTriples.droppedGraphs(),
+              ::testing::ElementsAre(graphAfter));
+}

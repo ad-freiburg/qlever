@@ -29,6 +29,35 @@
 
 class Permutation;
 
+// The graphs whose triples in the original index (that is, not the delta
+// triples) have been deleted completely (see `DeltaTriples::dropGraph`). The
+// graphs are stored via the bits of their `Id`s, which for the `Id`s of the
+// original index have the same order as the `Id`s in the permutations.
+class DroppedGraphs {
+ private:
+  // The graphs, sorted and without duplicates.
+  std::vector<Id::T> sorted_;
+  // The same graphs, for fast lookups.
+  ad_utility::HashSet<Id::T> hashed_;
+
+ public:
+  // Add the `graph`.
+  void add(Id graph);
+
+  // Return true iff the `graph` has been dropped.
+  bool contains(Id graph) const { return hashed_.contains(graph.getBits()); }
+
+  // Return true iff one of the graphs is in the closed range
+  // `[first, last]`.
+  bool containsGraphInRange(Id first, Id last) const;
+
+  // Return the graphs, sorted by their `Id`s.
+  std::vector<Id> graphs() const;
+
+  size_t size() const { return sorted_.size(); }
+  bool empty() const { return sorted_.empty(); }
+};
+
 struct NumAddedAndDeleted {
   size_t numAdded_;
   size_t numDeleted_;
@@ -150,6 +179,24 @@ class LocatedTriplesPerBlock {
   std::optional<std::shared_ptr<const std::vector<CompressedBlockMetadata>>>
       originalMetadata_;
 
+  // The graphs whose triples in the original blocks are deleted (see
+  // `DroppedGraphs`), and the position of the graph in the key order of the
+  // permutation (3 if the graph is the last column). The original rows of a
+  // block that may contain triples of these graphs are removed before the
+  // located triples are merged (see `mergeTriples`). Such a block is treated
+  // like a block with located triples (see `containsTriples`, `numTriples`,
+  // and `isEmpty`), so that all the shortcuts that rely on the original block
+  // metadata are disabled for it.
+  std::shared_ptr<const DroppedGraphs> droppedGraphs_;
+  size_t graphKeyPosition_ = 3;
+
+  // Remove the rows of the original `block` with the given index that belong
+  // to a dropped graph. See `mergeTriples` for the meaning of
+  // `numIndexColumns` and `fixedColumns`.
+  void removeRowsOfDroppedGraphs(
+      IdTable& block, size_t numIndexColumns,
+      const std::array<std::optional<Id>, 3>& fixedColumns) const;
+
  public:
   void updateAugmentedMetadata();
 
@@ -176,8 +223,8 @@ class LocatedTriplesPerBlock {
   boost::optional<const LocatedTriples&> getUpdatesIfPresent(
       size_t blockIndex) const;
 
-  // Merge located triples for `blockIndex_` (there must be at least one,
-  // otherwise this function must not be called) with the given input `block`.
+  // Merge located triples for `blockIndex_` with the given input `block`. This
+  // function must only be called if `containsTriples(blockIndex)` is true.
   // Return the result as an `IdTable`, which has the same number of columns as
   // `block`.
   //
@@ -195,13 +242,42 @@ class LocatedTriplesPerBlock {
   // and that `block` has block has two additional payload columns X and Y.
   // Then the result has five columns (like the input `block`), and each merged
   // located triple will have values for OSG and UNDEF for X and Y.
-  IdTable mergeTriples(size_t blockIndex, const IdTable& block,
-                       size_t numIndexColumns, bool includeGraphColumn) const;
+  //
+  // Before the merge, the rows of the `block` that belong to a dropped graph
+  // are removed (see `droppedGraphs_`). If the graph is one of the
+  // `numIndexColumns`, it is read from the `block`, otherwise it is fixed by
+  // the scan and contained in the `fixedColumns` (the `Id`s of the fixed first
+  // columns of the permutation, which are the same for all rows of the block).
+  IdTable mergeTriples(
+      size_t blockIndex, const IdTable& block, size_t numIndexColumns,
+      bool includeGraphColumn,
+      const std::array<std::optional<Id>, 3>& fixedColumns = {}) const;
 
   // Return true iff there are located triples in the block with the given
-  // index.
+  // index, or if the block may contain triples of a dropped graph (see
+  // `droppedGraphs_`).
   bool containsTriples(size_t blockIndex) const {
-    return map_.contains(blockIndex);
+    return map_.contains(blockIndex) ||
+           blockMayContainDroppedGraphs(blockIndex);
+  }
+
+  // Return true iff the original block with the given index may contain
+  // triples of a dropped graph.
+  bool blockMayContainDroppedGraphs(size_t blockIndex) const;
+
+  // Set the dropped graphs and the position of the graph in the key order of
+  // the permutation, see `droppedGraphs_`.
+  void setDroppedGraphs(std::shared_ptr<const DroppedGraphs> droppedGraphs) {
+    droppedGraphs_ = std::move(droppedGraphs);
+  }
+  void setGraphKeyPosition(size_t graphKeyPosition) {
+    AD_CONTRACT_CHECK(graphKeyPosition <= 3);
+    graphKeyPosition_ = graphKeyPosition;
+  }
+
+  // Return true iff there are dropped graphs.
+  bool hasDroppedGraphs() const {
+    return droppedGraphs_ != nullptr && !droppedGraphs_->empty();
   }
 
   // Add unsorted `locatedTriples` to the `LocatedTriplesPerBlock`.
@@ -238,8 +314,8 @@ class LocatedTriplesPerBlock {
   bool containsLocatedTriplesInBlockRange(size_t firstBlockIndex,
                                           size_t lastBlockIndex) const;
 
-  // Return whether there are any updates at all.
-  bool isEmpty() const { return map_.empty(); }
+  // Return whether there are any updates at all (including dropped graphs).
+  bool isEmpty() const { return map_.empty() && !hasDroppedGraphs(); }
 
   // Consolidate the located triples in all blocks that were modified since
   // the last call to this function. Forwards to `SortedSequence`. Must be
@@ -270,11 +346,17 @@ class LocatedTriplesPerBlock {
     return *originalMetadata_.value();
   }
 
-  // Remove all located triples.
+  // Remove all located triples and the dropped graphs.
   void clear() {
     map_.clear();
     unconsolidatedBlocks_.clear();
     augmentedMetadata_.reset();
+    droppedGraphs_.reset();
+  }
+
+  // Return the dropped graphs (or `nullptr` if there are none).
+  const std::shared_ptr<const DroppedGraphs>& droppedGraphs() const {
+    return droppedGraphs_;
   }
 
   // Identify, for all blocks in `perm` whose number of located triples is at

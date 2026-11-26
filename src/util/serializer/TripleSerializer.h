@@ -203,7 +203,7 @@ void serializeIds(const ql::filesystem::path& path, const LocalVocab& vocab,
   detail::writeHeader(serializer);
   detail::serializeLocalVocab(serializer, vocab);
   serializer << uint64_t{ql::ranges::size(idRanges)};
-  for (const auto& ids : idRanges) {
+  for (auto&& ids : idRanges) {
     detail::serializeIds(serializer, ids);
   }
 }

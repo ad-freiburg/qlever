@@ -176,6 +176,10 @@ class DeltaTriples {
 
   // TODO<qup42>: investigate whether we still need the state at all and whether
   // it can be replaced by a `HashMap<Triple, insertedOrDeleted>`.
+  // The graphs that have been dropped (see `dropGraph`). The same pointer is
+  // stored in all the `LocatedTriplesPerBlock`s.
+  std::shared_ptr<const DroppedGraphs> droppedGraphs_;
+
   TriplesSets<false> triplesSetsNormal_;
   TriplesSets<true> triplesSetsInternal_;
 
@@ -201,9 +205,31 @@ class DeltaTriples {
   }
 
   // Clear `triplesAdded_` and `triplesSubtracted_` and all associated data
-  // structures.
+  // structures, including the dropped graphs.
   void clear();
 
+  // Delete all the triples of the `graph`, in time that is independent of the
+  // number of its triples in the original index: The triples of the original
+  // index are not located one by one, instead the graph is added to the
+  // `droppedGraphs_`, and the scans remove its rows from the original blocks
+  // (see `LocatedTriplesPerBlock::mergeTriples`). The delta triples of the
+  // `graph` (inserted or deleted ones) are erased. Triples that are inserted
+  // into the `graph` later are visible as usual.
+  //
+  // NOTE: The counts of the inserted and deleted triples (see `getCounts`) do
+  // not include the triples of the dropped graphs.
+  void dropGraph(CancellationHandle cancellationHandle, Id graph);
+
+  // Return the graphs that have been dropped (see `dropGraph`), sorted by
+  // their `Id`s.
+  std::vector<Id> droppedGraphs() const;
+
+ private:
+  // Set the `droppedGraphs_` and propagate them to all the
+  // `LocatedTriplesPerBlock`s.
+  void setDroppedGraphs(std::shared_ptr<const DroppedGraphs> droppedGraphs);
+
+ public:
   // Remove redundant insertions (triples already in the index) and redundant
   // deletions (triples not in the index). The triples to be removed are taken
   // from the blocks in PSO that have at least `vacuum-minimum-block-size`

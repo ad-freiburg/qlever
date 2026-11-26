@@ -878,6 +878,93 @@ TEST(IndexRebuilder, materializeToIndexWithSomePermutations) {
   }
 }
 
+// Rebuild an index with a dropped graph (see `DeltaTriples::dropGraph`) and
+// triples that were inserted into it afterwards. The rebuilt index must not
+// contain the dropped triples anymore, but the inserted ones, in all
+// permutations (also in those with the graph as their first column).
+TEST(IndexRebuilder, materializeToIndexWithDroppedGraph) {
+  auto cancellationHandle =
+      std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
+  std::string name = gtestCurrentTestName();
+  std::string baseFolder = absl::StrCat(name, "-new");
+  std::string newIndexName = baseFolder + "/index";
+  const std::vector permutations{
+      Permutation::PSO, Permutation::POS,        Permutation::SPO,
+      Permutation::SOP, Permutation::Enum::GSPO, Permutation::Enum::GPSO};
+  auto makeIndex = [&permutations](std::string indexName, std::string nquads) {
+    ad_utility::testing::TestIndexConfig config{std::move(nquads)};
+    config.indexType = qlever::Filetype::NQuad;
+    config.permutations = permutations;
+    config.usePatterns = false;
+    return ad_utility::testing::makeTestIndex(indexName, std::move(config));
+  };
+  // The vocabularies of the two indexes below have to be the same, so that
+  // their `Id`s can be compared.
+  const std::string otherGraphs =
+      "<a> <b> <c> <g2> .\n<a> <b> <d> <g2> .\n<c> <b> <a> <g3> .\n"
+      "<e> <e> <e> <g4> .\n";
+  auto index = makeIndex(name, otherGraphs +
+                                   "<a> <b> <c> <g1> .\n<d> <b> <a> <g1> .\n"
+                                   "<e> <e> <e> <g1> .\n");
+  // The expected result: `<g1>` only contains the inserted triple.
+  auto reference = makeIndex(absl::StrCat(name, "-ref"),
+                             otherGraphs + "<c> <b> <a> <g1> .\n");
+
+  index.deltaTriplesManager().modify<void>([&cancellationHandle, &index](
+                                               DeltaTriples& deltaTriples) {
+    auto id = [&index](std::string iri) {
+      return toValueId(
+                 TripleComponent{
+                     ad_utility::triple_component::Iri::fromIriref(iri)},
+                 index)
+          .value();
+    };
+    deltaTriples.dropGraph(cancellationHandle, id("<g1>"));
+    deltaTriples.insertTriples(
+        cancellationHandle,
+        {IdTriple<0>{std::array{id("<c>"), id("<b>"), id("<a>"), id("<g1>")}}});
+  });
+  auto [state, vocab, blankNodes] =
+      index.deltaTriplesManager()
+          .getCurrentLocatedTriplesSharedStateWithVocab();
+  ql::filesystem::create_directory(baseFolder);
+  absl::Cleanup removeIndexFiles{
+      [&baseFolder] { ql::filesystem::remove_all(baseFolder); }};
+  qlever::materializeToIndex(index.getImpl(), newIndexName, state, vocab,
+                             blankNodes, cancellationHandle, executor(),
+                             newIndexName + ".log");
+
+  IndexImpl newIndex{ad_utility::makeUnlimitedAllocator<Id>()};
+  newIndex.createFromOnDiskIndex(newIndexName, false);
+  EXPECT_EQ(newIndex.numTriples().normal, 5);
+  const auto& referenceImpl = reference.getImpl();
+  auto newState =
+      newIndex.deltaTriplesManager().getCurrentLocatedTriplesSharedState();
+  auto referenceState =
+      reference.deltaTriplesManager().getCurrentLocatedTriplesSharedState();
+  ScanSpecification fullScan{std::nullopt, std::nullopt, std::nullopt};
+  std::vector<ColumnIndex> fourthColumn{ADDITIONAL_COLUMN_GRAPH_ID};
+  for (auto permutation : permutations) {
+    SCOPED_TRACE(Permutation::toString(permutation));
+    const auto& expectedPermutation = referenceImpl.getPermutation(permutation);
+    const auto& actualPermutation = newIndex.getPermutation(permutation);
+    auto expected = expectedPermutation.scan(
+        expectedPermutation.getScanSpecAndBlocks(fullScan, *referenceState),
+        fourthColumn, cancellationHandle, *referenceState, executor());
+    auto actual = actualPermutation.scan(
+        actualPermutation.getScanSpecAndBlocks(fullScan, *newState),
+        fourthColumn, cancellationHandle, *newState, executor());
+    EXPECT_EQ(actual, expected);
+    // Before the rebuild, the scans with the dropped graph give the same
+    // result.
+    const auto& oldPermutation = index.getImpl().getPermutation(permutation);
+    auto old = oldPermutation.scan(
+        oldPermutation.getScanSpecAndBlocks(fullScan, *state), fourthColumn,
+        cancellationHandle, *state, executor());
+    EXPECT_EQ(old, expected);
+  }
+}
+
 // _____________________________________________________________________________
 TEST(IndexRebuilder, materializeToIndexWithZeroMemorySourceIndex) {
   // Build a regular source index (with the default, unlimited allocator), but

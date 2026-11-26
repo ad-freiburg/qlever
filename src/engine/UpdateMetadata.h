@@ -38,6 +38,11 @@ struct UpdateMetadata {
   std::optional<DeltaTriplesCount> countBefore_;
   std::optional<DeltaTriplesCount> inUpdate_;
   std::optional<DeltaTriplesCount> countAfter_;
+  // For an update that deletes all the triples of a single graph without
+  // deleting them one by one (see `DeltaTriples::dropGraph`), whether the
+  // graph contained any triples before. The `inUpdate_` then does not count
+  // the deleted triples.
+  std::optional<bool> clearedGraphWasNonEmpty_;
 };
 
 #endif  // QLEVER_SRC_ENGINE_UPDATEMETADATA_H
