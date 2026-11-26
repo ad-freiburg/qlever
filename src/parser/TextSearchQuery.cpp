@@ -4,8 +4,6 @@
 
 #include "parser/TextSearchQuery.h"
 
-#include <absl/strings/str_split.h>
-
 #include "backports/StartsWithAndEndsWith.h"
 #include "parser/MagicServiceIriConstants.h"
 #include "parser/SparqlTriple.h"

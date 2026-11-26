@@ -924,11 +924,13 @@ TEST(GeometryInfoTest, SizeOfAndAlignmentBytes) {
   static_assert(sizeof(SerializationType) == 2);
 
   using EncodedGeometryTypeAndCentroid = uint64_t;
+  using EncodedGeometryStoreId = uint64_t;
   static_assert(sizeof(GeometryInfo) ==
                 sizeof(EncodedGeometryTypeAndCentroid) +
                     sizeof(EncodedBoundingBox) + sizeof(NumGeometries) +
                     sizeof(SourceCrsType) + sizeof(SerializationType) +
-                    sizeof(MetricLength) + sizeof(MetricArea));
+                    sizeof(MetricLength) + sizeof(MetricArea) +
+                    sizeof(EncodedGeometryStoreId));
 }
 
 // Test that `fromSerialized` rejects a version outside the loadable range and a
@@ -946,6 +948,34 @@ TEST(GeometryInfoTest, FromSerializedInvalidInput) {
       GeometryInfo::fromSerialized(ql::span<const uint8_t>{bytes}.first(1),
                                    GEOMETRY_INFO_VERSION),
       ::testing::HasSubstr("geometryInfoSize"));
+}
+
+// Test that the ID in the geometry store is set and returned, and that the
+// largest `uint64_t` is rejected (it cannot be stored as `id + 1`).
+TEST(GeometryInfoTest, GeometryStoreId) {
+  // A record of zeros has no ID.
+  std::array<uint8_t, sizeof(GeometryInfo)> bytes{};
+  auto info = GeometryInfo::fromSerialized(bytes, GEOMETRY_INFO_VERSION);
+  EXPECT_EQ(info.getGeometryStoreId(), std::nullopt);
+
+  // The smallest and the largest valid ID.
+  info.setGeometryStoreId(0);
+  EXPECT_EQ(info.getGeometryStoreId(), GeometryStoreId{0});
+  constexpr auto max = std::numeric_limits<uint64_t>::max();
+  info.setGeometryStoreId(max - 1);
+  EXPECT_EQ(info.getGeometryStoreId(), GeometryStoreId{max - 1});
+
+  // The largest `uint64_t` is rejected.
+  AD_EXPECT_THROW_WITH_MESSAGE(info.setGeometryStoreId(max),
+                               ::testing::HasSubstr("max"));
+
+  // The ID is also the requested info `GeometryStoreId`, which a WKT literal
+  // without a `GeometryInfo` does not have.
+  EXPECT_EQ(info.getRequestedInfo<GeometryStoreId>(), GeometryStoreId{max - 1});
+  info = GeometryInfo::fromSerialized(bytes, GEOMETRY_INFO_VERSION);
+  EXPECT_EQ(info.getRequestedInfo<GeometryStoreId>(), std::nullopt);
+  EXPECT_EQ(GeometryInfo::getRequestedInfo<GeometryStoreId>("POINT(1 2)"),
+            std::nullopt);
 }
 
 // _____________________________________________________________________________

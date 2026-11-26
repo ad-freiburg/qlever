@@ -761,29 +761,23 @@ class Operation : public std::enable_shared_from_this<Operation> {
   // other child.
   virtual void updateRuntimeInformationWhenOptimizedOut();
 
-  // Return true if all values that the `variable` will be bound to by this
-  // expression are guaranteed to be contained in the underlying knowledge
-  // graph or undefined. This is e.g. true for results of `IndexScan`s, but not
-  // for `VALUES` clauses or expression results. This information is used to
-  // skip potentially expensive checks in the `TransitivePath` implementation.
-  // The default implementation is very conservative and assume all operations
-  // are just creating values from thin air, or intersect them from their
-  // children.
-  // So unless you implement an operation that consumes a column from its child
-  // and just adds arbitrary values to this column, this implementation is never
-  // wrong, just potentially inefficientand assumes that variables that are
-  // newly created always contain values that are not from the knowledge graph
-  // (e.g. `BIND` with an arbitrary function). Variables that are also contained
-  // in at least one of the children are assumed to originate from the knowledge
-  // graph if this is true for the same variable in all the children that define
-  // this variable).
-  // Therefore, this function has to be overridden by classes that modify
-  // variables of their children in an arbitrary way (currently we can think of
-  // no such operation) and should be overridden (for efficiency reasons) in
-  // operations, that only pass on variables from some of their children (e.g.
-  // the variables on the right hand side of a MINUS operation never become part
-  // of the result).
-  virtual bool columnOriginatesFromGraphOrUndef(const Variable& variable) const;
+  // Return true if the `variable` is never UNDEF and all its values are nodes
+  // of the knowledge graph, i.e. occur as a subject or object of a triple. This
+  // is e.g. true for the subject and object columns of an `IndexScan`, but not
+  // for its predicate or graph column, for `VALUES` clauses, or for expression
+  // results. `TransitivePath` uses this to skip the check that the bound values
+  // of the empty path are nodes of the knowledge graph.
+  //
+  // NOTE: The default implementation returns true if the column is always
+  // defined and some children contain the `variable`, all of which return true
+  // for it. It assumes that newly created variables (e.g. by `BIND`) contain
+  // arbitrary values and that the values of all other variables are taken from
+  // the children. Operations that modify the values of their children have to
+  // override this function, and operations that only pass on the values of
+  // some of their children (e.g. the left side of a `MINUS`) should override it
+  // to be less conservative.
+  virtual bool columnContainsOnlyKnowledgeGraphNodes(
+      const Variable& variable) const;
 
   // The context of the `LocalVocabEntry`s that belong to this operation.
   const LocalVocabContext& getLocalVocabContext() const {

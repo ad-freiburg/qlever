@@ -1037,7 +1037,7 @@ TEST(JoinTest, makeTreeWithBindColumnSkipsChildThatAlreadyHasTheTarget) {
 }
 
 // _____________________________________________________________________________
-TEST_P(JoinTestParametrized, columnOriginatesFromGraphOrUndef) {
+TEST_P(JoinTestParametrized, columnContainsOnlyKnowledgeGraphNodes) {
   auto keepJoinCol = GetParam();
   using ad_utility::triple_component::Iri;
   auto* qec = ad_utility::testing::getQec();
@@ -1086,31 +1086,31 @@ TEST_P(JoinTestParametrized, columnOriginatesFromGraphOrUndef) {
 
     Join join{qec, std::move(left), std::move(right), 0, 0, keepJoinCol, false};
     if (keepJoinCol) {
-      EXPECT_EQ(join.columnOriginatesFromGraphOrUndef(Variable{"?a"}), a);
+      EXPECT_EQ(join.columnContainsOnlyKnowledgeGraphNodes(Variable{"?a"}), a);
     } else {
-      EXPECT_THROW(join.columnOriginatesFromGraphOrUndef(Variable{"?a"}),
+      EXPECT_THROW(join.columnContainsOnlyKnowledgeGraphNodes(Variable{"?a"}),
                    ad_utility::Exception);
     }
-    EXPECT_EQ(join.columnOriginatesFromGraphOrUndef(Variable{"?b"}), b);
-    EXPECT_EQ(join.columnOriginatesFromGraphOrUndef(Variable{"?c"}), c);
+    EXPECT_EQ(join.columnContainsOnlyKnowledgeGraphNodes(Variable{"?b"}), b);
+    EXPECT_EQ(join.columnContainsOnlyKnowledgeGraphNodes(Variable{"?c"}), c);
     EXPECT_THROW(
-        join.columnOriginatesFromGraphOrUndef(Variable{"?notExisting"}),
+        join.columnContainsOnlyKnowledgeGraphNodes(Variable{"?notExisting"}),
         ad_utility::Exception);
   };
 
-  testWithTrees(index3, index4, true, true, true);
-  testWithTrees(index3, index2, true, true, true);
-  testWithTrees(index3, values4, false, false, true);
-  testWithTrees(index3, values2, false, false, true);
-  testWithTrees(index1, index4, true, true, true);
+  testWithTrees(index3, index4, false, false, false);
+  testWithTrees(index3, index2, true, true, false);
+  testWithTrees(index3, values4, false, false, false);
+  testWithTrees(index3, values2, false, false, false);
+  testWithTrees(index1, index4, true, false, true);
   testWithTrees(index1, index2, true, true, true);
   testWithTrees(index1, values4, true, false, true);
   testWithTrees(index1, values2, true, false, true);
-  testWithTrees(values4, index3, false, false, true);
+  testWithTrees(values4, index3, false, false, false);
   testWithTrees(values4, index1, true, false, true);
   testWithTrees(values4, values3, false, false, false);
   testWithTrees(values4, values1, false, false, false);
-  testWithTrees(values2, index3, false, false, true);
+  testWithTrees(values2, index3, false, false, false);
   testWithTrees(values2, index1, true, false, true);
   testWithTrees(values2, values3, false, false, false);
   testWithTrees(values2, values1, false, false, false);

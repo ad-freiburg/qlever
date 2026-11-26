@@ -300,7 +300,7 @@ class IndexScan final : public Operation {
       const CompressedRelationReader::LazyScanMetadata& metadata,
       RuntimeInformation::SendPriority sendPriority);
 
-  bool columnOriginatesFromGraphOrUndef(
+  bool columnContainsOnlyKnowledgeGraphNodes(
       const Variable& variable) const override;
 
   // Retrieve the `Permutation` entity for this `IndexScan`.
