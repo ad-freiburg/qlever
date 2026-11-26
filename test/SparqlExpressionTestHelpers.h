@@ -8,7 +8,9 @@
 #include "./util/IdTestHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "global/ValueIdComparators.h"
+#include "util/AllocatorTestHelpers.h"
 #include "util/IndexTestHelpers.h"
+#include "util/LocalVocabEntryTestHelpers.h"
 
 namespace sparqlExpression {
 
@@ -40,7 +42,7 @@ struct TestContext {
       "<z> <label> \"zz\"@en";
   QueryExecutionContext* qec = ad_utility::testing::getQec(turtleInput);
   VariableToColumnMap varToColMap;
-  LocalVocab localVocab;
+  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
   IdTable table{qec->getAllocator()};
   sparqlExpression::EvaluationContext context{
       *qec,
@@ -78,7 +80,7 @@ struct TestContext {
     auto addLocalIri = [this, &localVocabContext](std::string_view s) {
       return Id::makeFromLocalVocabIndex(
           this->localVocab.getIndexAndAddIfNotContained(
-              LocalVocabEntry::fromIriref(s, localVocabContext)));
+              ad_utility::testing::iriLocalVocabEntry(s, localVocabContext)));
     };
 
     notInVocabA = addLocalLiteral("notInVocabA");

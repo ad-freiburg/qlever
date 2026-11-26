@@ -15,7 +15,11 @@
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
+#include "util/LocalVocabEntryTestHelpers.h"
 #include "util/ParsedQueryTestHelpers.h"
+
+using ad_utility::testing::iriLocalVocabEntry;
+using ad_utility::testing::localVocabEntry;
 
 static constexpr auto executor = &ad_utility::testing::singleThreadExecutor;
 
@@ -50,7 +54,8 @@ TEST(ExecuteUpdate, executeUpdate) {
             std::make_shared<ad_utility::CancellationHandle<>>();
         const std::vector<DatasetClause> datasets = {};
         ad_utility::BlankNodeManager bnm;
-        auto pqs = SparqlParser::parseUpdate(&bnm, encodedIriManager(), update);
+        auto pqs = SparqlParser::parseUpdate(&bnm, encodedIriManager(),
+                                             qec.getAllocator(), update);
         index.deltaTriplesManager().modify<void>(
             [&index, &sharedHandle, &pqs, &qec](DeltaTriples& deltaTriples) {
               qec.setLocatedTriplesForEvaluation(
@@ -238,7 +243,8 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
     auto& index = qec->getIndex();
     DeltaTriples deltaTriples{index};
     ad_utility::BlankNodeManager bnm;
-    auto pqs = SparqlParser::parseUpdate(&bnm, encodedIriManager(), update);
+    auto pqs = SparqlParser::parseUpdate(&bnm, encodedIriManager(),
+                                         qec->getAllocator(), update);
     std::vector<std::pair<ExecuteUpdate::IdTriplesAndLocalVocab,
                           ExecuteUpdate::IdTriplesAndLocalVocab>>
         results;
@@ -300,11 +306,11 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
     auto Id = ad_utility::testing::makeGetId(qec->getIndex());
     defaultGraphId = Id(std::string{DEFAULT_GRAPH_IRI});
 
-    LocalVocab localVocab;
+    LocalVocab localVocab{ad_utility::testing::makeAllocator()};
     auto LVI = [&localVocab, qec](std::string_view iri) {
       return Id::makeFromLocalVocabIndex(
           localVocab.getIndexAndAddIfNotContained(
-              LocalVocabEntry::fromIriref(iri, qec->getLocalVocabContext())));
+              iriLocalVocabEntry(iri, qec->getLocalVocabContext())));
     };
 
     expectComputeGraphUpdateQuads(
@@ -451,7 +457,7 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
                 const ad_utility::triple_component::LiteralOrIri& literalOrIri)
                 -> MatcherType {
               const auto lviOpt = localVocab.getIndexOrNullopt(
-                  LocalVocabEntry{literalOrIri, index.getLocalVocabContext()});
+                  localVocabEntry(literalOrIri, index.getLocalVocabContext()));
               if (!lviOpt) {
                 return AlwaysFalse(
                     absl::StrCat(literalOrIri.toStringRepresentation(),

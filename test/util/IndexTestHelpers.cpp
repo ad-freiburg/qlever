@@ -26,6 +26,7 @@
 #include "index/TripleComponentConversions.h"
 #include "index/vocabulary/SecondaryVocabulary.h"
 #include "index/vocabulary/VocabularyType.h"
+#include "util/Algorithm.h"
 #include "util/FilesystemHelpers.h"
 #include "util/ProgressBar.h"
 
@@ -62,32 +63,15 @@ Index makeIndexWithTestSettings(ad_utility::MemorySize parserBufferSize) {
   return index;
 }
 
-std::vector<std::string> getAllIndexFilenames(
-    const std::string& indexBasename) {
-  return {indexBasename + ".ttl",
-          indexBasename + ".index.pos",
-          indexBasename + ".index.pos.meta",
-          indexBasename + ".index.pso",
-          indexBasename + ".index.pso.meta",
-          indexBasename + ".index.sop",
-          indexBasename + ".index.sop.meta",
-          indexBasename + ".index.spo",
-          indexBasename + ".index.spo.meta",
-          indexBasename + ".index.ops",
-          indexBasename + ".index.ops.meta",
-          indexBasename + ".index.osp",
-          indexBasename + ".index.osp.meta",
-          indexBasename + ".index.patterns",
-          indexBasename + ".meta-data.json",
-          indexBasename + ".prefixes",
-          indexBasename + ".vocabulary.internal",
-          indexBasename + ".vocabulary.external",
-          indexBasename + ".vocabulary.external.offsets",
-          indexBasename + ".wordsfile",
-          indexBasename + ".docsfile",
-          indexBasename + ".text.index",
-          indexBasename + ".text.vocabulary",
-          indexBasename + ".text.docsDB"};
+// _____________________________________________________________________________
+void deleteTestIndexFiles(const std::string& indexBasename) {
+  std::string prefix = absl::StrCat(indexBasename, ".");
+  qlever::util::deleteFilesInDirectory(
+      ql::filesystem::current_path(),
+      [&prefix](const ql::filesystem::path& path) {
+        return ql::starts_with(path.filename().string(), prefix);
+      },
+      false);
 }
 
 namespace {
@@ -232,11 +216,16 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
   static constexpr std::array<std::string_view, 6> suffixes{
       VOCAB_SUFFIX,       ".index",          ".internal.index",
       CONFIGURATION_FILE, ".update-triples", ".allocated-graphs-state"};
+  // Build the prefixes once, the directory may contain many files.
+  auto prefixes = ad_utility::transformArray(
+      suffixes, [&indexBasename](std::string_view suffix) {
+        return absl::StrCat(indexBasename, suffix);
+      });
   qlever::util::deleteFilesInDirectory(
-      fs::current_path(), [&indexBasename](const auto& path) {
+      fs::current_path(), [&prefixes](const auto& path) {
         std::string name = path.filename().string();
-        return ql::ranges::any_of(suffixes, [&](std::string_view suffix) {
-          return ql::starts_with(name, absl::StrCat(indexBasename, suffix));
+        return ql::ranges::any_of(prefixes, [&name](const std::string& prefix) {
+          return ql::starts_with(name, prefix);
         });
       });
   std::string inputFilename = indexBasename + ".ttl";
@@ -287,6 +276,8 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
     index.setSettingsFile(inputFilename + ".settings.json");
     index.loadAllPermutations() = c.loadAllPermutations;
     index.addHasWordTriples() = c.addHasWordTriples;
+    index.getImpl().setHasWordNormalization(c.hasWordNormalization);
+    index.getImpl().setHasWordRestrictPredicates(c.hasWordRestrictPredicates);
     qlever::InputFileSpecification spec{inputFilename, c.indexType,
                                         std::nullopt};
     if (c.parseInParallel.has_value()) {
@@ -423,6 +414,11 @@ QueryExecutionContext* getQec(const std::string& indexBasenamePrefix,
   // inside the `QueryExecutionContext` remain stable even when moving the
   // `Context`.
   struct Context {
+    // The owner of the memory limit of `qec_`, which only holds a non-owning
+    // copy, so that copying its allocator costs no atomic operation. It is
+    // declared first, so that it outlives all the copies of that allocator
+    // (e.g. those in the results stored in `cache_`).
+    ad_utility::AllocatorWithLimit<Id> owningAllocator_;
     TypeErasedCleanup cleanup_;
     std::shared_ptr<Index> index_;
     std::unique_ptr<QueryResultCache> cache_;
@@ -430,7 +426,7 @@ QueryExecutionContext* getQec(const std::string& indexBasenamePrefix,
     std::shared_ptr<MaterializedViewsManager> materializedViewsManager_;
     std::shared_ptr<QueryExecutionContext> qec_ =
         std::make_unique<QueryExecutionContext>(
-            index_, cache_.get(), makeAllocator(MemorySize::megabytes(100)),
+            index_, cache_.get(), owningAllocator_.nonOwningCopy(),
             namedCache_.get(), materializedViewsManager_,
             singleThreadExecutor());
   };
@@ -447,14 +443,9 @@ QueryExecutionContext* getQec(const std::string& indexBasenamePrefix,
                      contextMap.size());
     contextMap.emplace(
         std::pair<TestIndexConfig, std::string>{c, indexBasenamePrefix},
-        Context{TypeErasedCleanup{[testIndexBasename]() {
-                  for (const std::string& indexFilename :
-                       getAllIndexFilenames(testIndexBasename)) {
-                    // Don't log when a file can't be deleted,
-                    // because the logging might already be
-                    // destroyed.
-                    ad_utility::deleteFile(indexFilename, false);
-                  }
+        Context{makeAllocator(MemorySize::megabytes(100)),
+                TypeErasedCleanup{[testIndexBasename]() {
+                  deleteTestIndexFiles(testIndexBasename);
                 }},
                 std::make_shared<Index>(makeTestIndex(testIndexBasename, c)),
                 std::make_unique<QueryResultCache>(),

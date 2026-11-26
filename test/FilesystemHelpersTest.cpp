@@ -10,15 +10,24 @@
 #include <absl/cleanup/cleanup.h>
 #include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
+#include <sys/resource.h>
+#include <unistd.h>
 
+#include <algorithm>
+#include <cerrno>
+#include <csignal>
+#include <cstring>
 #include <fstream>
 #include <string>
 #include <vector>
 
 #include "backports/filesystem.h"
+#include "backports/memory_resource.h"
+#include "util/File.h"
 #include "util/FilesystemHelpers.h"
 #include "util/GTestHelpers.h"
 #include "util/Log.h"
+#include "util/UninitializedAllocator.h"
 
 namespace fs = ql::filesystem;
 using qlever::util::copyFileAtomically;
@@ -345,7 +354,20 @@ TEST(DeleteFilesInDirectory, pathThatIsNotADirectoryReturnsZero) {
   EXPECT_TRUE(fs::exists(file));
 }
 
-// _____________________________________________________________________________
+// Return the names of all entries directly contained in `directory`, sorted.
+std::vector<std::string> entryNames(const fs::path& directory) {
+  std::vector<std::string> names;
+  for (const auto& entry : fs::directory_iterator{directory}) {
+    names.push_back(entry.path().filename().string());
+  }
+  std::sort(names.begin(), names.end());
+  return names;
+}
+
+// Test that bytes round-trip through `writeFileAtomically` and
+// `readBinaryFile`, that an existing file is replaced, that
+// `copyFileAtomically` copies a file (also over an existing copy), and that
+// missing files and directories are reported.
 TEST(FilesystemHelpers, readWriteAndCopyFilesAtomically) {
   TempDir dir;
   auto file = dir.path() / "file";
@@ -355,24 +377,342 @@ TEST(FilesystemHelpers, readWriteAndCopyFilesAtomically) {
   std::vector<char> bytes{'a', '\0', '\n', static_cast<char>(0xff), 'b'};
   writeFileAtomically(file, bytes);
   EXPECT_EQ(readBinaryFile(file), bytes);
-  EXPECT_FALSE(fs::exists(dir.path() / "file.tmp"));
+  // No temporary file is left behind.
+  EXPECT_THAT(entryNames(dir.path()), ::testing::ElementsAre("file"));
 
   // An existing file is replaced, also by an empty one.
   writeFileAtomically(file, std::vector<char>{'x'});
   EXPECT_EQ(readBinaryFile(file), std::vector<char>{'x'});
-  writeFileAtomically(file, {});
+  writeFileAtomically(file, std::vector<char>{});
   EXPECT_TRUE(readBinaryFile(file).empty());
 
+  // A copy has the same bytes, and an existing copy is replaced.
   writeFileAtomically(file, bytes);
   copyFileAtomically(file, copy);
   EXPECT_EQ(readBinaryFile(copy), bytes);
   writeFileAtomically(file, std::vector<char>{'y'});
   copyFileAtomically(file, copy);
   EXPECT_EQ(readBinaryFile(copy), std::vector<char>{'y'});
-  EXPECT_FALSE(fs::exists(dir.path() / "copy.tmp"));
+  EXPECT_THAT(entryNames(dir.path()), ::testing::ElementsAre("copy", "file"));
 
   // Missing files and directories are reported.
   EXPECT_ANY_THROW(readBinaryFile(dir.path() / "missing"));
   EXPECT_ANY_THROW(writeFileAtomically(dir.path() / "missing" / "file", bytes));
   EXPECT_ANY_THROW(copyFileAtomically(dir.path() / "missing", copy));
+  EXPECT_EQ(readBinaryFile(copy), std::vector<char>{'y'});
+}
+
+// Test that `readBinaryFile` reads into other containers and with a custom
+// allocator, and that it rejects paths that are not regular files.
+TEST(FilesystemHelpers, readBinaryFileContainersAndErrors) {
+  TempDir dir;
+  auto file = dir.path() / "file";
+  std::string content{"some\0content", 12};
+  writeFileAtomically(file, content);
+
+  EXPECT_EQ(readBinaryFile<std::string>(file), content);
+  using DefaultInitVector =
+      std::vector<char, ad_utility::default_init_allocator<char>>;
+  auto defaultInit = readBinaryFile<DefaultInitVector>(file);
+  EXPECT_EQ((std::string{defaultInit.begin(), defaultInit.end()}), content);
+  // The allocator is passed to the container.
+  ql::pmr::monotonic_buffer_resource resource;
+  using PmrVector = std::vector<char, ql::pmr::polymorphic_allocator<char>>;
+  auto withAllocator = readBinaryFile<PmrVector>(
+      file, ql::pmr::polymorphic_allocator<char>{&resource});
+  EXPECT_EQ(withAllocator.get_allocator().resource(), &resource);
+  EXPECT_EQ((std::string{withAllocator.begin(), withAllocator.end()}), content);
+
+  // An empty file yields an empty container.
+  auto empty = dir.path() / "empty";
+  writeFileAtomically(empty, std::vector<char>{});
+  EXPECT_TRUE(readBinaryFile<std::string>(empty).empty());
+
+  // A file that does not exist and a directory are rejected with a readable
+  // error message.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      readBinaryFile(dir.path() / "missing"),
+      HasSubstr("does not exist or is not a regular file"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      readBinaryFile(dir.path()),
+      HasSubstr("does not exist or is not a regular file"));
+}
+
+// Test the overload of `writeFileAtomically` that writes the temporary file via
+// a callback.
+TEST(FilesystemHelpers, writeFileAtomicallyWithCallback) {
+  TempDir dir;
+  auto file = dir.path() / "file";
+
+  // The callback writes to a temporary file in a fresh directory that only the
+  // owner can access. That directory is in the same directory as the target,
+  // its name starts with the name of the target and ends with `.tmp`, and it is
+  // different for each call.
+  std::vector<fs::path> temporaryPaths;
+  auto write = [&temporaryPaths](std::string content) {
+    return [&temporaryPaths, content](const fs::path& temporaryPath) {
+      temporaryPaths.push_back(temporaryPath);
+      EXPECT_FALSE(fs::exists(temporaryPath));
+      EXPECT_EQ(fs::status(temporaryPath.parent_path()).permissions(),
+                fs::perms::owner_all);
+      EXPECT_TRUE(fs::is_empty(temporaryPath.parent_path()));
+      ad_utility::makeOfstream(temporaryPath) << content;
+    };
+  };
+  writeFileAtomically(file, write("first"));
+  writeFileAtomically(file, write("second"));
+  EXPECT_EQ(readBinaryFile<std::string>(file), "second");
+  ASSERT_EQ(temporaryPaths.size(), 2u);
+  EXPECT_NE(temporaryPaths.at(0), temporaryPaths.at(1));
+  for (const auto& temporaryPath : temporaryPaths) {
+    auto temporaryDirectory = temporaryPath.parent_path();
+    EXPECT_EQ(temporaryDirectory.parent_path(), dir.path());
+    EXPECT_THAT(temporaryDirectory.filename().string(),
+                ::testing::AllOf(::testing::StartsWith("file."),
+                                 ::testing::EndsWith(".tmp")));
+  }
+  EXPECT_THAT(entryNames(dir.path()), ::testing::ElementsAre("file"));
+
+  // If the callback throws, the temporary directory (with the temporary file)
+  // is removed, the target is left unchanged, and the exception is propagated.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      writeFileAtomically(file,
+                          [](const fs::path& temporaryPath) {
+                            ad_utility::makeOfstream(temporaryPath) << "third";
+                            throw std::runtime_error{"callback failed"};
+                          }),
+      HasSubstr("callback failed"));
+  EXPECT_EQ(readBinaryFile<std::string>(file), "second");
+  EXPECT_THAT(entryNames(dir.path()), ::testing::ElementsAre("file"));
+
+  // If the renaming fails (here because the target is a non-empty directory),
+  // the temporary directory is removed as well.
+  auto directory = dir.path() / "directory";
+  fs::create_directory(directory);
+  touch(directory / "entry");
+  EXPECT_ANY_THROW(writeFileAtomically(directory, write("fourth")));
+  EXPECT_THAT(entryNames(dir.path()),
+              ::testing::ElementsAre("directory", "file"));
+}
+
+// Test that `detail::readFileIntoBuffer` throws if the file holds fewer bytes
+// than requested, or if it cannot be read at all.
+TEST(FilesystemHelpers, readFileIntoBufferFailures) {
+  TempDir dir;
+  auto file = dir.path() / "file";
+  writeFileAtomically(file, std::string{"abc"});
+
+  // Reading exactly the size of the file works.
+  std::vector<char> buffer(3);
+  qlever::util::detail::readFileIntoBuffer(file, buffer);
+  EXPECT_EQ((std::string{buffer.begin(), buffer.end()}), "abc");
+
+  // A file that is shorter than the buffer (e.g. because it was truncated after
+  // its size was determined) is reported.
+  std::vector<char> tooLarge(10);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      qlever::util::detail::readFileIntoBuffer(file, tooLarge),
+      HasSubstr("expected 10 bytes, but read 3"));
+
+  // A directory can be opened on Linux, but reading from it fails (with
+  // `EISDIR`), so `pread` returns a negative value, the reason of which is
+  // reported. On other platforms, the opening may already fail.
+  std::vector<char> oneByte(1);
+#ifdef __linux__
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      qlever::util::detail::readFileIntoBuffer(dir.path(), oneByte),
+      ::testing::AllOf(HasSubstr("Could not read the file"),
+                       HasSubstr(std::strerror(EISDIR))));
+#else
+  EXPECT_ANY_THROW(
+      qlever::util::detail::readFileIntoBuffer(dir.path(), oneByte));
+#endif
+}
+
+// Test that `writeFileAtomically` throws if writing the bytes fails after the
+// temporary file was successfully opened, and that it then leaves neither the
+// target nor a temporary file behind. The failure is provoked by lowering the
+// limit of the file size (`RLIMIT_FSIZE`) of this process, so that the `write`
+// fails with `EFBIG` (the signal `SIGXFSZ` that is raised in this case is
+// ignored, as it would otherwise terminate the process). The reason of the
+// failure is part of the message. The test is compiled out under Emscripten,
+// where `setrlimit` is not supported and always fails.
+#ifndef __EMSCRIPTEN__
+TEST(FilesystemHelpers, writeFileAtomicallyWriteFailure) {
+  TempDir dir;
+  auto file = dir.path() / "file";
+
+  struct rlimit oldLimit {};
+  ASSERT_EQ(getrlimit(RLIMIT_FSIZE, &oldLimit), 0);
+  auto oldHandler = std::signal(SIGXFSZ, SIG_IGN);
+  ASSERT_NE(oldHandler, SIG_ERR);
+  absl::Cleanup restore = [&oldLimit, oldHandler] {
+    setrlimit(RLIMIT_FSIZE, &oldLimit);
+    std::signal(SIGXFSZ, oldHandler);
+  };
+  struct rlimit newLimit = oldLimit;
+  newLimit.rlim_cur = 1;
+  ASSERT_EQ(setrlimit(RLIMIT_FSIZE, &newLimit), 0);
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      writeFileAtomically(file, std::vector<char>(100, 'x')),
+      ::testing::AllOf(HasSubstr("Could not write the file"),
+                       HasSubstr(std::strerror(EFBIG))));
+  std::move(restore).Invoke();
+
+  EXPECT_TRUE(entryNames(dir.path()).empty());
+}
+#endif  // __EMSCRIPTEN__
+
+// Test that `writeFileAtomically` throws if the temporary directory cannot be
+// created (here because the directory of the target is not writable), with the
+// reason in the message, and that it leaves nothing behind. (When the test runs
+// as `root`, the directory is writable anyway, so the test is skipped.)
+TEST(FilesystemHelpers, writeFileAtomicallyDirectoryNotWritable) {
+  if (geteuid() == 0) {
+    GTEST_SKIP() << "`root` can write to a read-only directory";
+  }
+  TempDir dir;
+  auto subdir = dir.path() / "subdir";
+  fs::create_directory(subdir);
+  fs::permissions(subdir,
+                  fs::perms::owner_read | ql::filesystem_perms_owner_exec);
+  absl::Cleanup restorePermissions = [&subdir] {
+    fs::permissions(subdir, fs::perms::owner_all);
+  };
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      writeFileAtomically(subdir / "file", std::string{"x"}),
+      ::testing::AllOf(
+          HasSubstr("Could not create a temporary directory for the file"),
+          HasSubstr(std::strerror(EACCES))));
+  std::move(restorePermissions).Invoke();
+  EXPECT_TRUE(entryNames(subdir).empty());
+}
+
+// Test that `writeFileAtomically` throws if the temporary file cannot be
+// opened, with the reason in the message, and that it leaves nothing behind.
+// The failure is provoked by lowering the limit of open file descriptors
+// (`RLIMIT_NOFILE`) of this process to zero, so that `open` fails with
+// `EMFILE`. The limit is restored immediately afterwards. The test is compiled
+// out under Emscripten, where `setrlimit` is not supported and always fails.
+#ifndef __EMSCRIPTEN__
+TEST(FilesystemHelpers, writeFileAtomicallyOpenFailure) {
+  TempDir dir;
+  struct rlimit oldLimit {};
+  ASSERT_EQ(getrlimit(RLIMIT_NOFILE, &oldLimit), 0);
+  absl::Cleanup restoreLimit = [&oldLimit] {
+    setrlimit(RLIMIT_NOFILE, &oldLimit);
+  };
+  struct rlimit newLimit = oldLimit;
+  newLimit.rlim_cur = 0;
+  ASSERT_EQ(setrlimit(RLIMIT_NOFILE, &newLimit), 0);
+  std::string message;
+  try {
+    writeFileAtomically(dir.path() / "file", std::string{"x"});
+  } catch (const std::exception& e) {
+    message = e.what();
+  }
+  std::move(restoreLimit).Invoke();
+  EXPECT_THAT(message, ::testing::AllOf(HasSubstr("Could not open the file"),
+                                        HasSubstr(std::strerror(EMFILE))));
+  EXPECT_TRUE(entryNames(dir.path()).empty());
+}
+#endif  // __EMSCRIPTEN__
+
+// Test that `writeFileAtomically` works for a file name of the maximal length,
+// for which the name of the temporary directory has to be shortened.
+TEST(FilesystemHelpers, writeFileAtomicallyLongFilename) {
+  TempDir dir;
+  std::string filename(255, 'a');
+  auto file = dir.path() / filename;
+  writeFileAtomically(file, [](const fs::path& temporaryPath) {
+    auto temporaryDirectory = temporaryPath.parent_path().filename().string();
+    EXPECT_LE(temporaryDirectory.size(), 255u);
+    EXPECT_THAT(temporaryDirectory, ::testing::EndsWith(".tmp"));
+    ad_utility::makeOfstream(temporaryPath) << "content";
+  });
+  EXPECT_EQ(readBinaryFile<std::string>(file), "content");
+  EXPECT_THAT(entryNames(dir.path()), ::testing::ElementsAre(filename));
+}
+
+// Test that `writeFileAtomically` and `copyFileAtomically` write to the file
+// that a symbolic link points to (and keep the link), and that `readBinaryFile`
+// reads through a symbolic link.
+TEST(FilesystemHelpers, symbolicLinks) {
+  TempDir dir;
+  auto real = dir.path() / "real";
+  auto link = dir.path() / "link";
+  auto linkToLink = dir.path() / "linkToLink";
+  writeFileAtomically(real, std::string{"original"});
+  // A relative link, which is resolved relative to its directory.
+  fs::create_symlink("real", link);
+  fs::create_symlink(link, linkToLink);
+  EXPECT_EQ(readBinaryFile<std::string>(linkToLink), "original");
+
+  writeFileAtomically(linkToLink, std::string{"new"});
+  EXPECT_TRUE(fs::is_symlink(link));
+  EXPECT_TRUE(fs::is_symlink(linkToLink));
+  EXPECT_EQ(readBinaryFile<std::string>(real), "new");
+
+  auto source = dir.path() / "source";
+  writeFileAtomically(source, std::string{"copied"});
+  copyFileAtomically(source, link);
+  EXPECT_TRUE(fs::is_symlink(link));
+  EXPECT_EQ(readBinaryFile<std::string>(real), "copied");
+  EXPECT_THAT(entryNames(dir.path()),
+              ::testing::ElementsAre("link", "linkToLink", "real", "source"));
+
+  // A dangling link cannot be read, but writing to it creates its target.
+  auto dangling = dir.path() / "dangling";
+  fs::create_symlink("target", dangling);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      readBinaryFile(dangling),
+      HasSubstr("does not exist or is not a regular file"));
+  writeFileAtomically(dangling, std::string{"created"});
+  EXPECT_TRUE(fs::is_symlink(dangling));
+  EXPECT_EQ(readBinaryFile<std::string>(dir.path() / "target"), "created");
+
+  // A cycle of links is reported.
+  fs::create_symlink("cycleB", dir.path() / "cycleA");
+  fs::create_symlink("cycleA", dir.path() / "cycleB");
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      writeFileAtomically(dir.path() / "cycleA", std::string{"x"}),
+      HasSubstr("too many levels of symbolic links"));
+}
+
+// Test that a file that is replaced by `writeFileAtomically` keeps its
+// permissions.
+TEST(FilesystemHelpers, writeFileAtomicallyKeepsPermissions) {
+  TempDir dir;
+  auto file = dir.path() / "file";
+  writeFileAtomically(file, std::string{"first"});
+  const auto ownerOnly = fs::perms::owner_read | fs::perms::owner_write;
+  fs::permissions(file, ownerOnly);
+  writeFileAtomically(file, std::string{"second"});
+  EXPECT_EQ(fs::status(file).permissions(), ownerOnly);
+  EXPECT_EQ(readBinaryFile<std::string>(file), "second");
+}
+
+// Test that the exception of a failing callback is propagated (and the process
+// is not terminated), also if the temporary directory cannot be removed
+// because the directory of the target is not writable. (The temporary file
+// inside it can still be removed. When the test runs as `root`, the removal of
+// the directory succeeds as well.)
+TEST(FilesystemHelpers, writeFileAtomicallyFailingRemovalOfTemporaryFile) {
+  TempDir dir;
+  auto subdir = dir.path() / "subdir";
+  fs::create_directory(subdir);
+  absl::Cleanup restorePermissions = [&subdir] {
+    fs::permissions(subdir, fs::perms::owner_all);
+  };
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      writeFileAtomically(subdir / "file",
+                          [&subdir](const fs::path& temporaryPath) {
+                            ad_utility::makeOfstream(temporaryPath) << "x";
+                            fs::permissions(
+                                subdir, fs::perms::owner_read |
+                                            ql::filesystem_perms_owner_exec);
+                            throw std::runtime_error{"callback failed"};
+                          }),
+      HasSubstr("callback failed"));
 }

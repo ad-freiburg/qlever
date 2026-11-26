@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <limits>
 
+#include "util/ContainersWithAllocator.h"
 #include "util/GeoConverters.h"
 
 using namespace geometryConverters;
@@ -100,6 +101,7 @@ Result S2GeometryAlgorithm::run() {
   addSkippedRowsWarning(indexOfRight ? numSkippedSearch : numSkippedIndex,
                         indexOfRight ? numSkippedIndex : numSkippedSearch,
                         "values that are not points");
-  return Result(std::move(result), std::vector<ColumnIndex>{},
+  return Result(std::move(result),
+                qlm::vector<ColumnIndex>{qec_->getAllocator()},
                 Result::getMergedLocalVocab(*resultLeft, *resultRight));
 }

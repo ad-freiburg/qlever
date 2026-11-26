@@ -25,6 +25,9 @@
 
 namespace ad_utility::triple_component {
 
+class Literal;
+class LiteralView;
+
 // A class template to hold literal values. When `isOwning = true` (the
 // default), storage is `std::string`. When `isOwning = false`, storage is
 // `std::string_view` and all mutating/allocating functions are disabled. Use
@@ -37,6 +40,12 @@ class BasicLiteral {
       std::conditional_t<isOwning, std::string, std::string_view>;
 
  private:
+  // Required for `toOwned` below, and for the constructor of `LiteralView`
+  // from an equal literal.
+  template <bool>
+  friend class BasicLiteral;
+  friend class LiteralView;
+
   // Store the normalized version of the literal, including possible datatypes
   // and descriptors.
   //  For example `"Hello World"@en`  or `"With"Quote"^^<someDatatype>` (note
@@ -47,6 +56,14 @@ class BasicLiteral {
   // the position of the `@` or `^^` for literals with language tags or
   // datatypes.
   std::size_t beginOfSuffix_;
+
+  // Like the constructor below, but without its checks. Only for a `content`
+  // and a `beginOfSuffix` that are taken from a valid literal (see `toOwned`
+  // and the constructor of `LiteralView` from an equal literal, which is called
+  // for each word that is added to a `LocalVocab`).
+  struct UncheckedTag {};
+  BasicLiteral(UncheckedTag, StorageType content, size_t beginOfSuffix)
+      : storage_{std::move(content)}, beginOfSuffix_{beginOfSuffix} {}
 
  protected:
   // Create a new literal without any descriptor.
@@ -76,6 +93,9 @@ class BasicLiteral {
   }
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(BasicLiteral, storage_,
                                               beginOfSuffix_)
+
+  // Return an owning copy of this literal.
+  Literal toOwned() const;
 
   std::conditional_t<isOwning, const std::string&, std::string_view>
   toStringRepresentation() const& {
@@ -124,6 +144,12 @@ class Literal : public BasicLiteral<true> {
   using BasicLiteral<true>::BasicLiteral;
 
  private:
+  // The qualified name is needed, because inside a class derived from
+  // `BasicLiteral<...>` GCC 8 resolves a plain `BasicLiteral` to the
+  // specialization of the base class.
+  template <bool>
+  friend class ::ad_utility::triple_component::BasicLiteral;
+
   explicit Literal(BasicLiteral<true>&& base)
       : BasicLiteral<true>(std::move(base)) {}
 
@@ -186,7 +212,7 @@ class Literal : public BasicLiteral<true> {
   // Concatenates the content of the current literal with another literal.
   // If the language tag or datatype of the literals differ, the existing
   // language tag or datatype is removed from the current literal. Used in the
-  // `CONCAT` function in `StringExpressions.cpp`.
+  // `CONCAT` function in `ConcatExpression.cpp`.
   void concat(const Literal& other);
 };
 
@@ -196,8 +222,24 @@ class LiteralView : public BasicLiteral<false> {
   using BasicLiteral<false>::BasicLiteral;
 
  private:
+  // The qualified name is needed, because inside a class derived from
+  // `BasicLiteral<...>` GCC 8 resolves a plain `BasicLiteral` to the
+  // specialization of the base class.
+  template <bool>
+  friend class ::ad_utility::triple_component::BasicLiteral;
+
   explicit LiteralView(BasicLiteral<false>&& base)
       : BasicLiteral<false>(std::move(base)) {}
+
+  // Only for the corresponding constructor of `LiteralOrIriView` (see there).
+  friend class LiteralOrIriView;
+  template <bool isOwning>
+  LiteralView(const BasicLiteral<isOwning>& equal, std::string_view storage)
+      : BasicLiteral<false>{BasicLiteral<false>::UncheckedTag{}, storage,
+                            equal.beginOfSuffix_} {
+    AD_EXPENSIVE_CHECK(storage ==
+                       std::string_view{equal.toStringRepresentation()});
+  }
 
  public:
   template <typename H>
@@ -210,6 +252,13 @@ class LiteralView : public BasicLiteral<false> {
     return LiteralView{BasicLiteral<false>::fromStringRepresentation(internal)};
   }
 };
+
+// _____________________________________________________________________________
+template <bool isOwning>
+Literal BasicLiteral<isOwning>::toOwned() const {
+  return Literal{BasicLiteral<true>{typename BasicLiteral<true>::UncheckedTag{},
+                                    std::string{storage_}, beginOfSuffix_}};
+}
 
 }  // namespace ad_utility::triple_component
 

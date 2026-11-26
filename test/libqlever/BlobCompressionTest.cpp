@@ -20,7 +20,7 @@
 #include "./QleverTestHelpers.h"
 #include "libqlever/BlobCompression.h"
 #include "libqlever/NamedCachedQueryBlobManager.h"
-#include "util/CompressionUsingZstd/ZstdWrapper.h"
+#include "util/compressionUsingZstd/ZstdWrapper.h"
 
 using namespace qlever::blobCompression;
 using namespace testing;

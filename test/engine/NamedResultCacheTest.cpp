@@ -7,8 +7,16 @@
 #include "../QueryPlannerTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/LocalVocabEntryTestHelpers.h"
+#include "../util/LocalVocabTestHelpers.h"
+#include "../util/OperationTestHelpers.h"
 #include "engine/NamedResultCache.h"
 #include "index/LocalVocabEntry.h"
+
+using ad_utility::testing::makeLocalVocab;
+
+using ad_utility::testing::colIndices;
+using ad_utility::testing::iriLocalVocabEntry;
 
 namespace {
 TEST(NamedResultCache, basicWorkflow) {
@@ -25,10 +33,10 @@ TEST(NamedResultCache, basicWorkflow) {
   VariableToColumnMap varColMap{{V{"?x"}, makeAlwaysDefinedColumn(0)},
                                 {V{"?y"}, makeAlwaysDefinedColumn(1)}};
 
-  LocalVocab localVocab;
+  LocalVocab localVocab = makeLocalVocab();
   auto* qec = ad_utility::testing::getQec();
-  localVocab.getIndexAndAddIfNotContained(LocalVocabEntry::fromIriref(
-      "<bliBlaBlubb>", qec->getLocalVocabContext()));
+  localVocab.getIndexAndAddIfNotContained(
+      iriLocalVocabEntry("<bliBlaBlubb>", qec->getLocalVocabContext()));
 
   // A matcher for the local vocab
   auto matchLocalVocab =
@@ -45,7 +53,7 @@ TEST(NamedResultCache, basicWorkflow) {
     return NamedResultCache::Value{
         std::make_shared<const IdTable>(table.clone()),
         varColMap,
-        {1, 0},
+        colIndices({1, 0}),
         localVocab.clone(),
         "cache key",
         std::nullopt};
@@ -144,10 +152,10 @@ TEST(NamedResultCache, E2E) {
   auto result = qet->getResult(false);
 
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
-  LocalVocab dummyVocab;
-  auto notInVocab = Id::makeFromLocalVocabIndex(
-      dummyVocab.getIndexAndAddIfNotContained(LocalVocabEntry::fromIriref(
-          "<notInVocab>", qec->getLocalVocabContext())));
+  LocalVocab dummyVocab = makeLocalVocab();
+  auto notInVocab =
+      Id::makeFromLocalVocabIndex(dummyVocab.getIndexAndAddIfNotContained(
+          iriLocalVocabEntry("<notInVocab>", qec->getLocalVocabContext())));
   auto expected =
       makeIdTableFromVector({{notInVocab}, {getId("<s>")}, {getId("<s2>")}});
   EXPECT_THAT(result->idTableView(), matchesIdTable(expected));

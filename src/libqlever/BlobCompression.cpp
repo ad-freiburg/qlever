@@ -24,10 +24,10 @@
 #include <string>
 
 #include "backports/algorithm.h"
-#include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/Exception.h"
 #include "util/Log.h"
 #include "util/UninitializedAllocator.h"
+#include "util/compressionUsingZstd/ZstdWrapper.h"
 
 namespace qlever::blobCompression {
 

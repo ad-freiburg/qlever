@@ -13,21 +13,22 @@
 #include <optional>
 #include <vector>
 
+#include "backports/span.h"
 #include "engine/AddCombinedRowToTable.h"
-#include "engine/IndexScan.h"
-#include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/Result.h"
-#include "engine/Sort.h"
 #include "engine/idTable/IdTable.h"
+#include "engine/operation/IndexScan.h"
+#include "engine/operation/Operation.h"
+#include "engine/operation/Sort.h"
 #include "index/CompressedRelationReader.h"
 #include "index/Permutation.h"
 #include "util/Exception.h"
 #include "util/Generators.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
-#include "util/JoinAlgorithms/JoinColumnMapping.h"
 #include "util/TypeTraits.h"
+#include "util/joinAlgorithms/JoinColumnMapping.h"
 
 namespace qlever::joinHelpers {
 
@@ -98,8 +99,8 @@ IteratorWithSingleCol<numJoinColumns> convertGeneratorFromScan(
         sendPriority = SendPriority::IfDue;
         // IndexScans don't have a local vocabulary, so we can just use an empty
         // one.
-        return makeIdTableAndFirstCols<numJoinColumns>(std::move(table),
-                                                       LocalVocab{});
+        return makeIdTableAndFirstCols<numJoinColumns>(
+            std::move(table), LocalVocab{scan.allocator()});
       });
 
   return IteratorWithSingleCol<numJoinColumns>{std::move(range)};
@@ -177,7 +178,7 @@ Result::LazyResult
 // IdTableVocabPair. An optional permutation can be applied to the result.
 template <typename Action>
 inline Result createResultFromAction(bool requestLaziness, Action&& action,
-                                     std::vector<ColumnIndex> resultSortedOn,
+                                     qlm::vector<ColumnIndex> resultSortedOn,
                                      OptionalPermutation permutation) {
   if (requestLaziness) {
     return {runLazyJoinAndConvertToGenerator(std::forward<Action>(action),
@@ -229,7 +230,7 @@ inline bool doesJoinProduceGuaranteedGraphValuesOrUndef(
 // Helper function to check if any of the join columns could potentially contain
 // undef values.
 inline bool joinColumnsAreAlwaysDefined(
-    const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
+    ql::span<const std::array<ColumnIndex, 2>> joinColumns,
     const std::shared_ptr<QueryExecutionTree>& left,
     const std::shared_ptr<QueryExecutionTree>& right) {
   auto alwaysDefHelper = [](const auto& tree, ColumnIndex index) {
@@ -263,7 +264,7 @@ inline std::shared_ptr<const Result> computeResultSkipChild(
 inline bool rightIndexNestedLoopJoinIsPossible(
     const std::shared_ptr<QueryExecutionTree>& left,
     const std::shared_ptr<QueryExecutionTree>& right,
-    const std::vector<std::array<ColumnIndex, 2>>& matchedColumns) {
+    ql::span<const std::array<ColumnIndex, 2>> matchedColumns) {
   auto sort = std::dynamic_pointer_cast<Sort>(left->getRootOperation());
   return sort && left->getSizeEstimate() >= right->getSizeEstimate() &&
          joinColumnsAreAlwaysDefined(matchedColumns, left, right);

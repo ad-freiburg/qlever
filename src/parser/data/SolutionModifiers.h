@@ -10,10 +10,11 @@
 #include "parser/data/OrderKey.h"
 #include "parser/data/SparqlFilter.h"
 #include "rdfTypes/Variable.h"
+#include "util/ContainersWithAllocator.h"
 
 struct SolutionModifiers {
-  std::vector<GroupKey> groupByVariables_;
-  std::vector<SparqlFilter> havingClauses_;
+  qlm::vector<GroupKey> groupByVariables_;
+  qlm::vector<SparqlFilter> havingClauses_;
   OrderClause orderBy_;
   LimitOffsetClause limitOffset_{};
 };

@@ -8,16 +8,22 @@
 #include <vector>
 
 #include "./util/IdTestHelpers.h"
+#include "./util/LocalVocabTestHelpers.h"
 #include "engine/CallFixedSize.h"
-#include "engine/IndexScan.h"
 #include "engine/JoinHelpers.h"
-#include "engine/Minus.h"
 #include "engine/MinusRowHandler.h"
 #include "engine/ValuesForTesting.h"
+#include "engine/operation/IndexScan.h"
+#include "engine/operation/Minus.h"
 #include "util/AllocatorTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
+#include "util/LocalVocabEntryTestHelpers.h"
 #include "util/OperationTestHelpers.h"
+
+using ad_utility::testing::makeLocalVocab;
+
+using ad_utility::testing::localVocabEntryFromStringRepresentation;
 
 namespace {
 auto V = ad_utility::testing::VocabId;
@@ -150,12 +156,12 @@ TEST(Minus, ensureLocalVocabFromLeftIsPassed) {
   IdTable a = makeIdTableFromVector({{0}, {1}, {2}, {3}, {4}});
   IdTable b = makeIdTableFromVector({{0}});
   LocalVocabEntry aEntry =
-      LocalVocabEntry::fromStringRepresentation("\"a\"", localVocabContext);
-  LocalVocab vocabA;
+      localVocabEntryFromStringRepresentation("\"a\"", localVocabContext);
+  LocalVocab vocabA = makeLocalVocab();
   vocabA.getIndexAndAddIfNotContained(aEntry);
-  LocalVocab vocabB;
+  LocalVocab vocabB = makeLocalVocab();
   vocabB.getIndexAndAddIfNotContained(
-      LocalVocabEntry::fromStringRepresentation("\"b\"", localVocabContext));
+      localVocabEntryFromStringRepresentation("\"b\"", localVocabContext));
 
   Minus m{qec,
           ad_utility::makeExecutionTree<ValuesForTesting>(
@@ -177,13 +183,13 @@ TEST(Minus, computeMinusLeftIndexNestedLoopJoinOptimization) {
   auto* qec = ad_utility::testing::getQec();
   const auto& localVocabContext = qec->getLocalVocabContext();
   LocalVocabEntry entryA =
-      LocalVocabEntry::fromStringRepresentation("\"a\"", localVocabContext);
+      localVocabEntryFromStringRepresentation("\"a\"", localVocabContext);
   LocalVocabEntry entryB =
-      LocalVocabEntry::fromStringRepresentation("\"b\"", localVocabContext);
+      localVocabEntryFromStringRepresentation("\"b\"", localVocabContext);
 
-  LocalVocab leftVocab;
+  LocalVocab leftVocab = makeLocalVocab();
   leftVocab.getIndexAndAddIfNotContained(entryA);
-  LocalVocab rightVocab;
+  LocalVocab rightVocab = makeLocalVocab();
   rightVocab.getIndexAndAddIfNotContained(entryB);
 
   // From this table columns 1 and 2 will be used for the join.
@@ -232,13 +238,13 @@ TEST(Minus, computeMinusRightIndexNestedLoopJoinOptimization) {
   auto* qec = ad_utility::testing::getQec();
   const auto& localVocabContext = qec->getLocalVocabContext();
   LocalVocabEntry entryA =
-      LocalVocabEntry::fromStringRepresentation("\"a\"", localVocabContext);
+      localVocabEntryFromStringRepresentation("\"a\"", localVocabContext);
   LocalVocabEntry entryB =
-      LocalVocabEntry::fromStringRepresentation("\"b\"", localVocabContext);
+      localVocabEntryFromStringRepresentation("\"b\"", localVocabContext);
 
-  LocalVocab leftVocab;
+  LocalVocab leftVocab = makeLocalVocab();
   leftVocab.getIndexAndAddIfNotContained(entryA);
-  LocalVocab rightVocab;
+  LocalVocab rightVocab = makeLocalVocab();
   rightVocab.getIndexAndAddIfNotContained(entryB);
 
   // From this table columns 2 and 1 will be used for the join.
@@ -521,6 +527,27 @@ TEST(Minus, repeatingMatchesDontProduceDuplicates) {
   testMinus(std::move(leftTables), std::move(rightTables), std::move(expected));
 }
 
+// Test that a left row is removed when its matches end inside the last of the
+// `FETCH_BLOCKS` (3) right blocks fetched at once and the right input continues
+// beyond that block.
+TEST(Minus, matchesEndInThirdFetchedBlockOfTheRightInput) {
+  // One left row and the right blocks [1] [1] [1] [1, 2] [3], the same blocks
+  // as in `OptionalJoin.lazyOptionalJoinMatchesEndInThirdFetchedBlock`.
+  std::vector<IdTable> leftTables;
+  leftTables.push_back(makeIdTableFromVector({{1, 11}}));
+  std::vector<IdTable> rightTables;
+  rightTables.push_back(makeIdTableFromVector({{1, 21}}));
+  rightTables.push_back(makeIdTableFromVector({{1, 22}}));
+  rightTables.push_back(makeIdTableFromVector({{1, 23}}));
+  rightTables.push_back(makeIdTableFromVector({{1, 24}, {2, 25}}));
+  rightTables.push_back(makeIdTableFromVector({{3, 26}}));
+
+  // The left row has a match, so the result is empty.
+  std::vector<IdTable> expected;
+
+  testMinus(std::move(leftTables), std::move(rightTables), std::move(expected));
+}
+
 // _____________________________________________________________________________
 TEST(Minus, lazyMinusWithUndefRight) {
   std::vector<IdTable> expected;
@@ -579,7 +606,8 @@ TEST(Minus, lazyMinusWithOneMaterializedTable) {
         qec,
         makeIdTableFromVector({{U, V(10)}, {V(1), V(11)}, {2, 12}, {3, 13}}),
         std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}},
-        false, std::vector<ColumnIndex>{0}, LocalVocab{}, std::nullopt, true);
+        false, std::vector<ColumnIndex>{0}, makeLocalVocab(), std::nullopt,
+        true);
     auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, std::move(rightTables),
         std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?z"}},
@@ -613,7 +641,8 @@ TEST(Minus, lazyMinusWithOneMaterializedTable) {
     auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, makeIdTableFromVector({{V(2), V(22)}}),
         std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?z"}},
-        false, std::vector<ColumnIndex>{0}, LocalVocab{}, std::nullopt, true);
+        false, std::vector<ColumnIndex>{0}, makeLocalVocab(), std::nullopt,
+        true);
     Minus minus{qec, left, right};
 
     qec->getQueryTreeCache().clearAll();
@@ -668,15 +697,15 @@ TEST(Minus, lazyMinusWithPermutedColumns) {
 TEST(Minus, lazyMinusKeepsLeftLocalVocab) {
   auto qec = ad_utility::testing::getQec();
 
-  LocalVocabEntry testLiteral = LocalVocabEntry::fromStringRepresentation(
+  LocalVocabEntry testLiteral = localVocabEntryFromStringRepresentation(
       "\"Abc\"", qec->getLocalVocabContext());
 
-  LocalVocab leftVocab{};
+  LocalVocab leftVocab = makeLocalVocab();
   leftVocab.getIndexAndAddIfNotContained(testLiteral);
-  LocalVocab rightVocab{};
+  LocalVocab rightVocab = makeLocalVocab();
   rightVocab.getIndexAndAddIfNotContained(
-      LocalVocabEntry::fromStringRepresentation("\"Def\"",
-                                                qec->getLocalVocabContext()));
+      localVocabEntryFromStringRepresentation("\"Def\"",
+                                              qec->getLocalVocabContext()));
 
   auto expected = makeIdTableFromVector({{1, 11, 111}, {3, 33, 333}});
 
@@ -759,10 +788,10 @@ struct Wrapper {
 TEST(Minus, MinusRowHandlerKeepsLeftLocalVocabAfterFlush) {
   auto qec = ad_utility::testing::getQec();
 
-  LocalVocabEntry testLiteral = LocalVocabEntry::fromStringRepresentation(
+  LocalVocabEntry testLiteral = localVocabEntryFromStringRepresentation(
       "\"Abc\"", qec->getLocalVocabContext());
 
-  LocalVocab leftVocab{};
+  LocalVocab leftVocab = makeLocalVocab();
   leftVocab.getIndexAndAddIfNotContained(testLiteral);
 
   std::vector<IdTable> resultTables;

@@ -19,6 +19,7 @@
 
 #include "./util/GTestHelpers.h"
 #include "./util/IndexTestHelpers.h"
+#include "./util/LocalVocabTestHelpers.h"
 #include "backports/algorithm.h"
 #include "engine/ExecuteUpdate.h"
 #include "engine/ExportQueryExecutionTrees.h"
@@ -32,11 +33,16 @@
 #include "index/LocalVocabEntry.h"
 #include "index/TripleComponentConversions.h"
 #include "index/vocabulary/SecondaryVocabulary.h"
-#include "parser/LiteralOrIri.h"
 #include "parser/SparqlParser.h"
 #include "parser/TripleComponent.h"
+#include "rdfTypes/LiteralOrIri.h"
 #include "util/CompactStringVector.h"
-#include "util/Serializer/ByteBufferSerializer.h"
+#include "util/LocalVocabEntryTestHelpers.h"
+#include "util/serializer/ByteBufferSerializer.h"
+
+using ad_utility::testing::makeLocalVocab;
+
+using ad_utility::testing::iriLocalVocabEntry;
 
 static constexpr auto executor = &ad_utility::testing::singleThreadExecutor;
 
@@ -110,14 +116,12 @@ class SecondaryVocabIndexTest : public ::testing::Test {
 
   // A `LocalVocabEntry` for the given IRI, in the context of this index.
   LocalVocabEntry entry(std::string_view iriref) const {
-    return LocalVocabEntry::fromIriref(iriref, context_);
+    return iriLocalVocabEntry(iriref, context_);
   }
 
-  // The `Id` that refers to the given entry. NOTE: The entry has to outlive the
-  // returned `Id`, which only stores a pointer to it.
-  static Id idOf(const LocalVocabEntry& entry) {
-    return Id::makeFromLocalVocabIndex(&entry);
-  }
+  // The `Id` that refers to (a copy of) the given entry.
+  decltype(ad_utility::testing::makeGetLocalVocabId()) idOf =
+      ad_utility::testing::makeGetLocalVocabId();
 };
 
 // _____________________________________________________________________________
@@ -483,10 +487,10 @@ TEST(SecondaryVocabIndex, sortsDirectlyAfterTheMainVocabulary) {
                       Id::makeFromWordVocabIndex(WordVocabIndex::make(3)),
                       Id::makeFromBlankNodeIndex(BlankNodeIndex::make(3)),
                       Id::makeFromEncodedVal(7),
+                      Id::makeFromTripleTermIndex(TripleTermIndex::make(3)),
                       secondaryVocabId(0),
                       secondaryVocabId(1)};
-  for (size_t i = 0; i <= static_cast<size_t>(Datatype::MaxValue); ++i) {
-    auto datatype = static_cast<Datatype>(i);
+  for (Datatype datatype : qlever::allEnumValues<Datatype>) {
     bool isCovered = ::ranges::contains(ids, datatype, Id::getDatatypeL);
     ASSERT_EQ(isCovered, datatype != Datatype::LocalVocabIndex)
         << toString(datatype);
@@ -622,15 +626,16 @@ TEST(SecondaryVocabIndex, localVocabEntryWithoutSecondaryVocabulary) {
   EXPECT_EQ(index.getImpl().secondaryVocab(), nullptr);
   EXPECT_FALSE(context.hasSecondaryVocabulary());
   auto entry = [&context](std::string_view iriref) {
-    return LocalVocabEntry::fromIriref(iriref, context);
+    return iriLocalVocabEntry(iriref, context);
   };
 
+  auto getLocalVocabId = ad_utility::testing::makeGetLocalVocabId();
   auto entryB = entry("<b>");
   auto position = entryB.positionInVocab();
   EXPECT_EQ(position.lowerBound_, position.upperBound_);
   EXPECT_EQ(Id::fromBits(position.lowerBound_.get()), getId("<c>"));
-  EXPECT_LT(Id::makeFromLocalVocabIndex(&entryB), getId("<c>"));
-  EXPECT_LT(getId("<a>"), Id::makeFromLocalVocabIndex(&entryB));
+  EXPECT_LT(getLocalVocabId(entryB), getId("<c>"));
+  EXPECT_LT(getId("<a>"), getLocalVocabId(entryB));
 
   // Without a secondary vocabulary, two entries are compared by their string
   // values alone, without looking up their positions (see the documentation of
@@ -649,7 +654,7 @@ TEST(SecondaryVocabIndex, localVocabEntryWithoutSecondaryVocabulary) {
 // _____________________________________________________________________________
 TEST_F(SecondaryVocabIndexTest, exportOfSecondaryVocabIds) {
   const IndexImpl& impl = index_.getImpl();
-  LocalVocab localVocab{};
+  LocalVocab localVocab = makeLocalVocab();
 
   auto iriId = secondaryVocabId(1);
   auto literalId = secondaryVocabId(0);
@@ -695,7 +700,7 @@ TEST(SecondaryVocabIndex, exportWithoutSecondaryVocabularyThrows) {
   Index index = ad_utility::testing::makeTestIndex(gtestCurrentTestName(),
                                                    "<s> <p> <a> .");
   AD_EXPECT_THROW_WITH_MESSAGE(
-      idToLiteralOrIri(index.getImpl(), secondaryVocabId(0), LocalVocab{}),
+      idToLiteralOrIri(index.getImpl(), secondaryVocabId(0), makeLocalVocab()),
       HasSubstr("the index has no secondary vocabulary"));
 }
 
@@ -717,7 +722,7 @@ TEST_F(SecondaryVocabIndexTest, toValueIdUsesAllVocabularies) {
 
   // A word of the secondary vocabulary becomes a bare `Id` of that vocabulary.
   {
-    LocalVocab localVocab;
+    LocalVocab localVocab = makeLocalVocab();
     Id id = toId("<b>", localVocab);
     EXPECT_EQ(id.getDatatype(), Datatype::SecondaryVocabIndex);
     EXPECT_EQ(id, secondaryVocabId(1));
@@ -727,7 +732,7 @@ TEST_F(SecondaryVocabIndexTest, toValueIdUsesAllVocabularies) {
   // A word of the vocabulary of the main index becomes a bare `Id` of that
   // vocabulary, as it always did.
   {
-    LocalVocab localVocab;
+    LocalVocab localVocab = makeLocalVocab();
     Id id = toId("<c>", localVocab);
     EXPECT_EQ(id.getDatatype(), Datatype::VocabIndex);
     EXPECT_EQ(id, getId_("<c>"));
@@ -739,7 +744,7 @@ TEST_F(SecondaryVocabIndexTest, toValueIdUsesAllVocabularies) {
   // vocabulary. That position has to be the very one that the entry computes
   // for itself, which is what the constructor of `LocalVocabEntry` checks.
   {
-    LocalVocab localVocab;
+    LocalVocab localVocab = makeLocalVocab();
     Id id = toId("<e>", localVocab);
     EXPECT_EQ(id.getDatatype(), Datatype::LocalVocabIndex);
     EXPECT_EQ(localVocab.size(), 1);
@@ -808,10 +813,7 @@ struct ContextWithSecondaryVocab {
   // deleting a file that is still open is fine on the platforms that QLever
   // supports, and the index is only ever read from.
   ~ContextWithSecondaryVocab() {
-    for (const std::string& filename :
-         ad_utility::testing::getAllIndexFilenames(indexBasename_)) {
-      ad_utility::deleteFile(filename, false);
-    }
+    ad_utility::testing::deleteTestIndexFiles(indexBasename_);
   }
 };
 
@@ -823,7 +825,8 @@ std::string runQuery(QueryExecutionContext* qec, const std::string& query) {
   static const EncodedIriManager encodedIriManager;
   auto cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
-  auto parsedQuery = SparqlParser::parseQuery(&encodedIriManager, query);
+  auto parsedQuery = SparqlParser::parseQuery(
+      &encodedIriManager, ad_utility::testing::makeAllocator(), query);
   QueryPlanner queryPlanner{qec, cancellationHandle};
   auto executionTree = queryPlanner.createExecutionTree(parsedQuery);
   ad_utility::Timer timer{ad_utility::Timer::Started};
@@ -857,7 +860,8 @@ void runUpdate(ContextWithSecondaryVocab& context, const std::string& update) {
       std::make_shared<ad_utility::CancellationHandle<>>();
   ad_utility::BlankNodeManager blankNodeManager;
   auto parsedQueries =
-      SparqlParser::parseUpdate(&blankNodeManager, &encodedIriManager, update);
+      SparqlParser::parseUpdate(&blankNodeManager, &encodedIriManager,
+                                ad_utility::testing::makeAllocator(), update);
   context.index_->deltaTriplesManager().modify<void>(
       [&context, &parsedQueries,
        &cancellationHandle](DeltaTriples& deltaTriples) {

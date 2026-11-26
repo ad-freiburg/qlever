@@ -13,7 +13,7 @@
 #define QLEVER_SRC_ENGINE_SPATIALJOINALGORITHMBASE_H
 
 #include "engine/Result.h"
-#include "engine/SpatialJoin.h"
+#include "engine/operation/SpatialJoin.h"
 
 // Abstract base class for the algorithms computing a `SpatialJoin`. Each
 // concrete algorithm (baseline, S2, bounding box/r-tree, libspatialjoin, ...)

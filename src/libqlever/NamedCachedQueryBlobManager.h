@@ -20,8 +20,8 @@
 #include "backports/span.h"
 #include "libqlever/BlobCompression.h"
 #include "util/AlignedAllocator.h"
-#include "util/Serializer/ByteBufferSerializer.h"
 #include "util/UninitializedAllocator.h"
+#include "util/serializer/ByteBufferSerializer.h"
 
 namespace qlever {
 

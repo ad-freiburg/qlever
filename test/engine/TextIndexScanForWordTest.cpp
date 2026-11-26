@@ -14,8 +14,8 @@
 #include "../util/IndexTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
 #include "./TextIndexScanTestHelpers.h"
-#include "engine/IndexScan.h"
-#include "engine/TextIndexScanForWord.h"
+#include "engine/operation/IndexScan.h"
+#include "engine/operation/TextIndexScanForWord.h"
 #include "parser/ParsedQuery.h"
 
 using namespace ad_utility::testing;
@@ -159,7 +159,8 @@ TEST(TextIndexScanForWord, TextScoringMetric) {
   ASSERT_EQ(getTextScoringMetricAsString(EXPLICIT), "explicit");
   ASSERT_EQ(getTextScoringMetricAsString(TFIDF), "tf-idf");
   ASSERT_EQ(getTextScoringMetricAsString(BM25), "bm25");
-  ASSERT_EQ(getTextScoringMetricAsString(static_cast<TextScoringMetric>(999)),
+  ASSERT_EQ(getTextScoringMetricAsString(
+                static_cast<TextScoringMetric>(enumSize<TextScoringMetric>)),
             "explicit");
 
   ASSERT_EQ(getTextScoringMetricFromString("explicit"), EXPLICIT);

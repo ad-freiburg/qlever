@@ -80,6 +80,9 @@ class BlockSelector {
   bool addGraphColumn_;
   const std::optional<std::vector<Id>>& idFilter_;
   const LocatedTriplesPerBlock& locatedTriples_;
+  // Checked once per ID of the `idFilter_`, for each of which the block
+  // metadata is searched.
+  const CompressedRelationReader::CancellationHandle& cancellationHandle_;
   SelectedBlocks result_;
 
  public:
@@ -87,6 +90,7 @@ class BlockSelector {
       const CompressedRelationReader::FilterDuplicatesAndGraphs& filter,
       bool addGraphColumn, const std::optional<std::vector<Id>>& idFilter,
       const LocatedTriplesPerBlock& locatedTriples,
+      const CompressedRelationReader::CancellationHandle& cancellationHandle,
       const CompressedRelationReader::Allocator& allocator);
 
   // Perform the classification described above.

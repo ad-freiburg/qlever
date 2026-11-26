@@ -90,15 +90,15 @@ const Index& testIndex() {
 // A shared mutable `LocalVocab` for the `preprocessTerm` call sites (which take
 // it by reference to hold the entries backing constant literal `dedupId_`s).
 LocalVocab& testLocalVocab() {
-  static LocalVocab localVocab;
+  static LocalVocab localVocab{ad_utility::testing::makeAllocator()};
   return localVocab;
 }
 
 // _____________________________________________________________________________
 auto preprocess = [](const Triples& triples,
                      const VariableToColumnMap& varMap) {
-  return ConstructTemplatePreprocessor::preprocess(triples, varMap,
-                                                   testIndex());
+  return ConstructTemplatePreprocessor::preprocess(
+      triples, varMap, testIndex(), ad_utility::testing::makeAllocator());
 };
 
 // _____________________________________________________________________________
@@ -199,8 +199,8 @@ TEST(ConstructTemplatePreprocessorTest, constantResolvesToSameValueIdAsData) {
     triples.push_back({GraphTerm{iriV("<http://s>")},
                        GraphTerm{iriV("<http://p>")}, std::move(object)});
     const VariableToColumnMap varMap;
-    auto result =
-        ConstructTemplatePreprocessor::preprocess(triples, varMap, index);
+    auto result = ConstructTemplatePreprocessor::preprocess(
+        triples, varMap, index, ad_utility::testing::makeAllocator());
 
     return dedupIdAt(result, 0, 2);
   };

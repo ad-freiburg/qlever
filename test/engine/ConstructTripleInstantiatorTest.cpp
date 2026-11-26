@@ -10,10 +10,14 @@
 #include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 
+#include "../util/AllocatorTestHelpers.h"
 #include "../util/GTestHelpers.h"
+#include "../util/LocalVocabTestHelpers.h"
 #include "engine/ConstructTripleInstantiator.h"
 #include "engine/ConstructTypes.h"
 #include "global/Constants.h"
+
+using ad_utility::testing::makeLocalVocab;
 
 namespace {
 using namespace qlever::constructExport;
@@ -176,7 +180,8 @@ TEST(InstantiateBatch, EmptyTemplate) {
   // verify that, if the construct triple template is empty, then the result
   // of instantiating all terms of the construct triple template leads to an
   // empty result.
-  PreprocessedConstructTemplate tmpl = {};
+  PreprocessedConstructTemplate tmpl{.localVocabForConstants_ =
+                                         makeLocalVocab()};
   auto batchResult = BatchEvaluationResult{{}, 3};
 
   auto result = instantiateBatch(tmpl, batchResult, dummyOffsetForRowIdxTotal);
@@ -189,7 +194,8 @@ TEST(InstantiateBatch, EmptyBatch) {
   auto s = makeTerm("<http://s>");
   auto p = makeTerm("<http://p>");
   auto o = makeTerm("<http://o>");
-  PreprocessedConstructTemplate tmpl;
+  PreprocessedConstructTemplate tmpl{.localVocabForConstants_ =
+                                         makeLocalVocab()};
   tmpl.preprocessedTriples_ = {
       {PrecomputedConstant{s}, PrecomputedConstant{p}, PrecomputedConstant{o}}};
   auto batchResult = BatchEvaluationResult{{}, 0};
@@ -204,7 +210,8 @@ TEST(InstantiateBatch, ConstantTripleReplicatedAcrossRows) {
   auto s = makeTerm("<http://s>");
   auto p = makeTerm("<http://p>");
   auto o = makeTerm("<http://o>");
-  PreprocessedConstructTemplate tmpl;
+  PreprocessedConstructTemplate tmpl{.localVocabForConstants_ =
+                                         makeLocalVocab()};
   tmpl.preprocessedTriples_ = {
       {PrecomputedConstant{s}, PrecomputedConstant{p}, PrecomputedConstant{o}}};
   auto batchResult = BatchEvaluationResult{{}, 3};
@@ -236,7 +243,8 @@ TEST(InstantiateBatch, UnboundVariableDropsTriple) {
   auto batchResult = BatchEvaluationResult{{{variableColumnIndex, vals}}, 3};
   auto p = makeTerm("<http://p>");
   auto o = makeTerm("<http://o>");
-  PreprocessedConstructTemplate tmpl;
+  PreprocessedConstructTemplate tmpl{.localVocabForConstants_ =
+                                         makeLocalVocab()};
   tmpl.preprocessedTriples_ = {{PrecomputedVariable{variableColumnIndex},
                                 PrecomputedConstant{p},
                                 PrecomputedConstant{o}}};
@@ -258,7 +266,8 @@ TEST(InstantiateBatch, UnboundVariableDropsTriple) {
 TEST(InstantiateBatch, BlankNodeIdIncludesBatchOffset) {
   auto p = makeTerm("<http://p>");
   auto o = makeTerm("<http://o>");
-  PreprocessedConstructTemplate tmpl;
+  PreprocessedConstructTemplate tmpl{.localVocabForConstants_ =
+                                         makeLocalVocab()};
   tmpl.preprocessedTriples_ = {{PrecomputedBlankNode{"_:g", ""},
                                 PrecomputedConstant{p},
                                 PrecomputedConstant{o}}};
@@ -283,7 +292,8 @@ TEST(InstantiateBatch, MultipleTriples) {
   auto o1 = makeTerm("<http://o1>");
   auto p2 = makeTerm("<http://p2>");
   auto o2 = makeTerm("<http://o2>");
-  PreprocessedConstructTemplate tmpl;
+  PreprocessedConstructTemplate tmpl{.localVocabForConstants_ =
+                                         makeLocalVocab()};
   tmpl.preprocessedTriples_ = {{PrecomputedConstant{s}, PrecomputedConstant{p1},
                                 PrecomputedConstant{o1}},
                                {PrecomputedConstant{s}, PrecomputedConstant{p2},

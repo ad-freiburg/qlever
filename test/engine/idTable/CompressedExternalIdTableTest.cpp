@@ -5,6 +5,7 @@
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
 
 #include <absl/cleanup/cleanup.h>
+#include <absl/functional/any_invocable.h>
 #include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -71,12 +72,8 @@ auto idTableFromBlockGenerator = [](auto& generator) -> CopyableIdTable<0> {
 // for details).
 template <size_t NumStaticColumns>
 auto idTableFromRowGenerator = [](auto&& generator, size_t numColumns) {
-  CopyableIdTable<NumStaticColumns> result(
-      numColumns, ad_utility::testing::makeAllocator());
-  for (const auto& row : generator) {
-    result.push_back(row);
-  }
-  return result;
+  return ::ranges::to<CopyableIdTable<NumStaticColumns>>(
+      AD_FWD(generator), numColumns, ad_utility::testing::makeAllocator());
 };
 }  // namespace
 
@@ -109,11 +106,13 @@ TEST(CompressedExternalIdTable, compressedExternalIdTableWriter) {
     ql::ranges::copy(tr, std::back_inserter(result));
     EXPECT_THAT(result, ElementsAreArray(tables));
   };
-  // With 10 bytes per block, the first and second IdTable are split up into
+  // With one `Id` per block, the first and second IdTable are split up into
   // multiple blocks.
-  runTestForBlockSize(10_B);
-  // With 48 bytes, each IdTable is stored in a single block.
-  runTestForBlockSize(48_B);
+  runTestForBlockSize(ad_utility::MemorySize::bytes(BYTES_PER_ID_COLUMN_ENTRY));
+  // With six `Id`s per block, each IdTable (at most three rows) is stored in
+  // a single block.
+  runTestForBlockSize(
+      ad_utility::MemorySize::bytes(6 * BYTES_PER_ID_COLUMN_ENTRY));
 }
 
 template <size_t NumStaticColumns>
@@ -517,11 +516,11 @@ TEST(CompressedExternalIdTable, blockBuffersAreRecycled) {
   // The address of the first column of each block, in the order of the blocks.
   // The transformation runs on the single background thread, and each run
   // completes before the next block is handed over, so no lock is needed.
-  auto buffers = std::make_shared<std::vector<const Id*>>();
+  auto buffers = std::make_shared<std::vector<const char*>>();
   struct RecordBuffer {
-    std::shared_ptr<std::vector<const Id*>> buffers_;
+    std::shared_ptr<std::vector<const char*>> buffers_;
     void operator()(IdTableStatic<NUM_COLS>& block) const {
-      buffers_->push_back(block.getColumn(0).data());
+      buffers_->push_back(memoryOf(block.getColumn(0)));
     }
   };
 
@@ -843,7 +842,8 @@ TEST(CompressedExternalIdTable, runsInputForwardsTheBlockMetadata) {
   input.appendToBlock(block, writer.firstRowOfBlock(0, 0));
   ASSERT_EQ(block.numRows(), 1u);
   EXPECT_EQ(block.at(0), writer.firstRowOfBlock(0, 0));
-  EXPECT_EQ(input.memorySizeOfElement(block.at(0)), 3 * 8_B);
+  EXPECT_EQ(input.memorySizeOfElement(block.at(0)),
+            ad_utility::MemorySize::bytes(3 * BYTES_PER_ID_COLUMN_ENTRY));
 }
 
 // _____________________________________________________________________________
@@ -965,6 +965,44 @@ TEST(CompressedExternalIdTable, sorterWithSerialMerge) {
   testExternalSorter<0>(NUM_COLS, 10'000, 10_kB, 1);
   testExternalSorter<0>(NUM_COLS, 1000, 1_MB, 1);
   testExternalSorter<0>(NUM_COLS, 0, 1_MB, 1);
+}
+
+namespace {
+// A `SortByOSP` that records whether it was ever called from a thread other
+// than the `callingThread_`.
+struct SortByOSPInCallingThread {
+  static inline std::thread::id callingThread_;
+  static inline std::atomic<bool> otherThreadWasSeen_ = false;
+  template <typename A, typename B>
+  bool operator()(const A& a, const B& b) const {
+    if (std::this_thread::get_id() != callingThread_) {
+      otherThreadWasSeen_ = true;
+    }
+    return SortByOSP{}(a, b);
+  }
+};
+}  // namespace
+
+// With `setDoAllWorkInCallingThread`, the sorter sorts its blocks and merges
+// them in the calling thread, and yields the same result as without it.
+TEST(CompressedExternalIdTable, sorterDoAllWorkInCallingThread) {
+  using Comp = SortByOSPInCallingThread;
+  Comp::callingThread_ = std::this_thread::get_id();
+  Comp::otherThreadWasSeen_ = false;
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
+  std::string filename = gtestCurrentTestName();
+  IdTable input = createRandomlyFilledIdTable(10'000, NUM_COLS);
+  ad_utility::CompressedExternalIdTableSorter<Comp, 0> sorter{
+      filename, NUM_COLS, 10_kB, ad_utility::testing::makeAllocator(), 5_kB};
+  sorter.setDoAllWorkInCallingThread();
+  sorter.pushBlock(input);
+  auto blocks = sorter.getSortedBlocks<0>();
+  auto result = idTableFromBlockGenerator(blocks);
+  ql::ranges::sort(input, SortByOSP{});
+  EXPECT_THAT(result, ::testing::ElementsAreArray(input));
+  EXPECT_FALSE(Comp::otherThreadWasSeen_);
+  // The mode can only be set before the first row is pushed.
+  EXPECT_ANY_THROW(sorter.setDoAllWorkInCallingThread());
 }
 
 // _____________________________________________________________________________
@@ -1089,10 +1127,8 @@ TEST(CompressedExternalIdTable, sorterManyRunsParallel) {
   };
   IdTable input =
       createRandomlyFilledIdTable(NUM_ROWS_PARALLEL_MERGE, NUM_COLS);
-  CopyableIdTable<0> expected{NUM_COLS, ad_utility::testing::makeAllocator()};
-  for (const auto& row : input) {
-    expected.push_back(row);
-  }
+  auto expected = ::ranges::to<CopyableIdTable<0>>(
+      input, NUM_COLS, ad_utility::testing::makeAllocator());
   ql::ranges::sort(expected, SortByOSP{});
 
   auto result = sortWithParallelism(input, 8, filename);
@@ -1492,7 +1528,8 @@ TEST(CompressedExternalIdTable, sorterReducedParallelismWarning) {
   const std::string warning =
       "merge phase of the external sorter can only merge 1 chunks "
       "concurrently instead of the 8 chunks";
-  EXPECT_THAT(logOutput, ::testing::HasSubstr(warning));
+  EXPECT_THAT(logOutput, ifLogLevelIsCompiledIn<LogLevel::Enum::WARN>(
+                             ::testing::HasSubstr(warning)));
   EXPECT_EQ(logOutput.find(warning), logOutput.rfind(warning));
   for (const auto& result : results) {
     EXPECT_EQ(result.numRows(), numRows);
@@ -1796,6 +1833,64 @@ TEST(CompressedExternalIdTable, asyncPushBlock) {
   // Mixing the concurrent pushes with sequential ones.
   testAsyncPushBlock(tables, 64, 20);
   testAsyncPushBlock(tables, 100'000, 20);
+}
+
+// Test that the callback of `makeAsyncPushBlockCallback` pushes its blocks via
+// `asyncPushBlock` (also from several threads at the same time), keeps them
+// alive until the push has completed, and reports the completion to its `done`
+// callback.
+TEST(CompressedExternalIdTable, makeAsyncPushBlockCallback) {
+  // A sorter with a merge executor (the pool has to outlive the sorter, see
+  // `setMergeExecutor`).
+  auto alloc = ad_utility::testing::makeAllocator();
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
+  std::string filename = absl::StrCat(gtestCurrentTestName(), ".dat");
+  absl::Cleanup cleanup = [&filename] {
+    ad_utility::deleteFile(filename, false);
+  };
+  net::thread_pool pool{4};
+  ad_utility::CompressedExternalIdTableSorter<SortByOSP, 0> sorter{
+      filename, NUM_COLS, memoryForBlocksize(64, NUM_COLS), alloc};
+  sorter.setMergeExecutor(pool.get_executor(), 4);
+  auto callback = sorter.makeAsyncPushBlockCallback();
+
+  // Push eight random blocks through the callback from eight threads at the
+  // same time.
+  IdTable expected{NUM_COLS, alloc};
+  std::vector<std::future<void>> results;
+  {
+    std::vector<ad_utility::JThread> threads;
+    for (size_t i = 0; i < 8; ++i) {
+      auto table = createRandomlyFilledIdTable(200 + 37 * i, NUM_COLS);
+      expected.insertAtEnd(table);
+      // Only the callback holds on to the block, so it has to keep it alive.
+      auto block = std::make_shared<const IdTableStatic<0>>(std::move(table));
+      // The `done` callback rethrows the exception of the push (if any) into
+      // the future of the task.
+      std::packaged_task<void(std::exception_ptr)> done{
+          [](std::exception_ptr e) {
+            if (e) {
+              std::rethrow_exception(e);
+            }
+          }};
+      results.push_back(done.get_future());
+      threads.emplace_back([&callback, block = std::move(block),
+                            done = std::move(done)]() mutable {
+        callback(
+            std::move(block),
+            absl::AnyInvocable<void(std::exception_ptr) &&>{std::move(done)});
+      });
+    }
+  }
+
+  // Every push completes without an exception, and the sorter holds exactly
+  // the pushed rows.
+  for (auto& result : results) {
+    EXPECT_NO_THROW(result.get());
+  }
+  EXPECT_EQ(sorter.size(), expected.numRows());
+  ql::ranges::sort(expected, SortByOSP{});
+  EXPECT_THAT(sortedOutput(sorter), ::testing::ElementsAreArray(expected));
 }
 
 // The tests below cover the output of the sorter as the input of an external

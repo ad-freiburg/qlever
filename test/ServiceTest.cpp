@@ -9,13 +9,15 @@
 #include <exception>
 #include <regex>
 
+#include "./util/LocalVocabTestHelpers.h"
 #include "backports/StartsWithAndEndsWith.h"
-#include "engine/Join.h"
-#include "engine/Service.h"
-#include "engine/Sort.h"
-#include "engine/StripColumns.h"
-#include "engine/Values.h"
 #include "engine/ValuesForTesting.h"
+#include "engine/binaryExport/BinaryExport.h"
+#include "engine/operation/Join.h"
+#include "engine/operation/Service.h"
+#include "engine/operation/Sort.h"
+#include "engine/operation/StripColumns.h"
+#include "engine/operation/Values.h"
 #include "global/Constants.h"
 #include "global/IndexTypes.h"
 #include "global/RuntimeParameters.h"
@@ -28,15 +30,29 @@
 #include "util/HttpClientTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
+#include "util/LocalVocabEntryTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 #include "util/RuntimeParametersTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
 #include "util/http/HttpUtils.h"
 
+using ad_utility::testing::makeLocalVocab;
+
+using ad_utility::testing::colIndices;
+using ad_utility::testing::iriLocalVocabEntry;
+
 // Fixture that sets up a test index and a factory for producing mocks for the
 // `getResultFunction` needed by the `Service` operation.
 class ServiceTest : public ::testing::Test {
  protected:
+  // Disable the binary service export for these tests, as the test mocks
+  // expect a plain JSON accept header.
+  decltype(setRuntimeParameterForTest<
+           &RuntimeParameters::binaryServiceEnabled_>(
+      false)) disableBinaryService_ =
+      setRuntimeParameterForTest<&RuntimeParameters::binaryServiceEnabled_>(
+          false);
+
   // Query execution context (with small test index) and allocator for testing,
   // see `IndexTestHelpers.h`. Note that `getQec` returns a pointer to a static
   // `QueryExecutionContext`, so no need to ever delete `testQec`.
@@ -116,7 +132,7 @@ class ServiceTest : public ::testing::Test {
   static Service::SiblingInfo siblingInfoFromOp(std::shared_ptr<Operation> op) {
     return Service::SiblingInfo{op->getResult(),
                                 op->getExternallyVisibleVariableColumns(),
-                                op->getCacheKey()};
+                                std::string{op->getCacheKey()}};
   };
 };
 
@@ -186,14 +202,14 @@ TEST_F(ServiceTest, computeResult) {
         [&](const std::string& result,
             boost::beast::http::status status = boost::beast::http::status::ok,
             std::string contentType = "application/sparql-results+json",
-            bool silent = false,
+            bool silent = false, bool requestLaziness = false,
             ad_utility::source_location loc =
                 AD_CURRENT_SOURCE_LOC()) -> Result {
       Service s{
           testQec, silent ? parsedServiceClauseSilent : parsedServiceClause,
           getResultFunctionFactory(expectedUrl, expectedSparqlQuery, result,
                                    status, contentType, nullptr, loc)};
-      return s.computeResultOnlyForTesting();
+      return s.computeResultOnlyForTesting(requestLaziness);
     };
 
     // Compute the Result lazily for the given Service and check that the
@@ -215,9 +231,8 @@ TEST_F(ServiceTest, computeResult) {
           auto get = [this, &localVocabs](
                          std::string_view s) -> std::optional<LocalVocabIndex> {
             for (const LocalVocab& localVocab : localVocabs) {
-              auto index =
-                  localVocab.getIndexOrNullopt(LocalVocabEntry::fromIriref(
-                      s, testQec->getLocalVocabContext()));
+              auto index = localVocab.getIndexOrNullopt(
+                  iriLocalVocabEntry(s, testQec->getLocalVocabContext()));
               if (index.has_value()) {
                 return index;
               }
@@ -257,6 +272,15 @@ TEST_F(ServiceTest, computeResult) {
               runComputeResult(result, status, contentType, false),
               ::testing::HasSubstr(errorMsg));
           EXPECT_NO_THROW(runComputeResult(result, status, contentType, true));
+
+          // With `SILENT`, a lazily requested result is computed eagerly, so
+          // that the error is silenced, too, and yields the neutral element.
+          auto silentLazyResult =
+              runComputeResult(result, status, contentType, true, true);
+          ASSERT_TRUE(silentLazyResult.isFullyMaterialized());
+          EXPECT_EQ(silentLazyResult.idTableView(),
+                    makeIdTableFromVector(
+                        {{Id::makeUndefined(), Id::makeUndefined()}}));
 
           // In the syntax test mode, all services (so also the failing ones)
           // return the neutral result.
@@ -388,7 +412,7 @@ TEST_F(ServiceTest, computeResult) {
     const auto& localVocabContext = testQec->getLocalVocabContext();
     auto get = [&localVocab, &localVocabContext](std::string_view s) {
       return localVocab.getIndexOrNullopt(
-          LocalVocabEntry::fromIriref(s, localVocabContext));
+          iriLocalVocabEntry(s, localVocabContext));
     };
     std::optional<LocalVocabIndex> idxBla = get("<bla>");
     std::optional<LocalVocabIndex> idxBli = get("<bli>");
@@ -482,6 +506,28 @@ TEST_F(ServiceTest, computeResult) {
     AD_EXPECT_THROW_WITH_MESSAGE(
         checkLazyResult(service8b, {}),
         ::testing::HasSubstr("Parser failed with error"));
+
+    // Check 8c: A truncated result must lead to an error, and not silently to
+    // only the rows before the truncation. This is how QLever truncates its
+    // result when the computation fails while the result is being sent (for
+    // example, because of a timeout).
+    const std::string completeResult = genJsonResult(
+        {"x", "y"}, {{"bla", "bli"}, {"blu", "bla"}, {"bli", "blu"}});
+    const std::string truncatedResult = absl::StrCat(
+        completeResult.substr(0, completeResult.rfind("blu")),
+        "\n !!!!>># An error has occurred while exporting the query result. "
+        "The error message was:\nOperation timed out.");
+    Service service8c{testQec, parsedServiceClause,
+                      getResultFunctionFactory(expectedUrl, expectedSparqlQuery,
+                                               truncatedResult)};
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        service8c.computeResultOnlyForTesting(),
+        ::testing::AllOf(::testing::HasSubstr("Parser failed with error"),
+                         ::testing::HasSubstr("ended before it was complete"),
+                         ::testing::HasSubstr("Operation timed out.'")));
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        checkLazyResult(service8c, {{"bla", "bli"}, {"blu", "bla"}}),
+        ::testing::HasSubstr("ended before it was complete"));
   }
 }
 
@@ -532,6 +578,63 @@ TEST_F(ServiceTest, pushDownValuesPlacesValuesAtEnd) {
   EXPECT_EQ(
       Service::pushDownValues("{ BIND (1 AS ?x) }", "VALUES (?x) { (1) } "),
       "{\n BIND (1 AS ?x) \nVALUES (?x) { (1) } \n}");
+}
+
+// Test that columns of the sibling that contain `UNDEF` are not pushed down,
+// as their rows would match overlapping sets of remote rows (see #4010).
+TEST_F(ServiceTest, siblingValuesClauseSkipsColumnsWithUndef) {
+  auto iri = ad_utility::testing::iri;
+  using TC = TripleComponent;
+  auto valuesClause = [&](parsedQuery::SparqlValues siblingValues,
+                          bool markAllPossiblyUndefined = false) {
+    Service service{
+        testQec,
+        parsedQuery::Service{
+            {Variable{"?x"}, Variable{"?y"}},
+            TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
+            "",
+            "{ ?x <p> ?y }",
+            false},
+        getResultFunctionFactory("http://localhorst:80/api", "", "")};
+    auto siblingInfo = siblingInfoFromOp(
+        std::make_shared<Values>(testQec, std::move(siblingValues)));
+    if (markAllPossiblyUndefined) {
+      for (auto& [var, info] : siblingInfo.variables_) {
+        info.mightContainUndef_ = ColumnIndexAndTypeInfo::PossiblyUndefined;
+      }
+    }
+    service.siblingInfo_.emplace(std::move(siblingInfo));
+    service.runtimeInfo().addDetail("optimized-with-sibling-result", "yes");
+    auto result = service.getSiblingValuesClause();
+    EXPECT_EQ(service.runtimeInfo().details_["optimized-with-sibling-result"],
+              result.has_value() ? "yes" : "no");
+    return result;
+  };
+
+  // Only `?y` contains `UNDEF`, so only `?x` is pushed down, and the rows that
+  // are then duplicates are removed.
+  EXPECT_EQ(valuesClause({{Variable{"?x"}, Variable{"?y"}},
+                          {{TC(iri("<x>")), TC::UNDEF()},
+                           {TC(iri("<x>")), TC(iri("<y>"))},
+                           {TC(iri("<x2>")), TC(iri("<y>"))}}}),
+            "VALUES (?x) { (<x>) (<x2>) } ");
+
+  // If every common column contains `UNDEF`, no `VALUES` clause is sent.
+  EXPECT_EQ(valuesClause({{Variable{"?x"}, Variable{"?z"}},
+                          {{TC::UNDEF(), TC(iri("<z>"))},
+                           {TC(iri("<x>")), TC(iri("<z>"))}}}),
+            std::nullopt);
+
+  // Without `UNDEF`, all common columns are pushed down.
+  EXPECT_EQ(valuesClause({{Variable{"?x"}, Variable{"?y"}},
+                          {{TC(iri("<x>")), TC(iri("<y>"))}}}),
+            "VALUES (?x ?y) { (<x> <y>) } ");
+
+  // A column that is only marked as possibly undefined is still pushed down.
+  EXPECT_EQ(valuesClause({{Variable{"?x"}, Variable{"?y"}},
+                          {{TC(iri("<x>")), TC(iri("<y>"))}}},
+                         true),
+            "VALUES (?x ?y) { (<x> <y>) } ");
 }
 
 // _____________________________________________________________________________
@@ -670,8 +773,8 @@ TEST_F(ServiceTest, bindingToTripleComponent) {
       bTTC({{"type", "literal"}, {"value", "Hallo Welt"}, {"xml:lang", "de"}}),
       TripleComponent::Literal::literalWithoutQuotes("Hallo Welt", "@de"));
 
-  // See the comment in `src/engine/Service.cpp` regarding the support of the
-  // deprecated `typed-literal` type.
+  // See the comment in `src/engine/operation/Service.cpp` regarding the support
+  // of the deprecated `typed-literal` type.
   EXPECT_EQ(
       bTTC({{"type", "typed-literal"},
             {"value", "Hallo Welt"},
@@ -843,7 +946,7 @@ TEST_F(ServiceTest, blankNodesAcrossResponseChunks) {
 // ____________________________________________________________________________
 TEST_F(ServiceTest, idToValueForValuesClause) {
   auto idToVc = Service::idToValueForValuesClause;
-  LocalVocab localVocab{};
+  LocalVocab localVocab = makeLocalVocab();
   auto index = ad_utility::testing::makeIndexWithTestSettings();
 
   // blanknode -> nullopt
@@ -858,11 +961,20 @@ TEST_F(ServiceTest, idToValueForValuesClause) {
   EXPECT_EQ(idToVc(index, Id::makeFromDouble(3.14), localVocab), "3.14");
   EXPECT_EQ(idToVc(index, Id::makeFromBool(true), localVocab), "true");
 
+  // Non-finite doubles have no bare SPARQL syntax -> typed literal.
+  auto xsdDouble = absl::StrCat("\"^^<", XSD_DOUBLE_TYPE, ">");
+  EXPECT_EQ(idToVc(index, Id::makeFromDouble(INFINITY), localVocab),
+            absl::StrCat("\"INF", xsdDouble));
+  EXPECT_EQ(idToVc(index, Id::makeFromDouble(-INFINITY), localVocab),
+            absl::StrCat("\"-INF", xsdDouble));
+  EXPECT_EQ(idToVc(index, Id::makeFromDouble(NAN), localVocab),
+            absl::StrCat("\"NaN", xsdDouble));
+
   // Escape Quotes within literals.
+  auto getLocalVocabId = ad_utility::testing::makeGetLocalVocabId();
   auto str = LocalVocabEntry::literalWithoutQuotes(
       "a\"b\"c", index.getLocalVocabContext());
-  EXPECT_EQ(idToVc(index, Id::makeFromLocalVocabIndex(&str), localVocab),
-            "\"a\\\"b\\\"c\"");
+  EXPECT_EQ(idToVc(index, getLocalVocabId(str), localVocab), "\"a\\\"b\\\"c\"");
 
   // value with xsd-type
   EXPECT_EQ(
@@ -970,7 +1082,8 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
                             ad_utility::makeUnlimitedAllocator<IdTable>()};
                 for (size_t i = 0; i < clone.size(); ++i) {
                   idt.push_back(clone[i]);
-                  Result::IdTableVocabPair pair{std::move(idt), LocalVocab{}};
+                  Result::IdTableVocabPair pair{std::move(idt),
+                                                makeLocalVocab()};
                   co_yield pair;
                   idt.clear();
                 }
@@ -987,7 +1100,7 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
                                           {TC(iri("<z>")), TC(iri("<a>"))}}});
   auto sibling = std::make_shared<Sort>(
       testQec, std::make_shared<QueryExecutionTree>(testQec, siblingOperation),
-      std::vector<ColumnIndex>{});
+      colIndices({}));
 
   // Reset the computed results, to reuse the mock-operations.
   auto reset = [&]() {
@@ -1125,7 +1238,7 @@ TEST_F(ServiceTest, precomputeSiblingResultWithStripColumns) {
       strip->applyLimitOffset(limitForStripColumns.value(), false);
     }
     return std::make_shared<Sort>(testQec, makeTree(std::move(strip)),
-                                  std::vector<ColumnIndex>{0});
+                                  colIndices({0}));
   };
   // The `VALUES` clause that is expected when only `?x` is pushed down.
   const std::string valuesClauseX = "VALUES (?x) { (<x>) } ";
@@ -1191,11 +1304,11 @@ TEST_F(ServiceTest, precomputeSiblingResultWithStripColumns) {
   {
     auto service = makeService();
     auto sibling = makeValues();
-    auto innerSort = std::make_shared<Sort>(testQec, makeTree(service),
-                                            std::vector<ColumnIndex>{0});
+    auto innerSort =
+        std::make_shared<Sort>(testQec, makeTree(service), colIndices({0}));
     innerSort->applyLimitOffset(LimitOffsetClause{1}, false);
-    auto outerSort = std::make_shared<Sort>(testQec, makeTree(innerSort),
-                                            std::vector<ColumnIndex>{0});
+    auto outerSort =
+        std::make_shared<Sort>(testQec, makeTree(innerSort), colIndices({0}));
     Service::precomputeSiblingResult(sibling, outerSort, true, false);
     EXPECT_FALSE(service->siblingInfo_.has_value());
     EXPECT_FALSE(
@@ -1344,6 +1457,66 @@ TEST_F(ServiceTest, redirectsIntegration) {
                         boost::beast::http::status::ok, matchers)};
     EXPECT_NO_THROW(service.computeResultOnlyForTesting());
   }
+}
+
+// Test that a `Service` requests QLever's binary format if the runtime
+// parameter `binary-service-enabled` is set, and that it correctly reads a
+// result in that format.
+TEST_F(ServiceTest, binaryFormat) {
+  auto enableBinaryService =
+      setRuntimeParameterForTest<&RuntimeParameters::binaryServiceEnabled_>(
+          true);
+  const auto& binaryMediaType =
+      ad_utility::toString(ad_utility::MediaType::binaryQleverExport);
+
+  // The result of the remote endpoint, which has the columns in a different
+  // order than the `Service`.
+  auto remoteResult = [this]() {
+    QueryExecutionTree qet{
+        testQec,
+        std::make_shared<ValuesForTesting>(
+            testQec, makeIdTableFromVector({{1, 2}, {3, 4}}, &Id::makeFromInt),
+            std::vector<std::optional<Variable>>{Variable{"?y"},
+                                                 Variable{"?x"}})};
+    auto allocator = ad_utility::testing::makeAllocator();
+    parsedQuery::SelectClause selectClause{allocator};
+    selectClause.setSelected(
+        qlm::vector<Variable>{{Variable{"?y"}, Variable{"?x"}}, allocator});
+    std::string bytes;
+    for (std::string_view chunk : qlever::binary_export::exportAsQLeverBinary(
+             qet, selectClause, {},
+             std::make_shared<ad_utility::CancellationHandle<>>())) {
+      bytes.append(chunk);
+    }
+    return bytes;
+  }();
+
+  parsedQuery::Service parsedServiceClause{
+      {Variable{"?x"}, Variable{"?y"}},
+      TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
+      "",
+      "{ }",
+      false};
+  httpClientTestHelpers::RequestMatchers matchers{
+      .accept_ = testing::Eq(absl::StrCat(
+          binaryMediaType, ",application/sparql-results+json;q=0.9"))};
+  Service service{testQec, parsedServiceClause,
+                  httpClientTestHelpers::getResultFunctionFactory(
+                      remoteResult, binaryMediaType,
+                      boost::beast::http::status::ok, matchers)};
+  auto result = service.computeResultOnlyForTesting();
+  EXPECT_EQ(result.idTableView(),
+            makeIdTableFromVector({{2, 1}, {4, 3}}, &Id::makeFromInt));
+
+  // A different media type is not accepted.
+  Service serviceWithWrongType{
+      testQec, parsedServiceClause,
+      httpClientTestHelpers::getResultFunctionFactory(
+          remoteResult, absl::StrCat(binaryMediaType, "x"),
+          boost::beast::http::status::ok, matchers)};
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      serviceWithWrongType.computeResultOnlyForTesting(),
+      ::testing::HasSubstr("QLever requires the endpoint of a SERVICE"));
 }
 
 // Test that the unconsumed lazy result of a `Service` sibling, which is

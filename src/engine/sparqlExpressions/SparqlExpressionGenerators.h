@@ -22,6 +22,7 @@
 #include "backports/functional.h"
 #endif
 #include "engine/idTable/IdTable.h"
+#include "engine/idTable/splitLayout/IdRef.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/Generator.h"
 
@@ -90,7 +91,19 @@ CPP_template(typename T, typename Transformation = ql::identity)(
 auto resultGeneratorImpl(T&& vector, size_t numItems,
                          Transformation transformation = {}) {
   AD_CONTRACT_CHECK(numItems == vector.size());
-  return AD_FWD(vector) | ql::views::transform(std::move(transformation));
+  if constexpr (ad_utility::SimilarToAny<
+                    ql::ranges::range_reference_t<T>,
+                    columnBasedIdTable::splitLayout::ConstIdRef::Base,
+                    columnBasedIdTable::splitLayout::IdRef::Base>) {
+    // An element of a split column converts to both `ValueId` and
+    // `IdOrLocalVocabEntry`, which makes a call of a value getter ambiguous,
+    // so it is passed on as the `Id` it refers to.
+    return AD_FWD(vector) |
+           ql::views::transform([transformation = std::move(transformation)](
+                                    Id id) { return transformation(id); });
+  } else {
+    return AD_FWD(vector) | ql::views::transform(std::move(transformation));
+  }
 }
 
 #ifdef QLEVER_EXPRESSION_GENERATOR_BACKPORTS_FOR_CPP17
@@ -216,7 +229,8 @@ inline auto valueGetterGenerator =
 //
 // NOTE: An IRI that can be encoded directly in an `Id` has already been encoded
 // when it was converted to the `Id` or `LocalVocabEntry` of the expression
-// result (see `toIdOrLocalVocabEntry`), so `entry` never needs this encoding.
+// result (the constructors of `LocalVocabEntry` that can store an IRI are
+// private, see `toIdOrLocalVocabEntry`), so `entry` never needs this encoding.
 inline auto makeStringResultGetter(LocalVocab* localVocab) {
   return [localVocab](const LocalVocabEntry& entry) {
     auto localVocabIndex = localVocab->getIndexAndAddIfNotContained(entry);
