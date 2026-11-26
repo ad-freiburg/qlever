@@ -312,17 +312,17 @@ std::unique_ptr<Operation> MultiColumnJoin::cloneImpl() const {
 }
 
 // _____________________________________________________________________________
-bool MultiColumnJoin::columnOriginatesFromGraphOrUndef(
+bool MultiColumnJoin::columnContainsOnlyKnowledgeGraphNodes(
     const Variable& variable) const {
   AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
-  // For the join columns we don't union the elements, we intersect them so we
-  // can have a more efficient implementation.
+  // The values of a join column are intersected, not united, so one side
+  // suffices (see `joinColumnContainsOnlyKnowledgeGraphNodes`).
   if (_left->getVariableColumnOrNullopt(variable).has_value() &&
       _right->getVariableColumnOrNullopt(variable).has_value()) {
     using namespace qlever::joinHelpers;
-    return doesJoinProduceGuaranteedGraphValuesOrUndef(_left, _right, variable);
+    return joinColumnContainsOnlyKnowledgeGraphNodes(_left, _right, variable);
   }
-  return Operation::columnOriginatesFromGraphOrUndef(variable);
+  return Operation::columnContainsOnlyKnowledgeGraphNodes(variable);
 }
 
 // _____________________________________________________________________________
