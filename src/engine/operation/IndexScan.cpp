@@ -17,7 +17,6 @@
 #include "engine/VariableToColumnMap.h"
 #include "index/IndexImpl.h"
 #include "index/TripleComponentConversions.h"
-#include "parser/ParsedQuery.h"
 #include "util/Exception.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
@@ -1197,7 +1196,7 @@ std::unique_ptr<Operation> IndexScan::cloneImpl() const {
 }
 
 // _____________________________________________________________________________
-bool IndexScan::columnOriginatesFromGraphOrUndef(
+bool IndexScan::columnContainsOnlyKnowledgeGraphNodes(
     const Variable& variable) const {
   AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
   return permutation().permutationType() == Permutation::Type::NORMAL &&

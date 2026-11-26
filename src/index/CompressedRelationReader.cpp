@@ -515,7 +515,11 @@ std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
       ql::ranges::subrange{beginBlock, endBlock}, [&](const auto& block) {
         const auto [ins, del] =
             locatedTriplesPerBlock.numTriples(block.blockIndex_);
-        if (!exactSize || (ins == 0 && del == 0)) {
+        // For the exact size, a block with delta triples or with a triple that
+        // occurs in several graphs (which the scan yields only once) has to be
+        // read.
+        if (!exactSize || (ins == 0 && del == 0 &&
+                           !block.containsDuplicatesWithDifferentGraphs_)) {
           inserted += ins;
           deleted += del;
           numResults += block.numRows_;
@@ -672,6 +676,7 @@ bool CompressedRelationReader::contentsAreKnownFromMetadata(
     const CompressedBlockMetadata& block, size_t numColumns,
     const LocatedTriplesPerBlock& locatedTriples) {
   return !block.containsInconsistentTriples(numColumns) &&
+         !block.containsDuplicatesWithDifferentGraphs_ &&
          !locatedTriples.containsTriples(block.blockIndex_);
 }
 
@@ -739,16 +744,15 @@ IdTable CompressedRelationReader::getDistinctColIdsAndCounts(
   // located triples. We could skip this for blocks with no updates, but that
   // would require more arguments to the `decompressBlock` function.
   auto scanConfig = getScanConfig(scanSpec, {}, locatedTriplesPerBlock);
-  // Iterate over the blocks and only read (and decompress) those which
-  // contain more than one different `colId`. For the others, we can determine
-  // the count from the metadata.
+  // Iterate over the blocks and only read (and decompress) those whose
+  // contents are not known from the metadata (several `colId`s, delta triples,
+  // or a triple in several graphs, see `contentsAreKnownFromMetadata`). For
+  // the others, the count comes from the metadata.
   for (const auto& [i, blockMetadata] : ranges::views::enumerate(blocks)) {
-    // The `numRows_` metadata shortcut is safe iff all rows of the block agree
-    // on the grouped column AND the block has no delta triples.
     if (contentsAreKnownFromMetadata(blockMetadata, columnIndex + 1,
                                      locatedTriplesPerBlock)) {
-      // The whole block has the same `colId` and no delta triples ->
-      // we get all the information from the metadata.
+      // All rows of the block have the same `colId` and the block has exactly
+      // `numRows_` of them.
       const auto& first = blockMetadata.firstTriple_;
       Id colId =
           std::array{first.col0Id_, first.col1Id_, first.col2Id_}[columnIndex];
@@ -757,7 +761,8 @@ IdTable CompressedRelationReader::getDistinctColIdsAndCounts(
         return std::move(table).toDynamic();
       }
     } else {
-      // Multiple `colId`s -> we have to read the block.
+      // Read the block (the read merges the delta triples and removes the
+      // duplicates from several graphs).
       const auto& optionalBlock = [&]() -> std::optional<DecompressedBlock> {
         if (i == 0) {
           return readPossiblyIncompleteBlock(scanSpec, scanConfig,

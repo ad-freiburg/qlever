@@ -9,7 +9,6 @@
 #include <array>
 #include <cstdlib>
 #include <ctime>
-#include <fstream>
 #include <functional>
 #include <iostream>
 #include <memory>
@@ -167,24 +166,6 @@ class MergeVocabularyTest : public ::testing::Test {
     // Delete the test files (to debug a test failure, comment this out).
     ql::error_code errorCode;
     ql::filesystem::remove_all(basePath_, errorCode);
-  }
-
-  // read all bytes from a file (e.g. to check equality of small test files)
-  static std::pair<bool, std::vector<char>> readAllBytes(
-      const std::string& filename) {
-    using std::ifstream;
-    ifstream ifs(filename, std::ios::binary | std::ios::ate);
-    if (!ifs.is_open()) {
-      return std::make_pair(false, std::vector<char>());
-    }
-    ifstream::pos_type pos = ifs.tellg();
-
-    std::vector<char> result(pos);
-
-    ifs.seekg(0, std::ios::beg);
-    ifs.read(&result[0], pos);
-
-    return std::make_pair(true, result);
   }
 };
 

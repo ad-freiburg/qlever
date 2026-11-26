@@ -24,14 +24,12 @@
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/VariableToColumnMap.h"
-#include "engine/idTable/CompressedExternalIdTable.h"
 #include "engine/operation/IndexScan.h"
 #include "engine/operation/Join.h"
 #include "global/Constants.h"
 #include "global/FileSuffixConstants.h"
 #include "global/RuntimeParameters.h"
 #include "index/DeltaTriples.h"
-#include "index/ExternalSortFunctors.h"
 #include "index/IdTableUtils.h"
 #include "index/compressedRelationWriter/CompressedRelationWriter.h"
 #include "libqlever/Qlever.h"
@@ -389,8 +387,9 @@ void MaterializedViewWriter::writeViewMetadata(
                              {"columns", std::move(columns)},
                              {"sorted_on_all_columns", true},
                              {"query", parsedQuery_._originalString}};
-  ad_utility::makeOfstream(absl::StrCat(getFilenameBase(), VIEW_INFO_SUFFIX))
-      << viewInfo.dump() << std::endl;
+  std::string serializedViewInfo = absl::StrCat(viewInfo.dump(), "\n");
+  qlever::util::writeFileAtomically(
+      absl::StrCat(getFilenameBase(), VIEW_INFO_SUFFIX), serializedViewInfo);
 }
 
 // _____________________________________________________________________________

@@ -82,7 +82,7 @@ class JoinImpl : public Operation {
   }
 
  public:
-  bool columnOriginatesFromGraphOrUndef(
+  bool columnContainsOnlyKnowledgeGraphNodes(
       const Variable& variable) const override;
 
   /**

@@ -26,7 +26,6 @@
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
-#include "engine/sparqlExpressions/StdevExpression.h"
 #include "global/Constants.h"
 #include "global/RuntimeParameters.h"
 #include "index/Index.h"

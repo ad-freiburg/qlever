@@ -12,7 +12,6 @@
 
 #include <iterator>
 
-#include "engine/CallFixedSize.h"
 #include "util/Views.h"
 
 namespace {

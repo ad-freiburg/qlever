@@ -26,6 +26,7 @@
 #include "parser/GraphPatternOperation.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/CancellationHandle.h"
+#include "util/ColumnStrippingTestHelpers.h"
 #include "util/GTestHelpers.h"
 #include "util/HttpClientTestHelpers.h"
 #include "util/IdTableHelpers.h"
@@ -716,6 +717,7 @@ TEST_F(ServiceTest, getCacheKeyWithCaching) {
                 AllOf(StartsWith("SERVICE"), Not(HasSubstr("SILENT")),
                       HasSubstr("<http://localhorst/api>"),
                       HasSubstr("PREFIX doof: <http://doof.org>"),
+                      HasSubstr("SELECT ?x ?y"),
                       HasSubstr(parsedServiceClause.graphPatternAsString_)));
   }
   {
@@ -739,7 +741,50 @@ TEST_F(ServiceTest, getCacheKeyWithCaching) {
                 AllOf(StartsWith("SERVICE"), HasSubstr("SILENT"),
                       HasSubstr("<http://localhorst/api>"),
                       HasSubstr("PREFIX doof: <http://doof.org>"),
+                      HasSubstr("SELECT ?x ?y"),
                       HasSubstr(parsedServiceClause.graphPatternAsString_)));
+  }
+  {
+    SendRequestType getResultFunction = getResultFunctionFactory(
+        "http://localhorst:80/api",
+        "PREFIX doof: <http://doof.org> SELECT ?x ?y WHERE { }",
+        genJsonResult(
+            {"x", "y"},
+            {{"x", "y"}, {"bla", "bli"}, {"blu", "bla"}, {"bli", "blu"}}));
+
+    Service service1{
+        testQec,
+        {{Variable{"?x"}, Variable{"?y"}, Variable{"?z"}},
+         TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
+         "PREFIX doof: <http://doof.org>",
+         "{ }",
+         false},
+        getResultFunction};
+
+    Service service2{
+        testQec,
+        {{Variable{"?x"}, Variable{"?y"}},
+         TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
+         "PREFIX doof: <http://doof.org>",
+         "{ }",
+         false},
+        getResultFunction};
+
+    // Two `Service`s that differ only in their visible variables have
+    // different cache keys.
+    EXPECT_NE(service1.getCacheKey(), service2.getCacheKey());
+  }
+  {
+    parsedQuery::Service parsedServiceClause{
+        {},
+        TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
+        "PREFIX doof: <http://doof.org>",
+        "{ }",
+        false};
+    Service service{
+        testQec, parsedServiceClause,
+        getResultFunctionFactory("http://localhorst:80/api", "", "{}")};
+    EXPECT_THAT(service.getCacheKey(), HasSubstr("SELECT * "));
   }
 }
 
@@ -1557,4 +1602,63 @@ TEST_F(ServiceTest, unconsumedLazySiblingResultDoesNotCrash) {
   // callback must not touch the operation anymore.
   join.reset();
   sibling.reset();
+}
+
+// Test that `makeTreeWithStrippedColumns` returns a `Service` with only the
+// requested variables, which requests only these from the remote endpoint, and
+// `std::nullopt` if nothing is to be stripped.
+TEST_F(ServiceTest, makeTreeWithStrippedColumns) {
+  using ::column_stripping_test_helpers::hasVariables;
+  using ::column_stripping_test_helpers::isStrippedColumns;
+  using V = Variable;
+
+  // A `SERVICE` with the visible variables `?x`, `?y` and `?z`.
+  parsedQuery::Service parsedServiceClause{
+      {V{"?x"}, V{"?y"}, V{"?z"}},
+      TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
+      "PREFIX doof: <http://doof.org>",
+      "{ }",
+      false};
+  auto strip = [&](const std::set<V>& requestedVariables) {
+    Service service{testQec, parsedServiceClause};
+    return service.makeTreeWithStrippedColumns(requestedVariables);
+  };
+
+  // Only `?x` and `?z` requested: `?y` is stripped.
+  {
+    auto tree = strip({V{"?x"}, V{"?z"}});
+    ASSERT_TRUE(tree.has_value());
+    EXPECT_THAT(tree->get(), hasVariables({V{"?x"}, V{"?z"}}));
+  }
+
+  // A requested variable that the `Service` does not have is ignored.
+  {
+    auto tree = strip({V{"?x"}, V{"?z"}, V{"?notIncluded"}});
+    ASSERT_TRUE(tree.has_value());
+    EXPECT_THAT(tree->get(), hasVariables({V{"?x"}, V{"?z"}}));
+  }
+
+  // All variables requested: nothing is stripped.
+  EXPECT_EQ(strip({V{"?x"}, V{"?y"}, V{"?z"}}), std::nullopt);
+  EXPECT_EQ(strip({V{"?x"}, V{"?y"}, V{"?z"}, V{"?notIncluded"}}),
+            std::nullopt);
+
+  // None of the variables requested: the `Service` is kept, since a `SELECT`
+  // without variables cannot be sent to the remote endpoint.
+  EXPECT_EQ(strip({}), std::nullopt);
+  EXPECT_EQ(strip({V{"?notIncluded"}}), std::nullopt);
+
+  // The stripped `Service` requests only the remaining variables from the
+  // remote endpoint.
+  {
+    Service service{testQec, parsedServiceClause,
+                    getResultFunctionFactory(
+                        "http://localhorst:80/api",
+                        "PREFIX doof: <http://doof.org> SELECT ?y { }",
+                        genJsonResult({"y"}, {{"bla"}, {"bli"}, {"blu"}}))};
+    auto tree = service.makeTreeWithStrippedColumns({V{"?y"}});
+    ASSERT_TRUE(tree.has_value());
+    EXPECT_THAT(tree->get(),
+                isStrippedColumns<Service>({V{"?y"}}, ::testing::SizeIs(3)));
+  }
 }
