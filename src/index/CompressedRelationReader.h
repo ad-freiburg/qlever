@@ -487,10 +487,8 @@ class CompressedRelationReader {
   // `contentsAreKnownFromMetadata`).
   //
   // NOTE: The counts of these blocks are taken from their metadata. The other
-  // blocks are read and decompressed on the `executor` (see `lazyScan`), so
-  // this function must not be called from one of its threads. For many such
-  // blocks, the normal evaluation of the GROUP BY is faster, because it groups
-  // the rows in parallel to the scan.
+  // blocks are read, decompressed, and counted on the `executor` (see
+  // `lazyScan`), so this function must not be called from one of its threads.
   std::optional<IdTable> getDistinctColIdsAndCounts(
       ColumnIndex columnIndex, const ScanSpecAndBlocks& scanSpecAndBlocks,
       const CancellationHandle& cancellationHandle,
@@ -605,6 +603,20 @@ class CompressedRelationReader {
       const CompressedBlockMetadata& blockMetadata,
       std::optional<std::reference_wrapper<LazyScanMetadata>> scanMetadata,
       const LocatedTriplesPerBlock&) const;
+
+  // Read, decompress, and postprocess the `relevantBlockMetadata` concurrently
+  // on the `executor` (see `lazyScan`), and apply the `transform` to each of
+  // the blocks there as well. Return a view that yields, in order, a pair of
+  // the transformed block (`std::nullopt` if the block was skipped because of
+  // its graphs) and the statistics of reading it.
+  template <typename Transform>
+  auto readBlocksConcurrently(
+      const ScanSpecification& scanSpec,
+      std::vector<CompressedBlockMetadata> relevantBlockMetadata,
+      ColumnIndicesRef additionalColumns, CancellationHandle cancellationHandle,
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+      qlever::Executor executor, std::optional<ColumnIndices> columnSubset,
+      Transform transform) const;
 
   // Return a vector that consists of the concatenation of `baseColumns` and
   // `additionalColumns`
