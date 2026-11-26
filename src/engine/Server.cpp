@@ -262,6 +262,17 @@ Server::TimeLimit Server::verifyUserSubmittedQueryTimeout(
     auto timeoutCandidate =
         ad_utility::ParseableDuration<TimeLimit>::fromString(
             userTimeout.value());
+    // Reject a timeout that is not strictly positive.
+    //
+    // NOTE: A negative timeout would pass the comparison with the default
+    // timeout below. A large negative one overflows in the conversion to
+    // nanoseconds for the timer and becomes a timeout of many years.
+    if (timeoutCandidate <= TimeLimit::zero()) {
+      throw HttpError(
+          boost::beast::http::status::bad_request,
+          absl::StrCat("User submitted timeout '", userTimeout.value(),
+                       "' must be strictly positive."));
+    }
     if (timeoutCandidate > defaultTimeout && !accessTokenOk) {
       throw HttpError(
           boost::beast::http::status::forbidden,
