@@ -20,7 +20,7 @@
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
-#include "engine/ExplicitIdTableOperation.h"
+#include "engine/operation/ExplicitIdTableOperation.h"
 #include "index/IdTableUtils.h"
 #include "index/LocalVocabEntry.h"
 #include "libqlever/CanonicalRowOrder.h"

@@ -6,7 +6,6 @@
 #include "parser/ParsedQuery.h"
 
 #include <absl/strings/str_join.h>
-#include <absl/strings/str_split.h>
 
 #include <optional>
 #include <sstream>
@@ -18,7 +17,6 @@
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "global/RuntimeParameters.h"
-#include "parser/sparqlParser/SparqlQleverVisitor.h"
 #include "util/ParseException.h"
 #include "util/TransparentFunctors.h"
 

@@ -11,7 +11,6 @@
 
 #include "rdfTypes/Iri.h"
 
-#include <absl/cleanup/cleanup.h>
 #include <absl/strings/str_cat.h>
 
 #include <ctre-unicode.hpp>
@@ -20,7 +19,6 @@
 #include "backports/StartsWithAndEndsWith.h"
 #include "global/Constants.h"
 #include "rdfTypes/RdfEscaping.h"
-#include "util/Log.h"
 
 using namespace std::string_view_literals;
 
