@@ -11,11 +11,8 @@
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "index/ConstantsIndexBuilding.h"
-#include "index/vocabulary/PolymorphicVocabulary.h"
-#include "index/vocabulary/SplitVocabulary.h"
 #include "rdfTypes/GeometryInfo.h"
 #include "util/Exception.h"
-#include "util/TypeTraits.h"
 
 using std::string;
 

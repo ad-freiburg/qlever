@@ -11,7 +11,6 @@
 #include "engine/Result.h"
 #include "engine/operation/Sort.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
-#include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/ChunkedForLoop.h"
 #include "util/VectorWithMemoryLimit.h"
 #include "util/joinAlgorithms/IndexNestedLoopJoin.h"
@@ -390,7 +389,7 @@ std::optional<Result> ExistsJoin::tryIndexNestedLoopJoinIfSuitable(
 }
 
 // _____________________________________________________________________________
-bool ExistsJoin::columnOriginatesFromGraphOrUndef(
+bool ExistsJoin::columnContainsOnlyKnowledgeGraphNodes(
     const Variable& variable) const {
   AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
   if (variable == existsVariable_) {
@@ -399,7 +398,8 @@ bool ExistsJoin::columnOriginatesFromGraphOrUndef(
     // complicated for almost no benefit.
     return false;
   }
-  return left_->getRootOperation()->columnOriginatesFromGraphOrUndef(variable);
+  return left_->getRootOperation()->columnContainsOnlyKnowledgeGraphNodes(
+      variable);
 }
 
 namespace {
