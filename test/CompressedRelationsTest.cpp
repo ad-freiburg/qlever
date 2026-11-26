@@ -1643,12 +1643,14 @@ TEST(CompressedRelationReader, getDistinctColIdsAndCountsDuplicatesInGraphs) {
   auto [blocks, metaData, reader] = writeAndOpenRelations(inputs, filename, 8);
   auto locatedTriples = makeLocatedTriplesPerBlock(blocks, {}, true);
   auto getCounts = [&](std::optional<Id> col0Id) {
-    return reader->getDistinctColIdsAndCounts(
-        col0Id.has_value() ? 1 : 0,
-        {ScanSpecification{col0Id, std::nullopt, std::nullopt},
-         getBlockMetadataRangesfromVec(blocks)},
-        std::make_shared<ad_utility::CancellationHandle<>>(), locatedTriples,
-        {});
+    return reader
+        ->getDistinctColIdsAndCounts(
+            col0Id.has_value() ? 1 : 0,
+            {ScanSpecification{col0Id, std::nullopt, std::nullopt},
+             getBlockMetadataRangesfromVec(blocks)},
+            std::make_shared<ad_utility::CancellationHandle<>>(),
+            locatedTriples, {}, 0)
+        .value();
   };
 
   // There are two distinct triples, both with `col0Id` 1 and `col1Id` 0.
