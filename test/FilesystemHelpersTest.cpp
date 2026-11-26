@@ -535,7 +535,9 @@ TEST(FilesystemHelpers, readFileIntoBufferFailures) {
 // limit of the file size (`RLIMIT_FSIZE`) of this process, so that the `write`
 // fails with `EFBIG` (the signal `SIGXFSZ` that is raised in this case is
 // ignored, as it would otherwise terminate the process). The reason of the
-// failure is part of the message.
+// failure is part of the message. The test is compiled out under Emscripten,
+// where `setrlimit` is not supported and always fails.
+#ifndef __EMSCRIPTEN__
 TEST(FilesystemHelpers, writeFileAtomicallyWriteFailure) {
   TempDir dir;
   auto file = dir.path() / "file";
@@ -560,6 +562,7 @@ TEST(FilesystemHelpers, writeFileAtomicallyWriteFailure) {
 
   EXPECT_TRUE(entryNames(dir.path()).empty());
 }
+#endif  // __EMSCRIPTEN__
 
 // Test that `writeFileAtomically` throws if the temporary directory cannot be
 // created (here because the directory of the target is not writable), with the
@@ -590,7 +593,9 @@ TEST(FilesystemHelpers, writeFileAtomicallyDirectoryNotWritable) {
 // opened, with the reason in the message, and that it leaves nothing behind.
 // The failure is provoked by lowering the limit of open file descriptors
 // (`RLIMIT_NOFILE`) of this process to zero, so that `open` fails with
-// `EMFILE`. The limit is restored immediately afterwards.
+// `EMFILE`. The limit is restored immediately afterwards. The test is compiled
+// out under Emscripten, where `setrlimit` is not supported and always fails.
+#ifndef __EMSCRIPTEN__
 TEST(FilesystemHelpers, writeFileAtomicallyOpenFailure) {
   TempDir dir;
   struct rlimit oldLimit {};
@@ -612,6 +617,7 @@ TEST(FilesystemHelpers, writeFileAtomicallyOpenFailure) {
                                         HasSubstr(std::strerror(EMFILE))));
   EXPECT_TRUE(entryNames(dir.path()).empty());
 }
+#endif  // __EMSCRIPTEN__
 
 // Test that `writeFileAtomically` works for a file name of the maximal length,
 // for which the name of the temporary directory has to be shortened.
