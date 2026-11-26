@@ -21,6 +21,7 @@
 #include "backports/span.h"
 #include "rdfTypes/GeoPoint.h"
 #include "util/ContainersWithAllocator.h"
+#include "util/Timer.h"
 
 namespace qlever::raster {
 
@@ -49,6 +50,47 @@ struct PixelTable {
   size_t numPixels() const { return centers_.size(); }
 };
 
+// How much work the lookups of one `RasterFile` did, summed over all lookups.
+// The times are measured once per geometry, never once per pixel.
+struct LookupStatistics {
+  // A point lookup reads one pixel directly, a shape lookup draws a mask
+  // first.
+  size_t numPointLookups_ = 0;
+  size_t numShapeLookups_ = 0;
+  // `numWindowPixels_` counts the pixels of all windows that were read, and
+  // `numPixelsInsideGeometry_` those of them that lie inside the geometry.
+  size_t numWindowPixels_ = 0;
+  size_t numPixelsInsideGeometry_ = 0;
+  // The time of all point lookups, each measured as a whole.
+  ad_utility::Timer::Duration timePointLookups_{};
+  // Each time is the sum of one step of the shape lookups over all lookups.
+  ad_utility::Timer::Duration timeParsingGeometries_{};
+  ad_utility::Timer::Duration timeProjectingGeometries_{};
+  ad_utility::Timer::Duration timeGrowingGeometries_{};
+  ad_utility::Timer::Duration timeDrawingMasks_{};
+  ad_utility::Timer::Duration timeReadingPixels_{};
+  ad_utility::Timer::Duration timeCollectingPixels_{};
+  ad_utility::Timer::Duration timeConvertingCenters_{};
+
+  // Add the statistics of `other`, for example of another file in the same
+  // query.
+  LookupStatistics& operator+=(const LookupStatistics& other) {
+    numPointLookups_ += other.numPointLookups_;
+    numShapeLookups_ += other.numShapeLookups_;
+    numWindowPixels_ += other.numWindowPixels_;
+    numPixelsInsideGeometry_ += other.numPixelsInsideGeometry_;
+    timePointLookups_ += other.timePointLookups_;
+    timeParsingGeometries_ += other.timeParsingGeometries_;
+    timeProjectingGeometries_ += other.timeProjectingGeometries_;
+    timeGrowingGeometries_ += other.timeGrowingGeometries_;
+    timeDrawingMasks_ += other.timeDrawingMasks_;
+    timeReadingPixels_ += other.timeReadingPixels_;
+    timeCollectingPixels_ += other.timeCollectingPixels_;
+    timeConvertingCenters_ += other.timeConvertingCenters_;
+    return *this;
+  }
+};
+
 // A raster file (for example a GeoTIFF), opened for lookups with geometries in
 // CRS84 (longitude first, as in WKT). A `RasterFile` must not be used by two
 // threads at the same time.
@@ -68,6 +110,9 @@ class RasterFile {
 
   // The number of bands. Bands are numbered from 1, as in GDAL.
   int numBands() const;
+
+  // Return the statistics of all lookups since this file was opened.
+  const LookupStatistics& statistics() const;
 
   // All lookups return one column of values per entry of `bands`, in the same
   // order. A pixel is left out if it is NoData in all of `bands`.

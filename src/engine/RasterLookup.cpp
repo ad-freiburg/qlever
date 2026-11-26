@@ -34,13 +34,13 @@ namespace {
 // point stored in the `Id`, or a WKT literal from the vocabulary or
 // `localVocab`. Like `GeoPointOrWktValueGetter`. Other `Id`s (UNDEF, numbers,
 // IRIs, ...) give no pixels. With a `radius` in metres, the geometry is first
-// widened by it.
-qlever::raster::PixelTable lookupPixels(qlever::raster::RasterFile& rasterFile,
-                                        ql::span<const int> bands,
-                                        std::optional<double> radius,
-                                        Id geometry, const Index& index,
-                                        const LocalVocab& localVocab,
-                                        const qlm::Allocator<char>& allocator) {
+// widened by it. The time to fetch a WKT literal is added to
+// `timeFetchingGeometries`.
+qlever::raster::PixelTable lookupPixels(
+    qlever::raster::RasterFile& rasterFile, ql::span<const int> bands,
+    std::optional<double> radius, Id geometry, const Index& index,
+    const LocalVocab& localVocab, const qlm::Allocator<char>& allocator,
+    ad_utility::Timer::Duration& timeFetchingGeometries) {
   auto noPixels = [&]() {
     return qlever::raster::PixelTable(bands.size(), allocator);
   };
@@ -56,12 +56,14 @@ qlever::raster::PixelTable lookupPixels(qlever::raster::RasterFile& rasterFile,
     case VocabIndex:
     case LocalVocabIndex:
     case SecondaryVocabIndex: {
+      ad_utility::Timer timer{ad_utility::Timer::Started};
       auto literalOrIri = ql::exportIds::getLiteralOrIriFromVocabIndex(
           index.getImpl(), geometry, localVocab);
       if (literalOrIri.isLiteral() && literalOrIri.hasDatatype() &&
           literalOrIri.getDatatype() == GEO_WKT_LITERAL) {
-        return rasterFile.lookupGeometry(literalOrIri.toStringRepresentation(),
-                                         bands, radius, allocator);
+        std::string wktLiteral = literalOrIri.toStringRepresentation();
+        timeFetchingGeometries += timer.value();
+        return rasterFile.lookupGeometry(wktLiteral, bands, radius, allocator);
       }
       return noPixels();
     }
@@ -151,6 +153,47 @@ std::string bandNumbers(
   return absl::StrJoin(bands, " ", [](std::string* out, const auto& band) {
     absl::StrAppend(out, band.number_);
   });
+}
+
+// Return `duration` in whole milliseconds, which `addDetail` accepts.
+std::chrono::milliseconds milliseconds(ad_utility::Timer::Duration duration) {
+  return std::chrono::duration_cast<std::chrono::milliseconds>(duration);
+}
+
+// Add `statistics` to the details of `runtimeInfo`, with times in
+// milliseconds. The two counts of lookups are always added. The details of the
+// point or shape lookups are only added if there was at least one such lookup,
+// and the time to grow the geometries only if the lookup has a radius.
+void addStatisticsToDetails(RuntimeInformation& runtimeInfo,
+                            const qlever::raster::LookupStatistics& statistics,
+                            bool hasRadius) {
+  runtimeInfo.addDetail("num-point-lookups", statistics.numPointLookups_);
+  runtimeInfo.addDetail("num-shape-lookups", statistics.numShapeLookups_);
+  if (statistics.numPointLookups_ > 0) {
+    runtimeInfo.addDetail("time-point-lookups",
+                          milliseconds(statistics.timePointLookups_));
+  }
+  if (statistics.numShapeLookups_ > 0) {
+    runtimeInfo.addDetail("time-parsing-geometries",
+                          milliseconds(statistics.timeParsingGeometries_));
+    runtimeInfo.addDetail("time-projecting-geometries",
+                          milliseconds(statistics.timeProjectingGeometries_));
+    if (hasRadius) {
+      runtimeInfo.addDetail("time-growing-geometries",
+                            milliseconds(statistics.timeGrowingGeometries_));
+    }
+    runtimeInfo.addDetail("num-window-pixels", statistics.numWindowPixels_);
+    runtimeInfo.addDetail("time-drawing-masks",
+                          milliseconds(statistics.timeDrawingMasks_));
+    runtimeInfo.addDetail("time-reading-pixels",
+                          milliseconds(statistics.timeReadingPixels_));
+    runtimeInfo.addDetail("num-pixels-inside-geometry",
+                          statistics.numPixelsInsideGeometry_);
+    runtimeInfo.addDetail("time-collecting-pixels",
+                          milliseconds(statistics.timeCollectingPixels_));
+    runtimeInfo.addDetail("time-converting-centers",
+                          milliseconds(statistics.timeConvertingCenters_));
+  }
 }
 
 }  // namespace
@@ -393,6 +436,10 @@ Result RasterLookup::computeResult([[maybe_unused]] bool requestLaziness) {
     // Input rows whose geometry is not a point or WKT literal, lies outside the
     // grid, or only covers NoData pixels.
     size_t numRowsWithoutPixels = 0;
+    // The time to fetch the WKT literals of all input rows.
+    ad_utility::Timer::Duration timeFetchingGeometries{};
+    // The time to write the output rows of all input rows.
+    ad_utility::Timer::Duration timeWritingRows{};
     auto checkCancellationCallback = [this]() { checkCancellation(); };
     size_t firstBandColumn = input.numColumns();
     for (size_t inputRow = 0; inputRow < input.numRows(); ++inputRow) {
@@ -407,12 +454,14 @@ Result RasterLookup::computeResult([[maybe_unused]] bool requestLaziness) {
       // is drawn) does not.
       qlever::raster::PixelTable pixels = lookupPixels(
           *rasterFile, bands, config_.radius_, input(inputRow, geometryColumn),
-          getIndex(), subResult->localVocab(), allocator());
+          getIndex(), subResult->localVocab(), allocator(),
+          timeFetchingGeometries);
       if (pixels.numPixels() == 0) {
         ++numRowsWithoutPixels;
         continue;
       }
 
+      ad_utility::Timer timer{ad_utility::Timer::Started};
       // One new row per pixel, written column by column, because an `IdTable`
       // stores each column contiguously. `resize` grows the table
       // geometrically, like `std::vector::resize`.
@@ -447,6 +496,7 @@ Result RasterLookup::computeResult([[maybe_unused]] bool requestLaziness) {
             },
             checkCancellationCallback);
       }
+      timeWritingRows += timer.value();
     }
     runtimeInfo().addDetail("num-input-rows-without-pixels",
                             numRowsWithoutPixels);
@@ -455,6 +505,21 @@ Result RasterLookup::computeResult([[maybe_unused]] bool requestLaziness) {
       runtimeInfo().addDetail("num-input-rows-without-raster",
                               numRowsWithoutRaster);
     }
+    runtimeInfo().addDetail("time-fetching-geometries",
+                            milliseconds(timeFetchingGeometries));
+    runtimeInfo().addDetail("time-writing-rows", milliseconds(timeWritingRows));
+    // The statistics of all files that this lookup opened.
+    qlever::raster::LookupStatistics statistics;
+    if (fixedRasterFile.has_value()) {
+      statistics += fixedRasterFile->statistics();
+    }
+    for (const auto& [dataset, rasterFile] : rasterFilesPerDataset) {
+      if (rasterFile.has_value()) {
+        statistics += rasterFile->statistics();
+      }
+    }
+    addStatisticsToDetails(runtimeInfo(), statistics,
+                           config_.radius_.has_value());
   }
 
   // The pixel values and centers are stored in the `Id`s themselves, so no

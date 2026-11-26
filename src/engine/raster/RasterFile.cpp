@@ -9,6 +9,7 @@
 
 #include "engine/raster/RasterFile.h"
 
+#include <absl/cleanup/cleanup.h>
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
 #include <gdal_alg.h>
@@ -221,6 +222,7 @@ struct RasterFile::Impl {
   // for feet. Empty for a CRS in degrees, where a radius cannot be used.
   std::optional<double> metresPerUnit_;
   std::vector<Band> bands_;
+  LookupStatistics statistics_;
 
   explicit Impl(const std::string& path);
 
@@ -489,7 +491,14 @@ PixelTable RasterFile::Impl::lookupOgrGeometry(
     std::unique_ptr<OGRGeometry> geometry, ql::span<const int> bands,
     std::optional<double> radius, const qlm::Allocator<char>& allocator) {
   checkBands(bands);
+  ++statistics_.numShapeLookups_;
   auto noPixels = [&]() { return PixelTable(bands.size(), allocator); };
+  // Each step adds the time since the end of the previous step to its total.
+  ad_utility::Timer timer{ad_utility::Timer::Started};
+  auto addTimeTo = [&timer](ad_utility::Timer::Duration& total) {
+    total += timer.value();
+    timer.start();
+  };
 
   // An edge that is straight in CRS84 is curved in the CRS of the file. Extra
   // vertices let the transformed edge follow that curve.
@@ -497,6 +506,8 @@ PixelTable RasterFile::Impl::lookupOgrGeometry(
   if (geometry->transform(crs84ToRaster_.get()) != OGRERR_NONE) {
     return noPixels();
   }
+  // Record the time to convert the geometry to the CRS of the file.
+  addTimeTo(statistics_.timeProjectingGeometries_);
   // Widen in the CRS of the file, where distances are in its own unit, not in
   // degrees.
   if (radius.has_value()) {
@@ -508,6 +519,8 @@ PixelTable RasterFile::Impl::lookupOgrGeometry(
     }
     // `Buffer` returns a new geometry, which `geometry` now owns.
     geometry.reset(geometry->Buffer(radius.value() / metresPerUnit_.value()));
+    // Record the time to grow the geometry by the radius.
+    addTimeTo(statistics_.timeGrowingGeometries_);
     if (!geometry) {
       return noPixels();
     }
@@ -515,11 +528,19 @@ PixelTable RasterFile::Impl::lookupOgrGeometry(
   OGREnvelope envelope;
   geometry->getEnvelope(&envelope);
   std::optional<PixelWindow> window = pixelWindow(envelope);
+  // Record the time to find the rectangle of pixels around the geometry, as
+  // part of projecting.
+  addTimeTo(statistics_.timeProjectingGeometries_);
   if (!window.has_value()) {
     return noPixels();
   }
+  statistics_.numWindowPixels_ +=
+      static_cast<size_t>(window->width_) * window->height_;
   qlm::vector<uint8_t> belongsToGeometry =
       rasterizeMask(*geometry, window.value(), allocator);
+  // Record the time to mark which pixels of the rectangle lie inside the
+  // geometry.
+  addTimeTo(statistics_.timeDrawingMasks_);
 
   // The values of all pixels of the window, one entry per entry of `bands`.
   std::vector<std::variant<qlm::vector<int64_t>, qlm::vector<double>>>
@@ -529,6 +550,8 @@ PixelTable RasterFile::Impl::lookupOgrGeometry(
     windowValuesPerBand.push_back(
         bands_[band - 1].readWindow(window.value(), allocator));
   }
+  // Record the time to read the values of all pixels of the rectangle.
+  addTimeTo(statistics_.timeReadingPixels_);
 
   // The value of `bands[bandIndex]` at `index` of the window, or nothing if it
   // is NoData.
@@ -552,12 +575,14 @@ PixelTable RasterFile::Impl::lookupOgrGeometry(
   // The values of the current pixel, reused so that the loop does not
   // allocate.
   std::vector<std::optional<PixelValue>> pixelValues(bands.size());
+  size_t numPixelsInsideGeometry = 0;
   for (int row = 0; row < window->height_; ++row) {
     for (int column = 0; column < window->width_; ++column) {
       size_t index = static_cast<size_t>(row) * window->width_ + column;
       if (!belongsToGeometry[index]) {
         continue;
       }
+      ++numPixelsInsideGeometry;
       for (size_t bandIndex = 0; bandIndex < bands.size(); ++bandIndex) {
         pixelValues[bandIndex] = valueAt(bandIndex, index);
       }
@@ -578,6 +603,10 @@ PixelTable RasterFile::Impl::lookupOgrGeometry(
       centersY.push_back(y);
     }
   }
+  statistics_.numPixelsInsideGeometry_ += numPixelsInsideGeometry;
+  // Record the time to collect the values and centers of the pixels inside the
+  // geometry.
+  addTimeTo(statistics_.timeCollectingPixels_);
 
   // Transform all centers to CRS84 in one call.
   if (!centersX.empty()) {
@@ -590,6 +619,8 @@ PixelTable RasterFile::Impl::lookupOgrGeometry(
     // `GeoPoint` takes the latitude first.
     centers.push_back(GeoPoint{centersY[pixelIndex], centersX[pixelIndex]});
   }
+  // Record the time to convert the centers to longitude and latitude.
+  addTimeTo(statistics_.timeConvertingCenters_);
   return PixelTable{std::move(centers), std::move(valuesPerBand)};
 }
 
@@ -609,11 +640,21 @@ int RasterFile::numBands() const {
 }
 
 // _____________________________________________________________________________
+const LookupStatistics& RasterFile::statistics() const {
+  return impl_->statistics_;
+}
+
+// _____________________________________________________________________________
 PixelTable RasterFile::lookupPoint(const GeoPoint& point,
                                    ql::span<const int> bands,
                                    const qlm::Allocator<char>& allocator) {
   Impl& impl = *impl_;
   impl.checkBands(bands);
+  ++impl.statistics_.numPointLookups_;
+  // Record the time of the whole lookup at whichever `return` it ends.
+  ad_utility::Timer timer{ad_utility::Timer::Started};
+  absl::Cleanup recordTime{
+      [&]() { impl.statistics_.timePointLookups_ += timer.value(); }};
   auto noPixels = [&]() { return PixelTable(bands.size(), allocator); };
 
   double x = point.getLng();
@@ -677,6 +718,7 @@ PixelTable RasterFile::lookupGeometry(std::string_view wktLiteral,
                                       ql::span<const int> bands,
                                       std::optional<double> radius,
                                       const qlm::Allocator<char>& allocator) {
+  ad_utility::Timer timer{ad_utility::Timer::Started};
   std::optional<ad_utility::detail::ParsedWkt> geometry =
       ad_utility::detail::parseWkt(wktLiteral).parsedWkt_;
   if (!geometry.has_value()) {
@@ -684,7 +726,8 @@ PixelTable RasterFile::lookupGeometry(std::string_view wktLiteral,
   }
 
   return std::visit(
-      [this, bands, radius, &allocator](const auto& parsed) -> PixelTable {
+      [this, bands, radius, &allocator,
+       &timer](const auto& parsed) -> PixelTable {
         using T = std::decay_t<decltype(parsed)>;
         // A point without a radius is one pixel, read directly.
         if constexpr (std::is_same_v<T, ::util::geo::DPoint>) {
@@ -700,7 +743,9 @@ PixelTable RasterFile::lookupGeometry(std::string_view wktLiteral,
         }
         // Lines, polygons, their multi types and collections, and every
         // geometry widened by a radius, each by the rule of `rasterizeMask`.
-        return impl_->lookupOgrGeometry(ToOgrGeometry{}(parsed), bands, radius,
+        std::unique_ptr<OGRGeometry> ogrGeometry = ToOgrGeometry{}(parsed);
+        impl_->statistics_.timeParsingGeometries_ += timer.value();
+        return impl_->lookupOgrGeometry(std::move(ogrGeometry), bands, radius,
                                         allocator);
       },
       geometry.value());
