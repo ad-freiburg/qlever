@@ -588,13 +588,14 @@ class RdfStringParser : public Parser {
   }
 
   // Parse all triples of `content` (see `parseAndReturnAllTriples`) with a
-  // fresh parser that uses the `encodedIriManager`, and return them. If an
-  // `inputName` is given, it appears in the messages of parse errors (see
-  // `RdfParserBase::setInputName`).
+  // fresh parser that uses the `encodedIriManager` and the `settings`, and
+  // return them. If an `inputName` is given, it appears in the messages of
+  // parse errors (see `RdfParserBase::setInputName`).
   static std::vector<TurtleTriple> parseTriplesFromString(
       std::string_view content, const EncodedIriManager* encodedIriManager,
+      RdfParserSettings settings = {},
       std::optional<std::string> inputName = std::nullopt) {
-    RdfStringParser parser{encodedIriManager};
+    RdfStringParser parser{encodedIriManager, settings};
     if (inputName.has_value()) {
       parser.setInputName(std::move(inputName.value()));
     }

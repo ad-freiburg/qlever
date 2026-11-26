@@ -54,6 +54,11 @@
 
 namespace qlever {
 
+namespace blobDiff {
+// Forward declaration, see `libqlever/blobDiff/TurtleDelta.h`.
+struct TripleDelta;
+}  // namespace blobDiff
+
 // The common configuration shared by the index building and query execution.
 struct CommonConfig {
   // The basename of all files that QLever will write as part of the index
@@ -601,6 +606,14 @@ class Qlever : public ad_utility::NoCopyNoMove {
       DeltaTriples& deltaTriples,
       ad_utility::timer::TimeTracer& tracer =
           ad_utility::timer::DEFAULT_TIME_TRACER);
+
+  // Apply the `delta` (see `blobDiff::computeTripleDelta`) to the delta triples
+  // of the current index in a single modification, and return metadata about
+  // the update (the counts before and after). Like `applyUpdate`, also clear
+  // the query and named-result caches, and throw if the index was loaded from a
+  // blob. The `delta` must have been computed for the current index, that is
+  // `indexAndViewsSnapshot()->index_`.
+  UpdateMetadata applyTripleDelta(blobDiff::TripleDelta delta);
 
   // Plan, parse, and execute the given `query` and pin the result to the cache
   // with the given options (name and possibly request for building a geometry

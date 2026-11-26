@@ -17,8 +17,9 @@
 #include "index/Index.h"
 #include "parser/BlankNodeAdder.h"
 
-// Forward declaration to not include the heavy `parser/RdfParser.h`.
+// Forward declarations to not include the heavy `parser/RdfParser.h`.
 struct TurtleTriple;
+struct RdfParserSettings;
 
 namespace qlever::blobDiff {
 
@@ -31,7 +32,12 @@ struct TripleDelta {
 };
 
 // Return the difference between the Turtle files `oldTurtleFile` and
-// `newTurtleFile`, both parsed with the settings of `index`. The difference is
+// `newTurtleFile`, both parsed with the `EncodedIriManager` of the `index` and
+// the `settings`. The `settings` have to be the ones with which the `index` was
+// built (they are not stored in the index): otherwise, the same triple can get
+// different `Id`s in the index and in the parsed files (for example, an integer
+// that was converted to a double during the index build), and the delta would
+// fail to delete it and insert it a second time. The difference is
 // computed on the level of the `Id`s, which are exact and normalized: a change
 // of a literal that only affects its lexical form (for example `"1"^^xsd:int`
 // to `"01"^^xsd:int`) gives the same `Id` and is thus no change, whereas a
@@ -42,24 +48,29 @@ struct TripleDelta {
 // (which contains a `LocalVocab`) keeps these words alive, so it has to outlive
 // the use of the result.
 //
+// NOTE: Both files are read and parsed completely in RAM, and their triples are
+// kept in RAM at the same time, so the files have to be small enough for that.
+//
 // Throw if one of the files contains a blank node. Blank nodes cannot be
 // diffed: the same label gets a different `Id` in each parsed file, and the
 // `Id`s that the blank nodes of the old file got when the `index` was built are
 // not stored anywhere. A delta with blank nodes would thus silently fail to
 // delete their triples and insert them a second time.
+//
+// To apply the result, use `Qlever::applyTripleDelta`.
 TripleDelta computeTripleDelta(const ql::filesystem::path& oldTurtleFile,
                                const ql::filesystem::path& newTurtleFile,
-                               const Index& index, BlankNodeAdder& adder);
-
-// Apply the `delta` to the delta triples of the `index`, in a single
-// modification.
-void applyTripleDelta(Index& index, TripleDelta delta);
+                               const Index& index,
+                               const RdfParserSettings& settings,
+                               BlankNodeAdder& adder);
 
 namespace detail {
-// Parse the Turtle file `path` using the settings of `index`. Throw if one of
-// the triples contains a blank node (see `computeTripleDelta` for the reason).
+// Parse the Turtle file `path` (completely in RAM) using the
+// `EncodedIriManager` of the `index` and the `settings`. Throw if one of the
+// triples contains a blank node (see `computeTripleDelta` for the reason).
 std::vector<TurtleTriple> parseTurtleFile(const ql::filesystem::path& path,
-                                          const Index& index);
+                                          const Index& index,
+                                          const RdfParserSettings& settings);
 
 // Convert the `triples` into sorted and deduplicated `IdTriple`s in the default
 // graph. Words that are not in the vocabulary of the `index` become

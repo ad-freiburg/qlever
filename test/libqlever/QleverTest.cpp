@@ -24,6 +24,7 @@
 #include "index/DeltaTriples.h"
 #include "index/IndexImpl.h"
 #include "libqlever/Qlever.h"
+#include "libqlever/blobDiff/TurtleDelta.h"
 #include "parser/SparqlParser.h"
 #include "util/BlankNodeManager.h"
 #include "util/FilesystemHelpers.h"
@@ -1198,6 +1199,9 @@ TEST(LibQlever, loadFromCompressedBlobFile) {
       qlever.vacuumDeltaTriples(
           std::make_shared<ad_utility::CancellationHandle<>>()),
       HasSubstr("Vacuuming the delta triples is not supported"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      qlever.applyTripleDelta(blobDiff::TripleDelta{}),
+      HasSubstr("Applying a triple delta is not supported"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       qlever.writeMaterializedView("someView", "SELECT * { ?s ?p ?o }"),
       HasSubstr("Writing a materialized view is not supported"));

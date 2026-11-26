@@ -13,7 +13,6 @@
 
 #include <algorithm>
 #include <iterator>
-#include <memory>
 #include <range/v3/range/conversion.hpp>
 #include <range/v3/view/enumerate.hpp>
 #include <stdexcept>
@@ -21,11 +20,9 @@
 #include <string_view>
 
 #include "backports/algorithm.h"
-#include "index/DeltaTriples.h"
 #include "index/TripleComponentConversions.h"
 #include "parser/RdfParser.h"
 #include "parser/Tokenizer.h"
-#include "util/CancellationHandle.h"
 #include "util/FilesystemHelpers.h"
 
 namespace qlever::blobDiff {
@@ -33,12 +30,13 @@ namespace qlever::blobDiff {
 namespace detail {
 // _____________________________________________________________________________
 std::vector<TurtleTriple> parseTurtleFile(const ql::filesystem::path& path,
-                                          const Index& index) {
+                                          const Index& index,
+                                          const RdfParserSettings& settings) {
   auto bytes = util::readBinaryFile(path);
   std::string_view content{bytes.data(), bytes.size()};
   auto triples =
       RdfStringParser<TurtleParser<Tokenizer>>::parseTriplesFromString(
-          content, &index.encodedIriManager(), path.string());
+          content, &index.encodedIriManager(), settings, path.string());
   // The RDF parsers represent blank nodes (both labeled and anonymous ones) as
   // plain strings, see `BlankNodeAdder::resolveParsedComponent`.
   for (const auto& [i, triple] : ::ranges::views::enumerate(triples)) {
@@ -82,11 +80,13 @@ std::vector<IdTriple<0>> toIdTriples(std::vector<TurtleTriple> triples,
 // _____________________________________________________________________________
 TripleDelta computeTripleDelta(const ql::filesystem::path& oldTurtleFile,
                                const ql::filesystem::path& newTurtleFile,
-                               const Index& index, BlankNodeAdder& adder) {
-  auto parseToIdTriples = [&index,
+                               const Index& index,
+                               const RdfParserSettings& settings,
+                               BlankNodeAdder& adder) {
+  auto parseToIdTriples = [&index, &settings,
                            &adder](const ql::filesystem::path& turtleFile) {
-    return detail::toIdTriples(detail::parseTurtleFile(turtleFile, index),
-                               index, adder);
+    return detail::toIdTriples(
+        detail::parseTurtleFile(turtleFile, index, settings), index, adder);
   };
   auto oldIdTriples = parseToIdTriples(oldTurtleFile);
   auto newIdTriples = parseToIdTriples(newTurtleFile);
@@ -96,24 +96,6 @@ TripleDelta computeTripleDelta(const ql::filesystem::path& oldTurtleFile,
   ql::ranges::set_difference(oldIdTriples, newIdTriples,
                              std::back_inserter(result.toDelete_));
   return result;
-}
-
-// _____________________________________________________________________________
-void applyTripleDelta(Index& index, TripleDelta delta) {
-  // The deletions come first, as in `ExecuteUpdate::executeUpdate`. The sets
-  // are disjoint by construction.
-  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
-  index.deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
-    if (!delta.toDelete_.empty()) {
-      deltaTriples.deleteTriples<DeltaTriples::Consolidate::No>(
-          handle, std::move(delta.toDelete_));
-    }
-    if (!delta.toInsert_.empty()) {
-      deltaTriples.insertTriples<DeltaTriples::Consolidate::No>(
-          handle, std::move(delta.toInsert_));
-    }
-    deltaTriples.consolidateAll();
-  });
 }
 
 }  // namespace qlever::blobDiff

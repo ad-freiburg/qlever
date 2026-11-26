@@ -45,7 +45,7 @@ TEST(TurtleDelta, parseTurtleFile) {
   std::string filename = absl::StrCat(gtestCurrentTestName(), ".ttl");
   absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
   ad_utility::makeOfstream(filename) << oldData;
-  auto triples = blobDiff::detail::parseTurtleFile(filename, index);
+  auto triples = blobDiff::detail::parseTurtleFile(filename, index, {});
   ASSERT_EQ(triples.size(), 3u);
   EXPECT_EQ(triples[2].subject_, ad_utility::testing::iri("<a>"));
   EXPECT_EQ(triples[2].predicate_, ad_utility::testing::iri("<r>"));
@@ -53,7 +53,7 @@ TEST(TurtleDelta, parseTurtleFile) {
 
   ad_utility::makeOfstream(filename) << "<a> <p> .\n";
   AD_EXPECT_THROW_WITH_MESSAGE(
-      blobDiff::detail::parseTurtleFile(filename, index),
+      blobDiff::detail::parseTurtleFile(filename, index, {}),
       HasSubstr(absl::StrCat("Parse error in \"", filename, "\"")));
 
   for (std::string_view withBlankNode :
@@ -61,10 +61,20 @@ TEST(TurtleDelta, parseTurtleFile) {
         "<a> <p> [ <q> <c> ] .\n"}) {
     ad_utility::makeOfstream(filename) << withBlankNode;
     AD_EXPECT_THROW_WITH_MESSAGE(
-        blobDiff::detail::parseTurtleFile(filename, index),
+        blobDiff::detail::parseTurtleFile(filename, index, {}),
         AllOf(HasSubstr(absl::StrCat("of \"", filename, "\"")),
               HasSubstr("contains a blank node")));
   }
+
+  // The `settings` are passed to the parser.
+  ad_utility::makeOfstream(filename) << "<a> <p> 42 .\n";
+  RdfParserSettings allToDouble;
+  allToDouble.integerOverflowBehavior_ =
+      TurtleParserIntegerOverflowBehavior::AllToDouble;
+  auto withSettings =
+      blobDiff::detail::parseTurtleFile(filename, index, allToDouble);
+  ASSERT_EQ(withSettings.size(), 1u);
+  EXPECT_EQ(withSettings[0].object_, TripleComponent{42.0});
 }
 
 // Test `detail::toIdTriples`: the result is sorted and free of duplicates, all
@@ -111,7 +121,8 @@ TEST(TurtleDelta, toIdTriples) {
       HasSubstr("Blank nodes are not supported"));
 }
 
-// Test `computeTripleDelta` and `applyTripleDelta` end to end on a small index.
+// Test `computeTripleDelta` and `Qlever::applyTripleDelta` end to end on a
+// small index.
 TEST(TurtleDelta, computeAndApplyTripleDelta) {
   auto indexConfig = ad_utility::testing::buildTestIndex(oldData);
   absl::Cleanup cleanupIndex = [baseName = indexConfig.baseName_] {
@@ -155,29 +166,37 @@ TEST(TurtleDelta, computeAndApplyTripleDelta) {
 
   // A blank node in either of the two files is rejected.
   AD_EXPECT_THROW_WITH_MESSAGE(
-      computeTripleDelta(blankFile, newFile, index, adder),
+      computeTripleDelta(blankFile, newFile, index, {}, adder),
       HasSubstr("contains a blank node"));
   AD_EXPECT_THROW_WITH_MESSAGE(
-      computeTripleDelta(oldFile, blankFile, index, adder),
+      computeTripleDelta(oldFile, blankFile, index, {}, adder),
       HasSubstr("contains a blank node"));
 
   // Without changes, the delta is empty.
-  auto unchanged = computeTripleDelta(oldFile, oldFile, index, adder);
+  auto unchanged = computeTripleDelta(oldFile, oldFile, index, {}, adder);
   EXPECT_TRUE(unchanged.toInsert_.empty());
   EXPECT_TRUE(unchanged.toDelete_.empty());
 
-  auto delta = computeTripleDelta(oldFile, newFile, index, adder);
+  auto delta = computeTripleDelta(oldFile, newFile, index, {}, adder);
   EXPECT_EQ(delta.toInsert_.size(), 2u);
   EXPECT_EQ(delta.toDelete_.size(), 1u);
   EXPECT_TRUE(ql::ranges::is_sorted(delta.toInsert_));
 
   // The reverse delta swaps the insertions and the deletions.
-  auto reverse = computeTripleDelta(newFile, oldFile, index, adder);
+  auto reverse = computeTripleDelta(newFile, oldFile, index, {}, adder);
   EXPECT_EQ(reverse.toInsert_, delta.toDelete_);
   EXPECT_EQ(reverse.toDelete_, delta.toInsert_);
 
-  applyTripleDelta(index, std::move(delta));
-  EXPECT_EQ(qlever.query("SELECT ?p ?o { <a> ?p ?o } ORDER BY ?p",
-                         ad_utility::MediaType::tsv),
+  // Applying the delta clears the caches and reports the counts.
+  std::string query = "SELECT ?p ?o { <a> ?p ?o } ORDER BY ?p";
+  EXPECT_EQ(qlever.query(query, ad_utility::MediaType::tsv),
+            "?p\t?o\n<p>\t1\n<q>\t\"x\"\n<r>\t<b>\n");
+  qlever.queryAndPinResultWithName("pinned", query);
+  EXPECT_EQ(qlever.namedResultCache().numEntries(), 1u);
+  auto metadata = qlever.applyTripleDelta(std::move(delta));
+  EXPECT_EQ(metadata.countBefore_, (DeltaTriplesCount{0, 0}));
+  EXPECT_EQ(metadata.countAfter_, (DeltaTriplesCount{2, 1}));
+  EXPECT_EQ(qlever.namedResultCache().numEntries(), 0u);
+  EXPECT_EQ(qlever.query(query, ad_utility::MediaType::tsv),
             "?p\t?o\n<p>\t1\n<q>\t\"new word\"\n<r>\t<b>\n<s>\t1.0\n");
 }

@@ -30,6 +30,7 @@
 #include "index/IndexRebuilder.h"
 #include "index/TextIndexBuilder.h"
 #include "libqlever/QleverTypes.h"
+#include "libqlever/blobDiff/TurtleDelta.h"
 #include "parser/SparqlParser.h"
 #include "util/Exception.h"
 #include "util/FairShareExecutor.h"
@@ -363,6 +364,35 @@ UpdateMetadata Qlever::applyUpdate(
   namedResultCache_.clear();
   tracer.endTrace("clearCache");
 
+  return updateMetadata;
+}
+
+// _____________________________________________________________________________
+UpdateMetadata Qlever::applyTripleDelta(blobDiff::TripleDelta delta) {
+  throwIfLoadedFromBlob("Applying a triple delta");
+  auto snapshot = indexAndViewsSnapshot();
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+  UpdateMetadata updateMetadata;
+  // The deletions come first, as in `ExecuteUpdate::executeUpdate`. The sets
+  // are disjoint by construction.
+  snapshot->index_.deltaTriplesManager().modify<void>(
+      [&handle, &delta, &updateMetadata](DeltaTriples& deltaTriples) {
+        updateMetadata.countBefore_ = deltaTriples.getCounts();
+        if (!delta.toDelete_.empty()) {
+          deltaTriples.deleteTriples<DeltaTriples::Consolidate::No>(
+              handle, std::move(delta.toDelete_));
+        }
+        if (!delta.toInsert_.empty()) {
+          deltaTriples.insertTriples<DeltaTriples::Consolidate::No>(
+              handle, std::move(delta.toInsert_));
+        }
+        deltaTriples.consolidateAll();
+        updateMetadata.countAfter_ = deltaTriples.getCounts();
+      });
+  // Clear the caches, because all their entries have been invalidated by the
+  // update anyway (see `applyUpdate`).
+  cache_.clearAll();
+  namedResultCache_.clear();
   return updateMetadata;
 }
 
