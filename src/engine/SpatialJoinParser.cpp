@@ -103,7 +103,7 @@ std::optional<StoredGeometryRow> WKTParser::storedGeometryRow(
     if (!info.has_value() || !info->getGeometryStoreId().has_value()) {
       return std::nullopt;
     }
-    return std::pair{info->getGeometryStoreId().value(),
+    return std::pair{info->getGeometryStoreId().value().id_,
                      info->getBoundingBox()};
   }();
   if (!idAndBox.has_value()) {

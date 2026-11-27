@@ -6,6 +6,7 @@
 
 #include "index/vocabulary/VocabularyType.h"
 #include "util/HashMap.h"
+#include "util/json.h"
 
 using namespace ad_utility;
 // Simple tests for the glorified enum `VocabularyType`.

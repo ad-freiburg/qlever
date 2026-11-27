@@ -106,6 +106,11 @@ using IdOrLocalVocabEntry = std::variant<Id, LocalVocabEntry>;
 // than the dispatch itself (measured: 0.8 ns vs 6.2 ns per call).
 [[nodiscard]] inline std::optional<std::string_view> toRdfLiteralView(
     const TripleComponent& tripleComponent) {
+  if (tripleComponent.isTripleTerm()) {
+    // TODO<Prashanth0703> Implement structural RDF export for triple terms.
+    AD_THROW(
+        "Converting parsed triple terms to RDF output is not yet supported");
+  }
   if (tripleComponent.isVariable()) {
     return tripleComponent.getVariable().name();
   } else if (tripleComponent.isString()) {

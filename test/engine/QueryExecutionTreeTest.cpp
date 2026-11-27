@@ -9,13 +9,13 @@
 #include "../util/IndexTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
 #include "./ValuesForTesting.h"
-#include "engine/CartesianProductJoin.h"
-#include "engine/Distinct.h"
-#include "engine/IndexScan.h"
 #include "engine/QueryExecutionTree.h"
-#include "engine/Sort.h"
-#include "engine/StripColumns.h"
-#include "engine/Union.h"
+#include "engine/operation/CartesianProductJoin.h"
+#include "engine/operation/Distinct.h"
+#include "engine/operation/IndexScan.h"
+#include "engine/operation/Sort.h"
+#include "engine/operation/StripColumns.h"
+#include "engine/operation/Union.h"
 
 using namespace ad_utility::testing;
 

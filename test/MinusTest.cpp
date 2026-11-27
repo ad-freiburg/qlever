@@ -10,16 +10,17 @@
 #include "./util/IdTestHelpers.h"
 #include "./util/LocalVocabTestHelpers.h"
 #include "engine/CallFixedSize.h"
-#include "engine/IndexScan.h"
 #include "engine/JoinHelpers.h"
-#include "engine/Minus.h"
 #include "engine/MinusRowHandler.h"
 #include "engine/ValuesForTesting.h"
+#include "engine/operation/IndexScan.h"
+#include "engine/operation/Minus.h"
 #include "util/AllocatorTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
 #include "util/LocalVocabEntryTestHelpers.h"
 #include "util/OperationTestHelpers.h"
+#include "util/joinAlgorithms/JoinAlgorithms.h"
 
 using ad_utility::testing::makeLocalVocab;
 
@@ -444,7 +445,7 @@ TEST(Minus, clone) {
 }
 
 // _____________________________________________________________________________
-TEST(Minus, columnOriginatesFromGraphOrUndef) {
+TEST(Minus, columnContainsOnlyKnowledgeGraphNodes) {
   using ad_utility::triple_component::Iri;
   auto* qec = ad_utility::testing::getQec();
   auto values1 = ad_utility::makeExecutionTree<ValuesForTesting>(
@@ -459,34 +460,34 @@ TEST(Minus, columnOriginatesFromGraphOrUndef) {
                          Iri::fromIriref("<c>")});
 
   Minus minus1{qec, values1, values1};
-  EXPECT_FALSE(minus1.columnOriginatesFromGraphOrUndef(Variable{"?a"}));
-  EXPECT_FALSE(minus1.columnOriginatesFromGraphOrUndef(Variable{"?b"}));
+  EXPECT_FALSE(minus1.columnContainsOnlyKnowledgeGraphNodes(Variable{"?a"}));
+  EXPECT_FALSE(minus1.columnContainsOnlyKnowledgeGraphNodes(Variable{"?b"}));
   EXPECT_THROW(
-      minus1.columnOriginatesFromGraphOrUndef(Variable{"?notExisting"}),
+      minus1.columnContainsOnlyKnowledgeGraphNodes(Variable{"?notExisting"}),
       ad_utility::Exception);
 
   Minus minus2{qec, values1, values2};
-  EXPECT_FALSE(minus2.columnOriginatesFromGraphOrUndef(Variable{"?a"}));
-  EXPECT_FALSE(minus2.columnOriginatesFromGraphOrUndef(Variable{"?b"}));
-  EXPECT_THROW(minus2.columnOriginatesFromGraphOrUndef(Variable{"?c"}),
+  EXPECT_FALSE(minus2.columnContainsOnlyKnowledgeGraphNodes(Variable{"?a"}));
+  EXPECT_FALSE(minus2.columnContainsOnlyKnowledgeGraphNodes(Variable{"?b"}));
+  EXPECT_THROW(minus2.columnContainsOnlyKnowledgeGraphNodes(Variable{"?c"}),
                ad_utility::Exception);
   EXPECT_THROW(
-      minus2.columnOriginatesFromGraphOrUndef(Variable{"?notExisting"}),
+      minus2.columnContainsOnlyKnowledgeGraphNodes(Variable{"?notExisting"}),
       ad_utility::Exception);
 
   Minus minus3{qec, index, values1};
-  EXPECT_TRUE(minus3.columnOriginatesFromGraphOrUndef(Variable{"?a"}));
-  EXPECT_THROW(minus3.columnOriginatesFromGraphOrUndef(Variable{"?b"}),
+  EXPECT_TRUE(minus3.columnContainsOnlyKnowledgeGraphNodes(Variable{"?a"}));
+  EXPECT_THROW(minus3.columnContainsOnlyKnowledgeGraphNodes(Variable{"?b"}),
                ad_utility::Exception);
   EXPECT_THROW(
-      minus3.columnOriginatesFromGraphOrUndef(Variable{"?notExisting"}),
+      minus3.columnContainsOnlyKnowledgeGraphNodes(Variable{"?notExisting"}),
       ad_utility::Exception);
 
   Minus minus4{qec, values1, index};
-  EXPECT_FALSE(minus4.columnOriginatesFromGraphOrUndef(Variable{"?a"}));
-  EXPECT_FALSE(minus4.columnOriginatesFromGraphOrUndef(Variable{"?b"}));
+  EXPECT_FALSE(minus4.columnContainsOnlyKnowledgeGraphNodes(Variable{"?a"}));
+  EXPECT_FALSE(minus4.columnContainsOnlyKnowledgeGraphNodes(Variable{"?b"}));
   EXPECT_THROW(
-      minus4.columnOriginatesFromGraphOrUndef(Variable{"?notExisting"}),
+      minus4.columnContainsOnlyKnowledgeGraphNodes(Variable{"?notExisting"}),
       ad_utility::Exception);
 }
 
@@ -523,6 +524,29 @@ TEST(Minus, repeatingMatchesDontProduceDuplicates) {
   rightTables.push_back(makeIdTableFromVector({{1, 21}}));
   rightTables.push_back(makeIdTableFromVector({{1, 22}}));
   rightTables.push_back(makeIdTableFromVector({{3, 23}}));
+
+  testMinus(std::move(leftTables), std::move(rightTables), std::move(expected));
+}
+
+// Test that a left row is removed when its matches end inside the last of the
+// `FETCH_BLOCKS` (3) right blocks fetched at once and the right input continues
+// beyond that block.
+TEST(Minus, matchesEndInThirdFetchedBlockOfTheRightInput) {
+  // The number of fetched blocks is based on this constant in the code.
+  static_assert(ad_utility::detail::FETCH_BLOCKS == 3);
+  // One left row and the right blocks [1] [1] [1] [1, 2] [3], the same blocks
+  // as in `OptionalJoin.lazyOptionalJoinMatchesEndInThirdFetchedBlock`.
+  std::vector<IdTable> leftTables;
+  leftTables.push_back(makeIdTableFromVector({{1, 11}}));
+  std::vector<IdTable> rightTables;
+  rightTables.push_back(makeIdTableFromVector({{1, 21}}));
+  rightTables.push_back(makeIdTableFromVector({{1, 22}}));
+  rightTables.push_back(makeIdTableFromVector({{1, 23}}));
+  rightTables.push_back(makeIdTableFromVector({{1, 24}, {2, 25}}));
+  rightTables.push_back(makeIdTableFromVector({{3, 26}}));
+
+  // The left row has a match, so the result is empty.
+  std::vector<IdTable> expected;
 
   testMinus(std::move(leftTables), std::move(rightTables), std::move(expected));
 }

@@ -9,12 +9,15 @@
 #include <vector>
 
 #include "backports/three_way_comparison.h"
+#include "global/Id.h"
 #include "index/LocalVocab.h"
 #include "parser/BlankNodeAdder.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/SparqlTriple.h"
 #include "parser/UpdateTriples.h"
 #include "parser/data/Types.h"
+#include "util/Allocator.h"
+#include "util/ContainersWithAllocator.h"
 
 // A class for the intermediate parsing results of `quads`. Provides utilities
 // for converting the quads into the required formats. The Quads/Triples can be
@@ -42,11 +45,14 @@ struct Quads {
   // Return the quads in a format for use as an update template.
   // The `defaultGraph` is used for the `freeTriples_`. It for example is set
   // when using a `WITH` clause. It can also be `std::monostate{}`, in which
-  // case the global default graph will be used later on.
+  // case the global default graph will be used later on. The `allocator` is
+  // used for the triples of the result.
   updateClause::UpdateTriples toTriplesWithGraph(
       const SparqlTripleSimpleWithGraph::Graph& defaultGraph,
-      BlankNodeAdder& blankNodeAdder) const;
-  // Return the quads in a format for use in a GraphPattern.
-  std::vector<parsedQuery::GraphPatternOperation> toGraphPatternOperations()
-      const;
+      BlankNodeAdder& blankNodeAdder,
+      const qlever::Allocator<Id>& allocator) const;
+  // Return the quads in a format for use in a GraphPattern. The `allocator` is
+  // used for the containers of the result.
+  qlm::vector<parsedQuery::GraphPatternOperation> toGraphPatternOperations(
+      const qlever::Allocator<Id>& allocator) const;
 };

@@ -37,11 +37,15 @@ enum class CRSType : uint8_t;
 
 namespace ad_utility {
 
-// The value `util::geo::CRSType::UNSUPPORTED`, which this header cannot name
-// (the enum is only forward-declared). Used by the `CRSTypeValueGetter` in
-// `SparqlExpressionValueGetters.h`, checked against the enum in
-// `GeometryInfo.cpp`.
+// The values `util::geo::CRSType::UNSUPPORTED` and `util::geo::CRSType::CRS84`
+// (the default CRS), which this header cannot name (the enum is only
+// forward-declared). Used by the `CRSTypeValueGetter` in
+// `SparqlExpressionValueGetters.h` and by `WktCentroid` in
+// `GeoSparqlHelpers.h`, checked against the enum in `GeometryInfo.cpp`.
 constexpr inline ::util::geo::CRSType crsTypeUnsupported{0};
+constexpr inline ::util::geo::CRSType crsTypeCrs84{1};
+
+struct SourceCrsType;
 
 // These encapsulating structs are required for the `RequestedInfo` templates
 // used in the `GeometryInfo` class and the `GeometryInfoValueGetter`.
@@ -56,6 +60,10 @@ struct Centroid {
   Centroid(double lat, double lng) : centroid_{lat, lng} {}
 
   GeoPoint centroid() const { return centroid_; }
+
+  // Return a `POINT` WKT literal without quotes or datatype representing this
+  // centroid, projected to `crs` (with the IRI of `crs` unless it is CRS84).
+  std::string asWkt(SourceCrsType crs) const;
 };
 
 // The individual coordinates describing the bounding box.
@@ -81,8 +89,10 @@ struct BoundingBox {
   }
 
   // Return a `POLYGON` WKT literal without quotes or datatype representing this
-  // bounding box.
+  // bounding box, in CRS84 or projected to `crs` (with the IRI of `crs` unless
+  // it is CRS84).
   std::string asWkt() const;
+  std::string asWkt(SourceCrsType crs) const;
 
   // Extract the minimum or maximum coordinates
   template <BoundingCoordinate RequestedCoordinate>
@@ -191,11 +201,14 @@ struct MetricArea {
   bool isValid() const { return !std::isnan(area_); }
 };
 
-// The ID of a parsed geometry in the `sj::GeometryStore` of the
-// `GeoVocabulary` (see `GeometryInfo::getGeometryStoreId`). It has at most 60
-// bits (the upper bits are the type of the geometry, see `sj::ID_TYPE_SHIFT`).
+// The typed ID of a parsed geometry in the `sj::GeometryStore` of the
+// `GeoVocabulary` (see `GeometryInfo::getGeometryStoreId`). Its upper 8 bits
+// hold the type of the geometry and its lower 56 bits the ID in the store (see
+// `sj::ID_TYPE_SHIFT` and `sj::typedId`).
 struct GeometryStoreId {
   uint64_t id_;
+
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL_CONSTEXPR(GeometryStoreId, id_)
 };
 
 // The serialization format of a geometry literal. For now, only WKT literals
@@ -248,7 +261,7 @@ using GeoPointOrWkt = std::variant<GeoPoint, std::string>;
 //    zeroed explicitly in later builds of this version).
 // 6: The bytes `[28, 32)` are the two 16-bit fields `sourceCrs_` (initially
 //    reserved and zero) and `serializationType_`, see below.
-// 7: Append the 64-bit field `geometryStoreId_`, see below.
+// 7: The bytes `[48, 56)` are the 64-bit field `geometryStoreId_`, see below.
 //
 // From version 6 on, the binary representation is append-only, so that adding
 // a field does not invalidate existing indices:
@@ -308,6 +321,17 @@ class GeometryInfo {
   // cannot be all-zero. This is currently used by the disk serialization of
   // `GeoVocabulary` to represent invalid literals.
   EncodedBoundingBox boundingBox_;
+  // The centroid is computed in the source CRS of the literal (see
+  // `sourceCrs_`), then projected to CRS84 and stored in CRS84.
+  //
+  // NOTE 1: Projecting the geometry to CRS84 first and computing the centroid
+  // there would give a different result, e.g. for Web Mercator, because its y
+  // axis is not linear in the latitude.
+  //
+  // NOTE 2: Records written before this rule (indices built between #3583 and
+  // #3787) hold the centroid computed in CRS84, which `geof:centroid` returns
+  // projected to the source CRS. Rebuild such an index if it has Web Mercator
+  // literals (for WGS84 both centroids are the same).
   uint64_t geometryTypeAndCentroid_;
   uint32_t numGeometries_;
   // The CRS named by the IRI of the literal (before the projection to CRS84),
@@ -320,8 +344,9 @@ class GeometryInfo {
   MetricLength metricLength_;
   MetricArea metricArea_;
   // The ID of the parsed geometry in the `sj::GeometryStore` of the
-  // `GeoVocabulary` plus one, such that zero means "not stored" (see
-  // `getGeometryStoreId`).
+  // `GeoVocabulary` plus one, see `getGeometryStoreId`. Zero means "not
+  // computed", as the rules at `GEOMETRY_INFO_VERSION` require for a field
+  // added after version 5.
   uint64_t geometryStoreId_ = 0;
 
   static constexpr uint64_t bitMaskGeometryType =
@@ -416,11 +441,18 @@ class GeometryInfo {
   // Get the ID of the parsed geometry in the `sj::GeometryStore` of the
   // `GeoVocabulary`. Empty iff the geometry is not stored there (for example
   // because the index predates the store).
-  std::optional<uint64_t> getGeometryStoreId() const;
+  std::optional<GeometryStoreId> getGeometryStoreId() const;
 
   // Set the ID of the parsed geometry in the `sj::GeometryStore`, see
   // `getGeometryStoreId`.
   void setGeometryStoreId(uint64_t id);
+
+  // Return the ID of an arbitrary WKT literal in the `sj::GeometryStore`, which
+  // is always empty (only a literal of the `GeoVocabulary` can be stored
+  // there).
+  static std::optional<GeometryStoreId> getGeometryStoreId(std::string_view) {
+    return std::nullopt;
+  }
 
   // Return the serialization format of an arbitrary WKT literal, which is
   // always `WKT`.

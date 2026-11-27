@@ -19,8 +19,8 @@
 #include <variant>
 
 #include "backports/algorithm.h"
-#include "engine/ExplicitIdTableOperation.h"
 #include "engine/NamedResultCacheSerializer.h"
+#include "engine/operation/ExplicitIdTableOperation.h"
 #include "index/IndexImpl.h"
 #include "index/vocabulary/BuildFilteredVocabulary.h"
 #include "index/vocabulary/PolymorphicVocabulary.h"
@@ -29,7 +29,7 @@
 #include "libqlever/NamedCacheSecondaryVocabRewriter.h"
 #include "libqlever/Qlever.h"
 #include "util/Log.h"
-#include "util/Random.h"
+#include "util/UuidGenerator.h"
 #include "util/compressionUsingZstd/ZstdWrapper.h"
 #include "util/json.h"
 

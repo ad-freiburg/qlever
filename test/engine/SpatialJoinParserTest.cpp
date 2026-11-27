@@ -141,7 +141,7 @@ TEST(SpatialJoinParser, StoredGeometryFromPrecomputedColumns) {
   auto uniId = uniInfo.value().getGeometryStoreId();
   ASSERT_TRUE(uniId.has_value());
   constexpr uint64_t otherId = 4711;
-  ASSERT_NE(uniId.value(), otherId);
+  ASSERT_NE(uniId.value().id_, otherId);
 
   // A parser that uses the persisted geometry store.
   SweeperResult results;
@@ -168,8 +168,8 @@ TEST(SpatialJoinParser, StoredGeometryFromPrecomputedColumns) {
 
   // Only the last row takes the ID and the bounding box from the job (so the
   // `GeometryInfo` was not read for it).
-  EXPECT_EQ(rows[0].geometryStoreId_, uniId.value());
-  EXPECT_EQ(rows[1].geometryStoreId_, uniId.value());
+  EXPECT_EQ(rows[0].geometryStoreId_, uniId.value().id_);
+  EXPECT_EQ(rows[1].geometryStoreId_, uniId.value().id_);
   EXPECT_EQ(rows[2].geometryStoreId_, otherId);
   EXPECT_EQ(rows[1].boundingBox_, rows[0].boundingBox_);
   EXPECT_NE(rows[2].boundingBox_, rows[0].boundingBox_);

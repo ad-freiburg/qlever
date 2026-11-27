@@ -507,11 +507,7 @@ TEST(IndexTest, parserIntegerOverflowBehaviorFromSettingsFile) {
   for (bool parseInParallel : {true, false}) {
     std::string basename =
         absl::StrCat(gtestCurrentTestName(), ".", parseInParallel);
-    absl::Cleanup cleanup = [&basename] {
-      for (const auto& filename : getAllIndexFilenames(basename)) {
-        ad_utility::deleteFile(filename, false);
-      }
-    };
+    absl::Cleanup cleanup = [&basename] { deleteTestIndexFiles(basename); };
     AD_EXPECT_THROW_WITH_MESSAGE(
         makeTestIndex(basename, makeConfig(parseInParallel,
                                            "overflowing-integers-throw")),
@@ -1170,12 +1166,7 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
 TEST(IndexTest, parallelParsingFromSettingsFile) {
   std::string basename = gtestCurrentTestName();
   std::string settingsFilename = basename + ".settings.json";
-  absl::Cleanup cleanup = [&basename, &settingsFilename] {
-    for (const auto& filename : getAllIndexFilenames(basename)) {
-      ad_utility::deleteFile(filename, false);
-    }
-    ad_utility::deleteFile(settingsFilename);
-  };
+  absl::Cleanup cleanup = [&basename] { deleteTestIndexFiles(basename); };
   // An input file with a multiline literal, which the parallel parser does not
   // support.
   ad_utility::makeOfstream(basename + ".ttl")
@@ -1205,11 +1196,7 @@ TEST(IndexTest, parallelParsingFromSettingsFile) {
 // Test that an index can be built from a type-erased range of input files.
 TEST(IndexTest, createFromFilesTypeErased) {
   std::string basename = gtestCurrentTestName();
-  absl::Cleanup cleanup = [&basename] {
-    for (const auto& filename : getAllIndexFilenames(basename)) {
-      ad_utility::deleteFile(filename, false);
-    }
-  };
+  absl::Cleanup cleanup = [&basename] { deleteTestIndexFiles(basename); };
   // Build an index from an input file with two triples.
   ad_utility::makeOfstream(basename + ".ttl") << "<s> <p> <o1>, <o2> .\n";
   {
@@ -1442,6 +1429,9 @@ TEST(IndexImpl, loadConfigFromOldIndex) {
   auto onDiskBase = directory + "/index";
   IndexImpl other{ad_utility::makeUnlimitedAllocator<Id>()};
   other.rowsPerBlock() = 1337;
+  other.avgNumDistinctPredicatesPerSubject_ = 3.14;
+  other.avgNumDistinctSubjectsPerPredicate_ = 1337.5;
+  other.numDistinctSubjectPredicatePairs_ = 42;
   nlohmann::json stats;
 
   Index::NumNormalAndInternal numTriples{42, 1337};
@@ -1464,6 +1454,9 @@ TEST(IndexImpl, loadConfigFromOldIndex) {
   EXPECT_EQ(index.numSubjects_, numSubjects);
   EXPECT_EQ(index.numObjects_, numObjects);
   EXPECT_EQ(index.rowsPerBlock(), other.rowsPerBlock());
+  EXPECT_EQ(index.avgNumDistinctPredicatesPerSubject_, 3.14);
+  EXPECT_EQ(index.avgNumDistinctSubjectsPerPredicate_, 1337.5);
+  EXPECT_EQ(index.numDistinctSubjectPredicatePairs_, 42);
   EXPECT_EQ(index.configurationJson_, stats);
 
   // The version written to disk will also have these fields.
