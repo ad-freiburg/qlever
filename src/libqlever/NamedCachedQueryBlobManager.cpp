@@ -19,8 +19,8 @@
 #include <variant>
 
 #include "backports/algorithm.h"
-#include "engine/ExplicitIdTableOperation.h"
 #include "engine/NamedResultCacheSerializer.h"
+#include "engine/operation/ExplicitIdTableOperation.h"
 #include "index/IndexImpl.h"
 #include "index/vocabulary/BuildFilteredVocabulary.h"
 #include "index/vocabulary/PolymorphicVocabulary.h"

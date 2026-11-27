@@ -10,6 +10,7 @@
 
 #include "backports/three_way_comparison.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
+#include "util/ContainersWithAllocator.h"
 
 /// Store an expression that appeared in an ORDER BY clause.
 class ExpressionOrderKey {
@@ -43,7 +44,7 @@ using OrderKey = std::variant<VariableOrderKey, ExpressionOrderKey>;
 enum struct IsInternalSort { True, False };
 struct OrderClause {
   IsInternalSort isInternalSort = IsInternalSort::False;
-  std::vector<OrderKey> orderKeys;
+  qlm::vector<OrderKey> orderKeys;
 };
 
 #endif  // QLEVER_SRC_PARSER_DATA_ORDERKEY_H

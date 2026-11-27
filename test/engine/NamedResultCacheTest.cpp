@@ -10,6 +10,7 @@
 #include "../util/LocalVocabEntryTestHelpers.h"
 #include "../util/LocalVocabTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
+#include "../util/VariableToColumnMapTestHelpers.h"
 #include "engine/NamedResultCache.h"
 #include "index/LocalVocabEntry.h"
 
@@ -30,8 +31,9 @@ TEST(NamedResultCache, basicWorkflow) {
   auto table = makeIdTableFromVector({{3, 7}, {9, 11}});
   auto table2 = makeIdTableFromVector({{3, 8}, {16, 11}, {39, 14}});
   using V = Variable;
-  VariableToColumnMap varColMap{{V{"?x"}, makeAlwaysDefinedColumn(0)},
-                                {V{"?y"}, makeAlwaysDefinedColumn(1)}};
+  auto varColMap =
+      makeVariableToColumnMap({{V{"?x"}, makeAlwaysDefinedColumn(0)},
+                               {V{"?y"}, makeAlwaysDefinedColumn(1)}});
 
   LocalVocab localVocab = makeLocalVocab();
   auto* qec = ad_utility::testing::getQec();
@@ -162,8 +164,8 @@ TEST(NamedResultCache, E2E) {
   EXPECT_THAT(result->localVocab().getAllWordsForTesting(),
               ::testing::ElementsAreArray(dummyVocab.getAllWordsForTesting()));
   EXPECT_THAT(result->sortedBy(), ::testing::ElementsAre(0));
-  VariableToColumnMap expectedVars{
-      {Variable{"?s"}, makeAlwaysDefinedColumn(0)}};
+  auto expectedVars =
+      makeVariableToColumnMap({{Variable{"?s"}, makeAlwaysDefinedColumn(0)}});
   EXPECT_THAT(qet->getVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVars));
 }
