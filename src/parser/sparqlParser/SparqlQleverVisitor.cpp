@@ -63,19 +63,20 @@ namespace {
 // CTRE regex pattern for C++17 compatibility
 constexpr ctll::fixed_string iriSchemeRegex = "<[A-Za-z]*[A-Za-z0-9+-.]:";
 
-// Return true iff `lit` is a WKT literal that is invalid according to the
-// strict WKT parsing mode.
-bool isInvalidWkt(const ad_utility::triple_component::Literal& lit) {
-  return lit.hasDatatype() && lit.getDatatype() == GEO_WKT_LITERAL &&
-         !ad_utility::GeometryInfo::isValidWktStrict(
-             lit.toStringRepresentation());
-}
-
-// Error message for an invalid WKT literal passed to a geo function.
-std::string invalidWktMessage(
+// If `lit` is a WKT literal that is invalid according to the strict WKT
+// parsing mode, return an error message for passing it to a geo function.
+std::optional<std::string> getInvalidWktMessage(
     const ad_utility::triple_component::Literal& lit) {
+  if (!lit.hasDatatype() || lit.getDatatype() != GEO_WKT_LITERAL) {
+    return std::nullopt;
+  }
+  auto wkt = lit.toStringRepresentation();
+  auto error = ad_utility::GeometryInfo::getWktParseError(wkt);
+  if (!error.has_value()) {
+    return std::nullopt;
+  }
   return absl::StrCat("Invalid WKT literal given to a GeoSPARQL function: ",
-                      lit.toStringRepresentation());
+                      wkt, ". ", error.value());
 }
 }  // namespace
 
@@ -214,8 +215,8 @@ void Visitor::checkGeoFunctionArgs(ql::span<const ExpressionPtr> args,
     } else if (auto lit = dynamic_cast<
                    const sparqlExpression::StringLiteralExpression*>(
                    arg.get())) {
-      if (isInvalidWkt(lit->value())) {
-        reportError(ctx, invalidWktMessage(lit->value()));
+      if (auto error = getInvalidWktMessage(lit->value())) {
+        reportError(ctx, error.value());
       }
     }
   }
@@ -239,8 +240,11 @@ void Visitor::checkWktInValues(ql::span<const GraphPatternOperation> ops,
         continue;
       }
       for (const auto& row : rows) {
-        if (row[col].isLiteral() && isInvalidWkt(row[col].getLiteral())) {
-          reportError(ctx, invalidWktMessage(row[col].getLiteral()));
+        if (!row[col].isLiteral()) {
+          continue;
+        }
+        if (auto error = getInvalidWktMessage(row[col].getLiteral())) {
+          reportError(ctx, error.value());
         }
       }
     }
