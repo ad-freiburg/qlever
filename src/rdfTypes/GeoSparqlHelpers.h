@@ -424,8 +424,8 @@ class WktNumGeometries {
   }
 };
 
-// The number of bits of a `GeometryStoreId`.
-constexpr inline size_t GEOMETRY_STORE_ID_BITS = 60;
+// The mask of the 60 bits of a `GeometryStoreId`.
+constexpr inline uint64_t GEOMETRY_STORE_ID_MASK = bitMaskForLowerBits(60);
 
 // Get the ID of a geometry in the `sj::GeometryStore` of the `GeoVocabulary` as
 // an integer `ValueId`, see `geometryStoreIdFromValueId` for the inverse.
@@ -438,8 +438,7 @@ class WktGeometryStoreId {
     if (!id.has_value()) {
       return ValueId::makeUndefined();
     }
-    AD_CORRECTNESS_CHECK(id.value().id_ <=
-                         bitMaskForLowerBits(GEOMETRY_STORE_ID_BITS));
+    AD_CORRECTNESS_CHECK(id.value().id_ <= GEOMETRY_STORE_ID_MASK);
     return ValueId::makeFromInt(static_cast<int64_t>(id.value().id_));
   }
 };
@@ -451,8 +450,7 @@ inline std::optional<uint64_t> geometryStoreIdFromValueId(ValueId id) {
   if (id.getDatatype() != Datatype::Int) {
     return std::nullopt;
   }
-  return static_cast<uint64_t>(id.getInt()) &
-         bitMaskForLowerBits(GEOMETRY_STORE_ID_BITS);
+  return static_cast<uint64_t>(id.getInt()) & GEOMETRY_STORE_ID_MASK;
 }
 
 // Compute the area of a WKT geometry.
