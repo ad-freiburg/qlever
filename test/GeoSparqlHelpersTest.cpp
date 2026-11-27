@@ -344,4 +344,28 @@ TEST(GeoSparqlHelpers, WktCentroidAndEnvelopeInSourceCrs) {
   EXPECT_EQ(WktEnvelope{}(std::nullopt), undef);
 }
 
+// Test that a geometry store ID survives the round trip through a `ValueId`,
+// also with all 60 bits set.
+TEST(GeoSparqlHelpers, GeometryStoreIdRoundTrip) {
+  using ad_utility::GeometryStoreId;
+  using ad_utility::geometryStoreIdFromValueId;
+  ad_utility::WktGeometryStoreId toValueId;
+
+  // Small and maximal IDs.
+  for (uint64_t id : {uint64_t{0}, uint64_t{42}, (uint64_t{13} << 56) + 7,
+                      (uint64_t{1} << 60) - 1}) {
+    auto valueId = toValueId(GeometryStoreId{id});
+    EXPECT_EQ(valueId.getDatatype(), Datatype::Int);
+    EXPECT_EQ(geometryStoreIdFromValueId(valueId), id);
+  }
+
+  // No ID gives `UNDEF`, which is not an ID.
+  auto undef = toValueId(std::nullopt);
+  EXPECT_TRUE(undef.isUndefined());
+  EXPECT_EQ(geometryStoreIdFromValueId(undef), std::nullopt);
+
+  // An ID with more than 60 bits is a bug.
+  EXPECT_ANY_THROW(toValueId(GeometryStoreId{uint64_t{1} << 60}));
+}
+
 }  // namespace
