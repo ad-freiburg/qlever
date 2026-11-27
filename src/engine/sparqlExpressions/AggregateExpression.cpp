@@ -7,7 +7,6 @@
 
 #include "engine/sparqlExpressions/AggregateExpression.h"
 
-#include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
 
 namespace sparqlExpression::detail {
@@ -92,8 +91,11 @@ struct EvaluateOnChildOperand {
       size_t numValues = 1;
 
       for (++it; it != inputs.end(); ++it) {
+        // Named, because `*it` is a prvalue for a split column (see
+        // `resultGeneratorImpl`) and moving a prvalue prevents copy elision.
+        decltype(auto) input = *it;
         result = aggregateTwoValues(std::move(result),
-                                    valueGetter(std::move(*it), context));
+                                    valueGetter(std::move(input), context));
         checkCancellation();
         ++numValues;
       }

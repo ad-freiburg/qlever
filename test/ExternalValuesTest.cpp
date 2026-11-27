@@ -14,10 +14,10 @@
 #include "./util/IdTableHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
-#include "engine/ExternalValues.h"
-#include "engine/Operation.h"
 #include "engine/Result.h"
 #include "engine/idTable/IdTable.h"
+#include "engine/operation/ExternalValues.h"
+#include "engine/operation/Operation.h"
 #include "util/IndexTestHelpers.h"
 #include "util/LocalVocabEntryTestHelpers.h"
 #include "util/OperationTestHelpers.h"
@@ -77,6 +77,10 @@ TEST(ExternalValues, knownEmptyResultWithEmptyValues) {
 
   // Should return false even though values are empty.
   EXPECT_FALSE(externalValuesOp.knownEmptyResult());
+
+  // Every column of the empty values has multiplicity 1.
+  EXPECT_FLOAT_EQ(externalValuesOp.getMultiplicity(0), 1.0f);
+  EXPECT_FLOAT_EQ(externalValuesOp.getMultiplicity(1), 1.0f);
 }
 
 // Check that `computeResult` works correctly.

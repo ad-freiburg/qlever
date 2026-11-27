@@ -10,11 +10,12 @@
 #include "./util/IdTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "engine/Result.h"
-#include "engine/Values.h"
 #include "engine/idTable/IdTable.h"
+#include "engine/operation/Values.h"
 #include "util/IndexTestHelpers.h"
 #include "util/LocalVocabEntryTestHelpers.h"
 #include "util/OperationTestHelpers.h"
+#include "util/VariableToColumnMapTestHelpers.h"
 
 using TC = TripleComponent;
 using ValuesComponents = std::vector<std::vector<TripleComponent>>;
@@ -48,10 +49,10 @@ TEST(Values, basicMethods) {
   EXPECT_FLOAT_EQ(valuesOp.getMultiplicity(4), 1.0f);
 
   using V = Variable;
-  VariableToColumnMap expectedVariables{
-      {V{"?x"}, makeAlwaysDefinedColumn(0)},
-      {V{"?y"}, makeAlwaysDefinedColumn(1)},
-      {V{"?z"}, makePossiblyUndefinedColumn(2)}};
+  auto expectedVariables =
+      makeVariableToColumnMap({{V{"?x"}, makeAlwaysDefinedColumn(0)},
+                               {V{"?y"}, makeAlwaysDefinedColumn(1)},
+                               {V{"?z"}, makePossiblyUndefinedColumn(2)}});
   EXPECT_THAT(valuesOp.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
 }
@@ -63,6 +64,17 @@ TEST(Values, emptyValuesClause) {
   EXPECT_TRUE(emptyValuesOp.knownEmptyResult());
   // The current implementation always returns `1.0` for nonexisting columns.
   EXPECT_FLOAT_EQ(emptyValuesOp.getMultiplicity(32), 1.0);
+}
+
+// Test that a `VALUES` clause with variables but no rows has multiplicity 1 for
+// every column (the general formula would divide 0 rows by 0 distinct values).
+TEST(Values, emptyValuesClauseWithVariables) {
+  auto testQec = ad_utility::testing::getQec();
+  Values valuesOp(testQec, {{Variable{"?x"}, Variable{"?y"}}, {}});
+  EXPECT_TRUE(valuesOp.knownEmptyResult());
+  EXPECT_EQ(valuesOp.getSizeEstimate(), 0u);
+  EXPECT_FLOAT_EQ(valuesOp.getMultiplicity(0), 1.0f);
+  EXPECT_FLOAT_EQ(valuesOp.getMultiplicity(1), 1.0f);
 }
 
 // A VALUES clause without variables, but with rows (e.g. `VALUES () { () }`)

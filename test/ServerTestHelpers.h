@@ -193,7 +193,6 @@ inline std::optional<nlohmann::json> responseBodyAsJson(ResT response) {
 inline qlever::EngineConfig getDefaultConfigWithName(std::string baseName) {
   qlever::EngineConfig config;
   config.baseName_ = std::move(baseName);
-  config.memoryLimit_ = ad_utility::MemorySize::gigabytes(1);
   // Never persist updates to disk in tests (would leave files behind after the
   // test). Tests that explicitly test the persistence can override this.
   config.persistUpdates_ = false;

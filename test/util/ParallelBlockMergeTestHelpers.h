@@ -20,8 +20,8 @@
 #include "backports/algorithm.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
-#include "util/MemorySize/MemorySize.h"
 #include "util/Random.h"
+#include "util/memorySize/MemorySize.h"
 #include "util/parallelBlockMerge/MergeHelpers.h"
 #include "util/parallelBlockMerge/MergeOptions.h"
 #include "util/parallelBlockMerge/RunsInputPolicy.h"
@@ -122,6 +122,11 @@ class VectorInput {
 
   // ________________________________________________________________________
   Block makeEmptyBlock() const { return Block{}; }
+
+  // ________________________________________________________________________
+  void reserveBlock(Block& block, size_t numElements) const {
+    block.reserve(numElements);
+  }
 
   // ________________________________________________________________________
   template <typename U>

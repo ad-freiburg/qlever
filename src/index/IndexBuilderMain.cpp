@@ -20,12 +20,39 @@
 #include "global/RuntimeParameters.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "libqlever/Qlever.h"
+#include "util/KernelBugWorkaround.h"
 #include "util/ProgramOptionsHelpers.h"
 #include "util/ReadableNumberFacet.h"
 #include "util/ResourceMonitor.h"
 #include "util/json.h"
 
 using std::string;
+
+// The configuration of jemalloc for this binary: reuse freed allocations of
+// any size instead of returning the large ones to the OS at once, and use only
+// two arenas. Both settings can be overridden by the `MALLOC_CONF` environment
+// variable. The symbol is ignored if jemalloc was not found at build time (see
+// `CMakeLists.txt`).
+//
+// NOTE 1: The index builder allocates, frees, and reallocates very large
+// buffers (sorter blocks, merge output blocks) all the time. By default,
+// jemalloc returns an allocation above its `oversize_threshold` (8 MB) to the
+// OS as soon as it is freed. The next such allocation is then faulted in page
+// by page again, which costs a large share of the CPU time of the index build.
+//
+// NOTE 2: A freed buffer is only reused by allocations from the same arena. A
+// small number of arenas makes the reuse work across threads and keeps the
+// resident memory lower.
+//
+// NOTE 3: Transparent huge pages (`thp:always`) were measured to make the
+// index build slower, because every freshly faulted huge page is zeroed
+// completely.
+//
+// NOTE 4: Keep the pointer itself non-`const`. A `const` pointer has internal
+// linkage, so jemalloc would silently not see the symbol.
+extern "C" {
+const char* malloc_conf = "oversize_threshold:0,narenas:2";
+}
 
 namespace po = boost::program_options;
 
@@ -187,6 +214,8 @@ int main(int argc, char** argv) {
   ad_utility::ReadableNumberFacet facet(1);
   std::locale locWithNumberGrouping(loc, &facet);
   ad_utility::Log::imbue(locWithNumberGrouping);
+  // Avoid a bug of some Linux kernels on arm64, see `KernelBugWorkaround.h`.
+  ad_utility::kernelBugWorkaround::applyIfNeeded();
 
   qlever::IndexBuilderConfig config;
   std::vector<string> filetype;

@@ -20,7 +20,7 @@
 #include "../util/ParallelBlockMergeTestHelpers.h"
 #include "backports/algorithm.h"
 #include "util/Forward.h"
-#include "util/MemorySize/MemorySize.h"
+#include "util/memorySize/MemorySize.h"
 #include "util/parallelBlockMerge/MergeHelpers.h"
 #include "util/parallelBlockMerge/MergeHelpersImpl.h"
 #include "util/parallelBlockMerge/RunsInputPolicy.h"
@@ -60,6 +60,9 @@ struct ZeroSizeBlockInput {
     return wrapped_.getBlock(runIdx, blockIdx);
   }
   Block makeEmptyBlock() const { return {}; }
+  void reserveBlock(Block& block, size_t numElements) const {
+    block.reserve(numElements);
+  }
   template <typename U>
   void appendToBlock(Block& block, U&& element) const {
     block.push_back(AD_FWD(element));
@@ -336,6 +339,9 @@ struct WeightedInput {
     return wrapped_.getBlock(runIdx, blockIdx);
   }
   Block makeEmptyBlock() const { return {}; }
+  void reserveBlock(Block& block, size_t numElements) const {
+    block.reserve(numElements);
+  }
   template <typename U>
   void appendToBlock(Block& block, U&& element) const {
     block.push_back(AD_FWD(element));

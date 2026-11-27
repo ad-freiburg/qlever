@@ -16,9 +16,9 @@
 #include "../util/RuntimeParametersTestHelpers.h"
 #include "./QleverTestHelpers.h"
 #include "backports/filesystem.h"
-#include "engine/ExternalValues.h"
 #include "engine/MaterializedViews.h"
 #include "engine/UpdateMetadata.h"
+#include "engine/operation/ExternalValues.h"
 #include "global/FileSuffixConstants.h"
 #include "global/RuntimeParameters.h"
 #include "index/DeltaTriples.h"
@@ -409,6 +409,39 @@ TEST(LibQlever, disableCaching) {
       EXPECT_TRUE(qec.disableCaching());
     }
   }
+}
+
+// Test that the cache of an engine follows the runtime parameters, and that
+// the destructor of the engine removes the actions that bind the parameters to
+// it. Without that, changing the parameters after the engine is destroyed
+// would access the destroyed engine (which AddressSanitizer reports).
+TEST(LibQlever, destructorUnbindsRuntimeParameters) {
+  using namespace ad_utility::memory_literals;
+
+  // While the engine lives, its cache follows the parameters.
+  {
+    Qlever engine{buildTestEngineConfig("<s> <p> <o> .")};
+    auto cleanupMaxSize =
+        setRuntimeParameterForTest<&RuntimeParameters::cacheMaxSize_>(3_MB);
+    auto cleanupMaxSizeSingleEntry = setRuntimeParameterForTest<
+        &RuntimeParameters::cacheMaxSizeSingleEntry_>(2_MB);
+    EXPECT_EQ(engine.cache().getMaxSize(), 3_MB);
+    EXPECT_EQ(engine.cache().getMaxSizeSingleEntry(), 2_MB);
+  }
+
+  // After the engine is destroyed, changing the parameters must not touch it
+  // (the cleanups restore the default values at the end of the test).
+  auto cleanupMaxNumEntries =
+      setRuntimeParameterForTest<&RuntimeParameters::cacheMaxNumEntries_>(42);
+  auto cleanupMaxSize =
+      setRuntimeParameterForTest<&RuntimeParameters::cacheMaxSize_>(4_MB);
+  auto cleanupMaxSizeSingleEntry =
+      setRuntimeParameterForTest<&RuntimeParameters::cacheMaxSizeSingleEntry_>(
+          1_MB);
+  auto cleanupMemoryForQueries =
+      setRuntimeParameterForTest<&RuntimeParameters::memoryForQueries_>(1_GB);
+  auto cleanupThreadSharePercent = setRuntimeParameterForTest<
+      &RuntimeParameters::backgroundThreadSharePercent_>(50.0);
 }
 
 namespace {
@@ -856,9 +889,9 @@ TEST(LibQlever, applyUpdate) {
   // updates (see `SparqlParser::parseQuery` vs. `parseUpdate`), so an update
   // has to be parsed separately and then planned via `bindParsedQuery`.
   ad_utility::BlankNodeManager bnm;
-  auto parsedUpdates =
-      SparqlParser::parseUpdate(&bnm, ad_utility::testing::encodedIriManager(),
-                                "INSERT DATA { <a> <b> <c> }");
+  auto parsedUpdates = SparqlParser::parseUpdate(
+      &bnm, ad_utility::testing::encodedIriManager(), engine.allocator(),
+      "INSERT DATA { <a> <b> <c> }");
   ASSERT_THAT(parsedUpdates, SizeIs(1));
   auto plannedUpdate =
       engine.planQuery(engine.bindParsedQuery(std::move(parsedUpdates[0])));
@@ -974,6 +1007,30 @@ TEST(LibQlever, allocatorGetter) {
   EXPECT_EQ(constEngine.allocator().amountMemoryLeft(), memoryLeftBefore);
 }
 
+// Test the constructor with a caller-provided allocator: the engine uses it
+// as-is (the memory limit from the config is not applied), and can answer
+// queries.
+TEST(LibQlever, callerProvidedAllocator) {
+  using namespace ad_utility::memory_literals;
+  EngineConfig ec = buildTestEngineConfig("<s> <p> <o> .");
+  ec.memoryLimit_ = 50_MB;
+  auto allocator = ad_utility::makeAllocatorWithLimit<Id>(1_GB);
+  Qlever engine{ec, false, allocator};
+  EXPECT_GT(engine.allocator().amountMemoryLeft(), 50_MB);
+
+  // The engine allocates from the caller's allocator.
+  const auto memoryLeftBefore = allocator.amountMemoryLeft();
+  constexpr size_t numIds = 16;
+  Id* ptr = engine.allocator().allocate(numIds);
+  EXPECT_EQ(allocator.amountMemoryLeft(),
+            memoryLeftBefore - memoryOfIds(numIds));
+  engine.allocator().deallocate(ptr, numIds);
+
+  EXPECT_EQ(
+      engine.query("SELECT ?o { <s> <p> ?o }", ad_utility::MediaType::tsv),
+      "?o\n<o>\n");
+}
+
 // _____________________________________________________________________________
 // The `clearOnAllocation` hook that `Qlever` installs in its allocator (see the
 // constructor in `Qlever.cpp`) evicts entries from the query result cache when
@@ -981,6 +1038,9 @@ TEST(LibQlever, allocatorGetter) {
 TEST(LibQlever, allocatorMakesRoomByClearingTheCache) {
   EngineConfig config = buildTestEngineConfig("<s> <p> <o> . <s2> <p> <o2> .");
   config.memoryLimit_ = ad_utility::MemorySize::megabytes(1);
+  // The engine sets `memory-for-queries` to its memory limit.
+  auto restoreMemoryForQueries = restoreRuntimeParameterOnScopeExit<
+      &RuntimeParameters::memoryForQueries_>();
   Qlever engine{config};
 
   // Run a query, the result of which is then stored in the cache as an unpinned
@@ -1060,8 +1120,9 @@ TEST(Qlever, makeIndexRebuildConfig) {
 // accessors dereference it.
 TEST(LibQlever, plannedQueryRequiresQueryExecutionTree) {
   auto* qec = ad_utility::testing::getQec();
-  ParsedQuery parsedQuery = SparqlParser::parseQuery(
-      &qec->getIndex().encodedIriManager(), "SELECT * { ?s ?p ?o }");
+  ParsedQuery parsedQuery =
+      SparqlParser::parseQuery(&qec->getIndex().encodedIriManager(),
+                               qec->getAllocator(), "SELECT * { ?s ?p ?o }");
   AD_EXPECT_THROW_WITH_MESSAGE(
       PlannedQuery(std::move(parsedQuery), nullptr, *qec),
       HasSubstr("Assertion `queryExecutionTree_ != nullptr` failed."));

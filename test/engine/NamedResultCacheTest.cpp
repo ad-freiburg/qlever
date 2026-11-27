@@ -8,9 +8,15 @@
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/LocalVocabEntryTestHelpers.h"
+#include "../util/LocalVocabTestHelpers.h"
+#include "../util/OperationTestHelpers.h"
+#include "../util/VariableToColumnMapTestHelpers.h"
 #include "engine/NamedResultCache.h"
 #include "index/LocalVocabEntry.h"
 
+using ad_utility::testing::makeLocalVocab;
+
+using ad_utility::testing::colIndices;
 using ad_utility::testing::iriLocalVocabEntry;
 
 namespace {
@@ -25,10 +31,11 @@ TEST(NamedResultCache, basicWorkflow) {
   auto table = makeIdTableFromVector({{3, 7}, {9, 11}});
   auto table2 = makeIdTableFromVector({{3, 8}, {16, 11}, {39, 14}});
   using V = Variable;
-  VariableToColumnMap varColMap{{V{"?x"}, makeAlwaysDefinedColumn(0)},
-                                {V{"?y"}, makeAlwaysDefinedColumn(1)}};
+  auto varColMap =
+      makeVariableToColumnMap({{V{"?x"}, makeAlwaysDefinedColumn(0)},
+                               {V{"?y"}, makeAlwaysDefinedColumn(1)}});
 
-  LocalVocab localVocab;
+  LocalVocab localVocab = makeLocalVocab();
   auto* qec = ad_utility::testing::getQec();
   localVocab.getIndexAndAddIfNotContained(
       iriLocalVocabEntry("<bliBlaBlubb>", qec->getLocalVocabContext()));
@@ -48,7 +55,7 @@ TEST(NamedResultCache, basicWorkflow) {
     return NamedResultCache::Value{
         std::make_shared<const IdTable>(table.clone()),
         varColMap,
-        {1, 0},
+        colIndices({1, 0}),
         localVocab.clone(),
         "cache key",
         std::nullopt};
@@ -147,7 +154,7 @@ TEST(NamedResultCache, E2E) {
   auto result = qet->getResult(false);
 
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
-  LocalVocab dummyVocab;
+  LocalVocab dummyVocab = makeLocalVocab();
   auto notInVocab =
       Id::makeFromLocalVocabIndex(dummyVocab.getIndexAndAddIfNotContained(
           iriLocalVocabEntry("<notInVocab>", qec->getLocalVocabContext())));
@@ -157,8 +164,8 @@ TEST(NamedResultCache, E2E) {
   EXPECT_THAT(result->localVocab().getAllWordsForTesting(),
               ::testing::ElementsAreArray(dummyVocab.getAllWordsForTesting()));
   EXPECT_THAT(result->sortedBy(), ::testing::ElementsAre(0));
-  VariableToColumnMap expectedVars{
-      {Variable{"?s"}, makeAlwaysDefinedColumn(0)}};
+  auto expectedVars =
+      makeVariableToColumnMap({{Variable{"?s"}, makeAlwaysDefinedColumn(0)}});
   EXPECT_THAT(qet->getVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVars));
 }

@@ -9,19 +9,21 @@
 #include "./util/ColumnStrippingTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
+#include "./util/LocalVocabTestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
-#include "engine/GroupBy.h"
-#include "engine/GroupByImpl.h"
-#include "engine/IndexScan.h"
-#include "engine/Join.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
 #include "engine/QueryPlanner.h"
-#include "engine/Sort.h"
-#include "engine/StripColumns.h"
-#include "engine/Values.h"
 #include "engine/ValuesForTesting.h"
+#include "engine/operation/ExistsJoin.h"
+#include "engine/operation/GroupBy.h"
+#include "engine/operation/GroupByImpl.h"
+#include "engine/operation/IndexScan.h"
+#include "engine/operation/Join.h"
+#include "engine/operation/Sort.h"
+#include "engine/operation/StripColumns.h"
+#include "engine/operation/Values.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/BlankNodeExpression.h"
 #include "engine/sparqlExpressions/CountStarExpression.h"
@@ -41,6 +43,9 @@
 #include "util/IndexTestHelpers.h"
 #include "util/LocalVocabEntryTestHelpers.h"
 #include "util/OperationTestHelpers.h"
+#include "util/VariableToColumnMapTestHelpers.h"
+
+using ad_utility::testing::makeLocalVocab;
 
 static constexpr auto executor = &ad_utility::testing::singleThreadExecutor;
 
@@ -455,7 +460,7 @@ TEST_F(GroupByOptimizations, countStarOptimizationWorksAsExpected) {
         qec,
         makeIdTableFromVector({{Id::makeUndefined()}, {1}, {2}, {2}, {4}, {8}}),
         std::vector<std::optional<Variable>>{Variable{"?a"}}, false,
-        std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt, true);
+        std::vector<ColumnIndex>{}, makeLocalVocab(), std::nullopt, true);
     GroupByImpl groupBy{
         qec,
         {},
@@ -532,9 +537,9 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
 
   std::vector<Variable> variablesXAndY{varX, varY};
 
-  std::vector<ColumnIndex> sortedColumns = {0};
+  auto sortedColumns = colIndices({0});
   Tree subtreeWithSort =
-      makeExecutionTree<Sort>(qec, validJoinWhenGroupingByX, sortedColumns);
+      ::makeExecutionTree<Sort>(qec, validJoinWhenGroupingByX, sortedColumns);
 
   SparqlExpressionPimpl avgXPimpl = makeAvgPimpl(varX);
   SparqlExpressionPimpl avgDistinctXPimpl = makeAvgPimpl(varX, true);
@@ -700,16 +705,12 @@ TEST_F(GroupByOptimizations, existsInGroupByAlias) {
 
   auto makeExistsArgument = [](const std::vector<Variable>& variables,
                                const std::vector<std::vector<int64_t>>& rows) {
-    ParsedQuery pq;
+    ParsedQuery pq{makeAllocator()};
     parsedQuery::Values valuesClause;
     valuesClause._inlineValues._variables = variables;
     for (const auto& row : rows) {
-      std::vector<TripleComponent> valueRow;
-      valueRow.reserve(row.size());
-      for (int64_t value : row) {
-        valueRow.emplace_back(value);
-      }
-      valuesClause._inlineValues._values.push_back(std::move(valueRow));
+      valuesClause._inlineValues._values.push_back(
+          ::ranges::to<std::vector<TripleComponent>>(row));
     }
     pq._rootGraphPattern._graphPatterns.emplace_back(std::move(valuesClause));
     for (const auto& variable : variables) {
@@ -921,11 +922,11 @@ TEST_F(GroupByOptimizations,
   // Check the result.
   auto d = DoubleId;
   using enum ColumnIndexAndTypeInfo::UndefStatus;
-  VariableToColumnMap expectedVariables{
-      {Variable{"?a"}, {0, AlwaysDefined}},
-      {Variable{"?b"}, {1, AlwaysDefined}},
-      {Variable{"?x"}, {2, PossiblyUndefined}},
-      {Variable{"?y"}, {3, PossiblyUndefined}}};
+  auto expectedVariables =
+      makeVariableToColumnMap({{Variable{"?a"}, {0, AlwaysDefined}},
+                               {Variable{"?b"}, {1, AlwaysDefined}},
+                               {Variable{"?x"}, {2, PossiblyUndefined}},
+                               {Variable{"?y"}, {3, PossiblyUndefined}}});
   EXPECT_THAT(groupBy.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
   auto expected = makeIdTableFromVector(
@@ -978,10 +979,10 @@ TEST_F(GroupByOptimizations,
   // Check the result.
   auto d = DoubleId;
   using enum ColumnIndexAndTypeInfo::UndefStatus;
-  VariableToColumnMap expectedVariables{
-      {Variable{"?a"}, {0, AlwaysDefined}},
-      {Variable{"?b"}, {1, AlwaysDefined}},
-      {Variable{"?x"}, {2, PossiblyUndefined}}};
+  auto expectedVariables =
+      makeVariableToColumnMap({{Variable{"?a"}, {0, AlwaysDefined}},
+                               {Variable{"?b"}, {1, AlwaysDefined}},
+                               {Variable{"?x"}, {2, PossiblyUndefined}}});
   EXPECT_THAT(groupBy.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
   auto expected = makeIdTableFromVector(
@@ -1034,10 +1035,10 @@ TEST_F(GroupByOptimizations,
   // Check the result.
   auto d = DoubleId;
   using enum ColumnIndexAndTypeInfo::UndefStatus;
-  VariableToColumnMap expectedVariables{
-      {Variable{"?a"}, {0, AlwaysDefined}},
-      {Variable{"?c"}, {1, AlwaysDefined}},
-      {Variable{"?x"}, {2, PossiblyUndefined}}};
+  auto expectedVariables =
+      makeVariableToColumnMap({{Variable{"?a"}, {0, AlwaysDefined}},
+                               {Variable{"?c"}, {1, AlwaysDefined}},
+                               {Variable{"?x"}, {2, PossiblyUndefined}}});
   EXPECT_THAT(groupBy.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
   auto expected = makeIdTableFromVector(
@@ -1098,14 +1099,14 @@ TEST_F(GroupByOptimizations, correctResultForHashMapOptimizationManyVariables) {
   // Check the result.
   auto d = DoubleId;
   using enum ColumnIndexAndTypeInfo::UndefStatus;
-  VariableToColumnMap expectedVariables{
-      {Variable{"?a"}, {0, AlwaysDefined}},
-      {Variable{"?b"}, {1, AlwaysDefined}},
-      {Variable{"?c"}, {2, AlwaysDefined}},
-      {Variable{"?d"}, {3, AlwaysDefined}},
-      {Variable{"?e"}, {4, AlwaysDefined}},
-      {Variable{"?f"}, {5, AlwaysDefined}},
-      {Variable{"?x"}, {6, PossiblyUndefined}}};
+  auto expectedVariables =
+      makeVariableToColumnMap({{Variable{"?a"}, {0, AlwaysDefined}},
+                               {Variable{"?b"}, {1, AlwaysDefined}},
+                               {Variable{"?c"}, {2, AlwaysDefined}},
+                               {Variable{"?d"}, {3, AlwaysDefined}},
+                               {Variable{"?e"}, {4, AlwaysDefined}},
+                               {Variable{"?f"}, {5, AlwaysDefined}},
+                               {Variable{"?x"}, {6, PossiblyUndefined}}});
   EXPECT_THAT(groupBy.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
   auto expected =
@@ -1172,11 +1173,11 @@ TEST_F(GroupByOptimizations, hashMapOptimizationGroupedVariable) {
   // Check the result.
   auto d = DoubleId;
   using enum ColumnIndexAndTypeInfo::UndefStatus;
-  VariableToColumnMap expectedVariables{
-      {Variable{"?a"}, {0, AlwaysDefined}},
-      {Variable{"?x"}, {1, PossiblyUndefined}},
-      {Variable{"?y"}, {2, PossiblyUndefined}},
-      {Variable{"?z"}, {3, PossiblyUndefined}}};
+  auto expectedVariables =
+      makeVariableToColumnMap({{Variable{"?a"}, {0, AlwaysDefined}},
+                               {Variable{"?x"}, {1, PossiblyUndefined}},
+                               {Variable{"?y"}, {2, PossiblyUndefined}},
+                               {Variable{"?z"}, {3, PossiblyUndefined}}});
   EXPECT_THAT(groupBy.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
   auto expected = makeIdTableFromVector(
@@ -1247,11 +1248,11 @@ TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxSum) {
   auto i = IntId;
   auto undef = ValueId::makeUndefined();
   using enum ColumnIndexAndTypeInfo::UndefStatus;
-  VariableToColumnMap expectedVariables{
-      {Variable{"?a"}, {0, AlwaysDefined}},
-      {Variable{"?x"}, {1, PossiblyUndefined}},
-      {Variable{"?z"}, {2, PossiblyUndefined}},
-      {Variable{"?w"}, {3, PossiblyUndefined}}};
+  auto expectedVariables =
+      makeVariableToColumnMap({{Variable{"?a"}, {0, AlwaysDefined}},
+                               {Variable{"?x"}, {1, PossiblyUndefined}},
+                               {Variable{"?z"}, {2, PossiblyUndefined}},
+                               {Variable{"?w"}, {3, PossiblyUndefined}}});
   EXPECT_THAT(groupBy.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
   // The sum `13.37 + 1.0 + 4.0` differs from the double `18.37` in the lowest
@@ -1335,11 +1336,11 @@ TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxSumIntegers) {
   // Check the result.
   auto i = IntId;
   using enum ColumnIndexAndTypeInfo::UndefStatus;
-  VariableToColumnMap expectedVariables{
-      {Variable{"?a"}, {0, AlwaysDefined}},
-      {Variable{"?x"}, {1, PossiblyUndefined}},
-      {Variable{"?z"}, {2, PossiblyUndefined}},
-      {Variable{"?w"}, {3, PossiblyUndefined}}};
+  auto expectedVariables =
+      makeVariableToColumnMap({{Variable{"?a"}, {0, AlwaysDefined}},
+                               {Variable{"?x"}, {1, PossiblyUndefined}},
+                               {Variable{"?z"}, {2, PossiblyUndefined}},
+                               {Variable{"?w"}, {3, PossiblyUndefined}}});
   EXPECT_THAT(groupBy.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
   auto expected = makeIdTableFromVector(
@@ -1364,8 +1365,8 @@ TEST_F(GroupByOptimizations, hashMapOptimizationGroupConcatIndex) {
       SparqlTripleSimple{varX, iri("<label>"), varY});
 
   // Optimization will not be used if subtree is not sort
-  std::vector<ColumnIndex> sortedColumns = {0};
-  Tree subtreeWithSort = makeExecutionTree<Sort>(qec, xyScan, sortedColumns);
+  auto sortedColumns = colIndices({0});
+  Tree subtreeWithSort = ::makeExecutionTree<Sort>(qec, xyScan, sortedColumns);
 
   auto groupConcatExpression1 = makeGroupConcatPimpl(varY);
   auto aliasGC1 = Alias{groupConcatExpression1, varZ};
@@ -1455,8 +1456,8 @@ TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxIndex) {
       SparqlTripleSimple{varX, iri("<label>"), varY});
 
   // Optimization will not be used if subtree is not sort
-  std::vector<ColumnIndex> sortedColumns = {0};
-  Tree subtreeWithSort = makeExecutionTree<Sort>(qec, xyScan, sortedColumns);
+  auto sortedColumns = colIndices({0});
+  Tree subtreeWithSort = ::makeExecutionTree<Sort>(qec, xyScan, sortedColumns);
 
   auto minExpression = makeMinPimpl(varY);
   auto aliasMin = Alias{minExpression, varZ};
@@ -1499,8 +1500,8 @@ TEST_F(GroupByOptimizations, hashMapOptimizationNonTrivial) {
       qec, Permutation::Enum::PSO,
       SparqlTripleSimple{Variable{"?z"}, iri("<is>"), Variable{"?y"}});
   Tree join = makeExecutionTree<Join>(qec, zxScan, zyScan, 0, 0);
-  std::vector<ColumnIndex> sortedColumns = {1};
-  Tree sortedJoin = makeExecutionTree<Sort>(qec, join, sortedColumns);
+  auto sortedColumns = colIndices({1});
+  Tree sortedJoin = ::makeExecutionTree<Sort>(qec, join, sortedColumns);
 
   // (AVG(?y) as ?avg)
   Variable varAvg{"?avg"};
@@ -2392,10 +2393,10 @@ TEST(GroupBy, GroupedVariableInExpressions) {
   // Check the result.
   auto d = DoubleId;
   using enum ColumnIndexAndTypeInfo::UndefStatus;
-  VariableToColumnMap expectedVariables{
-      {Variable{"?a"}, {0, AlwaysDefined}},
-      {Variable{"?x"}, {1, PossiblyUndefined}},
-      {Variable{"?y"}, {2, PossiblyUndefined}}};
+  auto expectedVariables =
+      makeVariableToColumnMap({{Variable{"?a"}, {0, AlwaysDefined}},
+                               {Variable{"?x"}, {1, PossiblyUndefined}},
+                               {Variable{"?y"}, {2, PossiblyUndefined}}});
   EXPECT_THAT(groupBy.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
   auto expected =
@@ -2455,10 +2456,10 @@ TEST(GroupBy, AliasResultReused) {
   // Check the result.
   auto d = DoubleId;
   using enum ColumnIndexAndTypeInfo::UndefStatus;
-  VariableToColumnMap expectedVariables{
-      {Variable{"?a"}, {0, AlwaysDefined}},
-      {Variable{"?x"}, {1, PossiblyUndefined}},
-      {Variable{"?y"}, {2, PossiblyUndefined}}};
+  auto expectedVariables =
+      makeVariableToColumnMap({{Variable{"?a"}, {0, AlwaysDefined}},
+                               {Variable{"?x"}, {1, PossiblyUndefined}},
+                               {Variable{"?y"}, {2, PossiblyUndefined}}});
   EXPECT_THAT(groupBy.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
   auto expected =
@@ -2477,8 +2478,8 @@ TEST(GroupBy, AddedHavingRows) {
       " VALUES (?x ?y) {(0 1) (0 3) (0 5) (1 4) (1 3) } }"
       "GROUP BY ?x HAVING (?count > 2)";
   auto qec = ad_utility::testing::getQec();
-  auto pq =
-      SparqlParser::parseQuery(&qec->getIndex().encodedIriManager(), query);
+  auto pq = SparqlParser::parseQuery(&qec->getIndex().encodedIriManager(),
+                                     makeAllocator(), query);
   QueryPlanner qp{qec, std::make_shared<ad_utility::CancellationHandle<>>()};
   auto tree = qp.createExecutionTree(pq);
 
@@ -2489,10 +2490,10 @@ TEST(GroupBy, AddedHavingRows) {
   EXPECT_THAT(pq.selectClause().getSelectedVariables(),
               ::testing::ElementsAre(Variable{"?x"}, Variable{"?count"}));
   using enum ColumnIndexAndTypeInfo::UndefStatus;
-  VariableToColumnMap expectedVariables{
-      {Variable{"?x"}, {0, AlwaysDefined}},
-      {Variable{"?count"}, {1, PossiblyUndefined}},
-      {Variable{"?_QLever_internal_variable_0"}, {2, PossiblyUndefined}}};
+  auto expectedVariables = makeVariableToColumnMap(
+      {{Variable{"?x"}, {0, AlwaysDefined}},
+       {Variable{"?count"}, {1, PossiblyUndefined}},
+       {Variable{"?_QLever_internal_variable_0"}, {2, PossiblyUndefined}}});
   EXPECT_THAT(tree->getVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
   const auto& table = res->idTableView();
@@ -2900,7 +2901,7 @@ TEST(GroupBy, localVocabIsProperlyCloned) {
   idTables.push_back(makeIdTableFromVector({{1}, {2}}, &Id::makeFromInt));
   idTables.push_back(makeIdTableFromVector({{2}}, &Id::makeFromInt));
   // This issue occurs only when the vocab contains any actual values.
-  LocalVocab dummy{};
+  LocalVocab dummy = makeLocalVocab();
   dummy.getIndexAndAddIfNotContained(localVocabEntryFromStringRepresentation(
       "\"dummy\"", qec->getLocalVocabContext()));
   auto subtree = makeExecutionTree<ValuesForTesting>(
@@ -3357,8 +3358,8 @@ TEST(GroupBy, RegexOnGroupedVariableHashMapOptimization) {
   auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{abc, I(1)}, {abc, I(2)}, {xyz, I(3)}}),
       std::vector<std::optional<Variable>>{o, y});
-  auto sorted = ad_utility::makeExecutionTree<Sort>(
-      qec, values, std::vector<ColumnIndex>{0});
+  auto sorted =
+      ad_utility::makeExecutionTree<Sort>(qec, values, colIndices({0}));
 
   auto count = std::make_unique<CountExpression>(
       false, std::make_unique<VariableExpression>(y));
@@ -3770,6 +3771,48 @@ TEST(GroupBy, makeTreeWithStrippedColumns) {
               "GroupBy on unbound variables");
     EXPECT_EQ(tree->getResult(false)->idTableView().numRows(), 0u);
   }
+
+  // An alias with an `EXISTS`: the constructor of `GroupBy` adds an
+  // `ExistsJoin` for it. When the constructor is called with a subtree that
+  // already contains this `ExistsJoin` (in `clone` and in
+  // `makeTreeWithStrippedColumns`), the column of the `EXISTS` must survive the
+  // stripping in the constructor, otherwise a second `ExistsJoin` is added.
+  {
+    // The constructor of `GroupBy` only strips columns if this is enabled (the
+    // default is `false`).
+    auto cleanup =
+        setRuntimeParameterForTest<&RuntimeParameters::stripColumns_>(true);
+
+    // `EXISTS { ?a <predicate> ?x }`, correlated only with the grouped `?a`.
+    using ::column_stripping_test_helpers::countOperations;
+    using ::column_stripping_test_helpers::makeExistsExpression;
+    auto [existsPimpl, existsVar] = makeExistsExpression("<predicate>");
+    Alias existsAlias(std::move(existsPimpl), Variable{"?target"});
+
+    // `GroupBy` `?a` with an `EXISTS` expression should result in one added
+    // `ExistsJoin` operation as a child of `GroupBy`. The columns delivered by
+    // `ExistsJoin` are `?a` and `existsVar`, `?b`, `?c` and `?d` are stripped.
+    GroupBy groupBy(qec, {V{"?a"}}, {existsAlias}, values);
+    ASSERT_EQ(groupBy.computeVariableToColumnMap().size(), 2u);
+    ASSERT_EQ(groupBy.getChildren().size(), 1u);
+    ASSERT_FALSE(groupBy.getChildren().at(0)->containsVariable(V{"?b"}));
+    ASSERT_TRUE(groupBy.getChildren().at(0)->containsVariable(existsVar));
+    ASSERT_TRUE(groupBy.getChildren().at(0)->containsVariable(V{"?a"}));
+    ASSERT_EQ(countOperations<ExistsJoin>(groupBy), 1u);
+
+    // There should only be one `ExistsJoin` in the tree after cloning.
+    auto clone = groupBy.clone();
+    EXPECT_EQ(countOperations<ExistsJoin>(*clone), 1u);
+
+    // There should only be one `ExistsJoin` in the tree after stripping (with
+    // and without the `StripColumns` on top).
+    for (const auto& requested :
+         {std::set<V>{V{"?a"}, V{"?target"}}, std::set<V>{V{"?target"}}}) {
+      auto tree = groupBy.makeTreeWithStrippedColumns(requested);
+      ASSERT_TRUE(tree.has_value() && tree.value() != nullptr);
+      EXPECT_EQ(countOperations<ExistsJoin>(*tree.value()), 1u);
+    }
+  }
 }
 
 // Test that a `GROUP BY` on unbound variables has one group for a non-empty
@@ -3891,8 +3934,8 @@ TEST(GroupBy, HashMapOptimizationWithoutGroupByColumns) {
     qec->getQueryTreeCache().clearAll();
     auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, std::move(input), std::vector<std::optional<Variable>>{x});
-    auto sorted = ad_utility::makeExecutionTree<Sort>(
-        qec, std::move(values), std::vector<ColumnIndex>{0});
+    auto sorted = ad_utility::makeExecutionTree<Sort>(qec, std::move(values),
+                                                      colIndices({0}));
     GroupByImpl groupBy{
         qec,
         std::move(groupByVariables),
@@ -3938,7 +3981,8 @@ TEST(GroupBy, aggregateOfComputedEncodableIri) {
         setRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled_>(
             hashMapEnabled);
     qec->clearCacheUnpinnedOnly();
-    auto parsedQuery = SparqlParser::parseQuery(&encodedIriManager, query, {});
+    auto parsedQuery = SparqlParser::parseQuery(&encodedIriManager,
+                                                makeAllocator(), query, {});
     QueryPlanner qp{qec, std::make_shared<ad_utility::CancellationHandle<>>()};
     auto qet = qp.createExecutionTree(parsedQuery);
     auto result = qet->getResult();

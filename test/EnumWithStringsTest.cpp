@@ -30,6 +30,7 @@ TEST(EnumWithStrings, VocabularyTypeEnum) {
 
   nlohmann::json j;
   j = V::InMemoryUncompressed;
+  EXPECT_EQ(j.get<std::string>(), "in-memory-uncompressed");
   EXPECT_EQ(V::InMemoryUncompressed, j.get<V>());
   j = V::OnDiskCompressed;
   EXPECT_EQ(V::OnDiskCompressed, j.get<V>());

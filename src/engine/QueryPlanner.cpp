@@ -24,44 +24,43 @@
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
 #include "backports/type_traits.h"
-#include "engine/Bind.h"
-#include "engine/CartesianProductJoin.h"
 #include "engine/CheckUsePatternTrick.h"
-#include "engine/CountAvailablePredicates.h"
 #include "engine/CountConnectedSubgraphs.h"
-#include "engine/Describe.h"
-#include "engine/Distinct.h"
-#include "engine/DistinctGraphs.h"
-#include "engine/ExternalValues.h"
-#include "engine/Filter.h"
-#include "engine/GroupBy.h"
-#include "engine/HasPredicateScan.h"
-#include "engine/IndexScan.h"
-#include "engine/Join.h"
-#include "engine/Load.h"
 #include "engine/MaterializedViews.h"
-#include "engine/Minus.h"
-#include "engine/MultiColumnJoin.h"
 #include "engine/NamedResultCache.h"
-#include "engine/NeutralElementOperation.h"
-#include "engine/NeutralOptional.h"
-#include "engine/OptionalJoin.h"
-#include "engine/OrderBy.h"
-#include "engine/PathSearch.h"
 #include "engine/PermutationSelector.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryRewriteUtils.h"
-#include "engine/RowNumber.h"
-#include "engine/Service.h"
-#include "engine/Sort.h"
-#include "engine/SpatialJoin.h"
-#include "engine/TextIndexScanForEntity.h"
-#include "engine/TextIndexScanForWord.h"
-#include "engine/TextLimit.h"
-#include "engine/TransitivePathBase.h"
-#include "engine/Union.h"
-#include "engine/Values.h"
+#include "engine/operation/Bind.h"
+#include "engine/operation/CartesianProductJoin.h"
+#include "engine/operation/CountAvailablePredicates.h"
+#include "engine/operation/Describe.h"
+#include "engine/operation/Distinct.h"
+#include "engine/operation/DistinctGraphs.h"
+#include "engine/operation/ExternalValues.h"
+#include "engine/operation/Filter.h"
+#include "engine/operation/GroupBy.h"
+#include "engine/operation/HasPredicateScan.h"
+#include "engine/operation/IndexScan.h"
+#include "engine/operation/Join.h"
+#include "engine/operation/Load.h"
+#include "engine/operation/Minus.h"
+#include "engine/operation/MultiColumnJoin.h"
+#include "engine/operation/NeutralElementOperation.h"
+#include "engine/operation/NeutralOptional.h"
+#include "engine/operation/OptionalJoin.h"
+#include "engine/operation/OrderBy.h"
+#include "engine/operation/PathSearch.h"
+#include "engine/operation/RowNumber.h"
+#include "engine/operation/Service.h"
+#include "engine/operation/SpatialJoin.h"
+#include "engine/operation/TextIndexScanForEntity.h"
+#include "engine/operation/TextIndexScanForWord.h"
+#include "engine/operation/TextLimit.h"
+#include "engine/operation/TransitivePathBase.h"
+#include "engine/operation/Union.h"
+#include "engine/operation/Values.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
@@ -72,9 +71,9 @@
 #include "parser/GraphPatternOperation.h"
 #include "parser/MagicServiceIriConstants.h"
 #include "parser/MaterializedViewQuery.h"
-#include "parser/PayloadVariables.h"
 #include "parser/SparqlParserHelpers.h"
 #include "rdfTypes/Variable.h"
+#include "util/Algorithm.h"
 #include "util/CompilerWarnings.h"
 #include "util/Exception.h"
 #include "util/Log.h"
@@ -290,6 +289,10 @@ std::shared_ptr<QueryExecutionTree> QueryPlanner::createExecutionTree(
 
 // _____________________________________________________________________________
 SubtreePlanVec QueryPlanner::optimize(ParsedQuery::GraphPattern* rootPattern) {
+  // Split each FILTER with a conjunct that is a fact (e.g. a maximum
+  // distance) into its conjuncts, so that the fact can be rewritten on its
+  // own (e.g. to a `SpatialJoin`).
+  splitFiltersWithFacts(rootPattern->_filters);
   QueryPlanner::GraphPatternPlanner optimizer{*this, rootPattern};
   for (auto& child : rootPattern->_graphPatterns) {
     child.visit([&optimizer](auto& arg) {
@@ -308,10 +311,11 @@ SubtreePlanVec QueryPlanner::optimize(ParsedQuery::GraphPattern* rootPattern) {
   if (!candidatePlans.empty()) {
     applyFiltersIfPossible<FilterMode::ApplyAllFiltersAndReplaceUnfiltered>(
         candidatePlans[0], optimizer.filtersAndSubst_);
-    applyTextLimitsIfPossible(candidatePlans[0],
-                              TextLimitVec{rootPattern->textLimits_.begin(),
-                                           rootPattern->textLimits_.end()},
-                              true);
+    applyTextLimitsIfPossible(
+        candidatePlans[0],
+        TextLimitVec{rootPattern->textLimits_.begin(),
+                     rootPattern->textLimits_.end(), allocator()},
+        true);
     checkCancellation();
   }
 
@@ -364,7 +368,7 @@ SubtreePlanVec QueryPlanner::getDistinctRow(
 
 // _____________________________________________________________________________
 SubtreePlanVec QueryPlanner::getPatternTrickRow(
-    const std::vector<Alias>& aliases, const SubtreePlanMatrix& dpTab,
+    ql::span<const Alias> aliases, const SubtreePlanMatrix& dpTab,
     const checkUsePatternTrick::PatternTrickTuple& patternTrickTuple) {
   AD_CORRECTNESS_CHECK(!dpTab.empty());
   const SubtreePlanVec& previous = dpTab.back();
@@ -433,7 +437,10 @@ SubtreePlanVec QueryPlanner::getGroupByRow(
   for (auto& parent : previous) {
     // Inside a `GRAPH ?var {....}` clause,  a `GROUP BY` must implicitly (also)
     // group by the graph variable.
-    auto groupVariables = pq._groupByVariables;
+    // TODO<vrbommireddy> Remove the conversions to `std::vector` when the
+    // constructor of `GroupBy` takes `qlm::vector`s.
+    std::vector<Variable> groupVariables(pq._groupByVariables.begin(),
+                                         pq._groupByVariables.end());
     if (activeGraphVariable_.has_value()) {
       AD_CORRECTNESS_CHECK(
           !ad_utility::contains(groupVariables, activeGraphVariable_.value()),
@@ -443,8 +450,9 @@ SubtreePlanVec QueryPlanner::getGroupByRow(
     }
     // Create a group by operation to determine on which columns the input
     // needs to be sorted
-    SubtreePlan groupByPlan =
-        makeSubtreePlan<GroupBy>(_qec, groupVariables, aliases, parent._qet);
+    SubtreePlan groupByPlan = makeSubtreePlan<GroupBy>(
+        _qec, groupVariables,
+        std::vector<Alias>(aliases.begin(), aliases.end()), parent._qet);
     assignNodesFilterAndTextLimitIds(groupByPlan, parent);
     added.push_back(std::move(groupByPlan));
   }
@@ -609,15 +617,18 @@ CPP_concept TriplePosition =
 
 // Create a `SparqlFilter` that corresponds to the expression `var1==var2`.
 // Used as a helper function below.
-SparqlFilter createEqualFilter(const Variable& var1, const Variable& var2) {
+SparqlFilter createEqualFilter(const Variable& var1, const Variable& var2,
+                               qlever::Allocator<Id> allocator) {
   std::string filterString =
       absl::StrCat("FILTER ( ", var1.name(), "=", var2.name(), ")");
 
   ad_utility::BlankNodeManager bn;
   static EncodedIriManager ev;
-  auto result = sparqlParserHelpers::ParserAndVisitor{&bn, &ev, filterString}
-                    .parseTypesafe(&SparqlAutomaticParser::filterR)
-                    .resultOfParse_;
+  auto result =
+      sparqlParserHelpers::ParserAndVisitor{&bn, &ev, std::move(allocator),
+                                            filterString}
+          .parseTypesafe(&SparqlAutomaticParser::filterR)
+          .resultOfParse_;
 
   // The `filter` rule never adds blank nodes.
   AD_CORRECTNESS_CHECK(bn.numBlocksUsed() == 0u);
@@ -630,10 +641,11 @@ SparqlFilter createEqualFilter(const Variable& var1, const Variable& var2) {
 // equality.
 constexpr auto rewriteSingle = CPP_template_lambda()(typename T)(
     T rewritePosition, SparqlTripleSimple& scanTriple, const auto& addFilter,
-    const auto& generateUniqueVarName)(requires TriplePosition<T>) {
+    const auto& generateUniqueVarName,
+    const qlever::Allocator<Id>& allocator)(requires TriplePosition<T>) {
   Variable filterVar = generateUniqueVarName();
   auto& target = std::invoke(rewritePosition, scanTriple).getVariable();
-  addFilter(createEqualFilter(filterVar, target));
+  addFilter(createEqualFilter(filterVar, target, allocator));
   target = filterVar;
 };
 
@@ -644,12 +656,13 @@ constexpr auto rewriteSingle = CPP_template_lambda()(typename T)(
 constexpr auto handleRepeatedVariablesImpl =
     [](const auto& triple, auto& addIndexScan,
        const auto& generateUniqueVarName, const auto& addFilter,
+       const qlever::Allocator<Id>& allocator,
        ql::span<const Permutation::Enum> permutations, auto... rewritePositions)
     -> CPP_ret(void)(
         requires(TriplePosition<decltype(rewritePositions)>&&...)) {
   auto scanTriple = triple;
   (..., rewriteSingle(rewritePositions, scanTriple, addFilter,
-                      generateUniqueVarName));
+                      generateUniqueVarName, allocator));
   for (const auto& permutation : permutations) {
     addIndexScan(permutation, scanTriple);
   }
@@ -686,13 +699,13 @@ void QueryPlanner::indexScanTwoVarsCase(
   // add an index scan for the rewritten triple.
   auto generate = [this]() { return generateUniqueVarName(); };
   auto handleRepeatedVariables =
-      [&triple, &addIndexScan, &addFilter, &generate](
+      [this, &triple, &addIndexScan, &addFilter, &generate](
           ql::span<const Permutation::Enum> permutations,
           auto... rewritePositions)
       -> CPP_ret(void)(
           requires(TriplePosition<decltype(rewritePositions)>&&...)) {
     return handleRepeatedVariablesImpl(triple, addIndexScan, generate,
-                                       addFilter, permutations,
+                                       addFilter, allocator(), permutations,
                                        rewritePositions...);
   };
 
@@ -741,13 +754,13 @@ void QueryPlanner::indexScanThreeVarsCase(
   // old and the new value for equality for this rewrite. Then also
   // add an index scan for the rewritten triple.
   auto handleRepeatedVariables =
-      [&triple, &addIndexScan, &addFilter, &generate](
+      [this, &triple, &addIndexScan, &addFilter, &generate](
           ql::span<const Permutation::Enum> permutations,
           auto... rewritePositions)
       -> CPP_ret(void)(
           requires(TriplePosition<decltype(rewritePositions)>&&...)) {
     return handleRepeatedVariablesImpl(triple, addIndexScan, generate,
-                                       addFilter, permutations,
+                                       addFilter, allocator(), permutations,
                                        rewritePositions...);
   };
 
@@ -802,7 +815,7 @@ void QueryPlanner::seedFromOrdinaryTriple(
 auto QueryPlanner::seedWithScansAndText(
     const QueryPlanner::TripleGraph& tg, const SubtreePlanMatrix& children,
     TextLimitMap& textLimits) -> PlansAndFilters {
-  PlansAndFilters result{SubtreePlanVec{allocator()}, {}};
+  PlansAndFilters result{SubtreePlanVec{allocator()}, {{}, allocator()}};
   SubtreePlanVec& seeds = result.plans_;
   // add all child plans as seeds
   uint64_t idShift = tg._nodeMap.size();
@@ -991,7 +1004,7 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromPropertyPath(
     const TripleComponent& left, const PropertyPath& path,
     const TripleComponent& right) {
   return path.handlePath<ParsedQuery::GraphPattern>(
-      [&left, &right](const ad_utility::triple_component::Iri& iri) {
+      [this, &left, &right](const ad_utility::triple_component::Iri& iri) {
         return seedFromVarOrIri(left, iri, right);
       },
       [this, &left, &right](const std::vector<PropertyPath>& children,
@@ -1023,7 +1036,7 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromSequence(
     const TripleComponent& right) {
   AD_CORRECTNESS_CHECK(paths.size() > 1);
 
-  ParsedQuery::GraphPattern joinPattern{};
+  ParsedQuery::GraphPattern joinPattern{allocator()};
   TripleComponent innerLeft = left;
   TripleComponent innerRight = generateUniqueVarName();
   for (size_t i = 0; i < paths.size(); i++) {
@@ -1068,15 +1081,9 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromTransitive(
   Variable innerRight = generateUniqueVarName();
   ParsedQuery::GraphPattern childPlan =
       seedFromPropertyPath(innerLeft, path, innerRight);
-  ParsedQuery::GraphPattern p{};
-  p::TransPath transPath;
-  transPath._left = left;
-  transPath._right = right;
-  transPath._innerLeft = innerLeft;
-  transPath._innerRight = innerRight;
-  transPath._min = min;
-  transPath._max = max;
-  transPath._childGraphPattern = std::move(childPlan);
+  ParsedQuery::GraphPattern p{allocator()};
+  p::TransPath transPath{left, right, innerLeft,           innerRight,
+                         min,  max,   std::move(childPlan)};
   p._graphPatterns.emplace_back(std::move(transPath));
   return p;
 }
@@ -1161,8 +1168,8 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromVarOrIri(
     const TripleComponent& left,
     const ad_utility::sparql_types::VarOrIri& varOrIri,
     const TripleComponent& right) {
-  ParsedQuery::GraphPattern p{};
-  p::BasicGraphPattern basic;
+  ParsedQuery::GraphPattern p{allocator()};
+  p::BasicGraphPattern basic{{{}, allocator()}};
   basic._triples.emplace_back(
       left,
       std::visit(
@@ -1184,12 +1191,12 @@ ParsedQuery::GraphPattern QueryPlanner::uniteGraphPatterns(
     std::vector<ParsedQuery::GraphPattern>&& patterns) {
   using GraphPattern = ParsedQuery::GraphPattern;
   // Build a tree of union operations
-  auto p = GraphPattern{};
+  auto p = GraphPattern{allocator()};
   p._graphPatterns.emplace_back(
       p::Union{std::move(patterns[0]), std::move(patterns[1])});
 
   for (size_t i = 2; i < patterns.size(); i++) {
-    GraphPattern next;
+    GraphPattern next{allocator()};
     next._graphPatterns.emplace_back(
         p::Union{std::move(p), std::move(patterns[i])});
     p = std::move(next);
@@ -1240,9 +1247,10 @@ SubtreePlan QueryPlanner::getTextLeafPlan(
 }
 
 // _____________________________________________________________________________
-SubtreePlanVec QueryPlanner::merge(const SubtreePlanVec& a,
-                                   const SubtreePlanVec& b,
-                                   const QueryPlanner::TripleGraph& tg) const {
+SubtreePlanVec QueryPlanner::merge(
+    const SubtreePlanVec& a, const SubtreePlanVec& b,
+    const QueryPlanner::TripleGraph& tg,
+    const FiltersAndOptionalSubstitutes& filters) const {
   // TODO: Add the following features:
   // If a join is supposed to happen, always check if it happens between
   // a scan with a relatively large result size
@@ -1255,7 +1263,10 @@ SubtreePlanVec QueryPlanner::merge(const SubtreePlanVec& a,
                << b.size() << " plans...\n";
   for (const auto& ai : a) {
     for (const auto& bj : b) {
-      for (auto& plan : createJoinCandidates(ai, bj, tg)) {
+      auto newPlans = createJoinCandidates(ai, bj, tg);
+      ql::ranges::move(createJoinsWithSubstitutes(ai, bj, filters),
+                       std::back_inserter(newPlans));
+      for (auto& plan : newPlans) {
         ++numCandidatePlans_;
         candidates
             .try_emplace(getPruningKey(plan, plan._qet->resultSortedOn()),
@@ -1328,7 +1339,7 @@ QueryPlanner::JoinColumns QueryPlanner::connected(
   // Check if there is overlap.
   // If so, don't consider them as properly connected.
   if ((a._idsOfIncludedNodes & b._idsOfIncludedNodes) != 0) {
-    return {};
+    return JoinColumns{allocator()};
   }
 
   // If a substitute is contained, do not use the triple graph. This is because
@@ -1355,7 +1366,7 @@ QueryPlanner::JoinColumns QueryPlanner::connected(
       }
     }
   }
-  return {};
+  return JoinColumns{allocator()};
 }
 
 // _____________________________________________________________________________
@@ -1368,7 +1379,7 @@ QueryPlanner::JoinColumns QueryPlanner::getJoinColumns(const SubtreePlan& a,
 // _____________________________________________________________________________
 std::string QueryPlanner::getPruningKey(
     const SubtreePlan& plan,
-    const std::vector<ColumnIndex>& orderedOnColumns) const {
+    const qlm::vector<ColumnIndex>& orderedOnColumns) const {
   // Get the ordered var
   std::ostringstream os;
   const auto& varCols = plan._qet->getVariableColumns();
@@ -1438,16 +1449,15 @@ void QueryPlanner::applyFiltersIfPossible(
         }
       }
 
-      // In `SeedSubstitutesOnly` mode there are no joining rounds afterwards
-      // that could complete a partial `SpatialJoin`. Therefore only enforced
-      // substitutes may be applied there, because they are complete as soon as
-      // `plan` is attached. A non-enforced substitute would stay incomplete
-      // forever and could still win the final plan selection via its dummy
-      // cost estimate.
-      const bool allowSubstitutes = mode == FilterMode::KeepUnfiltered ||
-                                    mode == FilterMode::ReplaceUnfiltered ||
-                                    (mode == FilterMode::SeedSubstitutesOnly &&
-                                     filterAndSubst.forceSubstitution_);
+      // Apply only enforced substitutes to a single plan, because they are
+      // complete as soon as `plan` is attached. The other substitutes connect
+      // two plans and are applied by `merge`, see `createJoinsWithSubstitutes`.
+      constexpr bool modeAllowsSubstitutes =
+          ad_utility::contains(std::array{FilterMode::KeepUnfiltered,
+                                          FilterMode::SeedSubstitutesOnly},
+                               mode);
+      const bool allowSubstitutes =
+          modeAllowsSubstitutes && filterAndSubst.forceSubstitution_;
       if (allowSubstitutes && filterAndSubst.hasSubstitute() &&
           (filterAndSubst.filter_.expression_.containedVariables().empty() ||
            ql::ranges::any_of(
@@ -1465,11 +1475,21 @@ void QueryPlanner::applyFiltersIfPossible(
           newPlan.type = plan.type;
           newPlan.containsFilterSubstitute_ = true;
         }
-        // If we need to enforce substitution, replace `plan` with our first
-        // candidate. This is not done in all cases, because an incomplete
-        // `SpatialJoin` would not get a join partner if `plan` would be
-        // removed.
-        if (!substPlans.empty() && filterAndSubst.forceSubstitution_) {
+        // In the `KeepUnfiltered` mode, keep `plan` and add the candidates,
+        // also if we need to enforce substitution.
+        //
+        // NOTE: This way, `plan` can first be joined with other plans (for
+        // example, a scan of all geometries with a small set of entities
+        // before the `SpatialJoin` with a constant geometry). The final
+        // `SeedSubstitutesOnly` pass applies an enforced substitute to every
+        // plan that still lacks it.
+        if constexpr (mode == FilterMode::KeepUnfiltered) {
+          ql::ranges::move(substPlans, std::back_inserter(addedPlans));
+          continue;
+        }
+
+        // Otherwise, replace `plan` with the first candidate.
+        if (!substPlans.empty()) {
           plan = std::move(substPlans.front());
           substPlans.erase(substPlans.begin());
         }
@@ -1632,7 +1652,7 @@ SubtreePlanVec QueryPlanner::runDynamicProgrammingOnConnectedComponent(
     // Regular query planning round for connected component.
     for (size_t i = 1; i * 2 <= k; ++i) {
       checkCancellation();
-      auto newPlans = merge(dpTab[i - 1], dpTab[k - i - 1], tg);
+      auto newPlans = merge(dpTab[i - 1], dpTab[k - i - 1], tg, filters);
       extendDpRow(newPlans);
     }
     // As we only passed in connected components, we expect the result to always
@@ -1647,9 +1667,11 @@ SubtreePlanVec QueryPlanner::runDynamicProgrammingOnConnectedComponent(
   }
   auto& result = dpTab.back();
   // Apply enforced filter substitutes (currently `SpatialJoin` with a
-  // fixed-value side). Both a connected component with a single seed and a
-  // full-cover replacement plan land in the final row without passing through
-  // a DP round that may apply substitutes, so they are handled here.
+  // fixed-value side) to every final plan that still lacks them. These are
+  // the plans that kept the unfiltered side in the `KeepUnfiltered` rounds
+  // above, as well as a connected component with a single seed and a
+  // full-cover replacement plan, which land in the final row without passing
+  // through a DP round at all.
   applyFiltersIfPossible<FilterMode::SeedSubstitutesOnly>(result, filters);
   applyFiltersIfPossible<FilterMode::ReplaceUnfilteredNoSubstitutes>(result,
                                                                      filters);
@@ -1660,7 +1682,7 @@ SubtreePlanVec QueryPlanner::runDynamicProgrammingOnConnectedComponent(
 
 // _____________________________________________________________________________
 size_t QueryPlanner::countSubgraphs(std::vector<const SubtreePlan*> graph,
-                                    const std::vector<SparqlFilter>& filters,
+                                    ql::span<const SparqlFilter> filters,
                                     size_t budget) {
   // Remove duplicate plans from `graph`.
   auto getId = [](const SubtreePlan* v) { return v->_idsOfIncludedNodes; };
@@ -1738,21 +1760,19 @@ SubtreePlanVec QueryPlanner::runGreedyPlanningOnConnectedComponent(
     ReplacementPlans&& replacementPlans) const {
   const size_t numSeeds =
       findUniqueNodeIds(connectedComponent, !replacementPlans.empty());
+  // Apply the filters and text limits to the `plans` as early as possible.
+  auto applyFiltersAndTextLimits = [this, &filters,
+                                    &textLimits](SubtreePlanVec& plans) {
+    applyFiltersIfPossible<FilterMode::SeedSubstitutesOnly>(plans, filters);
+    applyFiltersIfPossible<FilterMode::ReplaceUnfilteredNoSubstitutes>(plans,
+                                                                       filters);
+    applyTextLimitsIfPossible(plans, textLimits, true);
+  };
+  applyFiltersAndTextLimits(connectedComponent);
   if (numSeeds <= 1) {
-    // Only 0 or 1 nodes in the input, nothing to plan. As in the dynamic
-    // programming planner, only enforced filter substitutes may be applied
-    // here: there are no joining rounds that could complete a partial
-    // `SpatialJoin`, so a non-enforced substitute would stay incomplete.
-    applyFiltersIfPossible<FilterMode::SeedSubstitutesOnly>(connectedComponent,
-                                                            filters);
-    applyFiltersIfPossible<FilterMode::ReplaceUnfilteredNoSubstitutes>(
-        connectedComponent, filters);
-    applyTextLimitsIfPossible(connectedComponent, textLimits, true);
+    // Only 0 or 1 nodes in the input, nothing to plan.
     return connectedComponent;
   }
-  applyFiltersIfPossible<FilterMode::ReplaceUnfiltered>(connectedComponent,
-                                                        filters);
-  applyTextLimitsIfPossible(connectedComponent, textLimits, true);
 
   // Perform a single step of greedy query planning.
   // `nextBestPlan` contains the result of the last step of greedy query
@@ -1764,26 +1784,20 @@ SubtreePlanVec QueryPlanner::runGreedyPlanningOnConnectedComponent(
   // reinforces the above pre-/postconditions. Exception: if `isFirstStep` then
   // `cache` and `nextResult` must be empty, and the first step of greedy
   // planning is performed, which also establishes the pre-/postconditions.
-  auto greedyStep = [this, &tg, &filters, &textLimits,
+  auto greedyStep = [this, &tg, &filters, &applyFiltersAndTextLimits,
                      currentPlans = std::move(connectedComponent),
                      cache = SubtreePlanVec{allocator()}](
-                        SubtreePlanVec& nextBestPlan, bool isFirstStep,
-                        bool isLastStep) mutable {
+                        SubtreePlanVec& nextBestPlan,
+                        bool isFirstStep) mutable {
     checkCancellation();
     // Normally, we already have all combinations of two nodes in `currentPlans`
     // in the cache, so we only have to add the combinations between
     // `currentPlans` and `nextResult`. In the first step, we need to initially
     // compute all possible combinations.
-    auto newPlans = isFirstStep ? merge(currentPlans, currentPlans, tg)
-                                : merge(currentPlans, nextBestPlan, tg);
-    // Do not apply filter substitutes in the last round
-    if (isLastStep) {
-      applyFiltersIfPossible<FilterMode::ReplaceUnfilteredNoSubstitutes>(
-          newPlans, filters);
-    } else {
-      applyFiltersIfPossible<FilterMode::ReplaceUnfiltered>(newPlans, filters);
-    }
-    applyTextLimitsIfPossible(newPlans, textLimits, true);
+    auto newPlans = isFirstStep
+                        ? merge(currentPlans, currentPlans, tg, filters)
+                        : merge(currentPlans, nextBestPlan, tg, filters);
+    applyFiltersAndTextLimits(newPlans);
     AD_CORRECTNESS_CHECK(!newPlans.empty());
     ql::ranges::move(newPlans, std::back_inserter(cache));
     ql::ranges::move(nextBestPlan, std::back_inserter(currentPlans));
@@ -1810,7 +1824,7 @@ SubtreePlanVec QueryPlanner::runGreedyPlanningOnConnectedComponent(
 
   SubtreePlanVec result{allocator()};
   for (size_t i : ad_utility::integerRange(numSeeds - 1)) {
-    greedyStep(result, i == 0, i == numSeeds - 2);
+    greedyStep(result, i == 0);
   }
   // TODO<joka921> Assert that all seeds are covered by the result.
   return result;
@@ -1818,8 +1832,8 @@ SubtreePlanVec QueryPlanner::runGreedyPlanningOnConnectedComponent(
 
 // _____________________________________________________________________________
 QueryPlanner::FiltersAndOptionalSubstitutes QueryPlanner::seedFilterSubstitutes(
-    const std::vector<SparqlFilter>& filters) {
-  FiltersAndOptionalSubstitutes plans;
+    ql::span<const SparqlFilter> filters) {
+  FiltersAndOptionalSubstitutes plans{allocator()};
   plans.reserve(filters.size());
 
   for (const auto& [i, filterExpression] :
@@ -1846,13 +1860,11 @@ QueryPlanner::FiltersAndOptionalSubstitutes QueryPlanner::seedFilterSubstitutes(
 // _____________________________________________________________________________
 QueryPlanner::FiltersAndOptionalSubstitutes
 QueryPlanner::wrapFiltersWithoutSubstitutes(
-    const std::vector<SparqlFilter>& filters) {
-  FiltersAndOptionalSubstitutes plans;
-  plans.reserve(filters.size());
-  for (const auto& filter : filters) {
-    plans.push_back({filter, std::nullopt});
-  }
-  return plans;
+    ql::span<const SparqlFilter> filters) const {
+  return filters | ql::views::transform([](const auto& filter) {
+           return FilterAndOptionalSubstitute{filter, std::nullopt};
+         }) |
+         ::ranges::to<qlm::vector>(allocator());
 }
 
 // _____________________________________________________________________________
@@ -1911,7 +1923,7 @@ void QueryPlanner::prefilterSeeds(
 
 // _____________________________________________________________________________
 SubtreePlanMatrix QueryPlanner::fillDpTab(const QueryPlanner::TripleGraph& tg,
-                                          std::vector<SparqlFilter> filters,
+                                          qlm::vector<SparqlFilter> filters,
                                           TextLimitMap& textLimits,
                                           const SubtreePlanMatrix& children,
                                           ReplacementPlans replacementPlans) {
@@ -1937,7 +1949,7 @@ SubtreePlanMatrix QueryPlanner::fillDpTab(const QueryPlanner::TripleGraph& tg,
         .first->second.push_back(std::move(initialPlans.at(i)));
   }
   SubtreePlanMatrix lastDpRowFromComponents{allocator()};
-  TextLimitVec textLimitVec(textLimits.begin(), textLimits.end());
+  TextLimitVec textLimitVec(textLimits.begin(), textLimits.end(), allocator());
   for (auto& component : components | ql::views::values) {
     std::vector<const SubtreePlan*> g;
     uint64_t coveredNodes = 0;
@@ -2017,7 +2029,7 @@ SubtreePlanMatrix QueryPlanner::fillDpTab(const QueryPlanner::TripleGraph& tg,
   // More than one connected component, set up a Cartesian product.
   SubtreePlanMatrix result{allocator()};
   result.emplace_back(allocator());
-  std::vector<std::shared_ptr<QueryExecutionTree>> subtrees;
+  CartesianProductJoin::Children subtrees{allocator()};
   // We need to manually inform the cartesian produce about
   // its included nodes and filters and text limits to make the
   // `applyTextLimitsIfPossible` call below work correctly.
@@ -2182,7 +2194,7 @@ qlm::vector<SparqlFilter> QueryPlanner::TripleGraph::pickFilters(
 QueryPlanner::TripleGraph::TripleGraph(
     const std::vector<std::pair<Node, std::vector<size_t>>>& init,
     qlever::Allocator<size_t> allocator)
-    : _adjLists(allocator) {
+    : _adjLists(allocator), _nodeStorage(allocator) {
   for (const std::pair<Node, std::vector<size_t>>& p : init) {
     _nodeStorage.push_back(p.first);
     _nodeMap[p.first.id_] = &_nodeStorage.back();
@@ -2193,7 +2205,8 @@ QueryPlanner::TripleGraph::TripleGraph(
 // _____________________________________________________________________________
 QueryPlanner::TripleGraph::TripleGraph(const QueryPlanner::TripleGraph& other,
                                        qlm::vector<size_t> keepNodes)
-    : _adjLists(other._adjLists.get_allocator()) {
+    : _adjLists(other._adjLists.get_allocator()),
+      _nodeStorage(other._nodeStorage.get_allocator()) {
   ad_utility::HashSet<size_t> keep;
   for (auto v : keepNodes) {
     keep.insert(v);
@@ -2225,7 +2238,9 @@ QueryPlanner::TripleGraph::TripleGraph(const QueryPlanner::TripleGraph& other,
 
 // _____________________________________________________________________________
 QueryPlanner::TripleGraph::TripleGraph(const TripleGraph& other)
-    : _adjLists(other._adjLists), _nodeMap(), _nodeStorage() {
+    : _adjLists(other._adjLists),
+      _nodeMap(),
+      _nodeStorage(other._nodeStorage.get_allocator()) {
   for (auto it : other._nodeMap) {
     _nodeStorage.push_back(*it.second);
     _nodeMap[it.first] = &_nodeStorage.back();
@@ -2245,7 +2260,7 @@ QueryPlanner::TripleGraph& QueryPlanner::TripleGraph::operator=(
 
 // _____________________________________________________________________________
 QueryPlanner::TripleGraph::TripleGraph(qlever::Allocator<size_t> allocator)
-    : _adjLists(allocator), _nodeMap(), _nodeStorage() {}
+    : _adjLists(allocator), _nodeMap(), _nodeStorage(allocator) {}
 
 // _____________________________________________________________________________
 bool QueryPlanner::TripleGraph::isSimilar(
@@ -2367,7 +2382,8 @@ SubtreePlanVec QueryPlanner::createJoinCandidatesAllowEmpty(
     const JoinColumns& jcs) const {
   if (jcs.empty()) {
     return singlePlanVec(makeSubtreePlan<CartesianProductJoin>(
-        _qec, std::vector{ain._qet, bin._qet}));
+        _qec,
+        CartesianProductJoin::Children{{ain._qet, bin._qet}, allocator()}));
   }
   return createJoinCandidates(ain, bin, jcs);
 }
@@ -2526,6 +2542,51 @@ auto QueryPlanner::createSpatialJoin(const SubtreePlan& a, const SubtreePlan& b,
   return plan;
 }
 
+// _____________________________________________________________________________
+SubtreePlanVec QueryPlanner::createJoinsWithSubstitutes(
+    const SubtreePlan& a, const SubtreePlan& b,
+    const FiltersAndOptionalSubstitutes& filters) const {
+  SubtreePlanVec candidates{allocator()};
+  if ((a._idsOfIncludedNodes & b._idsOfIncludedNodes) != 0 ||
+      !getJoinColumns(a, b).empty()) {
+    return candidates;
+  }
+
+  // Join `plan` to `substitute`.
+  //
+  // NOTE: This also joins on a variable that is possibly undefined in `plan`.
+  // This is needed when the filter is the only connection between `a` and `b`
+  // (for example, when `b` is an `OPTIONAL` that shares no variable with the
+  // rest). The `SpatialJoin` drops the rows where the variable is undefined.
+  //
+  // TODO<ullingerc> This is wrong when a pattern outside of `a` and `b` binds
+  // the variable for these rows (for example, when `b` is a `UNION` with the
+  // variable in only one branch, followed by a triple with the variable). It
+  // was already wrong before the substitutes were applied here.
+  auto join = [this](const SubtreePlan& substitute, const SubtreePlan& plan) {
+    auto newPlans = createJoinCandidates(substitute, plan,
+                                         getJoinColumns(substitute, plan));
+    for (auto& newPlan : newPlans) {
+      mergeSubtreePlanIds(newPlan, newPlan, plan);
+    }
+    return newPlans;
+  };
+
+  // Join each substitute that is not applied to `a` or `b` yet with both of
+  // them. (An enforced substitute is complete after `a` and gets no join
+  // with `b`, which shares no variable with it.)
+  for (const auto& [i, filterAndSubst] : ::ranges::views::enumerate(filters)) {
+    if (!filterAndSubst.hasSubstitute() ||
+        (((a._idsOfIncludedFilters | b._idsOfIncludedFilters) >> i) & 1) != 0) {
+      continue;
+    }
+    for (const auto& withA : join(filterAndSubst.substitute_.value(), a)) {
+      ql::ranges::move(join(withA, b), std::back_inserter(candidates));
+    }
+  }
+  return candidates;
+}
+
 // _____________________________________________________________________________________________________________________
 
 namespace {
@@ -2534,9 +2595,9 @@ namespace {
 std::pair<QueryPlanner::JoinColumns, QueryPlanner::JoinColumns>
 mapColumnsInUnion(size_t columnIndex, const Union& unionOperation,
                   const QueryPlanner::JoinColumns& jcs) {
-  QueryPlanner::JoinColumns leftMapping;
+  QueryPlanner::JoinColumns leftMapping{jcs.get_allocator()};
   leftMapping.reserve(jcs.size());
-  QueryPlanner::JoinColumns rightMapping;
+  QueryPlanner::JoinColumns rightMapping{jcs.get_allocator()};
   rightMapping.reserve(jcs.size());
   auto mapColumns = [columnIndex, &unionOperation](
                         bool isLeft, std::array<ColumnIndex, 2> columns)
@@ -2671,56 +2732,34 @@ auto QueryPlanner::applyJoinDistributivelyToUnion(
 }
 
 // _____________________________________________________________________________
-std::optional<std::tuple<size_t, size_t>>
+QueryPlanner::TransitivePathJoinCols
 QueryPlanner::getJoinColumnsForTransitivePath(const JoinColumns& jcs,
                                               bool leftSideTransitivePath) {
 #ifdef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   (void)jcs;
   (void)leftSideTransitivePath;
-  return std::nullopt;
+  return TransitivePathJoinCols{std::nullopt, std::nullopt};
 #else
-  // If there are more than two pairs of join columns, we have a graph
-  // variable. In that case, we compute the full transitive hull (followed by a
-  // multi-column join).
-  if (jcs.size() > 2) {
-    return std::nullopt;
-  }
-
-  // The index in `jcs` of the transitive path side and the other side.
+  // The index in a pair of join columns from `jcs` of the transitive path side
+  // and the other side.
   auto transitivePathIndex = static_cast<size_t>(!leftSideTransitivePath);
   auto otherIndex = static_cast<size_t>(leftSideTransitivePath);
 
-  // If there is one pair of join columns, then either exactly one side of the
-  // transitive path can be bound (and we return that pair), or the graph
-  // variable is bound (in which case we return `std::nullopt`).
-  auto graphColIndex = TransitivePathBase::firstGraphOrPayloadColumnIndex();
-  if (jcs.size() == 1) {
-    size_t transitiveCol = jcs[0][transitivePathIndex];
-    size_t otherCol = jcs[0][otherIndex];
-    if (transitiveCol >= graphColIndex) {
-      return std::nullopt;
+  // The left and the right side are the columns 0 and 1 of the transitive
+  // path, a pair for its graph column (index 2) is ignored.
+  TransitivePathJoinCols cols;
+  for (const auto& jc : jcs) {
+    size_t transCol = jc[transitivePathIndex];
+    size_t otherCol = jc[otherIndex];
+    if (transCol == 0) {
+      AD_CORRECTNESS_CHECK(!cols.left.has_value());
+      cols.left = otherCol;
+    } else if (transCol == 1) {
+      AD_CORRECTNESS_CHECK(!cols.right.has_value());
+      cols.right = otherCol;
     }
-    return std::make_tuple(transitiveCol, otherCol);
   }
-
-  // At this point, we know that we have exactly two pairs of join columns,
-  // where one pertains to the graph variable and the other to one side of the
-  // transitive path operation. Return the pair that does not pertain to the
-  // graph variable.
-  size_t transitiveColA = jcs[0][transitivePathIndex];
-  size_t otherColA = jcs[0][otherIndex];
-  size_t transitiveColB = jcs[1][transitivePathIndex];
-  size_t otherColB = jcs[1][otherIndex];
-  if (transitiveColA < graphColIndex) {
-    if (transitiveColB == graphColIndex) {
-      return std::make_tuple(transitiveColA, otherColA);
-    }
-    // We currently don't support binding two regular columns at once
-    return std::nullopt;
-  }
-  AD_CORRECTNESS_CHECK(transitiveColB < graphColIndex);
-  AD_CORRECTNESS_CHECK(transitiveColA == graphColIndex);
-  return std::make_tuple(transitiveColB, otherColB);
+  return cols;
 #endif
 }
 
@@ -2750,27 +2789,15 @@ auto QueryPlanner::createJoinWithTransitivePath(
     return std::nullopt;
   }
 
-  // Do not bind the side of a path twice and don't bind on graph variable.
-  auto joinCols = getJoinColumnsForTransitivePath(jcs, aTransPath != nullptr);
-  if (!joinCols.has_value()) {
+  // The columns of `otherTree` that bind the left and the right side of the
+  // path. If only the graph variable is joined, the path is not bound.
+  auto [leftCol, rightCol] =
+      getJoinColumnsForTransitivePath(jcs, aTransPath != nullptr);
+  if (!leftCol.has_value() && !rightCol.has_value()) {
     return std::nullopt;
   }
-
-  // An unbound transitive path has at most two columns we can bind to.
-  const auto& [thisCol, otherCol] = joinCols.value();
-  AD_CONTRACT_CHECK(thisCol <= 1);
-
-  // The left or right side is a transitive path and its join column corresponds
-  // to the left side of its input.
-  SubtreePlan plan = [&]() {
-    if (thisCol == 0) {
-      return makeSubtreePlan(
-          transPathOperation->bindLeftSide(otherTree, otherCol));
-    } else {
-      return makeSubtreePlan(
-          transPathOperation->bindRightSide(otherTree, otherCol));
-    }
-  }();
+  SubtreePlan plan = makeSubtreePlan(
+      transPathOperation->bindSides(otherTree, leftCol, rightCol));
   mergeSubtreePlanIds(plan, a, b);
   return plan;
 #endif
@@ -2959,7 +2986,8 @@ void QueryPlanner::QueryGraph::setupGraph(
   // Prepare the `nodes_` vector for the graph. We have one node for each leaf
   // of what later becomes the `QueryExecutionTree`.
   for (const auto& leafOperation : leafOperations) {
-    nodes_.push_back(std::make_shared<Node>(&leafOperation));
+    nodes_.push_back(
+        qlm::makeShared<Node>(nodes_.get_allocator(), &leafOperation));
   }
 
   // Set up a hash map from variables to nodes that contain this variable.
@@ -3071,8 +3099,8 @@ void QueryPlanner::QueryGraph::dfs(Node* startNode, size_t componentIndex) {
   }
 }
 // _______________________________________________________________
-std::vector<size_t> QueryPlanner::QueryGraph::dfsForAllNodes() {
-  std::vector<size_t> result;
+qlm::vector<size_t> QueryPlanner::QueryGraph::dfsForAllNodes() {
+  qlm::vector<size_t> result{nodes_.get_allocator()};
   size_t nextIndex = 0;
   for (const auto& node : nodes_) {
     if (node->visited_) {
@@ -3282,8 +3310,8 @@ void QueryPlanner::GraphPatternPlanner::bindGraphVariableIfUnbound(
   for (auto& innerCand : candidates) {
     if (!innerCand._qet->getVariableColumns().contains(graphVar)) {
       innerCand = makeSubtreePlan<CartesianProductJoin>(
-          planner_._qec, std::vector<std::shared_ptr<QueryExecutionTree>>{
-                             graphsCand._qet, innerCand._qet});
+          planner_._qec, CartesianProductJoin::Children{
+                             {graphsCand._qet, innerCand._qet}, allocator()});
     }
     // TODO<metetolga> queries of the form SELECT * { GRAPH ?g { VALUES ?g
     // { <doesnotexist> } } } are not correctly handled.
@@ -3581,8 +3609,8 @@ void QueryPlanner::GraphPatternPlanner::visitSpatialSearch(
     // This helper function adds a subtree plan to the output candidates, which
     // either has the child graph pattern as a right child or no child at all.
     // If it has no child at all, the query planner may look for the right child
-    // of the SpatialJoin outside of the SERVICE. This is only allowed for max
-    // distance joins.
+    // of the SpatialJoin outside of the SERVICE. This is allowed for all joins
+    // except for nearest neighbors joins.
     auto addCandidateSpatialJoin = [this, &sub, &config,
                                     &candidatesOut](bool rightVarOutside) {
       std::optional<std::shared_ptr<QueryExecutionTree>> right = std::nullopt;
@@ -3599,10 +3627,12 @@ void QueryPlanner::GraphPatternPlanner::visitSpatialSearch(
       // The version using the child graph pattern
       addCandidateSpatialJoin(false);
     } else {
-      // The version without using the child graph pattern
-      if (std::holds_alternative<MaxDistanceConfig>(config.task_)) {
-        addCandidateSpatialJoin(true);
-      }
+      // The version without using the child graph pattern (a nearest neighbors
+      // search without child graph pattern is already rejected by
+      // `SpatialQuery::toSpatialJoinConfiguration`).
+      AD_CORRECTNESS_CHECK(
+          !std::holds_alternative<NearestNeighborsConfig>(config.task_));
+      addCandidateSpatialJoin(true);
     }
   }
   visitGroupOptionalOrMinus(std::move(candidatesOut));

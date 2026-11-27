@@ -20,7 +20,7 @@ copySortedByColumnIndex(VariableToColumnMap map) {
 // ______________________________________________________________________________
 VariableToColumnMap makeVarToColMapForJoinOperation(
     const VariableToColumnMap& leftVars, const VariableToColumnMap& rightVars,
-    std::vector<std::array<ColumnIndex, 2>> joinColumns, BinOpType binOpType,
+    ql::span<const std::array<ColumnIndex, 2>> joinColumns, BinOpType binOpType,
     size_t leftResultWidth, bool keepJoinColumns) {
   // First come all the variables from the left input. Variables that only
   // appear in the left input always have the same definedness as in the input.
@@ -32,7 +32,7 @@ VariableToColumnMap makeVarToColMapForJoinOperation(
     // Don't include the join columns, shift all variables that appear after
     // join columns to the left s.t. the result will be dense again.
     leftResultWidth -= joinColumns.size();
-    VariableToColumnMap res;
+    VariableToColumnMap res{leftVars.get_allocator()};
     const auto& jcls = joinColumns | ql::views::transform(ad_utility::first);
     // We deliberately copy the entries from the child map, as we have to insert
     // them into the result later on anyway.

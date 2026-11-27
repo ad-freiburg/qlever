@@ -35,8 +35,9 @@
 #include "backports/algorithm.h"
 #include "backports/asio.h"
 #include "util/CancellationHandle.h"
-#include "util/MemorySize/MemorySize.h"
 #include "util/SourceLocation.h"
+#include "util/Synchronized.h"
+#include "util/memorySize/MemorySize.h"
 #include "util/parallelBlockMerge/InMemoryBlockStorage.h"
 #include "util/parallelBlockMerge/ParallelBlockMerge.h"
 #include "util/parallelBlockMerge/ParallelMergeRange.h"
@@ -103,11 +104,7 @@ struct LiveCounted {
 
 // Return the sorted run of the `LiveCounted` elements `first ... last - 1`.
 std::vector<LiveCounted> makeLiveCounted(size_t first, size_t last) {
-  std::vector<LiveCounted> result;
-  for (size_t i = first; i < last; ++i) {
-    result.emplace_back(i);
-  }
-  return result;
+  return ::ranges::to<std::vector<LiveCounted>>(ql::views::iota(first, last));
 }
 
 // An input policy that derives from `SizeInput` (that is, from
@@ -198,11 +195,7 @@ std::vector<typename Input::value_type> mergeToVector(
 
 // Return the keys (that is, the first components) of the `pairs`.
 SizeVec getKeys(const std::vector<Pair>& pairs) {
-  SizeVec result;
-  for (const auto& pair : pairs) {
-    result.push_back(pair.first);
-  }
-  return result;
+  return pairs | ql::views::keys | ::ranges::to_vector;
 }
 
 // The number of runs and the number of elements per run of
@@ -297,11 +290,7 @@ SizeVec splitPointsUpTo(size_t numSplitPoints) {
 // yet.
 std::vector<CountingString> makeCountingStrings(
     const std::vector<std::string>& values) {
-  std::vector<CountingString> result;
-  for (const auto& value : values) {
-    result.emplace_back(value);
-  }
-  return result;
+  return ::ranges::to<std::vector<CountingString>>(values);
 }
 
 // Create the `MergeState` that the `detail::ChunkMerger`s of a merge share (see
@@ -657,6 +646,59 @@ TEST(ParallelBlockMerge, outputBlockMemoryLimit) {
     numElements += block.size();
   }
   EXPECT_EQ(numElements, 400u);
+}
+
+// An input policy that derives from `SizeInput` and overrides its
+// `reserveBlock` function (see `InputConcept`) to record the
+// `numElements` of every call. The recorded state is shared between all
+// copies, because the merge takes the input by value.
+struct ReservingInput : public SizeInput {
+  using State = ad_utility::Synchronized<std::vector<size_t>>;
+  std::shared_ptr<State> state_ = std::make_shared<State>();
+
+  void reserveBlock(Block& block, size_t numElements) const {
+    block.reserve(numElements);
+    state_->wlock()->push_back(numElements);
+  }
+};
+static_assert(InputConcept<ReservingInput>);
+
+// Test that the merge calls `reserveBlock` once per output block if and only
+// if the number of elements per output block is bounded.
+TEST(ParallelBlockMerge, reserveBlockOfTheInputIsCalled) {
+  auto runs = makeRandomRuns(4, 100, 100);
+  // If the number of elements per output block is bounded, every output block
+  // is reserved for exactly that number of elements up front.
+  {
+    ReservingInput input{makeVectorInput(runs, 16)};
+    auto state = input.state_;
+    size_t numBlocks = 0;
+    size_t numElements = 0;
+    for (const auto& block : serialBlockMergeToRange<false>(
+             std::move(input), std::less<>{}, optionsWithBlockSize(10))) {
+      ++numBlocks;
+      numElements += block.size();
+      EXPECT_GE(block.capacity(), 10u);
+    }
+    EXPECT_EQ(numElements, 400u);
+    EXPECT_EQ(state->rlock()->size(), numBlocks);
+    EXPECT_THAT(*state->rlock(), ::testing::Each(10u));
+  }
+  // If only the memory of an output block is bounded, nothing is reserved.
+  {
+    ReservingInput input{makeVectorInput(runs, 16)};
+    auto state = input.state_;
+    MergeOptions options;
+    options.outputBlockSize = OutputBlockSize::memory(
+        ad_utility::MemorySize::bytes(10 * sizeof(size_t)));
+    size_t numElements = 0;
+    for (const auto& block : serialBlockMergeToRange<false>(
+             std::move(input), std::less<>{}, options)) {
+      numElements += block.size();
+    }
+    EXPECT_EQ(numElements, 400u);
+    EXPECT_THAT(*state->rlock(), ::testing::IsEmpty());
+  }
 }
 
 // ___________________________________________________________________________

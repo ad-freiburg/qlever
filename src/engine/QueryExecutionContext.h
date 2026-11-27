@@ -14,9 +14,8 @@
 
 #include "backports/asio.h"
 #include "backports/three_way_comparison.h"
-#include "engine/QueryPlanningCostFactors.h"
 #include "engine/Result.h"
-#include "engine/RuntimeInformation.h"
+#include "engine/operation/RuntimeInformation.h"
 #include "global/Id.h"
 #include "index/DeltaTriples.h"
 #include "index/Index.h"
@@ -78,6 +77,11 @@ class CacheValue {
 // That way, two identical trees with different snapshot indices will have a
 // different cache key. This has the (desired!) effect that UPDATE requests
 // correctly invalidate preexisting cache results.
+//
+// TODO<RobinTF> Support heterogeneous lookup in the `QueryResultCache` (e.g.
+// with a key that holds a `std::string_view`), s.t. the lookups (e.g. in
+// `QueryExecutionTree::readFromCache`) don't have to copy the cache key of
+// the operation (which is a `qlm::string`) into a `std::string`.
 struct QueryCacheKey {
   std::string key_;
   size_t locatedTriplesSnapshotIndex_;
@@ -150,10 +154,6 @@ class QueryExecutionContext
   }
 
   void clearCacheUnpinnedOnly() { getQueryTreeCache().clearUnpinnedOnly(); }
-
-  [[nodiscard]] double getCostFactor(const std::string& key) const {
-    return _costFactors.getCostFactor(key);
-  }
 
   const ad_utility::AllocatorWithLimit<Id>& getAllocator() const {
     return _allocator;
@@ -307,7 +307,6 @@ class QueryExecutionContext
   QueryResultCache* const _subtreeCache;
   // allocators are copied but hold shared state
   ad_utility::AllocatorWithLimit<Id> _allocator;
-  QueryPlanningCostFactors _costFactors;
   std::function<void(std::string)> updateCallback_;
 
   // Cache the state of both runtime parameters to reduce the contention of the

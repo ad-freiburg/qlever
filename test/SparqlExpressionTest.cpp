@@ -12,6 +12,7 @@
 #include "./SparqlExpressionTestHelpers.h"
 #include "./printers/LocalVocabEntryPrinters.h"
 #include "./util/GTestHelpers.h"
+#include "./util/ParsedQueryTestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
@@ -29,13 +30,14 @@
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
 #include "index/Index.h"
-#include "parser/LiteralOrIri.h"
 #include "rdfTypes/GeoPoint.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/GeometryInfo.h"
+#include "rdfTypes/LiteralOrIri.h"
 #include "util/AllocatorTestHelpers.h"
 #include "util/IdTestHelpers.h"
 #include "util/LocalVocabEntryTestHelpers.h"
+#include "util/VariableToColumnMapTestHelpers.h"
 
 using ad_utility::testing::localVocabEntry;
 
@@ -214,8 +216,8 @@ auto testNaryExpressionImpl = [](auto&& makeExpression, auto const& expected,
              (SingleExpressionResult<decltype(operands)> && ...));
   ad_utility::AllocatorWithLimit<Id> alloc{
       ad_utility::testing::makeAllocator()};
-  VariableToColumnMap map;
-  LocalVocab localVocab;
+  auto map = makeVariableToColumnMap();
+  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
   IdTable table{alloc};
 
   // Get the size of `operand`: size for a vector or a `SetOfIntervals`, 1
@@ -850,7 +852,8 @@ TEST(SparqlExpression, sharedDateDispatchBypassesVariants) {
   context._endIndex = 2;
   const Id date = Dat(DateYearOrDuration::parseXsdDate, "2020-01-01");
   V<Id> dates{{date, date}, alloc};
-  ConstIdColumnRef column{dates.data(), dates.size()};
+  IdColumn dateColumn{date, date};
+  ConstIdColumnRef column{dateColumn};
   auto result =
       hn::evaluateHomogeneousNumericOperation<TypedOnly, DateYearOrDuration,
                                               DateYearOrDuration>(
@@ -1350,23 +1353,24 @@ TEST(SparqlExpression, stringOperators) {
                                    ValueId::makeUndefined(), nullptr),
                                ::testing::HasSubstr("unreachable"));
 
+  const auto emptyMap = makeVariableToColumnMap();
   // A simple test for uniqueness of the cache key.
   auto c1a = makeStrlenExpression(std::make_unique<IriExpression>(iri("<bim>")))
-                 ->getCacheKey({});
+                 ->getCacheKey(emptyMap);
   auto c1b = makeStrlenExpression(std::make_unique<IriExpression>(iri("<bim>")))
-                 ->getCacheKey({});
+                 ->getCacheKey(emptyMap);
   auto c2a = makeStrExpression(std::make_unique<IriExpression>(iri("<bim>")))
-                 ->getCacheKey({});
+                 ->getCacheKey(emptyMap);
   auto c2b = makeStrExpression(std::make_unique<IriExpression>(iri("<bim>")))
-                 ->getCacheKey({});
+                 ->getCacheKey(emptyMap);
   auto c3a =
       makeStrlenExpression(
           makeStrExpression(std::make_unique<IriExpression>(iri("<bim>"))))
-          ->getCacheKey({});
+          ->getCacheKey(emptyMap);
   auto c3b =
       makeStrlenExpression(
           makeStrExpression(std::make_unique<IriExpression>(iri("<bim>"))))
-          ->getCacheKey({});
+          ->getCacheKey(emptyMap);
 
   EXPECT_EQ(c1a, c1b);
   EXPECT_EQ(c2a, c2b);
@@ -2008,6 +2012,13 @@ TEST(SparqlExpression, testToNumericExpression) {
   auto checkGetDouble = testUnaryExpression<&makeConvertToDoubleExpression>;
   auto chekGetDecimal = testUnaryExpression<&makeConvertToDecimalExpression>;
 
+  // Triple terms cannot be cast to numeric literals; conversion is an
+  // expression error rather than a C++ exception from string export.
+  Id term = Id::makeFromTripleTermIndex(TripleTermIndex::make(17));
+  checkGetInt(idOrLitOrStringVec({term}), Ids{U});
+  checkGetDouble(idOrLitOrStringVec({term}), Ids{U});
+  chekGetDecimal(idOrLitOrStringVec({term}), Ids{U});
+
   checkGetInt(
       idOrLitOrStringVec({U, "  -1275", "5.97", "-78.97", "-5BoB6", "FreBurg1",
                           "", " .", " 42\n", " 0.01 ", "", "@", "@?+1", "1", G,
@@ -2111,7 +2122,11 @@ TEST(SparqlExpression, testToBooleanExpression) {
       Ids{U, U, U, U, U, F, U, U, T, U, U, U, F, T,
           T, F, F, F, T, T, F, T, T, U, U, U, U});
 
-  checkGetBoolean(IdOrLocalVocabEntryVec({Id::makeUndefined()}), Ids{U});
+  // Triple terms also cannot be cast to boolean literals.
+  checkGetBoolean(IdOrLocalVocabEntryVec(
+                      {Id::makeUndefined(),
+                       Id::makeFromTripleTermIndex(TripleTermIndex::make(17))}),
+                  Ids{U, U});
 }
 
 // ____________________________________________________________________________
@@ -2144,30 +2159,67 @@ TEST(SparqlExpression, geoSparqlExpressions) {
 
   checkLat(v, vLat);
   checkLong(v, vLng);
-  checkCentroid(v, v);
+  checkCentroid(v, IdOrLocalVocabEntry{ValueId::makeFromGeoPoint(p)});
   checkIsGeoPoint(v, B(true));
   checkDist(D(0.0), v, v);
   checkLat(idOrLitOrStringVec({"NotAPoint", I(12)}), Ids{U, U});
   checkLong(idOrLitOrStringVec({D(4.2), "NotAPoint"}), Ids{U, U});
   checkIsGeoPoint(IdOrLocalVocabEntry{lit("NotAPoint")}, B(false));
   checkIsGeoPoint(U, U);
-  checkCentroid(IdOrLocalVocabEntry{lit("NotAPoint")}, U);
+  checkCentroid(IdOrLocalVocabEntry{lit("NotAPoint")}, IdOrLocalVocabEntry{U});
   checkDist(U, v, IdOrLocalVocabEntry{I(12)});
   checkDist(U, IdOrLocalVocabEntry{I(12)}, v);
   checkDist(U, v, IdOrLocalVocabEntry{lit("NotAPoint")});
   checkDist(U, IdOrLocalVocabEntry{lit("NotAPoint")}, v);
 
-  auto polygonCentroid = GP({3, 3});
+  // The centroid of a literal in CRS84 (with or without the IRI) is a
+  // `GeoPoint`, the centroid of a literal in another CRS is a WKT literal in
+  // that CRS.
+  checkCentroid(
+      IdOrLocalVocabEntry{lit(
+          "\"<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(26.8 24.3)\"",
+          "^^<http://www.opengis.net/ont/geosparql#wktLiteral>")},
+      geoLit("<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(26.8 24.3)"));
+
+  auto crs84CentroidId = ValueId::makeFromGeoPoint(GeoPoint{20, 50});
   checkCentroid(IdOrLocalVocabEntry{lit(
-                    "\"POLYGON((2 4, 4 4, 4 2, 2 2))\"",
+                    "\"POLYGON((40 10, 40 30, 60 30, 60 10))\"",
                     "^^<http://www.opengis.net/ont/geosparql#wktLiteral>")},
-                polygonCentroid);
+                IdOrLocalVocabEntry{crs84CentroidId});
+
+  checkCentroid(IdOrLocalVocabEntry{lit(
+                    "\"<http://www.opengis.net/def/crs/OGC/1.3/CRS84> "
+                    "POLYGON((40 10, 40 30, 60 30, 60 10))\"",
+                    "^^<http://www.opengis.net/ont/geosparql#wktLiteral>")},
+                IdOrLocalVocabEntry{crs84CentroidId});
+
+  checkCentroid(
+      IdOrLocalVocabEntry{
+          lit("\"<http://www.opengis.net/def/crs/EPSG/0/4326> "
+              "POLYGON((10 40, 30 40, 30 60, 10 60))\"",
+              "^^<http://www.opengis.net/ont/geosparql#wktLiteral>")},
+      geoLit("<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(20 50)"));
+
+  // The centroid of a Web Mercator polygon is computed in Web Mercator (the
+  // center of this square), the projection of its CRS84 centroid would be
+  // `POINT(5000000 3924942.872771)`.
+  checkCentroid(
+      IdOrLocalVocabEntry{lit(
+          "\"<http://www.opengis.net/def/crs/EPSG/0/3857> "
+          "POLYGON((0 0, 10000000 0, 10000000 10000000, 0 10000000, 0 0))\"",
+          "^^<http://www.opengis.net/ont/geosparql#wktLiteral>")},
+      geoLit("<http://www.opengis.net/def/crs/EPSG/0/3857> POINT(5000000 "
+             "5000000)"));
 
   checkEnvelope(
       IdOrLocalVocabEntryVec{U, D(1.0), GP({4, 2}),
-                             geoLit("LINESTRING(2 4, 8 8)")},
+                             geoLit("LINESTRING(2 4, 8 8)"),
+                             geoLit("<http://www.opengis.net/def/crs/EPSG/0/"
+                                    "4326> LINESTRING(4 2, 8 8)")},
       IdOrLocalVocabEntryVec{U, U, geoLit("POLYGON((2 4,2 4,2 4,2 4,2 4))"),
-                             geoLit("POLYGON((2 4,8 4,8 8,2 8,2 4))")});
+                             geoLit("POLYGON((2 4,8 4,8 8,2 8,2 4))"),
+                             geoLit("<http://www.opengis.net/def/crs/EPSG/0/"
+                                    "4326> POLYGON((4 2,4 8,8 8,8 2,4 2))")});
   checkEnvelopeLL(IdOrLocalVocabEntryVec{U, D(1.0), GP({4, 2}),
                                          geoLit("LINESTRING(2 4, 8 8)")},
                   Ids{U, U, GP({4, 2}), GP({4, 2})});
@@ -2351,6 +2403,24 @@ TEST(SparqlExpression, geoSparqlExpressions) {
       },
       exampleMultiGeoms, Ids{I(2), I(2), I(2), I(2), I(2)});
 
+  // The function `geof:transform`: an unknown CRS IRI yields `UNDEF`.
+  auto checkTransform =
+      std::bind_front(testNaryExpression, &makeTransformExpression);
+  auto examplePoint = geoLit("POINT(1 2)");
+  checkTransform(
+      IdOrLocalVocabEntryVec{
+          geoLit("POINT(1 2)"), U,
+          geoLit("<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(2 1)"),
+          geoLit("<http://www.opengis.net/def/crs/EPSG/0/3857> "
+                 "POINT(111319.490793 222684.208506)")},
+      IdOrLocalVocabEntryVec{examplePoint, examplePoint, examplePoint,
+                             examplePoint},
+      IdOrLocalVocabEntryVec{
+          iriref("<http://www.opengis.net/def/crs/OGC/1.3/CRS84>"),
+          iriref("<http://www.opengis.net/bla/bli/>"),
+          iriref("<http://www.opengis.net/def/crs/EPSG/0/4326>"),
+          iriref("<http://www.opengis.net/def/crs/EPSG/0/3857>")});
+
   // The internal function `ql:simplifyGeometry`.
   auto checkSimplify =
       std::bind_front(testNaryExpression, &makeSimplifyGeometryExpression);
@@ -2513,7 +2583,7 @@ TEST(SparqlExpression, ifAndCoalesce) {
   auto coalesceExpr = makeCoalesceExpressionVariadic(
       std::make_unique<IriExpression>(iri("<bim>")),
       std::make_unique<IriExpression>(iri("<bam>")));
-  ASSERT_THAT(coalesceExpr->getCacheKey({}),
+  ASSERT_THAT(coalesceExpr->getCacheKey(makeVariableToColumnMap()),
               testing::AllOf(::testing::ContainsRegex("CoalesceExpression"),
                              ::testing::HasSubstr("<bim>"),
                              ::testing::HasSubstr("<bam>")));
@@ -2558,7 +2628,7 @@ TEST(SparqlExpression, concatExpression) {
   auto coalesceExpr = makeConcatExpressionVariadic(
       std::make_unique<IriExpression>(iri("<bim>")),
       std::make_unique<IriExpression>(iri("<bam>")));
-  ASSERT_THAT(coalesceExpr->getCacheKey({}),
+  ASSERT_THAT(coalesceExpr->getCacheKey(makeVariableToColumnMap()),
               testing::AllOf(::testing::ContainsRegex("ConcatExpression"),
                              ::testing::HasSubstr("<bim>"),
                              ::testing::HasSubstr("<bam>")));
@@ -2651,7 +2721,51 @@ TEST(SparqlExpression, ReplaceExpression) {
   checkReplace(idOrLitOrStringVec({R"("$1 \\2 A \\bc")", R"("$1 \\2 DE \\f")"}),
                std::tuple{idOrLitOrStringVec({"Abc", "DEf"}),
                           IdOrLocalVocabEntry{lit("([A-Z]+)")},
-                          IdOrLocalVocabEntry{lit(R"("\\$1 \\2 $1 \\")")}});
+                          IdOrLocalVocabEntry{lit(R"("\\$1 \\\\2 $1 \\\\")")}});
+
+  // The rules for the replacement string from the XPath standard. The literals
+  // are escaped, so `R"("\\\\")"` is a string that consists of two backslashes.
+  auto checkReplaceAbc = [&checkReplace](
+                             std::string_view pattern,
+                             std::string_view replacement,
+                             IdOrLocalVocabEntry expected,
+                             source_location l = AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    checkReplace(expected, std::tuple{IdOrLocalVocabEntry{lit("abc")},
+                                      IdOrLocalVocabEntry{lit(pattern)},
+                                      IdOrLocalVocabEntry{lit(replacement)}});
+  };
+  // `\$` is a literal dollar and `\\` a literal backslash.
+  checkReplaceAbc("b", R"("\\$")", lit("a$c"));
+  checkReplaceAbc("b", R"("\\\\")", lit(R"("a\\c")"));
+  checkReplaceAbc("(b)", R"("\\$$1")", lit("a$bc"));
+  checkReplaceAbc("(b)", R"("\\\\$1")", lit(R"("a\\bc")"));
+  checkReplaceAbc("(b)", R"("\\\\\\$$1")", lit(R"("a\\$bc")"));
+  // `$0` is the whole match, and a group that does not exist is empty.
+  checkReplaceAbc("b", "[$0]", lit("a[b]c"));
+  checkReplaceAbc("b", "[$2]", lit("a[]c"));
+  checkReplaceAbc("(a)(b)", "$3$2$1$9", lit("bac"));
+  // A reference takes as many digits as possible, as long as the number still
+  // names an existing group or is at most 9. The rest are literal digits.
+  checkReplaceAbc("(b)", "$10", lit("ab0c"));
+  checkReplaceAbc("(b)", "[$20]", lit("a[0]c"));
+  checkReplaceAbc("(b)", "[$01]", lit("a[b]c"));
+  checkReplaceAbc("b", "[$01]", lit("a[]c"));
+  checkReplaceAbc("b", "[$00]", lit("a[b]c"));
+  checkReplaceAbc("(a)(b)(c)()()()()()()()", "$11", lit("a1"));
+  // RE2 does not support references to group 10 or higher.
+  checkReplaceAbc("(a)(b)(c)()()()()()()()", "$10", U);
+  checkReplaceAbc("(a)(b)(c)()()()()()()()", "$010", U);
+  // A group that exists but did not participate in the match is empty.
+  checkReplaceAbc("(x)?b", "[$1]", lit("a[]c"));
+  checkReplaceAbc("(a)|(b)", "[$1|$2]", lit("[a|][|b]c"));
+  // An unescaped `$` that is not followed by a digit, or a `\` that is not
+  // followed by `\` or `$`, is an error.
+  checkReplaceAbc("b", "$", U);
+  checkReplaceAbc("b", "x$y", U);
+  checkReplaceAbc("b", R"("\\x")", U);
+  checkReplaceAbc("b", R"("x\\")", U);
+  checkReplaceAbc("b", R"("\\\\\\")", U);
 
   // Only simple literals should be replaced.
   checkReplace(idOrLitOrStringVec({U, U}),
@@ -2765,7 +2879,8 @@ TEST(SparqlExpression, literalExpression) {
 TEST(SparqlExpression, unboundVariableExpression) {
   TestContext ctx;
   VariableExpression var{Variable{"?notFoundAnywhere"}};
-  EXPECT_THAT(var.getCacheKey({}), ::testing::HasSubstr("Unbound Variable"));
+  EXPECT_THAT(var.getCacheKey(makeVariableToColumnMap()),
+              ::testing::HasSubstr("Unbound Variable"));
   EXPECT_THAT(var.evaluate(&ctx.context),
               ::testing::VariantWith<Id>(Id::makeUndefined()));
 }
@@ -2907,7 +3022,7 @@ TEST(SingleUseExpression, simpleMembersForTestCoverage) {
   EXPECT_ANY_THROW(expression.evaluate(nullptr));
   EXPECT_THAT(expression.childrenForTesting(), IsEmpty());
   EXPECT_ANY_THROW(expression.getUnaggregatedVariables());
-  EXPECT_ANY_THROW(expression.getCacheKey({}));
+  EXPECT_ANY_THROW(expression.getCacheKey(makeVariableToColumnMap()));
 }
 
 // This just tests basic functionality of the `ExistsExpression` class. Since
@@ -2916,7 +3031,7 @@ TEST(SingleUseExpression, simpleMembersForTestCoverage) {
 // `test/engine/ExistsJoinTest.cpp`.
 TEST(ExistsExpression, basicFunctionality) {
   using namespace ::testing;
-  ParsedQuery pq;
+  ParsedQuery pq{alloc};
   pq.selectClause().addVisibleVariable(Variable{"?testVar42"});
   pq.selectClause().setAsterisk();
   ExistsExpression exists{std::move(pq)};
@@ -3097,8 +3212,8 @@ TEST(NaryExpressionTypeErased, basicTests) {
               ElementsAre(typeMatcher(ti<IdExpression>),
                           typeMatcher(ti<VariableExpression>)));
 
-  VariableToColumnMap varColMap;
-  varColMap[Variable{"?x"}] = makeAlwaysDefinedColumn(42);
+  auto varColMap =
+      makeVariableToColumnMap({{Variable{"?x"}, makeAlwaysDefinedColumn(42)}});
 
   auto getKey = [&varColMap](const SparqlExpression::Ptr& ptr) {
     return ptr->getCacheKey(varColMap);
@@ -3126,6 +3241,51 @@ TEST(NaryExpressionTypeErased, isDeterministic) {
 
   EXPECT_TRUE(makeTypeErasedOrExpression(var(), var())->isDeterministic());
   EXPECT_FALSE(makeTypeErasedOrExpression(var(), rand())->isDeterministic());
+}
+
+// Test the functions that inspect the structure of an expression:
+// `splitConjunction`, `isAndExpression`, `isOrExpression` and `getComparison`.
+TEST(SparqlExpression, structureInspection) {
+  using enum valueIdComparators::Comparison;
+
+  // A FILTER with five conjuncts, one of which is an `||`.
+  auto query = ad_utility::testing::parseQuery(
+      "SELECT * { ?a ?b ?c FILTER(?a < 1 && ?a <= 2 && ?a > 0 && "
+      "(?b >= 2 || ?c = 3) && ?c != 3) }");
+  const auto& filter = query._rootGraphPattern._filters.at(0).expression_;
+
+  // The FILTER is split into its conjuncts, each with its original input as
+  // descriptor.
+  auto conjuncts = filter.splitConjunction();
+  std::vector<const SparqlExpression*> c;
+  for (const auto& conjunct : conjuncts) {
+    c.push_back(conjunct.getPimpl());
+  }
+  EXPECT_THAT(
+      conjuncts,
+      ::testing::ElementsAre(
+          AD_PROPERTY(SparqlExpressionPimpl, getDescriptor, "?a < 1"),
+          AD_PROPERTY(SparqlExpressionPimpl, getDescriptor, "?a <= 2"),
+          AD_PROPERTY(SparqlExpressionPimpl, getDescriptor, "?a > 0"),
+          AD_PROPERTY(SparqlExpressionPimpl, getDescriptor,
+                      "(?b >= 2 || ?c = 3)"),
+          AD_PROPERTY(SparqlExpressionPimpl, getDescriptor, "?c != 3")));
+
+  // `isAndExpression` and `isOrExpression` recognize only their own operator.
+  EXPECT_TRUE(isAndExpression(*filter.getPimpl()));
+  EXPECT_FALSE(isOrExpression(*filter.getPimpl()));
+  EXPECT_TRUE(isOrExpression(*c[3]));
+  EXPECT_FALSE(isAndExpression(*c[3]));
+
+  // `getComparison` returns the comparison of each of the six relational
+  // expressions, and `std::nullopt` for every other expression.
+  EXPECT_EQ(getComparison(*c[0]), LT);
+  EXPECT_EQ(getComparison(*c[1]), LE);
+  EXPECT_EQ(getComparison(*c[2]), GT);
+  EXPECT_EQ(getComparison(*c[3]->children()[0]), GE);
+  EXPECT_EQ(getComparison(*c[3]->children()[1]), EQ);
+  EXPECT_EQ(getComparison(*c[4]), NE);
+  EXPECT_EQ(getComparison(*c[3]), std::nullopt);
 }
 
 }  // anonymous namespace

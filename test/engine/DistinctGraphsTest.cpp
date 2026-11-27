@@ -13,8 +13,9 @@
 
 #include "../util/IndexTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
-#include "engine/DistinctGraphs.h"
+#include "../util/VariableToColumnMapTestHelpers.h"
 #include "engine/VariableToColumnMap.h"
+#include "engine/operation/DistinctGraphs.h"
 #include "global/Constants.h"
 #include "index/TripleComponentConversions.h"
 #include "rdfTypes/Variable.h"
@@ -132,7 +133,7 @@ TEST(DistinctGraphs, getResultSortedOn) {
 TEST(DistinctGraphs, isDistinctBy) {
   auto dg = makeDistinctGraphs();
 
-  EXPECT_TRUE(dg.isDistinctBy({0}));
+  EXPECT_TRUE(dg.isDistinctBy(std::vector<ColumnIndex>{0}));
   EXPECT_FALSE(dg.isDistinctBy({}));
 }
 
@@ -150,7 +151,8 @@ TEST(DistinctGraphs, clone) {
 TEST(DistinctGraphs, computeVariableToColumnMap) {
   auto dg = makeDistinctGraphs();
 
-  VariableToColumnMap expected{{Variable{"?g"}, makeAlwaysDefinedColumn(0)}};
+  auto expected =
+      makeVariableToColumnMap({{Variable{"?g"}, makeAlwaysDefinedColumn(0)}});
   EXPECT_EQ(dg.getExternallyVisibleVariableColumns(), expected);
 }
 

@@ -11,6 +11,8 @@
 #include <gmock/gmock.h>
 
 #include "./util/AllocatorTestHelpers.h"
+#include "./util/LocalVocabTestHelpers.h"
+#include "./util/VariableToColumnMapTestHelpers.h"
 #include "engine/ConstructBatchEvaluator.h"
 #include "engine/ConstructTemplatePreprocessor.h"
 #include "engine/ConstructTripleInstantiator.h"
@@ -18,6 +20,9 @@
 #include "engine/Result.h"
 #include "index/Index.h"
 #include "rdfTypes/Iri.h"
+#include "util/ContainersWithAllocator.h"
+
+using ad_utility::testing::makeLocalVocab;
 
 using namespace std::string_literals;
 using ::testing::Optional;
@@ -32,23 +37,26 @@ auto iriV = Iri::fromIrirefValidated;
 struct ContextWrapper {
   Index _index{ad_utility::makeUnlimitedAllocator<Id>()};
   Result _resultTable{
-      IdTable{ad_utility::testing::makeAllocator()}, {}, LocalVocab{}};
-  // TODO<joka921> `VariableToColumnMap`
-  VariableToColumnMap _hashMap;
+      IdTable{ad_utility::testing::makeAllocator()},
+      qlm::vector<ColumnIndex>{ad_utility::testing::makeAllocator()},
+      makeLocalVocab()};
+  VariableToColumnMap variableColumns_ = makeVariableToColumnMap();
 
   ConstructQueryExportContext createContextForRow(size_t row,
                                                   size_t rowOffset = 0) const {
     return {.resultTableRowIndex_ = row,
             .idTable_ = _resultTable.idTableView(),
             .localVocab_ = _resultTable.localVocab(),
-            ._variableColumns = _hashMap,
+            ._variableColumns = variableColumns_,
             ._qecIndex = _index,
             ._rowOffset = rowOffset};
   }
 
   void setIdTable(IdTable&& table) {
     _resultTable =
-        Result{std::move(table), {}, _resultTable.getSharedLocalVocab()};
+        Result{std::move(table),
+               qlm::vector<ColumnIndex>{ad_utility::testing::makeAllocator()},
+               _resultTable.getSharedLocalVocab()};
   }
 };
 
@@ -69,7 +77,7 @@ std::optional<std::string> evaluate(
   auto rowIdx = exportCtx._rowOffset + exportCtx.resultTableRowIndex_;
 
   // Backs the `dedupId_` of any constant term; must outlive `preprocessed`.
-  LocalVocab localVocabForConstants;
+  LocalVocab localVocabForConstants = makeLocalVocab();
   auto preprocessed = ConstructTemplatePreprocessor::preprocessTerm(
       term, position, exportCtx._variableColumns, exportCtx._qecIndex,
       localVocabForConstants);
@@ -286,7 +294,7 @@ TEST(SparqlDataTypesTest, VariableInvalidNamesThrowException) {
 TEST(SparqlDataTypesTest, VariableEvaluatesCorrectlyBasedOnContext) {
   auto wrapper = prepareContext();
 
-  wrapper._hashMap[Variable{"?var"}] = makeAlwaysDefinedColumn(0);
+  wrapper.variableColumns_[Variable{"?var"}] = makeAlwaysDefinedColumn(0);
   IdTable table{ad_utility::testing::makeAllocator()};
   table.setNumColumns(1);
   const Id value1 = Id::makeFromInt(69);
@@ -339,7 +347,7 @@ TEST(SparqlDataTypesTest, VariableEvaluatesNothingForUnusedName) {
 TEST(SparqlDataTypesTest, VariableEvaluateIsPropagatedCorrectly) {
   auto wrapper = prepareContext();
 
-  wrapper._hashMap[Variable{"?var"}] = makeAlwaysDefinedColumn(0);
+  wrapper.variableColumns_[Variable{"?var"}] = makeAlwaysDefinedColumn(0);
   IdTable table{ad_utility::testing::makeAllocator()};
   table.setNumColumns(1);
   const Id value = Id::makeFromInt(69);

@@ -9,8 +9,6 @@
 #include <algorithm>
 
 #include "backports/algorithm.h"
-#include "engine/NamedResultCacheSerializer.h"
-#include "util/Serializer/FileSerializer.h"
 #include "util/TransparentFunctors.h"
 
 // _____________________________________________________________________________

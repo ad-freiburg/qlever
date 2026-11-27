@@ -18,9 +18,10 @@
 #include <boost/optional.hpp>
 #include <vector>
 
+#include "backports/span.h"
 #include "engine/CheckUsePatternTrick.h"
 #include "engine/QueryExecutionTree.h"
-#include "engine/RuntimeInformation.h"
+#include "engine/operation/RuntimeInformation.h"
 #include "parser/GraphPattern.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/ParsedQuery.h"
@@ -31,7 +32,7 @@ class QueryPlanner {
   using TextLimitMap =
       ad_utility::HashMap<Variable, parsedQuery::TextLimitMetaObject>;
   using TextLimitVec =
-      std::vector<std::pair<Variable, parsedQuery::TextLimitMetaObject>>;
+      qlm::vector<std::pair<Variable, parsedQuery::TextLimitMetaObject>>;
   using CancellationHandle = ad_utility::SharedCancellationHandle;
 
   ParsedQuery::DatasetClauses activeDatasetClauses_;
@@ -47,7 +48,7 @@ class QueryPlanner {
           parsedQuery::GroupGraphPattern::GraphVariableBehaviour::ALL;
 
  public:
-  using JoinColumns = std::vector<std::array<ColumnIndex, 2>>;
+  using JoinColumns = qlm::vector<std::array<ColumnIndex, 2>>;
 
   explicit QueryPlanner(QueryExecutionContext* qec,
                         CancellationHandle cancellationHandle);
@@ -131,7 +132,7 @@ class QueryPlanner {
 
     qlm::vector<qlm::vector<size_t>> _adjLists;
     ad_utility::HashMap<size_t, Node*> _nodeMap;
-    std::list<TripleGraph::Node> _nodeStorage;
+    qlm::list<TripleGraph::Node> _nodeStorage;
 
     qlm::vector<size_t> bfsLeaveOut(size_t startNode,
                                     ad_utility::HashSet<size_t> leaveOut) const;
@@ -188,7 +189,10 @@ class QueryPlanner {
     std::optional<SubtreePlan> substitute_;
 
     // Enforce filter substitution. Replace the existing plan by the filtered
-    // one instead of adding the filtered plan as a candidate.
+    // one instead of adding the filtered plan as a candidate. In the
+    // `KeepUnfiltered` mode of the dynamic programming, the unfiltered plan is
+    // kept as a candidate nevertheless, and the substitute is enforced on the
+    // final plans of the component, see `applyFiltersIfPossible`.
     //
     // NOTE: This may not be used for a `SpatialJoin` that has no child yet, as
     // it will otherwise never have its second child attached.
@@ -198,7 +202,7 @@ class QueryPlanner {
   };
 
   using FiltersAndOptionalSubstitutes =
-      std::vector<FilterAndOptionalSubstitute>;
+      qlm::vector<FilterAndOptionalSubstitute>;
 
   // A helper class to find connected components of an RDF query using DFS.
   class QueryGraph {
@@ -217,20 +221,21 @@ class QueryPlanner {
       explicit Node(const SubtreePlan* plan) : plan_{plan} {}
     };
     // Storage for all the `Node`s that a graph contains.
-    std::vector<std::shared_ptr<Node>> nodes_;
+    qlm::vector<std::shared_ptr<Node>> nodes_;
 
-    // Default constructor
-    QueryGraph() = default;
+    // Construct an empty graph whose nodes are allocated via the `allocator`.
+    explicit QueryGraph(qlever::Allocator<std::shared_ptr<Node>> allocator)
+        : nodes_{allocator} {}
 
    public:
     // Return the indices of the connected component for each of the `node`s.
     // The return value will have exactly the same size as `node`s and
     // `result[i]` will be the index of the connected component of `nodes[i]`.
     // The connected components will be contiguous and start at 0.
-    static std::vector<size_t> computeConnectedComponents(
+    static qlm::vector<size_t> computeConnectedComponents(
         const SubtreePlanVec& nodes,
         const FiltersAndOptionalSubstitutes& filtersAndOptionalSubstitutes) {
-      QueryGraph graph;
+      QueryGraph graph{nodes.get_allocator()};
       graph.setupGraph(nodes, filtersAndOptionalSubstitutes);
       return graph.dfsForAllNodes();
     }
@@ -253,7 +258,7 @@ class QueryPlanner {
     // Run `dfs` repeatedly on nodes that were so far undiscovered until all
     // nodes are discovered, which means that all connected components have been
     // identified. Then return the indices of the connected components.
-    std::vector<size_t> dfsForAllNodes();
+    qlm::vector<size_t> dfsForAllNodes();
   };
 
   TripleGraph createTripleGraph(
@@ -346,7 +351,7 @@ class QueryPlanner {
    */
   struct PlansAndFilters {
     SubtreePlanVec plans_;
-    std::vector<SparqlFilter> filters_;
+    qlm::vector<SparqlFilter> filters_;
   };
 
   PlansAndFilters seedWithScansAndText(const TripleGraph& tg,
@@ -357,14 +362,14 @@ class QueryPlanner {
   // filters with the corresponding substitute subtree plan. This is currently
   // used to translate GeoSPARQL filters to spatial join operations.
   virtual FiltersAndOptionalSubstitutes seedFilterSubstitutes(
-      const std::vector<SparqlFilter>& filters);
+      ql::span<const SparqlFilter> filters);
 
   // Wrap `filters` as `FiltersAndOptionalSubstitutes` without computing any
   // substitutes. This is sufficient for the filter modes that never apply
   // substitutes and avoids constructing throwaway substitute plans (which
   // would also consume internal variable names).
-  static FiltersAndOptionalSubstitutes wrapFiltersWithoutSubstitutes(
-      const std::vector<SparqlFilter>& filters);
+  FiltersAndOptionalSubstitutes wrapFiltersWithoutSubstitutes(
+      ql::span<const SparqlFilter> filters) const;
 
   // TODO<RobinTF> Extract to dedicated module, this has little to do with
   // actual query planning.
@@ -400,7 +405,7 @@ class QueryPlanner {
   ParsedQuery::GraphPattern seedFromNegated(
       const TripleComponent& left, const std::vector<PropertyPath>& paths,
       const TripleComponent& right);
-  static ParsedQuery::GraphPattern seedFromVarOrIri(
+  ParsedQuery::GraphPattern seedFromVarOrIri(
       const TripleComponent& left,
       const ad_utility::sparql_types::VarOrIri& varOrIri,
       const TripleComponent& right);
@@ -408,17 +413,19 @@ class QueryPlanner {
   Variable generateUniqueVarName();
 
   // Creates a tree of unions with the given patterns as the trees leaves
-  static ParsedQuery::GraphPattern uniteGraphPatterns(
+  ParsedQuery::GraphPattern uniteGraphPatterns(
       std::vector<ParsedQuery::GraphPattern>&& patterns);
 
   /**
    * @brief Merges two rows of the dp optimization table using various types of
    * joins.
    * @return A new row for the dp table that contains plans created by joining
-   * the result of a plan in a and a plan in b.
+   * the result of a plan in a and a plan in b, also via the substitutes of
+   * the `filters` (see `createJoinsWithSubstitutes`).
    */
   SubtreePlanVec merge(const SubtreePlanVec& a, const SubtreePlanVec& b,
-                       const TripleGraph& tg) const;
+                       const TripleGraph& tg,
+                       const FiltersAndOptionalSubstitutes& filters) const;
 
   // Create `SubtreePlan`s that join `a` and `b` together. The columns are
   // computed automatically.
@@ -446,16 +453,21 @@ class QueryPlanner {
                                                 const SubtreePlan& b,
                                                 const JoinColumns& jcs) const;
 
-  // Return a pair of join columns (the first from the transitive path
-  // operation, the second from the other operation with which the result of the
-  // transitive path operation is joined). Otherwise return `std::nullopt`, in
-  // which case the full transitive path will be computed, If the Boolean
-  // `leftSideTransitivePath` is true, the column indices of the transitive path
-  // are on the "left side" of the pairs from `jcs`, otherwise they are on the
-  // "right side".
-  static std::optional<std::tuple<size_t, size_t>>
-  getJoinColumnsForTransitivePath(const JoinColumns& jcs,
-                                  bool leftSideTransitivePath);
+  // The columns of the other operation that are joined with the left and the
+  // right side of a transitive path, `std::nullopt` for a side that is not
+  // joined.
+  struct TransitivePathJoinCols {
+    std::optional<size_t> left;
+    std::optional<size_t> right;
+  };
+
+  // Return the columns of the other operation that are joined with the left
+  // and the right side of the transitive path (see `TransitivePathJoinCols`).
+  // If the Boolean `leftSideTransitivePath` is true, the column indices of the
+  // transitive path are on the "left side" of the pairs from `jcs`, otherwise
+  // they are on the "right side". A pair for the graph variable is ignored.
+  static TransitivePathJoinCols getJoinColumnsForTransitivePath(
+      const JoinColumns& jcs, bool leftSideTransitivePath);
 
   // Used internally by `createJoinCandidates`. If `a` or `b` is a transitive
   // path operation and the other input can be bound to this transitive path
@@ -488,6 +500,20 @@ class QueryPlanner {
                                                       const SubtreePlan& b,
                                                       const JoinColumns& jcs);
 
+  // Join `a` and `b` via each filter substitute among the `filters` that is
+  // connected to both of them, for example, a `SpatialJoin` with the left
+  // variable in `a` and the right variable in `b`. This is done only if `a` and
+  // `b` share no variable, otherwise no candidate is returned.
+  //
+  // NOTE: This is the only way in which a non-enforced substitute is applied.
+  // Applied to a single plan, it would give a partial `SpatialJoin` with one
+  // child and a dummy size estimate of 1. The greedy planner would choose such
+  // a partial `SpatialJoin` right away, and two of them for the same filter,
+  // one on each side, could never be merged (see #4015).
+  SubtreePlanVec createJoinsWithSubstitutes(
+      const SubtreePlan& a, const SubtreePlan& b,
+      const FiltersAndOptionalSubstitutes& filters) const;
+
   // Helper that generates `IndexScan` query plans on materialized views if they
   // can be used to avoid joins between some of the `triples`. The resulting
   // plans for part of the `triples` are given in a vector of query planning
@@ -511,7 +537,7 @@ class QueryPlanner {
                                 const SubtreePlanMatrix& dpTab) const;
 
   SubtreePlanVec getPatternTrickRow(
-      const std::vector<Alias>& aliases, const SubtreePlanMatrix& dpTab,
+      ql::span<const Alias> aliases, const SubtreePlanMatrix& dpTab,
       const checkUsePatternTrick::PatternTrickTuple& patternTrickTuple);
 
   SubtreePlanVec getHavingRow(const ParsedQuery& pq,
@@ -528,7 +554,7 @@ class QueryPlanner {
 
   std::string getPruningKey(
       const SubtreePlan& plan,
-      const std::vector<ColumnIndex>& orderedOnColumns) const;
+      const qlm::vector<ColumnIndex>& orderedOnColumns) const;
 
   // Configure the behavior of the `applyFiltersIfPossible` function below.
   enum class FilterMode {
@@ -536,19 +562,16 @@ class QueryPlanner {
     // already bind all the variables that are used in the filter. The plans
     // with the added filters are added to the candidate set. This mode is used
     // in the dynamic programming approach, where we don't apply the filters
-    // greedily. Applying filter substitutes is permitted in this mode.
+    // greedily. The enforced filter substitutes are applied in this mode, too.
     KeepUnfiltered,
     // Only apply matching filters (see above), but the plans with added filters
-    // replace the plans without filters. This is used in the greedy approach,
-    // where filters are always applied as early as possible. Applying filter
-    // substitutes is permitted in this mode.
-    ReplaceUnfiltered,
-    // Same as ReplaceUnfiltered, but do not apply filter substitutes.
+    // replace the plans without filters. Filter substitutes are not applied.
+    // This is used in the greedy approach, where filters are always applied as
+    // early as possible, and for the final plans of the dynamic programming.
     ReplaceUnfilteredNoSubstitutes,
-    // Only apply filter substitutes, but do not apply regular filters.
-    // Required by the dynamic programming approach for a connected component
-    // with fewer than 2 seeds, where a substitute is applicable. Currently
-    // needed for a `SpatialJoin` substitute with a fixed-value side.
+    // Only apply the enforced filter substitutes (currently a `SpatialJoin`
+    // with a fixed-value side), but do not apply regular filters. Used by the
+    // greedy approach and for the final plans of the dynamic programming.
     SeedSubstitutesOnly,
     // Apply all filters (also the nonmatching ones) and replace the unfiltered
     // plans. This has to be called at the end of parsing a group graph pattern
@@ -625,7 +648,7 @@ class QueryPlanner {
    * it as a filter later on).
    */
   SubtreePlanMatrix fillDpTab(const TripleGraph& graph,
-                              std::vector<SparqlFilter> fs,
+                              qlm::vector<SparqlFilter> fs,
                               TextLimitMap& textLimits,
                               const SubtreePlanMatrix& children,
                               ReplacementPlans replacementPlans);
@@ -669,8 +692,7 @@ class QueryPlanner {
   // Note: We also need the added filters, because they behave like additional
   // graph nodes wrt the performance of the DP based query planner.
   size_t countSubgraphs(std::vector<const SubtreePlan*> graph,
-                        const std::vector<SparqlFilter>& filters,
-                        size_t budget);
+                        ql::span<const SparqlFilter> filters, size_t budget);
 
   // Creates a SubtreePlan for the given text leaf node in the triple graph.
   // While doing this the TextLimitMetaObjects are created and updated according
@@ -707,7 +729,7 @@ class QueryPlanner {
 
     // Triples from BasicGraphPatterns that can be joined arbitrarily
     // with each other and with the contents of  `candidatePlans_`
-    parsedQuery::BasicGraphPattern candidateTriples_{};
+    parsedQuery::BasicGraphPattern candidateTriples_;
 
     // The variables that have been used by the children of the `rootPattern_`
     // which we have dealt with so far. They must not be the target of a later
@@ -731,8 +753,9 @@ class QueryPlanner {
           rootPattern_{rootPattern},
           qec_{planner._qec},
           candidatePlans_{allocator()},
+          candidateTriples_{{{}, allocator()}},
           filtersAndSubst_{
-              wrapFiltersWithoutSubstitutes(rootPattern->_filters)} {}
+              planner.wrapFiltersWithoutSubstitutes(rootPattern->_filters)} {}
 
     // This function is called for each of the graph patterns that are contained
     // in the `rootPattern_`. It dispatches to the various `visit...`functions

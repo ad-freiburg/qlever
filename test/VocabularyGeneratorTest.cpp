@@ -9,14 +9,13 @@
 #include <array>
 #include <cstdlib>
 #include <ctime>
-#include <fstream>
 #include <functional>
 #include <iostream>
 #include <memory>
 #include <string>
 #include <vector>
 
-#include "./index/vocabulary_merger/VocabularyMergerTestHelpers.h"
+#include "./index/vocabularyMerger/VocabularyMergerTestHelpers.h"
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/filesystem.h"
 #include "global/Constants.h"
@@ -168,24 +167,6 @@ class MergeVocabularyTest : public ::testing::Test {
     ql::error_code errorCode;
     ql::filesystem::remove_all(basePath_, errorCode);
   }
-
-  // read all bytes from a file (e.g. to check equality of small test files)
-  static std::pair<bool, std::vector<char>> readAllBytes(
-      const std::string& filename) {
-    using std::ifstream;
-    ifstream ifs(filename, std::ios::binary | std::ios::ate);
-    if (!ifs.is_open()) {
-      return std::make_pair(false, std::vector<char>());
-    }
-    ifstream::pos_type pos = ifs.tellg();
-
-    std::vector<char> result(pos);
-
-    ifs.seekg(0, std::ios::beg);
-    ifs.read(&result[0], pos);
-
-    return std::make_pair(true, result);
-  }
 };
 
 // Test for merge Vocabulary
@@ -227,7 +208,7 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
 // _____________________________________________________________________________
 TEST(MergeVocabulary, mergeVocabularyAssertion) {
   // The violated order is only detected if the expensive checks are enabled
-  // (see `buildSegment` in `index/vocabulary_merger/Segment.h`).
+  // (see `buildSegment` in `index/vocabularyMerger/Segment.h`).
   if constexpr (!ad_utility::areExpensiveChecksEnabled) {
     GTEST_SKIP();
   }

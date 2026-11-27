@@ -18,16 +18,16 @@ using ad_utility::IdTableOrSharedIdTableView;
 // _____________________________________________________________________________
 TEST(IdTableOrSharedIdTableView, owningTable) {
   auto table = makeIdTableFromVector({{1, 2}, {3, 4}});
-  const auto* data = table.getColumn(0).data();
+  const auto* data = memoryOf(table.getColumn(0));
   IdTableOrSharedIdTableView t{std::move(table)};
   EXPECT_TRUE(t.ownsRows());
   EXPECT_EQ(t.view(), makeIdTableFromVector({{1, 2}, {3, 4}}));
 
   // Moving doesn't invalidate the memory of the rows.
   IdTableOrSharedIdTableView moved{std::move(t)};
-  EXPECT_EQ(moved.view().getColumn(0).data(), data);
+  EXPECT_EQ(memoryOf(moved.view().getColumn(0)), data);
   IdTable extracted = std::move(moved).extractTable();
-  EXPECT_EQ(extracted.getColumn(0).data(), data);
+  EXPECT_EQ(memoryOf(extracted.getColumn(0)), data);
   EXPECT_EQ(extracted, makeIdTableFromVector({{1, 2}, {3, 4}}));
 }
 

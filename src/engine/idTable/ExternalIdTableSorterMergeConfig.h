@@ -26,7 +26,7 @@
 #include "util/CompressedBlockFile.h"
 #include "util/Exception.h"
 #include "util/GlobalExecutor.h"
-#include "util/MemorySize/MemorySize.h"
+#include "util/memorySize/MemorySize.h"
 #include "util/parallelBlockMerge/MergeOptions.h"
 
 // How the merge phase of a `CompressedExternalIdTableSorter` (see
@@ -78,6 +78,14 @@ constexpr size_t mergePhaseOutputBlocksPerChunk(
 // pays off. The low positive levels 1 and 2 are a bad choice for this data.
 constexpr inline CompressedBlockFile::CompressionLevel
     MERGE_PHASE_SPILL_COMPRESSION = -5;
+
+// The ZSTD compression level of the presorted runs of a
+// `CompressedExternalIdTableWriter`.
+//
+// NOTE: The runs are written once and read back once (by the merge), so a fast
+// level is used. Level 1 compresses the (typically well compressible) columns
+// of IDs almost as well as the ZSTD default of 3, but roughly twice as fast.
+constexpr inline int DEFAULT_RUN_COMPRESSION = 1;
 
 // The smallest number of rows that an output block of the merge phase may have.
 // The number of chunks that are merged concurrently is chosen as large as the
