@@ -119,6 +119,16 @@ void addBind(const parsedQuery::Bind& bind, Definitions& defs,
 }  // namespace
 
 // _____________________________________________________________________________
+std::optional<TripleComponent> Definitions::getConstant(
+    const Variable& variable) const {
+  auto it = constants_.find(variable);
+  if (it == constants_.end() || it->second.size() != 1) {
+    return std::nullopt;
+  }
+  return it->second.front();
+}
+
+// _____________________________________________________________________________
 Definitions collectDefinitions(
     ql::span<const parsedQuery::GraphPatternOperation> group) {
   Definitions defs;

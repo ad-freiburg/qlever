@@ -32,6 +32,7 @@
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryRewriteUtils.h"
+#include "engine/filterFacts/Canonicalizer.h"
 #include "engine/operation/Bind.h"
 #include "engine/operation/CartesianProductJoin.h"
 #include "engine/operation/CountAvailablePredicates.h"
@@ -423,51 +424,46 @@ TripleKind getTripleKind(const SparqlTriple& triple) {
   return getTripleKind(predicate.value());
 }
 
-// _____________________________________________________________________________
-void QueryPlanner::GraphPatternPlanner::addConstants(const p::Values& values) {
-  // Only a `VALUES` clause with a single row binds its variables to a single
-  // constant, except for its `UNDEF` values.
-  const auto& inlineValues = values._inlineValues;
-  if (inlineValues._values.size() != 1) {
+namespace {
+// Replace each variable of `triple` that has a single constant in `defs` by
+// this constant, except for an internal IRI (like `ql:langtag`). The `VALUES`
+// or `BIND` clause that binds the variable is still planned, so the variable
+// remains bound in the result (usually as a column of the scan, see
+// `addConstantsAsColumns` in `fillDpTab`).
+//
+// NOTE 1: The fixed constant allows for index scans with fewer variables, which
+// are sorted by the remaining variables and thus avoid joins and sorts.
+//
+// NOTE 2: Only a triple that is evaluated by a plain index scan is changed (the
+// special predicates, e.g. `ql:has-predicate`, require variables in certain
+// positions, see `TripleKind`).
+//
+// NOTE 3: A triple with an internal IRI is evaluated on the internal
+// permutation, which contains other triples than the regular one that the
+// triple with the variable is evaluated on.
+void substituteConstants(SparqlTriple& triple,
+                         const filterFacts::Definitions& defs) {
+  if (defs.constants_.empty() ||
+      getTripleKind(triple) != TripleKind::IndexScan) {
     return;
   }
-  for (const auto& [variable, value] :
-       ::ranges::views::zip(inlineValues._variables, inlineValues._values[0])) {
-    if (!value.isUndef() && !qlever::isInternalComponent(value)) {
-      constants_.emplace(variable, value);
+
+  // Return the constant of `variable`, unless it has none or it is internal.
+  auto getConstant = [&defs](const Variable& variable) {
+    auto constant = defs.getConstant(variable);
+    if (constant.has_value() && qlever::isInternalComponent(constant.value())) {
+      return std::optional<TripleComponent>{};
     }
-  }
-}
-
-// _____________________________________________________________________________
-void QueryPlanner::GraphPatternPlanner::addConstants(const p::Bind& bind) {
-  // A `BIND` of an undefined `Id` (for example, of an unknown function in the
-  // syntax test mode) does not bind its variable to a constant.
-  auto constant = bind._expression.getConstantValue();
-  if (constant.has_value() &&
-      !(constant->isId() && constant->getId().isUndefined()) &&
-      !qlever::isInternalComponent(constant.value())) {
-    constants_.emplace(bind._target, std::move(constant.value()));
-  }
-}
-
-// _____________________________________________________________________________
-void QueryPlanner::GraphPatternPlanner::substituteConstants(
-    SparqlTriple& triple) const {
-  // Only a plain index scan is changed (the special predicates require
-  // variables in certain positions).
-  if (constants_.empty() || getTripleKind(triple) != TripleKind::IndexScan) {
-    return;
-  }
+    return constant;
+  };
 
   // Replace the variable in `component` by its constant if it has one.
-  auto substitute = [this](TripleComponent& component) {
+  auto substitute = [&getConstant](TripleComponent& component) {
     if (!component.isVariable()) {
       return;
     }
-    auto it = constants_.find(component.getVariable());
-    if (it != constants_.end()) {
-      component = it->second;
+    if (auto constant = getConstant(component.getVariable())) {
+      component = std::move(constant).value();
     }
   };
   substitute(triple.s_);
@@ -476,14 +472,15 @@ void QueryPlanner::GraphPatternPlanner::substituteConstants(
   // A variable predicate can only be replaced by an IRI, and only if the triple
   // remains a plain index scan.
   if (const auto* variable = std::get_if<Variable>(&triple.p_)) {
-    auto it = constants_.find(*variable);
-    if (it != constants_.end() && it->second.isIri() &&
-        getTripleKind(it->second.getIri().toStringRepresentation()) ==
+    auto constant = getConstant(*variable);
+    if (constant.has_value() && constant->isIri() &&
+        getTripleKind(constant->getIri().toStringRepresentation()) ==
             TripleKind::IndexScan) {
-      triple.p_ = PropertyPath::fromIri(it->second.getIri());
+      triple.p_ = PropertyPath::fromIri(constant->getIri());
     }
   }
 }
+}  // namespace
 
 // _____________________________________________________________________________
 SubtreePlanVec QueryPlanner::optimize(ParsedQuery::GraphPattern* rootPattern) {
@@ -493,6 +490,7 @@ SubtreePlanVec QueryPlanner::optimize(ParsedQuery::GraphPattern* rootPattern) {
   splitFiltersWithFacts(rootPattern->_filters);
   QueryPlanner::GraphPatternPlanner optimizer{*this, rootPattern};
   for (auto& child : rootPattern->_graphPatterns) {
+    ++optimizer.numVisitedChildren_;
     child.visit([&optimizer](auto& arg) {
       return optimizer.graphPatternOperationVisitor(arg);
     });
@@ -3527,7 +3525,6 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
   } else if constexpr (std::is_same_v<T, p::TransPath>) {
     return visitTransitivePath(arg);
   } else if constexpr (std::is_same_v<T, p::Values>) {
-    addConstants(arg);
     SubtreePlan valuesPlan = makeSubtreePlan<Values>(qec_, arg._inlineValues);
     visitGroupOptionalOrMinus(singlePlanVec(std::move(valuesPlan)));
   } else if constexpr (std::is_same_v<T, p::Service>) {
@@ -3630,7 +3627,6 @@ void QueryPlanner::GraphPatternPlanner::visitBind(const parsedQuery::Bind& v) {
   // Assumption for now: BIND does not commute. This is always safe.
   optimizeCommutatively();
   AD_CORRECTNESS_CHECK(candidatePlans_.size() == 1);
-  addConstants(v);
   auto lastRow = std::move(candidatePlans_.at(0));
   candidatePlans_.at(0).clear();
   for (const auto& a : lastRow) {
@@ -3935,11 +3931,19 @@ void QueryPlanner::GraphPatternPlanner::visitSubquery(
 
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::optimizeCommutatively() {
-  // Replace the variables of the triples by their constants (only now, as a
-  // `VALUES` clause after a triple also binds its variables, see
-  // `substituteConstants`).
-  ql::ranges::for_each(candidateTriples_._triples,
-                       [this](auto& triple) { substituteConstants(triple); });
+  // Replace the variables of the triples by their constants from the children
+  // of the `rootPattern_` visited so far (only now, as a `VALUES` clause after
+  // a triple also binds its variables).
+  //
+  // NOTE: A constant from a later child must not be used. For example, in
+  // `?x <p> ?o OPTIONAL { ?x <q> ?y } VALUES ?x { <a> }`, the triple without
+  // `?x` would make the `OPTIONAL` bind `?x` to any subject of `<q>`.
+  auto defs = filterFacts::collectDefinitions(
+      ql::span<const p::GraphPatternOperation>{rootPattern_->_graphPatterns}
+          .first(numVisitedChildren_));
+  ql::ranges::for_each(candidateTriples_._triples, [&defs](auto& triple) {
+    substituteConstants(triple, defs);
+  });
 
   auto replacementPlans =
       planner_.createMaterializedViewJoinReplacements(candidateTriples_);
