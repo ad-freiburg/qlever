@@ -402,8 +402,8 @@ TEST(GeoBlockWriter, sameGeometryStoreAsWordWriter) {
   // store, once `libspatialjoin` no longer writes the padding bytes of its
   // `BoxId`s (`std::pair<int32_t, uint8_t>`) uninitialized to them.
   for (const auto& suffix : GV::fileSuffixes()) {
-    auto fileA = readFile(absl::StrCat(filenameA, suffix));
-    auto fileB = readFile(absl::StrCat(filenameB, suffix));
+    auto fileA = qlever::util::readBinaryFile(absl::StrCat(filenameA, suffix));
+    auto fileB = qlever::util::readBinaryFile(absl::StrCat(filenameB, suffix));
     if (ql::starts_with(suffix, ".geostore.")) {
       EXPECT_EQ(fileA.size(), fileB.size()) << suffix;
     } else {
