@@ -94,6 +94,7 @@ class PolymorphicVocabulary {
         });
   }
 
+
   // The geo cell grid of an underlying `GeoVocabulary`, or `std::nullopt` if
   // the active vocabulary is not a `SplitVocabulary` holding one with a grid.
   std::optional<ad_utility::GeoCellGrid> getGeoCellGrid() const {
@@ -103,6 +104,36 @@ class PolymorphicVocabulary {
           return vocab.getGeoCellGrid();
         },
         [](const auto& vocab) -> std::optional<ad_utility::GeoCellGrid> {
+          static_assert(
+              NeverProvidesGeometryInfo<std::decay_t<decltype(vocab)>>);
+          return std::nullopt;
+        });
+  }
+
+  // See `SplitVocabulary::getGeometryStorePrefix`, `std::nullopt` if the active
+  // vocabulary is not a `SplitVocabulary`.
+  std::optional<std::string> getGeometryStorePrefix() const {
+    return ad_utility::visitIf(
+        vocab_,
+        [](const OnDiskCompressedGeoSplit& vocab) {
+          return vocab.getGeometryStorePrefix();
+        },
+        [](const auto& vocab) -> std::optional<std::string> {
+          static_assert(
+              NeverProvidesGeometryInfo<std::decay_t<decltype(vocab)>>);
+          return std::nullopt;
+        });
+  }
+
+  // See `SplitVocabulary::getGeoVocabularyPosition`, `std::nullopt` if the
+  // active vocabulary is not a `SplitVocabulary`.
+  std::optional<uint64_t> getGeoVocabularyPosition(uint64_t index) const {
+    return ad_utility::visitIf(
+        vocab_,
+        [index](const OnDiskCompressedGeoSplit& vocab) {
+          return vocab.getGeoVocabularyPosition(index);
+        },
+        [](const auto& vocab) -> std::optional<uint64_t> {
           static_assert(
               NeverProvidesGeometryInfo<std::decay_t<decltype(vocab)>>);
           return std::nullopt;

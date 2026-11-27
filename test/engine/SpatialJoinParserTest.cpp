@@ -120,6 +120,60 @@ TEST(SpatialJoinParser, AddValueIdToQueue) {
   checkPrefilterBox(actualBox2, boundingBoxUniAndLondon);
 }
 
+// Test that the ID and the bounding box of a geometry in the persisted geometry
+// store are taken from the job if it has both (as precomputed in a
+// materialized view), and otherwise from the `GeometryInfo`.
+TEST(SpatialJoinParser, StoredGeometryFromPrecomputedColumns) {
+  using enum SpatialJoinType::Enum;
+
+  // An index with a geometry store, and the ID of Uni Freiburg in it.
+  ad_utility::testing::TestIndexConfig config{buildLibSJTestDataset()};
+  config.vocabularyType = ad_utility::VocabularyType{
+      ad_utility::VocabularyType::Enum::OnDiskCompressedGeoSplit};
+  config.parserBufferSize = 10_kB;
+  auto qec = ad_utility::testing::getQec(std::move(config));
+  const auto& index = qec->getIndex();
+  auto [vMap, nMap] = resolveValIdTable(qec, 6);
+  auto idxUni = getValId(nMap, "uni");
+  auto uniInfo = index.getVocab().getGeoInfo(idxUni.getVocabIndex());
+  ASSERT_TRUE(uniInfo.has_value());
+  auto uniId = uniInfo.value().getGeometryStoreId();
+  ASSERT_TRUE(uniId.has_value());
+  constexpr uint64_t otherId = 4711;
+  ASSERT_NE(uniId.value().id_, otherId);
+
+  // A parser that uses the persisted geometry store.
+  SweeperResult results;
+  SweeperDistResult resultDists;
+  auto cfg = makeSweeperCfg(LibSpatialJoinConfig{INTERSECTS}, results,
+                            resultDists, -1);
+  std::string sweeperPath = qec->getIndex().getOnDiskBase() + ".spatialjoin";
+  sj::GeometryStore store{cfg, ".", sweeperPath, false};
+  sj::SweepEventList events{cfg, ".", sweeperPath};
+  WKTParser parser(&store, events.addCb(0), 1, false, std::nullopt, index,
+                   true);
+
+  // Uni Freiburg three times: without precomputed values, with only the ID,
+  // and with the ID and a bounding box that are both not the ones of Uni
+  // Freiburg.
+  ad_utility::BoundingBox otherBox{GeoPoint{1, 2}, GeoPoint{3, 4}};
+  parser.addValueIdToQueue(idxUni, 0, std::nullopt);
+  parser.addValueIdToQueue(idxUni, 1, std::nullopt, otherId);
+  parser.addValueIdToQueue(idxUni, 2, otherBox, otherId);
+  parser.done();
+  auto rows = parser.takeStoredRows();
+  ql::ranges::sort(rows, {}, &StoredGeometryRow::row_);
+  ASSERT_EQ(rows.size(), 3);
+
+  // Only the last row takes the ID and the bounding box from the job (so the
+  // `GeometryInfo` was not read for it).
+  EXPECT_EQ(rows[0].geometryStoreId_, uniId.value().id_);
+  EXPECT_EQ(rows[1].geometryStoreId_, uniId.value().id_);
+  EXPECT_EQ(rows[2].geometryStoreId_, otherId);
+  EXPECT_EQ(rows[1].boundingBox_, rows[0].boundingBox_);
+  EXPECT_NE(rows[2].boundingBox_, rows[0].boundingBox_);
+}
+
 // Test that a parser can be destroyed without `done()` while its worker
 // threads still have work, as happens when a query is cancelled during the
 // parsing. The threads must stop before the members of the parser that they

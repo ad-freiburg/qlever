@@ -22,8 +22,17 @@
 #include "rdfTypes/Variable.h"
 #include "util/ContainersWithAllocator.h"
 
+// The columns of a child of a `SpatialJoin` with precomputed information about
+// the geometries in its join column: the corners of their bounding boxes and,
+// if available, their IDs in the persisted `sj::GeometryStore` (see
+// `SpatialJoin::cloneWithBoundingBoxColumns`).
+struct SpatialJoinPrecomputedColumns {
+  ColumnIndex lowerLeft_;
+  ColumnIndex upperRight_;
+  std::optional<ColumnIndex> geometryStoreId_;
+};
 using SpatialJoinBoundingBoxColumns =
-    std::optional<std::pair<ColumnIndex, ColumnIndex>>;
+    std::optional<SpatialJoinPrecomputedColumns>;
 
 // Helper providing the left and right input tables and column indices to
 // each spatial join algorithm.
@@ -190,13 +199,18 @@ class SpatialJoin : public Operation {
   static std::pair<Variable, Variable> getBoundingBoxColumnNames(
       const Variable& joinVar);
 
+  // Get the internal variable name of the column with the IDs of the
+  // geometries in the persisted `sj::GeometryStore`.
+  static Variable getGeometryStoreIdColumnName(const Variable& joinVar);
+
   // Check if the child provides bounding boxes and if yes, return the column
   // indices.
   SpatialJoinBoundingBoxColumns getBoundingBoxColumnIndices(
       std::shared_ptr<QueryExecutionTree> child, const Variable& joinVar) const;
 
   // Make a clone of this `SpatialJoin` which uses precomputed bounding boxes of
-  // the geometries from an underlying `MaterializedView` if possible.
+  // the geometries from an underlying `MaterializedView` if possible, and also
+  // their IDs in the persisted `sj::GeometryStore` if the view has them.
   std::optional<std::shared_ptr<SpatialJoin>> cloneWithBoundingBoxColumns()
       const;
 

@@ -291,9 +291,9 @@ inline void runParsingAndSweeper(
 
   // Run first parsing step (left side)
   auto [aggBoundingBoxLeft, numGeomAddedLeft, numGeomDroppedLeft,
-        numGeomInvalidLeft, numThreadsLeft] =
+        numGeomInvalidLeft, numThreadsLeft, storedRowsLeft] =
       sjAlgo.parse({prepared.idTableLeft_, prepared.leftJoinCol_, std::nullopt},
-                   store, eventsLeft.addCb(storeId), 1, std::nullopt);
+                   {store, storeId, std::nullopt, eventsLeft}, 1, std::nullopt);
   // Only the prefilter of the parser is tested here, so the filter box of the
   // store (see `LibspatialjoinAlgorithm::run`) is not set.
 
@@ -303,10 +303,10 @@ inline void runParsingAndSweeper(
     prefilterBox = store.getPaddedBoundingBox(aggBoundingBoxLeft);
   }
   auto [aggBoundingBoxRight, numGeomAddedRight, numGeomDroppedRight,
-        numGeomInvalidRight, numThreadsRight] =
+        numGeomInvalidRight, numThreadsRight, storedRowsRight] =
       sjAlgo.parse(
-          {prepared.idTableRight_, prepared.rightJoinCol_, std::nullopt}, store,
-          eventsRight.addCb(storeId), 1, prefilterBox);
+          {prepared.idTableRight_, prepared.rightJoinCol_, std::nullopt},
+          {store, storeId, std::nullopt, eventsRight}, 1, prefilterBox);
 
   // Check counters
   size_t numSkipped = numGeomDroppedLeft + numGeomDroppedRight;

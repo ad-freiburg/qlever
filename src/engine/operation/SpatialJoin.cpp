@@ -742,8 +742,12 @@ std::pair<Variable, Variable> SpatialJoin::getBoundingBoxColumnNames(
 }
 
 // _____________________________________________________________________________
-std::optional<std::pair<ColumnIndex, ColumnIndex>>
-SpatialJoin::getBoundingBoxColumnIndices(
+Variable SpatialJoin::getGeometryStoreIdColumnName(const Variable& joinVar) {
+  return Variable{absl::StrCat("?_ql_sj_gsid_", joinVar.name().substr(1))};
+}
+
+// _____________________________________________________________________________
+SpatialJoinBoundingBoxColumns SpatialJoin::getBoundingBoxColumnIndices(
     std::shared_ptr<QueryExecutionTree> child, const Variable& joinVar) const {
   auto [lowerLeft, upperRight] = getBoundingBoxColumnNames(joinVar);
   auto colLowerLeft = child->getVariableColumnOrNullopt(lowerLeft);
@@ -751,8 +755,9 @@ SpatialJoin::getBoundingBoxColumnIndices(
   if (!colLowerLeft.has_value() || !colUpperRight.has_value()) {
     return std::nullopt;
   }
-  return std::pair<ColumnIndex, ColumnIndex>{colLowerLeft.value(),
-                                             colUpperRight.value()};
+  return SpatialJoinPrecomputedColumns{
+      colLowerLeft.value(), colUpperRight.value(),
+      child->getVariableColumnOrNullopt(getGeometryStoreIdColumnName(joinVar))};
 }
 
 // _____________________________________________________________________________
@@ -785,10 +790,13 @@ SpatialJoin::cloneWithBoundingBoxColumns() const {
       singleBindPushDown, &sparqlExpression::makeEnvelopeLowerLeftExpression);
   auto bindUpperRight = absl::bind_front(
       singleBindPushDown, &sparqlExpression::makeEnvelopeUpperRightExpression);
+  auto bindGeometryStoreId = absl::bind_front(
+      singleBindPushDown, &sparqlExpression::makeGeometryStoreIdExpression);
 
-  // Try to push down both lower left and upper right `BIND`s into a child.
-  // Return the new child if it was successful and `nullopt` otherwise.
-  auto tryPushDown = [bindLowerLeft, bindUpperRight](
+  // Try to push down both lower left and upper right `BIND`s into a child, and
+  // then the `BIND` of the geometry store ID. Return the new child if at least
+  // the first two were successful and `nullopt` otherwise.
+  auto tryPushDown = [bindLowerLeft, bindUpperRight, bindGeometryStoreId](
                          std::shared_ptr<QueryExecutionTree> child,
                          const Variable& geomVar)
       -> std::optional<std::shared_ptr<QueryExecutionTree>> {
@@ -802,7 +810,17 @@ SpatialJoin::cloneWithBoundingBoxColumns() const {
     }
 
     // Try to push down `ql:envelopeUpperRight`.
-    return bindUpperRight(pushDownLowerLeft.value(), geomVar, varUpperRight);
+    auto pushDownUpperRight =
+        bindUpperRight(pushDownLowerLeft.value(), geomVar, varUpperRight);
+    if (!pushDownUpperRight.has_value()) {
+      return std::nullopt;
+    }
+
+    // Try to push down `ql:geometryStoreId` (it is only useful together with
+    // the bounding box, see `WKTParser::storedGeometryRow`).
+    return bindGeometryStoreId(pushDownUpperRight.value(), geomVar,
+                               getGeometryStoreIdColumnName(geomVar))
+        .value_or(pushDownUpperRight.value());
   };
 
   // Try to push down both `BIND`s into each of the children. If at least one of

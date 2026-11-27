@@ -26,8 +26,11 @@
 #include "backports/span.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoinConfig.h"
+#include "engine/operation/Bind.h"
 #include "engine/operation/IndexScan.h"
 #include "engine/operation/SpatialJoin.h"
+#include "engine/sparqlExpressions/LiteralExpression.h"
+#include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/spatialJoinAlgorithms/BoundingBoxAlgorithm.h"
 #include "index/vocabulary/VocabularyType.h"
 #include "parser/SpatialQuery.h"
@@ -2215,5 +2218,166 @@ TEST(SpatialJoin, LibspatialJoinWithAbsoluteOnDiskBase) {
 }
 
 }  // namespace runtimeParameters
+
+// Test that a `libspatialjoin` spatial join on an index with a geometry store
+// (built with the geo split vocabulary, see `GeoVocabulary`) takes the
+// geometries of the geo vocabulary from the store, and has the same result as
+// on an index without a geometry store for each join type.
+TEST(SpatialJoin, LibspatialJoinWithGeometryStore) {
+  // Areas, of which one is the object of two subjects, a line, an invalid
+  // literal and points, which are `GeoPoint`s and thus not in the store.
+  std::string kg = createTrueDistanceDataset();
+  addArea(kg, "7", "\"Minster Freiburg Area again\"", areaMuenster);
+  addArea(kg, "8", "\"Georges-Koehler-Allee\"", lineSegmentGeorgesKoehlerAllee);
+  addArea(kg, "9", "\"Invalid\"", invalidWkt);
+  using VocabEnum = ad_utility::VocabularyType::Enum;
+  auto makeQec = [&kg](VocabEnum vocabularyType) {
+    ad_utility::testing::TestIndexConfig config{kg};
+    config.vocabularyType = ad_utility::VocabularyType{vocabularyType};
+    config.parserBufferSize = 10_kB;
+    return ad_utility::testing::getQec(std::move(config));
+  };
+  auto qecWithoutStore = makeQec(VocabEnum::OnDiskCompressed);
+  auto qecWithStore = makeQec(VocabEnum::OnDiskCompressedGeoSplit);
+
+  // Join all geometries with all geometries using the given `task` and return
+  // the sorted result rows and the number of rows from the geometry store.
+  auto run = [](QueryExecutionContext* qec, LibSpatialJoinConfig task) {
+    SpatialJoinConfiguration config{task,
+                                    Variable{"?geo1"},
+                                    Variable{"?geo2"},
+                                    Variable{"?dist"},
+                                    PayloadVariables::all(),
+                                    SpatialJoinAlgorithm::LIBSPATIALJOIN};
+    config.distanceUnit_ = UnitOfMeasurement::METERS;
+    auto tree = ad_utility::makeExecutionTree<SpatialJoin>(
+        qec, std::move(config),
+        buildIndexScan(qec, {"?obj1", std::string{"<asWKT>"}, "?geo1"}),
+        buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?geo2"}));
+    auto spatialJoin =
+        std::dynamic_pointer_cast<SpatialJoin>(tree->getRootOperation());
+    auto result = spatialJoin->computeResult(false);
+    auto rows = printTable(qec, &result);
+    ql::ranges::sort(rows);
+    auto details = spatialJoin->runtimeInfo().details_;
+    return std::pair{
+        rows, static_cast<size_t>(details["num-rows-from-geometry-store"])};
+  };
+
+  // The four valid literals of the geo vocabulary (five rows) are taken from
+  // the store on each side, and the results are the same as without the store
+  // (including the pairs of a stored geometry with itself, see `EQUALS`).
+  using enum SpatialJoinType::Enum;
+  for (auto task :
+       {LibSpatialJoinConfig{INTERSECTS}, LibSpatialJoinConfig{CONTAINS},
+        LibSpatialJoinConfig{WITHIN}, LibSpatialJoinConfig{EQUALS},
+        LibSpatialJoinConfig{WITHIN_DIST, 100'000, std::nullopt}}) {
+    auto [rowsWithoutStore, storedWithoutStore] = run(qecWithoutStore, task);
+    auto [rowsWithStore, storedWithStore] = run(qecWithStore, task);
+    EXPECT_EQ(storedWithoutStore, 0);
+    EXPECT_EQ(storedWithStore, 2 * 5);
+    EXPECT_FALSE(rowsWithStore.empty());
+    EXPECT_EQ(rowsWithStore, rowsWithoutStore);
+  }
+}
+
+// Test that a `libspatialjoin` spatial join takes the IDs and the bounding
+// boxes of the geometries in the geometry store from the columns of
+// `ql:geometryStoreId`, `ql:envelopeLowerLeft` and `ql:envelopeUpperRight` of
+// its children (as a materialized view provides them, see
+// `SpatialJoin::cloneWithBoundingBoxColumns`), with the same result.
+TEST(SpatialJoin, LibspatialJoinWithGeometryStoreIdColumns) {
+  // An index with a geometry store.
+  ad_utility::testing::TestIndexConfig indexConfig{createTrueDistanceDataset()};
+  indexConfig.vocabularyType = ad_utility::VocabularyType{
+      ad_utility::VocabularyType::Enum::OnDiskCompressedGeoSplit};
+  indexConfig.parserBufferSize = 10_kB;
+  auto qec = ad_utility::testing::getQec(std::move(indexConfig));
+
+  // A scan of all geometries into `?geo<i>`, with the precomputed columns of
+  // the spatial join if `withColumns` is set.
+  auto makeChild = [qec](std::string i, bool withColumns) {
+    Variable geo{absl::StrCat("?geo", i)};
+    auto tree = buildIndexScan(
+        qec, {absl::StrCat("?obj", i), std::string{"<asWKT>"}, geo.name()});
+    if (!withColumns) {
+      return tree;
+    }
+    auto bind = [&](auto factory, const Variable& target) {
+      tree = ad_utility::makeExecutionTree<Bind>(
+          qec, tree,
+          parsedQuery::Bind{
+              sparqlExpression::SparqlExpressionPimpl{
+                  factory(
+                      std::make_unique<sparqlExpression::VariableExpression>(
+                          geo)),
+                  target.name()},
+              target});
+    };
+    auto [lowerLeft, upperRight] = SpatialJoin::getBoundingBoxColumnNames(geo);
+    bind(&sparqlExpression::makeEnvelopeLowerLeftExpression, lowerLeft);
+    bind(&sparqlExpression::makeEnvelopeUpperRightExpression, upperRight);
+    bind(&sparqlExpression::makeGeometryStoreIdExpression,
+         SpatialJoin::getGeometryStoreIdColumnName(geo));
+    return tree;
+  };
+
+  // Return the sorted result rows of an `INTERSECTS` join of all geometries
+  // with all geometries, the number of rows from the geometry store, and
+  // whether the children had a geometry store ID column.
+  auto run = [&](bool withColumns) {
+    SpatialJoinConfiguration config{
+        LibSpatialJoinConfig{SpatialJoinType::INTERSECTS},
+        Variable{"?geo1"},
+        Variable{"?geo2"},
+        std::nullopt,
+        PayloadVariables::all(),
+        SpatialJoinAlgorithm::LIBSPATIALJOIN};
+    auto tree = ad_utility::makeExecutionTree<SpatialJoin>(
+        qec, std::move(config), makeChild("1", withColumns),
+        makeChild("2", withColumns));
+    auto spatialJoin =
+        std::dynamic_pointer_cast<SpatialJoin>(tree->getRootOperation());
+    auto [colsLeft, colsRight] =
+        spatialJoin->onlyForTestingGetLibspatialjoinBoundingBoxCols();
+    bool hasIdColumns = colsLeft.has_value() && colsRight.has_value() &&
+                        colsLeft.value().geometryStoreId_.has_value() &&
+                        colsRight.value().geometryStoreId_.has_value();
+    auto result = spatialJoin->computeResult(false);
+
+    // The rows of the result in the columns of the scans (the precomputed
+    // columns cannot be printed, they contain `UNDEF` for `GeoPoint`s).
+    auto varToCol = spatialJoin->computeVariableToColumnMap();
+    std::vector<std::string> rows;
+    const auto& table = result.idTableView();
+    for (size_t i = 0; i < table.numRows(); ++i) {
+      std::vector<std::string> row;
+      for (const auto* var : {"?obj1", "?geo1", "?obj2", "?geo2"}) {
+        auto id = table.at(i, varToCol.at(Variable{var}).columnIndex_);
+        row.push_back(ql::exportIds::idToStringAndType(
+                          qec->getIndex(), id, LocalVocab{qec->getAllocator()})
+                          .value()
+                          .first);
+      }
+      rows.push_back(absl::StrJoin(row, " "));
+    }
+    ql::ranges::sort(rows);
+    auto details = spatialJoin->runtimeInfo().details_;
+    return std::tuple{
+        rows, static_cast<size_t>(details["num-rows-from-geometry-store"]),
+        hasIdColumns};
+  };
+
+  // With the columns, the geometries are taken from the store as without them,
+  // and the result is the same.
+  auto [rowsWithout, storedWithout, idColumnsWithout] = run(false);
+  auto [rowsWith, storedWith, idColumnsWith] = run(true);
+  EXPECT_FALSE(idColumnsWithout);
+  EXPECT_TRUE(idColumnsWith);
+  EXPECT_GT(storedWithout, 0);
+  EXPECT_EQ(storedWith, storedWithout);
+  EXPECT_FALSE(rowsWith.empty());
+  EXPECT_EQ(rowsWith, rowsWithout);
+}
 
 }  // namespace
