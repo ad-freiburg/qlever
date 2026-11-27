@@ -18,7 +18,6 @@
 #include <string>
 
 #include "../test/util/IndexTestHelpers.h"
-#include "../test/util/VariableToColumnMapTestHelpers.h"
 #include "engine/sparqlExpressions/BinaryExpression.h"
 #include "engine/sparqlExpressions/HomogeneousNumericExpressionHelpers.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"

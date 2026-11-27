@@ -13,7 +13,6 @@
 #include "index/ConstantsIndexBuilding.h"
 #include "util/IndexTestHelpers.h"
 #include "util/LocalVocabEntryTestHelpers.h"
-#include "util/VariableToColumnMapTestHelpers.h"
 
 using namespace sparqlExpression;
 using ad_utility::source_location;

@@ -6,7 +6,6 @@
 
 #include "../util/IdTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
-#include "../util/VariableToColumnMapTestHelpers.h"
 #include "engine/GroupByHashMapOptimization.h"
 
 namespace {

@@ -11,7 +11,6 @@
 #include "util/AllocatorTestHelpers.h"
 #include "util/IndexTestHelpers.h"
 #include "util/LocalVocabEntryTestHelpers.h"
-#include "util/VariableToColumnMapTestHelpers.h"
 
 namespace sparqlExpression {
 

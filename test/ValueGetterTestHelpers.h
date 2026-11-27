@@ -30,7 +30,6 @@
 #include "util/GTestHelpers.h"
 #include "util/LocalVocabEntryTestHelpers.h"
 #include "util/TypeTraits.h"
-#include "util/VariableToColumnMapTestHelpers.h"
 
 using ad_utility::testing::localVocabEntryFromStringRepresentation;
 

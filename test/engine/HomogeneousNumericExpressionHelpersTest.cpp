@@ -18,7 +18,6 @@
 
 #include "../util/IdTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
-#include "../util/VariableToColumnMapTestHelpers.h"
 #include "backports/concepts.h"
 #include "engine/idTable/splitLayout/IdColumnVector.h"
 #include "engine/sparqlExpressions/HomogeneousNumericExpressionHelpers.h"
