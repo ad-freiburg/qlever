@@ -663,13 +663,6 @@ std::optional<RequestedInfo> GeometryInfoValueGetter<CPP_sfinae_args(
           return info;
         }
       }
-      // Only the precomputed `GeometryInfo` can contain a geometry store ID,
-      // so there is no need to fetch the string.
-      if constexpr (std::is_same_v<RequestedInfo,
-                                   ad_utility::GeometryStoreId>) {
-        return std::nullopt;
-      }
-
       // No precomputed geometry info available: we have to fetch and parse
       // the string.
       auto lit = getLiteralOrIri(id, context);
