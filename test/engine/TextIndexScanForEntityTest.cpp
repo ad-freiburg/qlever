@@ -8,6 +8,7 @@
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
+#include "../util/VariableToColumnMapTestHelpers.h"
 #include "./TextIndexScanTestHelpers.h"
 #include "engine/operation/IndexScan.h"
 #include "engine/operation/TextIndexScanForEntity.h"
@@ -70,10 +71,10 @@ TEST(TextIndexScanForEntity, EntityScanBasic) {
             h::getEntityFromResultTable(qec, result, 2));
 
   using enum ColumnIndexAndTypeInfo::UndefStatus;
-  VariableToColumnMap expectedVariables{
-      {Variable{"?text2"}, {0, AlwaysDefined}},
-      {Variable{"?entityVar2"}, {1, AlwaysDefined}},
-      {Variable{"?ql_score_text2_var_entityVar2"}, {2, AlwaysDefined}}};
+  auto expectedVariables = makeVariableToColumnMap(
+      {{Variable{"?text2"}, {0, AlwaysDefined}},
+       {Variable{"?entityVar2"}, {1, AlwaysDefined}},
+       {Variable{"?ql_score_text2_var_entityVar2"}, {2, AlwaysDefined}}});
   EXPECT_THAT(s2.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
 }
@@ -90,11 +91,11 @@ TEST(TextIndexScanForEntity, FixedEntityScan) {
   ASSERT_EQ(result.idTableView().size(), 1);
 
   using enum ColumnIndexAndTypeInfo::UndefStatus;
-  VariableToColumnMap expectedVariables = {
-      {Variable{"?text3"}, {0, AlwaysDefined}},
-      {Variable{
-           "?ql_score_text3_fixedEntity__34_some_32_other_32_sentence_34_"},
-       {1, AlwaysDefined}}};
+  auto expectedVariables = makeVariableToColumnMap(
+      {{Variable{"?text3"}, {0, AlwaysDefined}},
+       {Variable{
+            "?ql_score_text3_fixedEntity__34_some_32_other_32_sentence_34_"},
+        {1, AlwaysDefined}}});
   EXPECT_THAT(s3.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
 

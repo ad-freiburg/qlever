@@ -67,7 +67,7 @@ VariableToColumnMap Values::computeVariableToColumnMap() const {
       isUndef = static_cast<bool>(isUndef) || row[i].isUndef();
     }
   }
-  VariableToColumnMap map;
+  VariableToColumnMap map{allocator()};
   for (size_t i = 0; i < parsedValues_._variables.size(); i++) {
     using enum ColumnIndexAndTypeInfo::UndefStatus;
     auto undefStatus = static_cast<bool>(colContainsUndef.at(i))

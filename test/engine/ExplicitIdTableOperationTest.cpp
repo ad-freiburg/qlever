@@ -15,6 +15,7 @@
 #include "../util/LocalVocabEntryTestHelpers.h"
 #include "../util/LocalVocabTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
+#include "../util/VariableToColumnMapTestHelpers.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/operation/ExplicitIdTableOperation.h"
 #include "global/Id.h"
@@ -51,7 +52,7 @@ std::shared_ptr<IdTable> createTestIdTable(size_t numRows, size_t numCols) {
 
 // Helper function to create VariableToColumnMap
 VariableToColumnMap createTestVariableMap(size_t numVars) {
-  VariableToColumnMap map;
+  auto map = makeVariableToColumnMap();
   for (size_t i = 0; i < numVars; ++i) {
     map[Variable("?var" + std::to_string(i))] = makeAlwaysDefinedColumn(i);
   }
@@ -89,7 +90,7 @@ class ExplicitIdTableOperationTest : public ::testing::TestWithParam<bool> {
 
   QueryExecutionContext* qec_ = getTestQec();
   std::shared_ptr<IdTable> testTable_;
-  VariableToColumnMap testVariables_;
+  VariableToColumnMap testVariables_ = makeVariableToColumnMap();
   qlm::vector<ColumnIndex> testSortedColumns_{qec_->getAllocator()};
   LocalVocab testLocalVocab_ = makeLocalVocab();
   std::string testCacheKey_;
@@ -290,9 +291,9 @@ TEST_P(ExplicitIdTableOperationTest, DifferentTableSizes) {
 
 // Test variable to column mapping
 TEST_P(ExplicitIdTableOperationTest, VariableToColumnMapping) {
-  VariableToColumnMap customVars;
-  customVars[Variable("?subject")] = makeAlwaysDefinedColumn(0);
-  customVars[Variable("?predicate")] = makeAlwaysDefinedColumn(1);
+  auto customVars = makeVariableToColumnMap(
+      {{Variable("?subject"), makeAlwaysDefinedColumn(0)},
+       {Variable("?predicate"), makeAlwaysDefinedColumn(1)}});
 
   ExplicitIdTableOperation op(qec_, wrapTable(testTable_), customVars,
                               colIndices({}), LocalVocab{qec_->getAllocator()},

@@ -61,7 +61,7 @@ class NeutralElementOperation : public Operation {
 
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap()
       const override {
-    return {};
+    return VariableToColumnMap{allocator()};
   }
 };
 

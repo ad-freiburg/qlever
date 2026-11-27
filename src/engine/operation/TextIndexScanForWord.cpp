@@ -55,7 +55,7 @@ Result TextIndexScanForWord::computeResult(
 
 // _____________________________________________________________________________
 void TextIndexScanForWord::setVariableToColumnMap() {
-  config_.variableColumns_ = VariableToColumnMap{};
+  config_.variableColumns_ = VariableToColumnMap{allocator()};
   auto index = ColumnIndex{0};
   config_.variableColumns_.value()[config_.varToBindText_] =
       makeAlwaysDefinedColumn(index);

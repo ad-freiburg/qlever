@@ -6,6 +6,7 @@
 #include "engine/sparqlExpressions/NowDatetimeExpression.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
+#include "util/VariableToColumnMapTestHelpers.h"
 
 using namespace sparqlExpression;
 
@@ -40,18 +41,19 @@ TEST(NowDatetimeExpression, nowExpressionEvaluate) {
 }
 
 TEST(NowDatetimeExpression, getCacheKeyNowExpression) {
+  const auto emptyMap = makeVariableToColumnMap();
   std::string strDate1 = "2011-01-10T14:45:13.815-05:00";
   std::string strDate2 = "2024-06-18T12:16:33.815-06:00";
   NowDatetimeExpression dateNow1(strDate1);
   NowDatetimeExpression dateNow2(strDate2);
   ASSERT_TRUE(dateNow1.getUnaggregatedVariables().empty());
-  auto cacheKey1 = dateNow1.getCacheKey({});
+  auto cacheKey1 = dateNow1.getCacheKey(emptyMap);
   ASSERT_THAT(cacheKey1, ::testing::StartsWith("NOW "));
-  ASSERT_EQ(cacheKey1, dateNow1.getCacheKey({}));
+  ASSERT_EQ(cacheKey1, dateNow1.getCacheKey(emptyMap));
   // Given that these use the same date-time string the key should be equal.
-  ASSERT_EQ(cacheKey1, NowDatetimeExpression{strDate1}.getCacheKey({}));
+  ASSERT_EQ(cacheKey1, NowDatetimeExpression{strDate1}.getCacheKey(emptyMap));
   // Given that dateNow1 and dateNow2 are constructed from different date-time
   // strings, it should be rather unlikely that their cache-keys are equal.
-  auto cacheKey2 = dateNow2.getCacheKey({});
+  auto cacheKey2 = dateNow2.getCacheKey(emptyMap);
   ASSERT_NE(cacheKey1, cacheKey2);
 }

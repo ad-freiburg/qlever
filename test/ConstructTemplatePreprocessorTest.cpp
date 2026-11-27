@@ -13,6 +13,7 @@
 #include "engine/ConstructTemplatePreprocessor.h"
 #include "index/Index.h"
 #include "parser/data/Types.h"
+#include "util/VariableToColumnMapTestHelpers.h"
 
 namespace qlever::constructExport {
 
@@ -130,7 +131,7 @@ TEST(ConstructTemplatePreprocessorTest, preprocessIri) {
                      GraphTerm{iriV("<http://p>")},
                      GraphTerm{iriV("<http://o>")}});
 
-  const VariableToColumnMap varMap;
+  const auto varMap = makeVariableToColumnMap();
   auto result = preprocess(triples, varMap);
 
   EXPECT_THAT(result.preprocessedTriples_,
@@ -147,7 +148,7 @@ TEST(ConstructTemplatePreprocessorTest, preprocessLiteralInObjectPosition) {
                      GraphTerm{iriV("<http://p>")},
                      GraphTerm{Literal{"\"hello\""}}});
 
-  const VariableToColumnMap varMap;
+  const auto varMap = makeVariableToColumnMap();
   auto result = preprocess(triples, varMap);
 
   EXPECT_THAT(result.preprocessedTriples_,
@@ -167,7 +168,7 @@ TEST(ConstructTemplatePreprocessorTest, preprocessLiteralInSubjectPosition) {
                      GraphTerm{iriV("<http://p>")},
                      GraphTerm{iriV("<http://o>")}});
 
-  const VariableToColumnMap varMap;
+  const auto varMap = makeVariableToColumnMap();
   auto result = preprocess(triples, varMap);
 
   expectEmptyResult(result);
@@ -198,7 +199,7 @@ TEST(ConstructTemplatePreprocessorTest, constantResolvesToSameValueIdAsData) {
     Triples triples;
     triples.push_back({GraphTerm{iriV("<http://s>")},
                        GraphTerm{iriV("<http://p>")}, std::move(object)});
-    const VariableToColumnMap varMap;
+    const auto varMap = makeVariableToColumnMap();
     auto result = ConstructTemplatePreprocessor::preprocess(
         triples, varMap, index, ad_utility::testing::makeAllocator());
 
@@ -226,8 +227,8 @@ TEST(ConstructTemplatePreprocessorTest, preprocessVariableBound) {
   triples.push_back({GraphTerm{Variable{"?x"}}, GraphTerm{iriV("<http://p>")},
                      GraphTerm{iriV("<http://o>")}});
 
-  VariableToColumnMap varMap;
-  varMap[Variable{"?x"}] = makeAlwaysDefinedColumn(3);
+  auto varMap =
+      makeVariableToColumnMap({{Variable{"?x"}, makeAlwaysDefinedColumn(3)}});
   auto result = preprocess(triples, varMap);
 
   // After preprocessing, columnIndex_ holds the original IdTable column (3).
@@ -248,7 +249,7 @@ TEST(ConstructTemplatePreprocessorTest, preprocessVariableUnbound) {
                      GraphTerm{iriV("<http://p>")},
                      GraphTerm{iriV("<http://o>")}});
 
-  const VariableToColumnMap varMap;  // ?unbound is not in the map
+  const auto varMap = makeVariableToColumnMap();  // ?unbound is not in the map
   auto result = preprocess(triples, varMap);
 
   expectEmptyResult(result);
@@ -261,7 +262,7 @@ TEST(ConstructTemplatePreprocessorTest, preprocessBlankNodeUserDefined) {
                      GraphTerm{iriV("<http://p>")},
                      GraphTerm{iriV("<http://o>")}});
 
-  const VariableToColumnMap varMap;
+  const auto varMap = makeVariableToColumnMap();
   auto result = preprocess(triples, varMap);
 
   EXPECT_THAT(result.preprocessedTriples_,
@@ -278,7 +279,7 @@ TEST(ConstructTemplatePreprocessorTest, preprocessBlankNodeGenerated) {
                      GraphTerm{iriV("<http://p>")},
                      GraphTerm{iriV("<http://o>")}});
 
-  const VariableToColumnMap varMap;
+  const auto varMap = makeVariableToColumnMap();
   auto result = preprocess(triples, varMap);
 
   EXPECT_THAT(result.preprocessedTriples_,
@@ -291,7 +292,7 @@ TEST(ConstructTemplatePreprocessorTest, preprocessBlankNodeGenerated) {
 // _____________________________________________________________________________
 TEST(ConstructTemplatePreprocessorTest, emptyTriples) {
   const Triples triples;
-  const VariableToColumnMap varMap;
+  const auto varMap = makeVariableToColumnMap();
   auto result = preprocess(triples, varMap);
 
   expectEmptyResult(result);
@@ -305,8 +306,8 @@ TEST(ConstructTemplatePreprocessorTest,
   triples.push_back({GraphTerm{Variable{"?x"}}, GraphTerm{iriV("<http://p>")},
                      GraphTerm{Variable{"?x"}}});
 
-  VariableToColumnMap varMap;
-  varMap[Variable{"?x"}] = makeAlwaysDefinedColumn(5);
+  auto varMap =
+      makeVariableToColumnMap({{Variable{"?x"}, makeAlwaysDefinedColumn(5)}});
   auto result = preprocess(triples, varMap);
 
   EXPECT_THAT(result.preprocessedTriples_,
@@ -327,8 +328,8 @@ TEST(ConstructTemplatePreprocessorTest,
                      GraphTerm{iriV("<http://p2>")},
                      GraphTerm{Variable{"?x"}}});
 
-  VariableToColumnMap varMap;
-  varMap[Variable{"?x"}] = makeAlwaysDefinedColumn(2);
+  auto varMap =
+      makeVariableToColumnMap({{Variable{"?x"}, makeAlwaysDefinedColumn(2)}});
   auto result = preprocess(triples, varMap);
 
   EXPECT_THAT(
@@ -349,9 +350,9 @@ TEST(ConstructTemplatePreprocessorTest,
   triples.push_back({GraphTerm{Variable{"?x"}}, GraphTerm{iriV("<http://p>")},
                      GraphTerm{Variable{"?y"}}});
 
-  VariableToColumnMap varMap;
-  varMap[Variable{"?x"}] = makeAlwaysDefinedColumn(0);
-  varMap[Variable{"?y"}] = makeAlwaysDefinedColumn(1);
+  auto varMap =
+      makeVariableToColumnMap({{Variable{"?x"}, makeAlwaysDefinedColumn(0)},
+                               {Variable{"?y"}, makeAlwaysDefinedColumn(1)}});
   auto result = preprocess(triples, varMap);
 
   EXPECT_THAT(result.preprocessedTriples_,
@@ -373,10 +374,10 @@ TEST(ConstructTemplatePreprocessorTest,
   triples.push_back({GraphTerm{Variable{"?y"}}, GraphTerm{iriV("<http://p3>")},
                      GraphTerm{Variable{"?z"}}});
 
-  VariableToColumnMap varMap;
-  varMap[Variable{"?x"}] = makeAlwaysDefinedColumn(0);
-  varMap[Variable{"?y"}] = makeAlwaysDefinedColumn(1);
-  varMap[Variable{"?z"}] = makeAlwaysDefinedColumn(2);
+  auto varMap =
+      makeVariableToColumnMap({{Variable{"?x"}, makeAlwaysDefinedColumn(0)},
+                               {Variable{"?y"}, makeAlwaysDefinedColumn(1)},
+                               {Variable{"?z"}, makeAlwaysDefinedColumn(2)}});
   auto result = preprocess(triples, varMap);
 
   EXPECT_THAT(result.preprocessedTriples_,
@@ -396,8 +397,8 @@ TEST(ConstructTemplatePreprocessorTest, unboundVariableDropsTriple) {
   triples.push_back({GraphTerm{Variable{"?x"}}, GraphTerm{iriV("<http://p>")},
                      GraphTerm{Variable{"?unbound"}}});
 
-  VariableToColumnMap varMap;
-  varMap[Variable{"?x"}] = makeAlwaysDefinedColumn(0);
+  auto varMap =
+      makeVariableToColumnMap({{Variable{"?x"}, makeAlwaysDefinedColumn(0)}});
   auto result = preprocess(triples, varMap);
 
   expectEmptyResult(result);
@@ -415,8 +416,8 @@ TEST(ConstructTemplatePreprocessorTest,
   triples.push_back({GraphTerm{Variable{"?x"}}, GraphTerm{iriV("<http://p>")},
                      GraphTerm{iriV("<http://o>")}});
 
-  VariableToColumnMap varMap;
-  varMap[Variable{"?x"}] = makeAlwaysDefinedColumn(0);
+  auto varMap =
+      makeVariableToColumnMap({{Variable{"?x"}, makeAlwaysDefinedColumn(0)}});
   auto result = preprocess(triples, varMap);
 
   EXPECT_THAT(
@@ -437,7 +438,7 @@ TEST(ConstructTemplatePreprocessorTest, multipleTriplesConstantsOnly) {
                      GraphTerm{iriV("<http://p2>")},
                      GraphTerm{iriV("<http://o2>")}});
 
-  const VariableToColumnMap varMap;
+  const auto varMap = makeVariableToColumnMap();
   auto result = preprocess(triples, varMap);
 
   EXPECT_THAT(
@@ -462,8 +463,8 @@ TEST(ConstructTemplatePreprocessorTest, mixedTermTypesAcrossTriples) {
                      GraphTerm{iriV("<http://q>")},
                      GraphTerm{Literal{"\"text\""}}});
 
-  VariableToColumnMap varMap;
-  varMap[Variable{"?val"}] = makeAlwaysDefinedColumn(4);
+  auto varMap =
+      makeVariableToColumnMap({{Variable{"?val"}, makeAlwaysDefinedColumn(4)}});
   auto result = preprocess(triples, varMap);
 
   EXPECT_THAT(
@@ -482,7 +483,7 @@ TEST(ConstructTemplatePreprocessorTest, mixedTermTypesAcrossTriples) {
 
 // _____________________________________________________________________________
 TEST(ConstructTemplatePreprocessorTest, preprocessTermIri) {
-  const VariableToColumnMap varMap;
+  const auto varMap = makeVariableToColumnMap();
   auto result = preprocessTerm(GraphTerm{iriV("<http://s>")}, SUBJECT, varMap);
 
   EXPECT_THAT(result, Optional(Const("<http://s>")));
@@ -490,7 +491,7 @@ TEST(ConstructTemplatePreprocessorTest, preprocessTermIri) {
 
 // _____________________________________________________________________________
 TEST(ConstructTemplatePreprocessorTest, preprocessTermLiteralObject) {
-  const VariableToColumnMap varMap;
+  const auto varMap = makeVariableToColumnMap();
   auto result = preprocessTerm(GraphTerm{Literal{"\"hello\""}}, OBJECT, varMap);
 
   EXPECT_THAT(result, Optional(Const("\"hello\"")));
@@ -500,15 +501,15 @@ TEST(ConstructTemplatePreprocessorTest, preprocessTermLiteralObject) {
 TEST(ConstructTemplatePreprocessorTest, preprocessTermLiteralSubject) {
   // Literals in subject position are invalid; evaluate returns empty string,
   // so preprocessTerm returns nullopt.
-  const VariableToColumnMap varMap;
+  const auto varMap = makeVariableToColumnMap();
   auto result = preprocessTerm(GraphTerm{Literal{"invalid"}}, SUBJECT, varMap);
   EXPECT_EQ(result, std::nullopt);
 }
 
 // _____________________________________________________________________________
 TEST(ConstructTemplatePreprocessorTest, preprocessTermVariableBound) {
-  VariableToColumnMap varMap;
-  varMap[Variable{"?x"}] = makeAlwaysDefinedColumn(3);
+  auto varMap =
+      makeVariableToColumnMap({{Variable{"?x"}, makeAlwaysDefinedColumn(3)}});
   auto result = preprocessTerm(GraphTerm{Variable{"?x"}}, SUBJECT, varMap);
 
   EXPECT_THAT(result, Optional(Var(3)));
@@ -516,7 +517,7 @@ TEST(ConstructTemplatePreprocessorTest, preprocessTermVariableBound) {
 
 // _____________________________________________________________________________
 TEST(ConstructTemplatePreprocessorTest, preprocessTermVariableUnbound) {
-  const VariableToColumnMap varMap;
+  const auto varMap = makeVariableToColumnMap();
   auto result =
       preprocessTerm(GraphTerm{Variable{"?unbound"}}, SUBJECT, varMap);
   EXPECT_EQ(result, std::nullopt);
@@ -524,7 +525,7 @@ TEST(ConstructTemplatePreprocessorTest, preprocessTermVariableUnbound) {
 
 // _____________________________________________________________________________
 TEST(ConstructTemplatePreprocessorTest, preprocessTermBlankNodeUser) {
-  const VariableToColumnMap varMap;
+  const auto varMap = makeVariableToColumnMap();
   auto result =
       preprocessTerm(GraphTerm{BlankNode{false, "myNode"}}, SUBJECT, varMap);
 
@@ -532,7 +533,7 @@ TEST(ConstructTemplatePreprocessorTest, preprocessTermBlankNodeUser) {
 }
 
 TEST(ConstructTemplatePreprocessorTest, preprocessTermBlankNodeGenerated) {
-  const VariableToColumnMap varMap;
+  const auto varMap = makeVariableToColumnMap();
   auto result =
       preprocessTerm(GraphTerm{BlankNode{true, "gen"}}, SUBJECT, varMap);
 
@@ -547,7 +548,7 @@ TEST(ConstructTemplatePreprocessorTest, dedupIdIsResolvedForConstants) {
                      GraphTerm{iriV("<http://p>")},
                      GraphTerm{Literal{"\"hello\""}}});
 
-  const VariableToColumnMap varMap;
+  const auto varMap = makeVariableToColumnMap();
   auto result = preprocess(triples, varMap);
 
   ASSERT_EQ(result.preprocessedTriples_.size(), 1);
@@ -568,7 +569,7 @@ TEST(ConstructTemplatePreprocessorTest, dedupIdIsStableAndDistinct) {
                      GraphTerm{iriV("<http://p>")},
                      GraphTerm{iriV("<http://b>")}});
 
-  const VariableToColumnMap varMap;
+  const auto varMap = makeVariableToColumnMap();
   auto result = preprocess(triples, varMap);
 
   ASSERT_EQ(result.preprocessedTriples_.size(), 2);
@@ -600,7 +601,7 @@ TEST(ConstructTemplatePreprocessorTest, tripleContainsBlankNodeFlag) {
                      GraphTerm{iriV("<http://p>")},
                      GraphTerm{iriV("<http://o>")}});
 
-  const VariableToColumnMap varMap;
+  const auto varMap = makeVariableToColumnMap();
   auto result = preprocess(triples, varMap);
 
   EXPECT_THAT(result.tripleContainsBlankNode_, ElementsAre(false, true));

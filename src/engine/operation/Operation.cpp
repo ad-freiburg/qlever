@@ -726,7 +726,7 @@ const VariableToColumnMap& Operation::getExternallyVisibleVariableColumns()
 void Operation::setSelectedVariablesForSubquery(
     const std::vector<Variable>& selectedVariables) {
   const auto& internalVariables = getInternallyVisibleVariableColumns();
-  externallyVisibleVariableToColumnMap_.emplace();
+  externallyVisibleVariableToColumnMap_.emplace(allocator());
   auto& externalVariables = externallyVisibleVariableToColumnMap_.value();
   for (const Variable& variable : selectedVariables) {
     if (internalVariables.contains(variable)) {

@@ -24,6 +24,7 @@
 #include "../util/IndexTestHelpers.h"
 #include "../util/LocalVocabTestHelpers.h"
 #include "../util/RuntimeParametersTestHelpers.h"
+#include "../util/VariableToColumnMapTestHelpers.h"
 #include "./SpatialJoinTestHelpers.h"
 #include "./ValuesForTesting.h"
 #include "engine/ExportQueryExecutionTrees.h"
@@ -553,7 +554,7 @@ class SpatialJoinVarColParamTest
                             bool addDist, bool withObj, bool withName,
                             bool withGeo) -> VariableToColumnMap {
       size_t currentColumn = 0;
-      VariableToColumnMap expected;
+      auto expected = makeVariableToColumnMap();
 
       auto addV = [&](std::vector<V> vec, bool right = false) {
         for (auto v : vec) {
@@ -750,11 +751,11 @@ TEST(SpatialJoinVarColTest, ChildResultWidth) {
   // The `SpatialJoin`'s `VariableToColumnMap` is expected to include all named
   // columns from the left child and from the right child only the requested
   // ones.
-  VariableToColumnMap expectedVarToCol{
+  auto expectedVarToCol = makeVariableToColumnMap({
       {V{"?a"}, makeAlwaysDefinedColumn(0)},
       {V{"?b"}, makeAlwaysDefinedColumn(1)},
       {V{"?c"}, makeAlwaysDefinedColumn(2)},
-  };
+  });
   EXPECT_THAT(spatialJoin->getVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVarToCol));
 }
@@ -802,11 +803,11 @@ TEST(SpatialJoinVarColTest, InvisibleColumnsAndWithinSwap) {
 
   // We expect the three visible columns (two join cols and the payload column)
   // to be in the result, but not the invisible column.
-  VariableToColumnMap expectedVarToCol{
+  auto expectedVarToCol = makeVariableToColumnMap({
       {Variable{"?a"}, makeAlwaysDefinedColumn(0)},
       {Variable{"?b"}, makeAlwaysDefinedColumn(1)},
       {Variable{"?c"}, makeAlwaysDefinedColumn(2)},
-  };
+  });
   EXPECT_THAT(spatialJoin->getVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVarToCol));
 

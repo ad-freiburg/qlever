@@ -19,6 +19,7 @@
 #include "../util/LocalVocabEntryTestHelpers.h"
 #include "../util/LocalVocabTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
+#include "../util/VariableToColumnMapTestHelpers.h"
 #include "./LazyJoinTestHelpers.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
@@ -447,10 +448,10 @@ TEST(IndexScan, additionalColumn) {
   auto scan = IndexScan{qec, Permutation::PSO, triple};
   ASSERT_EQ(scan.getResultWidth(), 4);
   auto col = makeAlwaysDefinedColumn;
-  VariableToColumnMap expected = {{V{"?x"}, col(0)},
-                                  {V{"?z"}, col(1)},
-                                  {V("?xpattern"), col(2)},
-                                  {V("?ypattern"), col(3)}};
+  auto expected = makeVariableToColumnMap({{V{"?x"}, col(0)},
+                                           {V{"?z"}, col(1)},
+                                           {V("?xpattern"), col(2)},
+                                           {V("?ypattern"), col(3)}});
   ASSERT_THAT(scan.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expected));
   ASSERT_THAT(scan.getCacheKey(),
@@ -493,8 +494,8 @@ TEST(IndexScan, makeTreeWithBindColumnOfConstant) {
   ASSERT_TRUE(tree.has_value());
   auto col = makeAlwaysDefinedColumn;
   EXPECT_THAT(tree.value()->getVariableColumns(),
-              ::testing::UnorderedElementsAreArray(VariableToColumnMap{
-                  {V{"?s"}, col(0)}, {V{"?o"}, col(1)}, {V{"?c"}, col(2)}}));
+              ::testing::UnorderedElementsAreArray(makeVariableToColumnMap(
+                  {{V{"?s"}, col(0)}, {V{"?o"}, col(1)}, {V{"?c"}, col(2)}})));
   EXPECT_THAT(
       tree.value()->getCacheKey(),
       ::testing::HasSubstr(absl::StrCat("Constant Columns: ", p.getBits())));
@@ -1883,7 +1884,7 @@ TEST(IndexScanTest, StripColumns) {
         getVarsAndColumnIndices(varsToKeep, baseScan);
     // Build expected variable to column mapping with dense, ordered column
     // indices
-    VariableToColumnMap expected;
+    auto expected = makeVariableToColumnMap();
     std::vector<ColumnIndex> originalColumnIndices;
     for (size_t i = 0; i < columnOrigins.size(); ++i) {
       expected[columnOrigins[i].first] = def(i);

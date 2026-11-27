@@ -166,7 +166,7 @@ struct PathSearchConfiguration {
 class PathSearch : public Operation {
   std::shared_ptr<QueryExecutionTree> subtree_;
   size_t resultWidth_;
-  VariableToColumnMap variableColumns_;
+  VariableToColumnMap variableColumns_{allocator()};
 
   PathSearchConfiguration config_;
 

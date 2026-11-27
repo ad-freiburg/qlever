@@ -25,7 +25,7 @@ class StripColumns : public Operation {
   // The subset of the childrens' columns that are to be kept.
   std::vector<ColumnIndex> subset_;
   // The mapping from variables to columns.
-  VariableToColumnMap varToCol_;
+  VariableToColumnMap varToCol_{allocator()};
 
  public:
   // Construct from a child operation and the set of variables that are to be

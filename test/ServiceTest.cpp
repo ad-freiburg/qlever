@@ -35,6 +35,7 @@
 #include "util/OperationTestHelpers.h"
 #include "util/RuntimeParametersTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
+#include "util/VariableToColumnMapTestHelpers.h"
 #include "util/http/HttpUtils.h"
 
 using ad_utility::testing::makeLocalVocab;
@@ -164,9 +165,9 @@ TEST_F(ServiceTest, basicMethods) {
   ASSERT_EQ(serviceOp.getCostEstimate(), 1'000'000);
   using V = Variable;
   ASSERT_THAT(serviceOp.computeVariableToColumnMap(),
-              ::testing::UnorderedElementsAreArray(VariableToColumnMap{
-                  {V{"?x"}, makePossiblyUndefinedColumn(0)},
-                  {V{"?y"}, makePossiblyUndefinedColumn(1)}}));
+              ::testing::UnorderedElementsAreArray(makeVariableToColumnMap(
+                  {{V{"?x"}, makePossiblyUndefinedColumn(0)},
+                   {V{"?y"}, makePossiblyUndefinedColumn(1)}})));
   ASSERT_FALSE(serviceOp.knownEmptyResult());
   ASSERT_TRUE(serviceOp.getChildren().empty());
 }

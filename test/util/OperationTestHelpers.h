@@ -46,7 +46,9 @@ class StallForeverOperation : public Operation {
   qlm::vector<ColumnIndex> resultSortedOn() const override {
     return qlm::vector<ColumnIndex>{allocator()};
   }
-  VariableToColumnMap computeVariableToColumnMap() const override { return {}; }
+  VariableToColumnMap computeVariableToColumnMap() const override {
+    return VariableToColumnMap{allocator()};
+  }
 
  public:
   using Operation::Operation;
@@ -90,7 +92,9 @@ class ShallowParentOperation : public Operation {
   qlm::vector<ColumnIndex> resultSortedOn() const override {
     return qlm::vector<ColumnIndex>{allocator()};
   }
-  VariableToColumnMap computeVariableToColumnMap() const override { return {}; }
+  VariableToColumnMap computeVariableToColumnMap() const override {
+    return VariableToColumnMap{allocator()};
+  }
   qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
     return {{child_.get()}, allocator()};
   }
@@ -139,12 +143,12 @@ class AlwaysFailOperation : public Operation {
     return {{0}, allocator()};
   }
   VariableToColumnMap computeVariableToColumnMap() const override {
-    if (!variable_.has_value()) {
-      return {};
+    VariableToColumnMap map{allocator()};
+    if (variable_.has_value()) {
+      map[variable_.value()] = ColumnIndexAndTypeInfo{
+          0, ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined};
     }
-    return {{variable_.value(),
-             ColumnIndexAndTypeInfo{
-                 0, ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined}}};
+    return map;
   }
 
  public:
@@ -190,7 +194,9 @@ class CustomGeneratorOperation : public Operation {
   qlm::vector<ColumnIndex> resultSortedOn() const override {
     return qlm::vector<ColumnIndex>{allocator()};
   }
-  VariableToColumnMap computeVariableToColumnMap() const override { return {}; }
+  VariableToColumnMap computeVariableToColumnMap() const override {
+    return VariableToColumnMap{allocator()};
+  }
 
  public:
   CustomGeneratorOperation(QueryExecutionContext* context,

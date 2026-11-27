@@ -162,12 +162,15 @@ VariableToColumnMap HasPredicateScan::computeVariableToColumnMap() const {
   checkType(type_);
   switch (type_) {
     case ScanType::FREE_S:
-      return {{subject_.getVariable(), col(0)}};
+      return VariableToColumnMap{{{subject_.getVariable(), col(0)}},
+                                 allocator()};
     case ScanType::FREE_O:
-      return {{object_.getVariable(), col(0)}};
+      return VariableToColumnMap{{{object_.getVariable(), col(0)}},
+                                 allocator()};
     case ScanType::FULL_SCAN:
-      return {{subject_.getVariable(), col(0)},
-              {object_.getVariable(), col(1)}};
+      return VariableToColumnMap{
+          {{subject_.getVariable(), col(0)}, {object_.getVariable(), col(1)}},
+          allocator()};
     case ScanType::SUBQUERY_S:
       return subtree().getVariableColumns();
   }

@@ -414,15 +414,14 @@ class IndexScan final : public Operation {
 
   // Return a lambda that takes an `idTable` as read from the permutation (with
   // `getSubsetOfPermutationColumns()` already applied) and appends the
-  // `constantColumns_` (which are never stripped, see there).
+  // `constantColumns_` (which are never stripped, see there) in place.
   auto makeAppendConstantColumns() const {
     auto ids = ::ranges::to<std::vector>(constantColumns_ | ql::views::keys);
-    return [ids = std::move(ids)](auto&& table) {
+    return [ids = std::move(ids)](IdTable& table) {
       for (Id id : ids) {
         table.addEmptyColumn();
         ql::ranges::fill(table.getColumn(table.numColumns() - 1), id);
       }
-      return std::move(table);
     };
   }
 
