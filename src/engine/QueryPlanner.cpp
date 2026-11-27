@@ -1868,7 +1868,7 @@ QueryPlanner::wrapFiltersWithoutSubstitutes(
 }
 
 // _____________________________________________________________________________
-void QueryPlanner::prefilterSeeds(
+void QueryPlanner::applyPrefiltersToIndexScans(
     SubtreePlanVec& seeds, size_t numTripleNodes,
     const FiltersAndOptionalSubstitutes& filters) const {
   if (filters.empty() ||
@@ -1930,7 +1930,8 @@ SubtreePlanMatrix QueryPlanner::fillDpTab(const QueryPlanner::TripleGraph& tg,
   // If we have FILTER statements that can also be answered by a special join,
   // add the respective query plans as filter substitutes.
   auto filtersAndOptSubstitutes = seedFilterSubstitutes(filters);
-  prefilterSeeds(initialPlans, tg._nodeMap.size(), filtersAndOptSubstitutes);
+  applyPrefiltersToIndexScans(initialPlans, tg._nodeMap.size(),
+                              filtersAndOptSubstitutes);
 
   if (filters.size() > 64) {
     AD_THROW("At most 64 filters allowed at the moment.");

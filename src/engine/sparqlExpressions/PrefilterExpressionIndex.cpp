@@ -278,7 +278,9 @@ static BlockMetadataRanges getNegationAwareUnionOfBlockRanges(
 }  // namespace detail
 
 // This function retrieves the `BlockRange`s for `CompressedBlockMetadata`
-// values that contain bounding `ValueId`s with different underlying datatypes.
+// values that contain bounding `ValueId`s with different underlying datatypes,
+// and of those that contain words of a secondary vocabulary. All of these are
+// kept by every prefilter.
 static BlockMetadataRanges getRangesMixedDatatypeBlocks(
     const ValueIdSubrange& idRange, BlockMetadataSpan blockRange) {
   using enum Datatype;
@@ -287,9 +289,13 @@ static BlockMetadataRanges getRangesMixedDatatypeBlocks(
   }
   AD_CORRECTNESS_CHECK(idRange.size() % 2 == 0);
 
-  // `VocabIndex` and `LocalVocabIndex` count as one datatype here.
+  // `VocabIndex`, `LocalVocabIndex`, and `SecondaryVocabIndex` count as one
+  // datatype here: `LocalVocabIndex` IDs are interleaved with the IDs of both
+  // vocabularies, so only the three together form a contiguous run.
   auto group = [](Datatype datatype) {
-    return datatype == LocalVocabIndex ? VocabIndex : datatype;
+    return datatype == LocalVocabIndex || datatype == SecondaryVocabIndex
+               ? VocabIndex
+               : datatype;
   };
 
   // The IDs in `idRange` (first and last ID of each block) are sorted, and the
@@ -308,6 +314,21 @@ static BlockMetadataRanges getRangesMixedDatatypeBlocks(
         runBegin, end, [&group, currentGroup](const ValueId& id) {
           return group(id.getDatatype()) == currentGroup;
         });
+    if (currentGroup == VocabIndex) {
+      // The IDs of the secondary vocabulary (and the local vocab entries stored
+      // in it) are sorted after all words of the main vocabulary, but by their
+      // insertion order, not by their string value (see
+      // `index/vocabulary/SecondaryVocabulary.h`). No prefilter can judge
+      // them, so keep all blocks from the first of them to the end of the run.
+      static constexpr auto firstSecondaryVocabId =
+          ValueId::makeFromSecondaryVocabIndex(SecondaryVocabIndex::make(0));
+      auto secondaryBegin = ql::ranges::partition_point(
+          runBegin, runEnd,
+          [](const ValueId& id) { return id < firstSecondaryVocabId; });
+      if (secondaryBegin != runEnd) {
+        mixedDatatypeRanges.emplace_back(secondaryBegin, runEnd);
+      }
+    }
     if (runEnd != end && (runEnd - begin) % 2 == 1) {
       mixedDatatypeRanges.emplace_back(std::prev(runEnd), runEnd);
     }
@@ -711,17 +732,11 @@ BlockMetadataRanges IsDatatypeExpression<IsDatatype::IRI>::evaluateImpl(
   // `VocabIndex`/`LocalVocabIndex`) and encoded IRIs (datatype `EncodedVal`).
   // We therefore have to keep the blocks for *both* representations.
   //
-  // TODO<joka921> There is a third range: the IRIs of a secondary vocabulary
-  // (datatype `SecondaryVocabIndex`, see
-  // `index/vocabulary/SecondaryVocabulary.h`). Those sort after all of the
-  // ranges below, so neither the `> <>` prefilter nor the datatype range of
-  // the encoded IRIs covers them, which means that blocks consisting entirely
-  // of such IRIs are incorrectly pruned. This is a known limitation for now,
-  // because apart from unit tests, a secondary vocabulary is only created when
-  // a blob of `NamedCachedQueryBlobManager` that contains new words is loaded,
-  // but it has to be fixed before it is used more widely, together with the
-  // semantic comparison of those `Id`s (see the detailed note at
-  // `valueIdComparators::detail::compareIdsImpl`).
+  // The IRIs of a secondary vocabulary (datatype `SecondaryVocabIndex`, see
+  // `index/vocabulary/SecondaryVocabulary.h`) form a third range, which is
+  // covered by neither of the two below. This is fine, because all blocks
+  // that contain words of a secondary vocabulary are kept by every prefilter
+  // (see `getRangesMixedDatatypeBlocks`).
   //
   // (1) Vocabulary IRIs: Ids containing LITERAL values precede IRI related Ids
   // in order. The smallest possible IRI is represented by "<>", we use its

@@ -23,6 +23,7 @@
 #include "rdfTypes/GeoPoint.h"
 #include "util/GTestHelpers.h"
 #include "util/IndexTestHelpers.h"
+#include "util/LocalVocabEntryTestHelpers.h"
 #include "util/ParsedQueryTestHelpers.h"
 
 using ad_utility::testing::BlankNodeId;
@@ -1780,4 +1781,62 @@ TEST(PrefilterExpressionIndex, negativeNumberBoundaryEndToEnd) {
   EXPECT_EQ(query("p", "<= -4"), "?s\n<s-5>\n<s-4>\n");
   EXPECT_EQ(query("p", "< -4"), "?s\n<s-5>\n");
   EXPECT_EQ(query("q", "<= -4.5"), "?s\n<t-5>\n<t-4>\n");
+}
+
+// Test that every prefilter keeps the blocks that contain words of a secondary
+// vocabulary. Their `Id`s are sorted after all words of the main vocabulary,
+// but not by their string value (see `index/vocabulary/SecondaryVocabulary.h`),
+// so no prefilter can judge them. This holds for the `Id`s of the secondary
+// vocabulary itself and for local vocab entries that are stored in it.
+TEST(PrefilterExpressionIndex, blocksWithSecondaryVocabularyAreKept) {
+  // The main vocabulary holds `<a>`, `<c>`, `<p>`, and `<s>`, the secondary one
+  // `"a"`, `<b>`, and `<d>` (at the indices 0, 1, and 2).
+  ad_utility::testing::TestIndexConfig config{"<s> <p> <a> . <s> <p> <c> ."};
+  config.secondaryVocabWords = std::vector<std::string>{"\"a\"", "<b>", "<d>"};
+  auto index = ad_utility::testing::makeTestIndex(std::move(config));
+  const auto& indexImpl = index.getImpl();
+  auto getVocabId = ad_utility::testing::makeGetId(index);
+  auto secondaryVocabId = [](uint64_t i) {
+    return Id::makeFromSecondaryVocabIndex(SecondaryVocabIndex::make(i));
+  };
+  auto getLocalVocabId = ad_utility::testing::makeGetLocalVocabId();
+  Id localVocabIdB = getLocalVocabId(ad_utility::testing::iriLocalVocabEntry(
+      "<b>", indexImpl.getLocalVocabContext()));
+  ASSERT_EQ(localVocabIdB, secondaryVocabId(1));
+
+  auto makeBlock = [blockIndex = size_t{0}](
+                       Id first, Id last) mutable -> CompressedBlockMetadata {
+    return {{{},
+             0,
+             {VocabId10, DoubleId33, first, GraphId},
+             {VocabId10, DoubleId33, last, GraphId},
+             {},
+             false},
+            blockIndex++};
+  };
+  auto blockInt = makeBlock(IntId(1), IntId(2));
+  auto blockVocab = makeBlock(getVocabId("<a>"), getVocabId("<c>"));
+  auto blockVocabAndSecondary =
+      makeBlock(getVocabId("<p>"), secondaryVocabId(0));
+  auto blockLocalVocabInSecondary = makeBlock(localVocabIdB, localVocabIdB);
+  auto blockSecondary = makeBlock(secondaryVocabId(2), secondaryVocabId(2));
+  auto blockBlankNodes = makeBlock(BlankNodeId(1), BlankNodeId(2));
+  const std::vector<CompressedBlockMetadata> blocks{blockInt,
+                                                    blockVocab,
+                                                    blockVocabAndSecondary,
+                                                    blockLocalVocabInSecondary,
+                                                    blockSecondary,
+                                                    blockBlankNodes};
+
+  // A prefilter that has nothing to do with the vocabularies.
+  EXPECT_EQ(toVec(eq(IntId(1))->evaluate(indexImpl, blocks, 2)),
+            (std::vector<CompressedBlockMetadata>{
+                blockInt, blockVocabAndSecondary, blockLocalVocabInSecondary,
+                blockSecondary}));
+  // `isIri` keeps the IRIs of the main vocabulary, and those of the secondary
+  // vocabulary, which its own ranges do not cover.
+  EXPECT_EQ(toVec(isIri()->evaluate(indexImpl, blocks, 2)),
+            (std::vector<CompressedBlockMetadata>{
+                blockVocab, blockVocabAndSecondary, blockLocalVocabInSecondary,
+                blockSecondary}));
 }

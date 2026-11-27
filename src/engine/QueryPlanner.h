@@ -664,8 +664,9 @@ class QueryPlanner {
   // programming the prefiltered size estimates from the first round on. The
   // plans of nested groups (`OPTIONAL`, `MINUS`, subqueries) are left alone,
   // and so are filters with a substitute (see `seedFilterSubstitutes`).
-  void prefilterSeeds(SubtreePlanVec& seeds, size_t numTripleNodes,
-                      const FiltersAndOptionalSubstitutes& filters) const;
+  void applyPrefiltersToIndexScans(
+      SubtreePlanVec& seeds, size_t numTripleNodes,
+      const FiltersAndOptionalSubstitutes& filters) const;
 
   // Internal subroutine of `fillDpTab` that  only works on a single connected
   // component of the input. Throws if the subtrees in the `connectedComponent`

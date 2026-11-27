@@ -2600,8 +2600,8 @@ TEST(IndexScan, isDistinctBy) {
 
 // Test that a prefilter that was already applied to a scan is not applied
 // again (the query planner relies on this when it prefilters the seed scans
-// once, see `QueryPlanner::prefilterSeeds`), while a different prefilter still
-// is, and that the prefiltered copy remembers both.
+// once, see `QueryPlanner::applyPrefiltersToIndexScans`), while a different
+// prefilter still is, and that the prefiltered copy remembers both.
 TEST(IndexScan, prefilterAlreadyAppliedIsNotAppliedAgain) {
   using namespace makeFilterExpression;
   using namespace filterHelper;

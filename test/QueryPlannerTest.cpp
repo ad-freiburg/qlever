@@ -4732,10 +4732,10 @@ TEST(QueryPlanner, plannerAllocationsCountTowardsMemoryLimit) {
 }
 
 // Test that the scans of a group graph pattern are prefiltered once at the
-// seed level (`QueryPlanner::prefilterSeeds`): the `Filter` on top of the
-// final plan sits on a prefiltered scan and finds nothing left to prefilter.
-// With prefiltering disabled, the scan stays as it is.
-TEST(QueryPlanner, prefilterSeedScansOnce) {
+// seed level (`QueryPlanner::applyPrefiltersToIndexScans`): the `Filter` on top
+// of the final plan sits on a prefiltered scan and finds nothing left to
+// prefilter. With prefiltering disabled, the scan stays as it is.
+TEST(QueryPlanner, prefilterIndexScansOnce) {
   using ::testing::AllOf;
   using ::testing::Eq;
   using ::testing::ResultOf;
