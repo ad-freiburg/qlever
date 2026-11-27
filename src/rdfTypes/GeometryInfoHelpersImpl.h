@@ -580,26 +580,26 @@ struct CoordinateFromGeoPointOrWktVisitor {
   }
 
   double operator()(const std::string& wkt) const {
-    ParseResult parseResult = parseWkt(wkt);
-
-    if (!parseResult.parsedWkt_.has_value()) {
+    auto c = wkt.c_str();
+    auto crsType = getCRSType(c, &c);
+    // Cannot compute longitude/latitude from WKT literal in unsupported CRS.
+    if (crsType == ::util::geo::CRSType::UNSUPPORTED) {
       return std::numeric_limits<double>::quiet_NaN();
     }
-    return std::visit(
-        [](const auto& value) -> double {
-          // Only compute longitude/latitude if the WKT literal describes a
-          // `POINT`.
-          if constexpr (std::is_same_v<std::decay_t<decltype(value)>,
-                                       Point<CoordType>>) {
-            return CoordinateFromGeoPointOrWktVisitor<C>{}(value);
-          } else {
-            return std::numeric_limits<double>::quiet_NaN();
-          }
-        },
-        parseResult.parsedWkt_.value());
-  }
+    auto wktType = getWKTType(c, &c);
+    // Only compute longitude/latitude if the WKT literal describes a `POINT`.
+    if (wktType != ::util::geo::WKTType::POINT) {
+      return std::numeric_limits<double>::quiet_NaN();
+    }
+    auto projFunc = [](const Point<double>& p, CRSType sourceCrs) {
+      return projectToCRS(p, sourceCrs, defaultCrs);
+    };
+    auto point = pointFromWKTProj<double>(c, &c, projFunc, crsType);
+    // `POINT EMPTY` yields a point with sentinel coordinates.
+    if (point.empty()) {
+      throw std::runtime_error("Cannot parse point from WKT");
+    }
 
-  double operator()(const Point<CoordType>& point) const {
     if constexpr (C == Coordinate::Longitude) {
       return point.getX();
     } else if constexpr (C == Coordinate::Latitude) {

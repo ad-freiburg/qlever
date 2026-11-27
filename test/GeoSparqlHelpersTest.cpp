@@ -25,6 +25,9 @@ using ad_utility::WktLatitude;
 using ad_utility::WktLongitude;
 using ad_utility::detail::parseWktPoint;
 
+// Helper matcher used for `WktLongitude/Latitude` tests.
+MATCHER(nanMatcher, "Test that input is Nan") { return std::isnan(arg); }
+
 // _____________________________________________________________________________
 TEST(GeoSparqlHelpers, ParseWktPoint) {
   // Test that the given WKT point parses correctly (with all three of
@@ -81,19 +84,21 @@ TEST(GeoSparqlHelpers, ParseWktPoint) {
 // Test that `WktLongitude` and `WktLatitude` work correctly (with all supported
 // coordinate reference systems).
 TEST(GeoSparqlHelpers, WktLongitudeLatitude) {
+  using ::testing::AllOf;
+  using ::testing::DoubleEq;
+  using ::testing::ResultOf;
   auto testWktPointCorrect = [](const std::string& pointWkt,
                                 double expected_lng, double expected_lat) {
-    ASSERT_DOUBLE_EQ(expected_lng, WktLongitude()(pointWkt));
-    ASSERT_DOUBLE_EQ(expected_lat, WktLatitude()(pointWkt));
+    EXPECT_THAT(pointWkt,
+                AllOf(ResultOf(WktLongitude(), DoubleEq(expected_lng)),
+                      ResultOf(WktLatitude(), DoubleEq(expected_lat))));
   };
 
   // Test that the given WKT point is invalid (with all three of
   // parseWktPoint, wktLongitude, and wktLatitude).
   auto testWktPointInvalid = [](const std::string& pointWkt) {
-    auto lng = WktLongitude()(pointWkt);
-    auto lat = WktLatitude()(pointWkt);
-    ASSERT_TRUE(std::isnan(lng));
-    ASSERT_TRUE(std::isnan(lat));
+    EXPECT_THAT(pointWkt, AllOf(ResultOf(WktLongitude(), nanMatcher()),
+                                ResultOf(WktLatitude(), nanMatcher())));
   };
 
   // Test same point in different coordinate reference systems.
@@ -122,6 +127,19 @@ TEST(GeoSparqlHelpers, WktLongitudeLatitude) {
   testWktPointInvalid(
       "\"<http://www.opengis.net/invalid> POINT(7 8)\""
       "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
+  // Test invalid for other WKT types.
+  testWktPointInvalid(
+      "\"POLYGON((1 2,3 4,1 4,1 2))\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
+  // Test empty POINT.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      WktLongitude()(
+          "\"POINT EMPTY\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"),
+      ::testing::HasSubstr("Cannot parse point from WKT"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      WktLatitude()(
+          "\"POINT EMPTY\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"),
+      ::testing::HasSubstr("Cannot parse point from WKT"));
 }
 
 // _____________________________________________________________________________
