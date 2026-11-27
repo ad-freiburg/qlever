@@ -201,6 +201,16 @@ struct MetricArea {
   bool isValid() const { return !std::isnan(area_); }
 };
 
+// The typed ID of a parsed geometry in the `sj::GeometryStore` of the
+// `GeoVocabulary` (see `GeometryInfo::getGeometryStoreId`). Its upper 8 bits
+// hold the type of the geometry and its lower 56 bits the ID in the store (see
+// `sj::ID_TYPE_SHIFT` and `sj::typedId`).
+struct GeometryStoreId {
+  uint64_t id_;
+
+  QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL_CONSTEXPR(GeometryStoreId, id_)
+};
+
 // The serialization format of a geometry literal. For now, only WKT literals
 // are supported (in the future possibly e.g. GeoJSON or KML). The value zero
 // is `WKT`, because all records written before this field was taken into use
@@ -237,7 +247,7 @@ template <typename T>
 CPP_concept RequestedInfoT =
     SameAsAny<T, GeometryInfo, Centroid, BoundingBox, GeometryType,
               SourceCrsType, NumGeometries, MetricLength, MetricArea,
-              SerializationType> ||
+              SerializationType, GeometryStoreId> ||
     SameAsAny<T, WithSourceCrs<Centroid>, WithSourceCrs<BoundingBox>>;
 
 // Where the actual geometries are required, this type can be used.
@@ -251,7 +261,14 @@ using GeoPointOrWkt = std::variant<GeoPoint, std::string>;
 //    zeroed explicitly in later builds of this version).
 // 6: The bytes `[28, 32)` are the two 16-bit fields `sourceCrs_` (initially
 //    reserved and zero) and `serializationType_`, see below.
-// 7: The field `parsedGeometryOffset_` is appended (8 bytes).
+// 7: The bytes `[48, 56)` are the 64-bit field `parsedGeometryOffset_`, see
+//    below. It does not follow the rule below that zero means "not computed".
+// 8: The bytes `[56, 64)` are the 64-bit field `geometryStoreId_`, see below.
+//
+// NOTE: Do not read an index with version 7 that was built with the master,
+// where the bytes `[48, 56)` are the field `geometryStoreId_`. As long as
+// that field is zero in all records and the index has no file with parsed
+// geometries, reading it is harmless (see `GeoVocabulary::getParsedGeometry`).
 //
 // From version 6 on, the binary representation is append-only, so that adding
 // a field does not invalidate existing indices:
@@ -279,14 +296,14 @@ using GeoPointOrWkt = std::variant<GeoPoint, std::string>;
 //   `GEOMETRY_INFO_VERSION`, raise `MIN_LOADABLE_GEOMETRY_INFO_VERSION` to it,
 //   and remove the handling of the dropped versions from `fromSerialized` and
 //   `GEOMETRY_INFO_SIZE_PER_VERSION`.
-constexpr uint64_t GEOMETRY_INFO_VERSION = 7;
+constexpr uint64_t GEOMETRY_INFO_VERSION = 8;
 constexpr uint64_t MIN_LOADABLE_GEOMETRY_INFO_VERSION = 5;
 
 // The size of the binary representation of `GeometryInfo` for each loadable
 // version, starting at `MIN_LOADABLE_GEOMETRY_INFO_VERSION`.
 inline constexpr std::array<size_t, GEOMETRY_INFO_VERSION -
                                         MIN_LOADABLE_GEOMETRY_INFO_VERSION + 1>
-    GEOMETRY_INFO_SIZE_PER_VERSION{48, 48, 56};
+    GEOMETRY_INFO_SIZE_PER_VERSION{48, 48, 56, 64};
 
 // Return true iff a `GeometryInfo` of the given `version` can be read.
 constexpr bool isLoadableGeometryInfoVersion(uint64_t version) {
@@ -338,6 +355,11 @@ class GeometryInfo {
   // Added in version 7, the records of older versions get -1 (see
   // `fromSerialized`).
   int64_t parsedGeometryOffset_ = -1;
+  // The ID of the parsed geometry in the `sj::GeometryStore` of the
+  // `GeoVocabulary` plus one, see `getGeometryStoreId`. Zero means "not
+  // computed", as the rules at `GEOMETRY_INFO_VERSION` require for a field
+  // added after version 5.
+  uint64_t geometryStoreId_ = 0;
 
   static constexpr uint64_t bitMaskGeometryType =
       bitMaskForHigherBits(GeoPoint::numTypeBits);
@@ -435,6 +457,22 @@ class GeometryInfo {
 
   // Get the serialization format of the literal.
   SerializationType getSerializationType() const;
+
+  // Get the ID of the parsed geometry in the `sj::GeometryStore` of the
+  // `GeoVocabulary`. Empty iff the geometry is not stored there (for example
+  // because the index predates the store).
+  std::optional<GeometryStoreId> getGeometryStoreId() const;
+
+  // Set the ID of the parsed geometry in the `sj::GeometryStore`, see
+  // `getGeometryStoreId`.
+  void setGeometryStoreId(uint64_t id);
+
+  // Return the ID of an arbitrary WKT literal in the `sj::GeometryStore`, which
+  // is always empty (only a literal of the `GeoVocabulary` can be stored
+  // there).
+  static std::optional<GeometryStoreId> getGeometryStoreId(std::string_view) {
+    return std::nullopt;
+  }
 
   // Return the serialization format of an arbitrary WKT literal, which is
   // always `WKT`.

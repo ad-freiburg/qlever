@@ -23,9 +23,11 @@
 #include "util/EnumSize.h"
 #include "util/Exception.h"
 #include "util/Random.h"
-// Use the raw nlohmann header rather than `util/json.h` to avoid pulling in
-// `util/File.h` (which uses AD_LOG macros) during the processing of Log.h.
-#include <nlohmann/json.hpp>
+// Only the forward declarations of `nlohmann::json`, because the full header
+// is expensive to compile and this header is included almost everywhere (via
+// `util/Log.h`). The JSON hooks below are templates, so they only need the full
+// header where they are actually used.
+#include <nlohmann/json_fwd.hpp>
 
 namespace ad_utility {
 
@@ -102,7 +104,10 @@ class EnumWithStrings : public EnumWithStringsBaseTag {
 
   // Convert the enum to the corresponding string.
   constexpr std::string_view toString() const {
-    return descriptions()[static_cast<size_t>(value_)];
+    // Index `descriptions_` directly instead of going through the
+    // `descriptions()` view, which is much more expensive to compile. This is
+    // correct because of `checkIndices()`.
+    return Derived::descriptions_[static_cast<size_t>(value_)].second;
   }
 
   friend std::ostream& operator<<(std::ostream& stream, const Derived& d) {
@@ -155,9 +160,13 @@ class EnumWithStrings : public EnumWithStringsBaseTag {
   }
 
   // JSON serialization.
-  friend void to_json(nlohmann::json& j, const Derived& e) { j = e.toString(); }
+  template <typename BasicJson>
+  friend void to_json(BasicJson& j, const Derived& e) {
+    j = e.toString();
+  }
 
-  friend void from_json(const nlohmann::json& j, Derived& e) {
+  template <typename BasicJson>
+  friend void from_json(const BasicJson& j, Derived& e) {
     e = Derived::fromString(static_cast<std::string>(j));
   }
 

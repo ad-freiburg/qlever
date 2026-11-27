@@ -8,14 +8,15 @@
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
+#include "../util/VariableToColumnMapTestHelpers.h"
 #include "./ValuesForTesting.h"
-#include "engine/CartesianProductJoin.h"
-#include "engine/Distinct.h"
-#include "engine/IndexScan.h"
 #include "engine/QueryExecutionTree.h"
-#include "engine/Sort.h"
-#include "engine/StripColumns.h"
-#include "engine/Union.h"
+#include "engine/operation/CartesianProductJoin.h"
+#include "engine/operation/Distinct.h"
+#include "engine/operation/IndexScan.h"
+#include "engine/operation/Sort.h"
+#include "engine/operation/StripColumns.h"
+#include "engine/operation/Union.h"
 
 using namespace ad_utility::testing;
 
@@ -273,8 +274,8 @@ TEST(QueryExecutionTree, createSortedTreeKeepsHiddenVariablesHidden) {
   using Var = Variable;
   using Vars = std::vector<std::optional<Variable>>;
   auto* qec = getQec();
-  VariableToColumnMap expectedVariables{
-      {Var{"?a"}, makeAlwaysDefinedColumn(0)}};
+  auto expectedVariables =
+      makeVariableToColumnMap({{Var{"?a"}, makeAlwaysDefinedColumn(0)}});
 
   // A `Union` whose root hides `?b`, re-sorted by `?a`.
   auto makeValues = [qec](IdTable table) {

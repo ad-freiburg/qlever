@@ -10,14 +10,15 @@
 #include "./util/IdTableHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
+#include "./util/VariableToColumnMapTestHelpers.h"
 #include "engine/CallFixedSize.h"
-#include "engine/CountAvailablePredicates.h"
-#include "engine/HasPredicateScan.h"
-#include "engine/IndexScan.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
 #include "engine/PermutationSelector.h"
 #include "engine/ValuesForTesting.h"
+#include "engine/operation/CountAvailablePredicates.h"
+#include "engine/operation/HasPredicateScan.h"
+#include "engine/operation/IndexScan.h"
 #include "global/Pattern.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
@@ -77,6 +78,8 @@ TEST_F(HasPredicateScanTest, freeS) {
   auto scan = HasPredicateScan{
       qec,
       SparqlTriple{Variable{"?x"}, iri(HAS_PREDICATE_PREDICATE), iri("<p>")}};
+  EXPECT_EQ(scan.getExternallyVisibleVariableColumns(),
+            makeVariableToColumnMap({{V{"?x"}, makeAlwaysDefinedColumn(0)}}));
   runTest(scan, {{x}, {y}});
   // Run again to test handling a cached `IndexScan`.
   runTest(scan, {{x}, {y}});
@@ -88,6 +91,8 @@ TEST_F(HasPredicateScanTest, freeO) {
   auto scan = HasPredicateScan{
       qec,
       SparqlTriple{iri("<x>"), iri(HAS_PREDICATE_PREDICATE), Variable{"?p"}}};
+  EXPECT_EQ(scan.getExternallyVisibleVariableColumns(),
+            makeVariableToColumnMap({{V{"?p"}, makeAlwaysDefinedColumn(0)}}));
   runTest(scan, {{p}, {p2}});
 }
 // _____________________________________________________________
@@ -130,6 +135,9 @@ TEST_F(HasPredicateScanTest, fullScan) {
   auto scan = HasPredicateScan{
       qec, SparqlTriple{Variable{"?s"}, iri(HAS_PREDICATE_PREDICATE),
                         Variable{"?p"}}};
+  EXPECT_EQ(scan.getExternallyVisibleVariableColumns(),
+            makeVariableToColumnMap({{V{"?s"}, makeAlwaysDefinedColumn(0)},
+                                     {V{"?p"}, makeAlwaysDefinedColumn(1)}}));
   runTest(scan, {{x, p}, {x, p2}, {y, p}, {y, p3}, {z, p3}});
   // Run again to test handling a cached `IndexScan`.
   runTest(scan, {{x, p}, {x, p2}, {y, p}, {y, p3}, {z, p3}});

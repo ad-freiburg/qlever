@@ -5,7 +5,6 @@
 #include "index/vocabulary/PrefixHeuristic.h"
 
 #include "backports/StartsWithAndEndsWith.h"
-#include "util/Exception.h"
 #include "util/StringUtils.h"
 
 using std::string;

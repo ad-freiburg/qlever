@@ -6,10 +6,6 @@
 
 #include <regex>
 
-#include "util/configManager/ConfigShorthandVisitor.h"
-#include "util/configManager/generated/ConfigShorthandLexer.h"
-#include "util/configManager/generated/ConfigShorthandParser.h"
-
 namespace ad_utility {
 // ____________________________________________________________________________
 bool isNameInShortHand(std::string_view str) {

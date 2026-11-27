@@ -15,10 +15,11 @@
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
-#include "engine/CartesianProductJoin.h"
-#include "engine/Distinct.h"
-#include "engine/IndexScan.h"
+#include "../util/VariableToColumnMapTestHelpers.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/operation/CartesianProductJoin.h"
+#include "engine/operation/Distinct.h"
+#include "engine/operation/IndexScan.h"
 
 using namespace ad_utility::testing;
 using ad_utility::source_location;
@@ -229,10 +230,10 @@ TEST(CartesianProductJoin, variableColumnMap) {
   CartesianProductJoin join{qec, std::move(subtrees)};
 
   using enum ColumnIndexAndTypeInfo::UndefStatus;
-  VariableToColumnMap expectedVariables{
-      {Variable{"?x"}, {4, AlwaysDefined}},
-      {Variable{"?y"}, {1, AlwaysDefined}},
-      {Variable{"?z"}, {3, PossiblyUndefined}}};
+  auto expectedVariables =
+      makeVariableToColumnMap({{Variable{"?x"}, {4, AlwaysDefined}},
+                               {Variable{"?y"}, {1, AlwaysDefined}},
+                               {Variable{"?z"}, {3, PossiblyUndefined}}});
   EXPECT_THAT(join.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
 }

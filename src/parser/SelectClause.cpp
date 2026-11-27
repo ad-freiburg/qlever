@@ -19,7 +19,7 @@ void ClauseBase::addVisibleVariable(const Variable& variable) {
   }
 }
 
-const std::vector<Variable>& ClauseBase::getVisibleVariables() const {
+const qlm::vector<Variable>& ClauseBase::getVisibleVariables() const {
   return visibleVariables_;
 }
 
@@ -32,8 +32,8 @@ const std::vector<Variable>& ClauseBase::getVisibleVariables() const {
 void SelectClause::setAsterisk() { varsAndAliasesOrAsterisk_ = Asterisk{}; }
 
 // ____________________________________________________________________
-void SelectClause::setSelected(std::vector<VarOrAlias> varsOrAliases) {
-  varsAndAliasesOrAsterisk_ = VarsAndAliases{};
+void SelectClause::setSelected(qlm::vector<VarOrAlias> varsOrAliases) {
+  varsAndAliasesOrAsterisk_ = VarsAndAliases{visibleVariables_.get_allocator()};
   for (auto& el : varsOrAliases) {
     // The second argument means that the variables are not internal.
     addAlias(std::move(el), false);
@@ -60,14 +60,15 @@ void SelectClause::addAlias(parsedQuery::SelectClause::VarOrAlias varOrAlias,
 }
 
 // ____________________________________________________________________
-void SelectClause::setSelected(std::vector<Variable> variables) {
-  std::vector<VarOrAlias> v(ql::make_move_iterator(variables.begin()),
-                            ql::make_move_iterator(variables.end()));
-  setSelected(v);
+void SelectClause::setSelected(qlm::vector<Variable> variables) {
+  qlm::vector<VarOrAlias> v(ql::make_move_iterator(variables.begin()),
+                            ql::make_move_iterator(variables.end()),
+                            variables.get_allocator());
+  setSelected(std::move(v));
 }
 
 // ____________________________________________________________________________
-[[nodiscard]] const std::vector<Variable>& SelectClause::getSelectedVariables()
+[[nodiscard]] const qlm::vector<Variable>& SelectClause::getSelectedVariables()
     const {
   return isAsterisk()
              ? visibleVariables_
@@ -83,22 +84,23 @@ SelectClause::getSelectedVariablesAsStrings() const {
 }
 
 // ____________________________________________________________________
-[[nodiscard]] const std::vector<Alias>& SelectClause::getAliases() const {
-  static const std::vector<Alias> emptyDummy;
+[[nodiscard]] ql::span<const Alias> SelectClause::getAliases() const {
   // Aliases are always manually specified
   if (isAsterisk()) {
-    return emptyDummy;
+    return {};
   } else {
     return std::get<VarsAndAliases>(varsAndAliasesOrAsterisk_).aliases_;
   }
 }
 
-std::vector<Alias> SelectClause::deleteAliasesButKeepVariables() {
+qlm::vector<Alias> SelectClause::deleteAliasesButKeepVariables() {
   if (isAsterisk()) {
-    return {};
+    return qlm::vector<Alias>{visibleVariables_.get_allocator()};
   }
   auto& varsAndAliases = std::get<VarsAndAliases>(varsAndAliasesOrAsterisk_);
   // The variables that the aliases are bound to have previously been stored
   // separately in `varsAndAliases.vars_`, so we can simply delete the aliases.
-  return std::exchange(varsAndAliases.aliases_, {});
+  return std::exchange(
+      varsAndAliases.aliases_,
+      qlm::vector<Alias>{varsAndAliases.aliases_.get_allocator()});
 }

@@ -19,10 +19,11 @@
 #include "../util/LocalVocabEntryTestHelpers.h"
 #include "../util/LocalVocabTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
+#include "../util/VariableToColumnMapTestHelpers.h"
 #include "./LazyJoinTestHelpers.h"
-#include "engine/IndexScan.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
+#include "engine/operation/IndexScan.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "index/IndexImpl.h"
 #include "index/TripleComponentConversions.h"
@@ -165,7 +166,7 @@ void testLazyScanForJoinWithColumn(
   auto t = generateLocationTrace(l);
   auto qec = getQec(kg);
   IndexScan scan{qec, Permutation::PSO, scanTriple};
-  std::vector<Id> column;
+  IdColumn column;
   for (const auto& entry : columnEntries) {
     column.push_back(toValueId(entry, qec->getIndex()).value());
   }
@@ -183,7 +184,7 @@ void testLazyScanWithColumnThrows(
   auto t = generateLocationTrace(l);
   auto qec = getQec(kg);
   IndexScan s1{qec, Permutation::PSO, scanTriple};
-  std::vector<Id> column;
+  IdColumn column;
   for (const auto& entry : columnEntries) {
     column.push_back(toValueId(entry, qec->getIndex()).value());
   }
@@ -447,10 +448,10 @@ TEST(IndexScan, additionalColumn) {
   auto scan = IndexScan{qec, Permutation::PSO, triple};
   ASSERT_EQ(scan.getResultWidth(), 4);
   auto col = makeAlwaysDefinedColumn;
-  VariableToColumnMap expected = {{V{"?x"}, col(0)},
-                                  {V{"?z"}, col(1)},
-                                  {V("?xpattern"), col(2)},
-                                  {V("?ypattern"), col(3)}};
+  auto expected = makeVariableToColumnMap({{V{"?x"}, col(0)},
+                                           {V{"?z"}, col(1)},
+                                           {V("?xpattern"), col(2)},
+                                           {V("?ypattern"), col(3)}});
   ASSERT_THAT(scan.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expected));
   ASSERT_THAT(scan.getCacheKey(),
@@ -493,8 +494,8 @@ TEST(IndexScan, makeTreeWithBindColumnOfConstant) {
   ASSERT_TRUE(tree.has_value());
   auto col = makeAlwaysDefinedColumn;
   EXPECT_THAT(tree.value()->getVariableColumns(),
-              ::testing::UnorderedElementsAreArray(VariableToColumnMap{
-                  {V{"?s"}, col(0)}, {V{"?o"}, col(1)}, {V{"?c"}, col(2)}}));
+              ::testing::UnorderedElementsAreArray(makeVariableToColumnMap(
+                  {{V{"?s"}, col(0)}, {V{"?o"}, col(1)}, {V{"?c"}, col(2)}})));
   EXPECT_THAT(
       tree.value()->getCacheKey(),
       ::testing::HasSubstr(absl::StrCat("Constant Columns: ", p.getBits())));
@@ -1781,33 +1782,33 @@ TEST(IndexScan, clone) {
 }
 
 // _____________________________________________________________________________
-TEST(IndexScan, columnOriginatesFromGraphOrUndef) {
+TEST(IndexScan, columnContainsOnlyKnowledgeGraphNodes) {
   auto* qec = getQec();
   IndexScan scan1{qec, Permutation::PSO,
                   SparqlTripleSimple{Var{"?x"}, Var{"?y"}, Var{"?z"}}};
-  EXPECT_TRUE(scan1.columnOriginatesFromGraphOrUndef(Var{"?x"}));
-  EXPECT_FALSE(scan1.columnOriginatesFromGraphOrUndef(Var{"?y"}));
-  EXPECT_TRUE(scan1.columnOriginatesFromGraphOrUndef(Var{"?z"}));
-  EXPECT_THROW(scan1.columnOriginatesFromGraphOrUndef(Var{"?notExisting"}),
+  EXPECT_TRUE(scan1.columnContainsOnlyKnowledgeGraphNodes(Var{"?x"}));
+  EXPECT_FALSE(scan1.columnContainsOnlyKnowledgeGraphNodes(Var{"?y"}));
+  EXPECT_TRUE(scan1.columnContainsOnlyKnowledgeGraphNodes(Var{"?z"}));
+  EXPECT_THROW(scan1.columnContainsOnlyKnowledgeGraphNodes(Var{"?notExisting"}),
                ad_utility::Exception);
 
   IndexScan scan2{
       qec, Permutation::PSO,
       SparqlTripleSimple{
           Var{"?x"}, Var{"?y"}, Var{"?z"}, {std::pair{3, Var{"?g"}}}}};
-  EXPECT_TRUE(scan2.columnOriginatesFromGraphOrUndef(Var{"?x"}));
-  EXPECT_FALSE(scan2.columnOriginatesFromGraphOrUndef(Var{"?y"}));
-  EXPECT_TRUE(scan2.columnOriginatesFromGraphOrUndef(Var{"?z"}));
-  EXPECT_FALSE(scan2.columnOriginatesFromGraphOrUndef(Var{"?g"}));
-  EXPECT_THROW(scan2.columnOriginatesFromGraphOrUndef(Var{"?notExisting"}),
+  EXPECT_TRUE(scan2.columnContainsOnlyKnowledgeGraphNodes(Var{"?x"}));
+  EXPECT_FALSE(scan2.columnContainsOnlyKnowledgeGraphNodes(Var{"?y"}));
+  EXPECT_TRUE(scan2.columnContainsOnlyKnowledgeGraphNodes(Var{"?z"}));
+  EXPECT_FALSE(scan2.columnContainsOnlyKnowledgeGraphNodes(Var{"?g"}));
+  EXPECT_THROW(scan2.columnContainsOnlyKnowledgeGraphNodes(Var{"?notExisting"}),
                ad_utility::Exception);
 
   IndexScan scan3{qec, Permutation::OSP,
                   SparqlTripleSimple{iri("<a>"), Var{"?y"}, iri("<c>")}};
-  EXPECT_THROW(scan3.columnOriginatesFromGraphOrUndef(Var{"?x"}),
+  EXPECT_THROW(scan3.columnContainsOnlyKnowledgeGraphNodes(Var{"?x"}),
                ad_utility::Exception);
-  EXPECT_FALSE(scan3.columnOriginatesFromGraphOrUndef(Var{"?y"}));
-  EXPECT_THROW(scan3.columnOriginatesFromGraphOrUndef(Var{"?z"}),
+  EXPECT_FALSE(scan3.columnContainsOnlyKnowledgeGraphNodes(Var{"?y"}));
+  EXPECT_THROW(scan3.columnContainsOnlyKnowledgeGraphNodes(Var{"?z"}),
                ad_utility::Exception);
 }
 
@@ -1883,7 +1884,7 @@ TEST(IndexScanTest, StripColumns) {
         getVarsAndColumnIndices(varsToKeep, baseScan);
     // Build expected variable to column mapping with dense, ordered column
     // indices
-    VariableToColumnMap expected;
+    auto expected = makeVariableToColumnMap();
     std::vector<ColumnIndex> originalColumnIndices;
     for (size_t i = 0; i < columnOrigins.size(); ++i) {
       expected[columnOrigins[i].first] = def(i);
@@ -2017,8 +2018,8 @@ TEST(IndexScanTest, StripColumns) {
 
     // Test column origin function for variables that exist in both scans
     for (const auto& var : varsToKeep) {
-      EXPECT_EQ(strippedScanOp.columnOriginatesFromGraphOrUndef(var),
-                baseScan.columnOriginatesFromGraphOrUndef(var));
+      EXPECT_EQ(strippedScanOp.columnContainsOnlyKnowledgeGraphNodes(var),
+                baseScan.columnContainsOnlyKnowledgeGraphNodes(var));
     }
   };
 
