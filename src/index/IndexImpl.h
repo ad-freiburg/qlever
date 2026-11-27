@@ -707,14 +707,10 @@ class IndexImpl {
   // Return true iff the `permutation` is loaded.
   bool hasPermutation(Permutation::Enum permutation) const;
 
-  // Return the loaded permutations, in the order of `Permutation::ALL`.
-  std::vector<Permutation::Enum> loadedPermutations() const {
-    return loadedPermutations<false>();
-  }
-
-  // Return those of the `Permutation::all<isInternal>()` that are loaded. The
-  // internal permutations are loaded together with their normal counterparts.
-  template <bool isInternal>
+  // Return those of the `Permutation::all<isInternal>()` that are loaded, in
+  // the order of `Permutation::ALL`. The internal permutations are loaded
+  // together with their normal counterparts.
+  template <bool isInternal = false>
   std::vector<Permutation::Enum> loadedPermutations() const {
     std::vector<Permutation::Enum> result;
     ql::ranges::copy_if(

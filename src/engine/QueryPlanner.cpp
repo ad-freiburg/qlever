@@ -618,6 +618,10 @@ CPP_concept TriplePosition =
 
 // Create a `SparqlFilter` that corresponds to the expression `var1==var2`.
 // Used as a helper function below.
+// TODO<joka921> The `=` of SPARQL compares the values of terms (for example,
+// the integer `1` is equal to the decimal `1.0`), while a repeated variable in
+// a triple pattern only matches the exact same term. Use `sameTerm` instead
+// once it is supported (see PR ad-freiburg/qlever#3730).
 SparqlFilter createEqualFilter(const Variable& var1, const Variable& var2,
                                qlever::Allocator<Id> allocator) {
   std::string filterString =
@@ -826,24 +830,22 @@ void QueryPlanner::seedFromOrdinaryTriple(
   // permutation is loaded at all (for example, for an index that was loaded
   // from a blob), the recorded scans are used, and their execution reports
   // the missing permutation.
-  bool noPermutationIsLoaded =
-      _qec != nullptr && _qec->getIndex().loadedPermutations().empty();
-  auto isLoaded = [this, noPermutationIsLoaded](Permutation::Enum permutation) {
-    return _qec == nullptr || noPermutationIsLoaded ||
-           _qec->getIndex().hasPermutation(permutation);
-  };
-  if (ql::ranges::any_of(scans | ql::views::keys, isLoaded)) {
-    for (auto& filter : filters) {
-      addFilter(std::move(filter));
+  const auto& index = _qec->getIndex();
+  bool noPermutationIsLoaded = index.loadedPermutations().empty();
+  bool anyScanWasAdded = false;
+  for (auto& [permutation, scanTriple] : scans) {
+    if (noPermutationIsLoaded || index.hasPermutation(permutation)) {
+      addIndexScan(permutation, std::move(scanTriple));
+      anyScanWasAdded = true;
     }
-    for (auto& [permutation, scanTriple] : scans) {
-      if (isLoaded(permutation)) {
-        addIndexScan(permutation, std::move(scanTriple));
-      }
-    }
+  }
+  if (!anyScanWasAdded) {
+    seedWithoutSuitablePermutation(triple, addIndexScan, addFilter);
     return;
   }
-  seedWithoutSuitablePermutation(triple, addIndexScan, addFilter);
+  for (auto& filter : filters) {
+    addFilter(std::move(filter));
+  }
 }
 
 // _____________________________________________________________________________
@@ -851,7 +853,6 @@ template <typename AddedIndexScanFunction, typename AddFilter>
 void QueryPlanner::seedWithoutSuitablePermutation(
     const SparqlTripleSimple& triple,
     const AddedIndexScanFunction& addIndexScan, const AddFilter& addFilter) {
-  AD_CORRECTNESS_CHECK(_qec != nullptr);
   auto scanTriple = triple;
   std::array<TripleComponent*, 3> components{&scanTriple.s_, &scanTriple.p_,
                                              &scanTriple.o_};
@@ -930,10 +931,10 @@ SparqlFilter QueryPlanner::createEqualFilterWithConstant(
     AD_CORRECTNESS_CHECK(id.has_value());
     constantExpression = std::make_unique<IdExpression>(id.value());
   }
-  // NOTE: The `=` of SPARQL compares the values of terms, so for example the
-  // integer `1` is equal to the decimal `1.0`, while a triple pattern only
-  // matches the exact term. As this is only a fallback for very unusual
-  // configurations, we accept this difference.
+  // TODO<joka921> The `=` of SPARQL compares the values of terms, so for
+  // example the integer `1` is equal to the decimal `1.0`, while a triple
+  // pattern only matches the exact term. Use `sameTerm` instead once it is
+  // supported (see PR ad-freiburg/qlever#3730).
   return SparqlFilter{SparqlExpressionPimpl{
       _qec->makeShared<EqualExpression>(std::array<SparqlExpression::Ptr, 2>{
           std::make_unique<VariableExpression>(variable),
@@ -1076,6 +1077,10 @@ auto QueryPlanner::seedWithScansAndText(
                                     : graphVariable;
         // If the pattern contains the graph variable, make sure to apply a
         // proper filter.
+        // TODO<joka921> This filter has to check that the graph and the
+        // triple component are the same term, which is `sameTerm`, not `=`.
+        // Use `sameTerm` once it is supported (see PR
+        // ad-freiburg/qlever#3730).
         if (tripleContainsGraphVariable) {
           using namespace sparqlExpression;
           auto makeVarExpr = [](Variable variable) {
