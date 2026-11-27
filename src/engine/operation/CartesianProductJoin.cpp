@@ -183,7 +183,7 @@ Result CartesianProductJoin::computeResult(bool requestLaziness) {
 
 // ____________________________________________________________________________
 VariableToColumnMap CartesianProductJoin::computeVariableToColumnMap() const {
-  VariableToColumnMap result;
+  VariableToColumnMap result{allocator()};
   // It is crucial that we also count the columns in the inputs to which no
   // variable was assigned. This is managed by the `offset` variable.
   size_t offset = 0;

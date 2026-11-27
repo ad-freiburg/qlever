@@ -13,6 +13,7 @@
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
+#include "../util/VariableToColumnMapTestHelpers.h"
 #include "./TextIndexScanTestHelpers.h"
 #include "engine/operation/IndexScan.h"
 #include "engine/operation/TextIndexScanForWord.h"
@@ -188,10 +189,10 @@ TEST(TextIndexScanForWord, WordScanPrefix) {
 
   // Test if all columns are there and correct
   using enum ColumnIndexAndTypeInfo::UndefStatus;
-  VariableToColumnMap expectedVariables{
-      {Variable{"?text2"}, {0, AlwaysDefined}},
-      {Variable{"?ql_matchingword_text2_test"}, {1, AlwaysDefined}},
-      {Variable{"?ql_score_prefix_text2_test"}, {2, AlwaysDefined}}};
+  auto expectedVariables = makeVariableToColumnMap(
+      {{Variable{"?text2"}, {0, AlwaysDefined}},
+       {Variable{"?ql_matchingword_text2_test"}, {1, AlwaysDefined}},
+       {Variable{"?ql_score_prefix_text2_test"}, {2, AlwaysDefined}}});
   EXPECT_THAT(s2.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
 

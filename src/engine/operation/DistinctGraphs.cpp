@@ -46,7 +46,8 @@ qlm::string DistinctGraphs::getCacheKeyImpl() const {
 
 // ____________________________________________________________________________
 VariableToColumnMap DistinctGraphs::computeVariableToColumnMap() const {
-  return {{graphVariable_, makeAlwaysDefinedColumn(0)}};
+  return VariableToColumnMap{{{graphVariable_, makeAlwaysDefinedColumn(0)}},
+                             allocator()};
 }
 
 // ____________________________________________________________________________

@@ -96,9 +96,10 @@ qlm::vector<ColumnIndex> Describe::resultSortedOn() const {
 VariableToColumnMap Describe::computeVariableToColumnMap() const {
   using V = Variable;
   auto col = makeAlwaysDefinedColumn;
-  return {{V("?subject"), col(0)},
-          {V("?predicate"), col(1)},
-          {V("?object"), col(2)}};
+  return VariableToColumnMap{{{V("?subject"), col(0)},
+                              {V("?predicate"), col(1)},
+                              {V("?object"), col(2)}},
+                             allocator()};
 }
 
 // A helper function for the recursive BFS. Return those `Id`s from `input` (an
@@ -174,8 +175,9 @@ IdTable Describe::makeAndExecuteJoinWithFullIndex(
   auto valuesOp = ad_utility::makeExecutionTree<ExplicitIdTableOperation>(
       getExecutionContext(), makeShared<IdTable>(std::move(input)),
       VariableToColumnMap{
-          {subjectVar,
-           ColumnIndexAndTypeInfo{0, ColumnIndexAndTypeInfo::AlwaysDefined}}},
+          {{subjectVar,
+            ColumnIndexAndTypeInfo{0, ColumnIndexAndTypeInfo::AlwaysDefined}}},
+          allocator()},
       qlm::vector<ColumnIndex>{allocator()}, LocalVocab{allocator()},
       absl::StrCat("INTERNAL DESCRIBE ", uniqueCounter++));
   SparqlTripleSimple triple{subjectVar, V{"?predicate"}, V{"?object"}};

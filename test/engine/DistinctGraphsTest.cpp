@@ -13,6 +13,7 @@
 
 #include "../util/IndexTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
+#include "../util/VariableToColumnMapTestHelpers.h"
 #include "engine/VariableToColumnMap.h"
 #include "engine/operation/DistinctGraphs.h"
 #include "global/Constants.h"
@@ -150,7 +151,8 @@ TEST(DistinctGraphs, clone) {
 TEST(DistinctGraphs, computeVariableToColumnMap) {
   auto dg = makeDistinctGraphs();
 
-  VariableToColumnMap expected{{Variable{"?g"}, makeAlwaysDefinedColumn(0)}};
+  auto expected =
+      makeVariableToColumnMap({{Variable{"?g"}, makeAlwaysDefinedColumn(0)}});
   EXPECT_EQ(dg.getExternallyVisibleVariableColumns(), expected);
 }
 

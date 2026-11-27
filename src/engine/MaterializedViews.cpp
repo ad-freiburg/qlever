@@ -474,6 +474,7 @@ MaterializedView::MaterializedView(std::string onDiskBase, std::string name,
       name_{std::move(name)},
       permutation_{std::allocate_shared<Permutation>(
           allocator, Permutation::Enum::SPO, allocator, name_)},
+      varToColMap_{allocator},
       locatedTriplesState_{makeEmptyLocatedTriplesState(allocator)} {
   AD_CORRECTNESS_CHECK(onDiskBase_ != "",
                        "The index base filename was not set.");

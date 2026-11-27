@@ -43,6 +43,7 @@
 #include "util/IndexTestHelpers.h"
 #include "util/LocalVocabEntryTestHelpers.h"
 #include "util/OperationTestHelpers.h"
+#include "util/VariableToColumnMapTestHelpers.h"
 
 using ad_utility::testing::makeLocalVocab;
 
@@ -921,11 +922,11 @@ TEST_F(GroupByOptimizations,
   // Check the result.
   auto d = DoubleId;
   using enum ColumnIndexAndTypeInfo::UndefStatus;
-  VariableToColumnMap expectedVariables{
-      {Variable{"?a"}, {0, AlwaysDefined}},
-      {Variable{"?b"}, {1, AlwaysDefined}},
-      {Variable{"?x"}, {2, PossiblyUndefined}},
-      {Variable{"?y"}, {3, PossiblyUndefined}}};
+  auto expectedVariables =
+      makeVariableToColumnMap({{Variable{"?a"}, {0, AlwaysDefined}},
+                               {Variable{"?b"}, {1, AlwaysDefined}},
+                               {Variable{"?x"}, {2, PossiblyUndefined}},
+                               {Variable{"?y"}, {3, PossiblyUndefined}}});
   EXPECT_THAT(groupBy.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
   auto expected = makeIdTableFromVector(
@@ -978,10 +979,10 @@ TEST_F(GroupByOptimizations,
   // Check the result.
   auto d = DoubleId;
   using enum ColumnIndexAndTypeInfo::UndefStatus;
-  VariableToColumnMap expectedVariables{
-      {Variable{"?a"}, {0, AlwaysDefined}},
-      {Variable{"?b"}, {1, AlwaysDefined}},
-      {Variable{"?x"}, {2, PossiblyUndefined}}};
+  auto expectedVariables =
+      makeVariableToColumnMap({{Variable{"?a"}, {0, AlwaysDefined}},
+                               {Variable{"?b"}, {1, AlwaysDefined}},
+                               {Variable{"?x"}, {2, PossiblyUndefined}}});
   EXPECT_THAT(groupBy.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
   auto expected = makeIdTableFromVector(
@@ -1034,10 +1035,10 @@ TEST_F(GroupByOptimizations,
   // Check the result.
   auto d = DoubleId;
   using enum ColumnIndexAndTypeInfo::UndefStatus;
-  VariableToColumnMap expectedVariables{
-      {Variable{"?a"}, {0, AlwaysDefined}},
-      {Variable{"?c"}, {1, AlwaysDefined}},
-      {Variable{"?x"}, {2, PossiblyUndefined}}};
+  auto expectedVariables =
+      makeVariableToColumnMap({{Variable{"?a"}, {0, AlwaysDefined}},
+                               {Variable{"?c"}, {1, AlwaysDefined}},
+                               {Variable{"?x"}, {2, PossiblyUndefined}}});
   EXPECT_THAT(groupBy.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
   auto expected = makeIdTableFromVector(
@@ -1098,14 +1099,14 @@ TEST_F(GroupByOptimizations, correctResultForHashMapOptimizationManyVariables) {
   // Check the result.
   auto d = DoubleId;
   using enum ColumnIndexAndTypeInfo::UndefStatus;
-  VariableToColumnMap expectedVariables{
-      {Variable{"?a"}, {0, AlwaysDefined}},
-      {Variable{"?b"}, {1, AlwaysDefined}},
-      {Variable{"?c"}, {2, AlwaysDefined}},
-      {Variable{"?d"}, {3, AlwaysDefined}},
-      {Variable{"?e"}, {4, AlwaysDefined}},
-      {Variable{"?f"}, {5, AlwaysDefined}},
-      {Variable{"?x"}, {6, PossiblyUndefined}}};
+  auto expectedVariables =
+      makeVariableToColumnMap({{Variable{"?a"}, {0, AlwaysDefined}},
+                               {Variable{"?b"}, {1, AlwaysDefined}},
+                               {Variable{"?c"}, {2, AlwaysDefined}},
+                               {Variable{"?d"}, {3, AlwaysDefined}},
+                               {Variable{"?e"}, {4, AlwaysDefined}},
+                               {Variable{"?f"}, {5, AlwaysDefined}},
+                               {Variable{"?x"}, {6, PossiblyUndefined}}});
   EXPECT_THAT(groupBy.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
   auto expected =
@@ -1172,11 +1173,11 @@ TEST_F(GroupByOptimizations, hashMapOptimizationGroupedVariable) {
   // Check the result.
   auto d = DoubleId;
   using enum ColumnIndexAndTypeInfo::UndefStatus;
-  VariableToColumnMap expectedVariables{
-      {Variable{"?a"}, {0, AlwaysDefined}},
-      {Variable{"?x"}, {1, PossiblyUndefined}},
-      {Variable{"?y"}, {2, PossiblyUndefined}},
-      {Variable{"?z"}, {3, PossiblyUndefined}}};
+  auto expectedVariables =
+      makeVariableToColumnMap({{Variable{"?a"}, {0, AlwaysDefined}},
+                               {Variable{"?x"}, {1, PossiblyUndefined}},
+                               {Variable{"?y"}, {2, PossiblyUndefined}},
+                               {Variable{"?z"}, {3, PossiblyUndefined}}});
   EXPECT_THAT(groupBy.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
   auto expected = makeIdTableFromVector(
@@ -1247,11 +1248,11 @@ TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxSum) {
   auto i = IntId;
   auto undef = ValueId::makeUndefined();
   using enum ColumnIndexAndTypeInfo::UndefStatus;
-  VariableToColumnMap expectedVariables{
-      {Variable{"?a"}, {0, AlwaysDefined}},
-      {Variable{"?x"}, {1, PossiblyUndefined}},
-      {Variable{"?z"}, {2, PossiblyUndefined}},
-      {Variable{"?w"}, {3, PossiblyUndefined}}};
+  auto expectedVariables =
+      makeVariableToColumnMap({{Variable{"?a"}, {0, AlwaysDefined}},
+                               {Variable{"?x"}, {1, PossiblyUndefined}},
+                               {Variable{"?z"}, {2, PossiblyUndefined}},
+                               {Variable{"?w"}, {3, PossiblyUndefined}}});
   EXPECT_THAT(groupBy.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
   // The sum `13.37 + 1.0 + 4.0` differs from the double `18.37` in the lowest
@@ -1335,11 +1336,11 @@ TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxSumIntegers) {
   // Check the result.
   auto i = IntId;
   using enum ColumnIndexAndTypeInfo::UndefStatus;
-  VariableToColumnMap expectedVariables{
-      {Variable{"?a"}, {0, AlwaysDefined}},
-      {Variable{"?x"}, {1, PossiblyUndefined}},
-      {Variable{"?z"}, {2, PossiblyUndefined}},
-      {Variable{"?w"}, {3, PossiblyUndefined}}};
+  auto expectedVariables =
+      makeVariableToColumnMap({{Variable{"?a"}, {0, AlwaysDefined}},
+                               {Variable{"?x"}, {1, PossiblyUndefined}},
+                               {Variable{"?z"}, {2, PossiblyUndefined}},
+                               {Variable{"?w"}, {3, PossiblyUndefined}}});
   EXPECT_THAT(groupBy.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
   auto expected = makeIdTableFromVector(
@@ -2392,10 +2393,10 @@ TEST(GroupBy, GroupedVariableInExpressions) {
   // Check the result.
   auto d = DoubleId;
   using enum ColumnIndexAndTypeInfo::UndefStatus;
-  VariableToColumnMap expectedVariables{
-      {Variable{"?a"}, {0, AlwaysDefined}},
-      {Variable{"?x"}, {1, PossiblyUndefined}},
-      {Variable{"?y"}, {2, PossiblyUndefined}}};
+  auto expectedVariables =
+      makeVariableToColumnMap({{Variable{"?a"}, {0, AlwaysDefined}},
+                               {Variable{"?x"}, {1, PossiblyUndefined}},
+                               {Variable{"?y"}, {2, PossiblyUndefined}}});
   EXPECT_THAT(groupBy.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
   auto expected =
@@ -2455,10 +2456,10 @@ TEST(GroupBy, AliasResultReused) {
   // Check the result.
   auto d = DoubleId;
   using enum ColumnIndexAndTypeInfo::UndefStatus;
-  VariableToColumnMap expectedVariables{
-      {Variable{"?a"}, {0, AlwaysDefined}},
-      {Variable{"?x"}, {1, PossiblyUndefined}},
-      {Variable{"?y"}, {2, PossiblyUndefined}}};
+  auto expectedVariables =
+      makeVariableToColumnMap({{Variable{"?a"}, {0, AlwaysDefined}},
+                               {Variable{"?x"}, {1, PossiblyUndefined}},
+                               {Variable{"?y"}, {2, PossiblyUndefined}}});
   EXPECT_THAT(groupBy.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
   auto expected =
@@ -2489,10 +2490,10 @@ TEST(GroupBy, AddedHavingRows) {
   EXPECT_THAT(pq.selectClause().getSelectedVariables(),
               ::testing::ElementsAre(Variable{"?x"}, Variable{"?count"}));
   using enum ColumnIndexAndTypeInfo::UndefStatus;
-  VariableToColumnMap expectedVariables{
-      {Variable{"?x"}, {0, AlwaysDefined}},
-      {Variable{"?count"}, {1, PossiblyUndefined}},
-      {Variable{"?_QLever_internal_variable_0"}, {2, PossiblyUndefined}}};
+  auto expectedVariables = makeVariableToColumnMap(
+      {{Variable{"?x"}, {0, AlwaysDefined}},
+       {Variable{"?count"}, {1, PossiblyUndefined}},
+       {Variable{"?_QLever_internal_variable_0"}, {2, PossiblyUndefined}}});
   EXPECT_THAT(tree->getVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
   const auto& table = res->idTableView();

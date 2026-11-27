@@ -21,6 +21,7 @@
 #include "util/OperationTestHelpers.h"
 #include "util/RuntimeParametersTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
+#include "util/VariableToColumnMapTestHelpers.h"
 
 namespace {
 
@@ -74,10 +75,10 @@ TEST_F(LoadTest, basicMethods) {
   EXPECT_THAT(load.getMultiplicity(1), testing::Eq(1));
   EXPECT_THAT(load.getMultiplicity(2), testing::Eq(1));
   EXPECT_THAT(load.getExternallyVisibleVariableColumns(),
-              testing::UnorderedElementsAreArray(VariableToColumnMap{
-                  {Variable("?s"), makeAlwaysDefinedColumn(0)},
-                  {Variable("?p"), makeAlwaysDefinedColumn(1)},
-                  {Variable("?o"), makeAlwaysDefinedColumn(2)}}));
+              testing::UnorderedElementsAreArray(makeVariableToColumnMap(
+                  {{Variable("?s"), makeAlwaysDefinedColumn(0)},
+                   {Variable("?p"), makeAlwaysDefinedColumn(1)},
+                   {Variable("?o"), makeAlwaysDefinedColumn(2)}})));
   EXPECT_THAT(load.getSizeEstimate(), testing::Eq(100'000));
   EXPECT_THAT(load.getCostEstimate(), testing::Eq(1'000'000));
   EXPECT_THAT(load.knownEmptyResult(), testing::IsFalse());

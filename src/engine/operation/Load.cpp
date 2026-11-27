@@ -178,7 +178,7 @@ Result Load::computeResultImpl([[maybe_unused]] bool requestLaziness) {
 
 // _____________________________________________________________________________
 VariableToColumnMap Load::computeVariableToColumnMap() const {
-  VariableToColumnMap map;
+  VariableToColumnMap map{allocator()};
   map[Variable("?s")] = makeAlwaysDefinedColumn(0);
   map[Variable("?p")] = makeAlwaysDefinedColumn(1);
   map[Variable("?o")] = makeAlwaysDefinedColumn(2);

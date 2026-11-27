@@ -100,7 +100,7 @@ struct TestAddThree {
 class HomogeneousNumericExpressionHelpersTest : public ::testing::Test {
  protected:
   QueryExecutionContext* qec_ = ad_utility::testing::getQec();
-  VariableToColumnMap variableToColumnMap_;
+  VariableToColumnMap variableToColumnMap_{qec_->getAllocator()};
   LocalVocab localVocab_{ad_utility::testing::makeAllocator()};
   IdTable table_{qec_->getAllocator()};
 

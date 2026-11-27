@@ -17,6 +17,7 @@
 #include "../util/ParsedQueryTestHelpers.h"
 #include "../util/RuntimeParametersTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
+#include "../util/VariableToColumnMapTestHelpers.h"
 #include "SparqlAntlrParserTestHelpers.h"
 #include "backports/type_traits.h"
 #include "global/RuntimeParameters.h"
@@ -118,7 +119,7 @@ TEST(SparqlExpressionParser, First) {
   EXPECT_EQ(resultofParse.remainingText_.length(), 6);
   auto resultAsExpression = std::move(resultofParse.resultOfParse_);
 
-  VariableToColumnMap map;
+  auto map = makeVariableToColumnMap();
   ad_utility::AllocatorWithLimit<Id> alloc{
       ad_utility::testing::makeAllocator()};
   IdTable table{alloc};
