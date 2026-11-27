@@ -630,7 +630,8 @@ TEST(IndexTest, geoCellGridIndexBuild) {
 
   // A query with a WKT literal as constant finds its subject.
   auto query = absl::StrCat("SELECT ?s WHERE { ?s <p> ", w12, " }");
-  auto pq = SparqlParser::parseQuery(&index.encodedIriManager(), query);
+  auto pq = SparqlParser::parseQuery(
+      &index.encodedIriManager(), ad_utility::testing::makeAllocator(), query);
   QueryPlanner qp{qec, std::make_shared<ad_utility::CancellationHandle<>>()};
   auto result = qp.createExecutionTree(pq)->getResult();
   VocabIndex idxOfA;
