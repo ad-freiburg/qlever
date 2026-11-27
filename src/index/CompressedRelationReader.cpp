@@ -17,7 +17,9 @@
 
 #include <algorithm>
 #include <numeric>
+#include <range/v3/view/chunk_by.hpp>
 
+#include "backports/functional.h"
 #include "engine/idTable/IdColumnByteIO.h"
 #include "global/RuntimeParameters.h"
 #include "index/DistinctCol0Ids.h"
@@ -32,6 +34,13 @@
 #include "util/views/AsyncTransformView.h"
 
 using namespace std::chrono_literals;
+
+// Return true iff the two `Id`s are equal. Compare their bits first (equal
+// bits imply equal `Id`s, and the full comparison is much more expensive
+// because of the special cases for `LocalVocabIndex`).
+static bool isSameId(Id a, Id b) {
+  return a.getBits() == b.getBits() || a == b;
+}
 
 // Return true iff the `triple` is contained in the `scanSpec`. For example, the
 // triple ` 42 0 3 ` is contained in the specs `U U U`, `42 U U` and `42 0 U` ,
@@ -186,6 +195,65 @@ bool CompressedRelationReader::FilterDuplicatesAndGraphs::canBlockBeSkipped(
 }
 
 // _____________________________________________________________________________
+template <typename Transform>
+auto CompressedRelationReader::readBlocksConcurrently(
+    const ScanSpecification& scanSpec,
+    std::vector<CompressedBlockMetadata> relevantBlockMetadata,
+    ColumnIndicesRef additionalColumns, CancellationHandle cancellationHandle,
+    const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+    qlever::Executor executor, std::optional<ColumnIndices> columnSubset,
+    Transform transform) const {
+  const size_t numBlocks = relevantBlockMetadata.size();
+
+  // Read, decompress, and postprocess the `i`-th of the relevant blocks, apply
+  // the `transform`, and return the result together with the statistics of
+  // reading the block. The result is `std::nullopt` if the block was skipped
+  // because of its graphs. This runs on the `executor`, concurrently for
+  // several blocks.
+  auto readBlock = [this, scanSpec,
+                    config = getScanConfig(scanSpec, additionalColumns,
+                                           locatedTriplesPerBlock,
+                                           std::move(columnSubset)),
+                    cancellationHandle, &locatedTriplesPerBlock,
+                    blocks = std::move(relevantBlockMetadata),
+                    transform = std::move(transform)](size_t i) {
+    using Result = std::optional<std::decay_t<
+        std::invoke_result_t<const Transform&, DecompressedBlock>>>;
+    cancellationHandle->throwIfCancelled();
+    LazyScanMetadata stats;
+    const auto& blockMetadata = blocks.at(i);
+    // Only the first and the last block may contain triples that don't match
+    // the `scanSpec`, all the blocks in between are read completely.
+    if (i == 0 || i + 1 == blocks.size()) {
+      auto block =
+          readPossiblyIncompleteBlock(scanSpec, config, blockMetadata,
+                                      std::ref(stats), locatedTriplesPerBlock);
+      return std::pair{Result{transform(std::move(block))}, stats};
+    }
+    auto block = readAndDecompressBlock(blockMetadata, config);
+    stats.update(block);
+    return std::pair{block.has_value()
+                         ? Result{transform(std::move(block.value().block_))}
+                         : Result{},
+                     stats};
+  };
+  // The block that the consumer is currently processing still counts as in
+  // flight for the `AsyncTransformView`, so one more block is needed to read
+  // and decompress `numBlocksAhead` blocks while the consumer is busy.
+  size_t numBlocksAhead = getRuntimeParameter<
+      &RuntimeParameters::lazyIndexScanNumBlocksInFlight_>();
+  size_t numBlocksInFlight = numBlocksAhead + 1;
+  using BlocksView = ad_utility::AsyncTransformView<
+      decltype(ad_utility::integerRange(numBlocks)), decltype(readBlock)>;
+  return std::make_unique<BlocksView>(
+      ad_utility::integerRange(numBlocks), std::move(readBlock),
+      numBlocksInFlight, std::move(executor),
+      // The `executor` runs at most this many tasks of the query at the same
+      // time, so more runners would only wait in its queue.
+      getRuntimeParameter<&RuntimeParameters::maxNumThreadsPerQuery_>());
+}
+
+// _____________________________________________________________________________
 CompressedRelationReader::IdTableGeneratorInputRange
 CompressedRelationReader::lazyScan(
     const ScanSpecification& scanSpec,
@@ -200,43 +268,11 @@ CompressedRelationReader::lazyScan(
     return IdTableGeneratorInputRange{};
   }
   const size_t numBlocks = relevantBlockMetadata.size();
-
-  // Read, decompress, and postprocess the `i`-th of the relevant blocks, and
-  // return it together with the statistics of reading it. The block is
-  // `std::nullopt` if it was skipped because of its graphs. This runs on the
-  // `executor`, concurrently for several blocks.
-  auto readBlock = [this, scanSpec,
-                    config = getScanConfig(scanSpec, additionalColumns,
-                                           locatedTriplesPerBlock,
-                                           std::move(columnSubset)),
-                    cancellationHandle, &locatedTriplesPerBlock,
-                    blocks = std::move(relevantBlockMetadata)](size_t i) {
-    cancellationHandle->throwIfCancelled();
-    LazyScanMetadata stats;
-    const auto& blockMetadata = blocks.at(i);
-    // Only the first and the last block may contain triples that don't match
-    // the `scanSpec`, all the blocks in between are read completely.
-    if (i == 0 || i + 1 == blocks.size()) {
-      auto block =
-          readPossiblyIncompleteBlock(scanSpec, config, blockMetadata,
-                                      std::ref(stats), locatedTriplesPerBlock);
-      return std::pair{std::optional{std::move(block)}, stats};
-    }
-    auto block = readAndDecompressBlock(blockMetadata, config);
-    stats.update(block);
-    return std::pair{block.has_value()
-                         ? std::optional{std::move(block.value().block_)}
-                         : std::nullopt,
-                     stats};
-  };
-  // The block that the consumer is currently processing still counts as in
-  // flight for the `AsyncTransformView`, so one more block is needed to read
-  // and decompress `numBlocksAhead` blocks while the consumer is busy.
-  size_t numBlocksAhead = getRuntimeParameter<
-      &RuntimeParameters::lazyIndexScanNumBlocksInFlight_>();
-  size_t numBlocksInFlight = numBlocksAhead + 1;
-  using BlocksView = ad_utility::AsyncTransformView<
-      decltype(ad_utility::integerRange(numBlocks)), decltype(readBlock)>;
+  auto blocks = readBlocksConcurrently(
+      scanSpec, std::move(relevantBlockMetadata), additionalColumns,
+      cancellationHandle, locatedTriplesPerBlock, std::move(executor),
+      std::move(columnSubset), ql::identity{});
+  using BlocksView = typename decltype(blocks)::element_type;
 
   // Yield the blocks in order, apply the `limitOffset`, and keep track of the
   // statistics.
@@ -285,14 +321,9 @@ CompressedRelationReader::lazyScan(
     }
   };
 
-  return IdTableGeneratorInputRange{Generator{
-      std::make_unique<BlocksView>(
-          ad_utility::integerRange(numBlocks), std::move(readBlock),
-          numBlocksInFlight, std::move(executor),
-          // The `executor` runs at most this many tasks of the query at the
-          // same time, so more runners would only wait in its queue.
-          getRuntimeParameter<&RuntimeParameters::maxNumThreadsPerQuery_>()),
-      numBlocks, std::move(cancellationHandle), limitOffset}};
+  return IdTableGeneratorInputRange{Generator{std::move(blocks), numBlocks,
+                                              std::move(cancellationHandle),
+                                              limitOffset}};
 }
 
 // _____________________________________________________________________________
@@ -685,118 +716,140 @@ IdTable CompressedRelationReader::getDistinctColIdsAndCounts(
     ColumnIndex columnIndex, const ScanSpecAndBlocks& scanSpecAndBlocks,
     const CancellationHandle& cancellationHandle,
     const LocatedTriplesPerBlock& locatedTriplesPerBlock,
-    const LimitOffsetClause& limitOffset) const {
+    qlever::Executor executor, const LimitOffsetClause& limitOffset) const {
   AD_CORRECTNESS_CHECK(columnIndex <= 1, "Only column 0 and 1 are supported");
+  const auto& scanSpec = scanSpecAndBlocks.scanSpec_;
+  AD_CORRECTNESS_CHECK(scanSpec.firstFreeColIndex() == columnIndex);
   // The result has two columns: one for the distinct `Id`s and one for their
   // counts.
   IdTableStatic<2> table(allocator_);
 
-  // The current `colId` and its current count.
-  std::optional<Id> currentColId;
-  size_t currentCount = 0;
-  uint64_t remainingOffset = limitOffset._offset;
-  uint64_t remainingLimit = limitOffset.limitOrDefault();
-
   // For LIMIT 0 we need to abort early for correctness (and its also more
   // efficient).
-  if (remainingLimit == 0) {
+  if (limitOffset.limitOrDefault() == 0) {
     return std::move(table).toDynamic();
   }
 
-  // Helper lambda that processes the next `colId` and a count. If it's new, a
-  // row with the previous `currentColId` and its count are added to the
-  // result, and `currentColId` and its count are updated to the new `colId`.
-  auto processColId = [&table, &currentColId, &currentCount, &remainingOffset,
-                       &remainingLimit](std::optional<Id> colId,
-                                        size_t colIdCount) {
-    bool abort = false;
-    if (colId != currentColId) {
-      if (currentColId.has_value()) {
-        // Handle `OFFSET` clause correctly.
-        if (currentCount > remainingOffset) {
-          currentCount -= remainingOffset;
-          remainingOffset = 0;
-          // Handle `LIMIT` clause correctly.
-          if (remainingLimit >= currentCount) {
-            remainingLimit -= currentCount;
-          } else {
-            currentCount = remainingLimit;
-            remainingLimit = 0;
-          }
-          abort = remainingLimit == 0;
-          table.push_back(
-              {currentColId.value(), Id::makeFromInt(currentCount)});
-        } else {
-          remainingOffset -= currentCount;
-        }
-      }
-      currentColId = colId;
-      currentCount = 0;
+  // Get the `colId` and the count of each block from its metadata if its
+  // contents are known from the metadata (in particular, all its rows have the
+  // same `colId`). Collect the other blocks, which have to be read. Stop after
+  // the blocks that yield at least the rows up to the end of the LIMIT.
+  std::vector<std::pair<Id, size_t>> countsFromMetadata;
+  std::vector<CompressedBlockMetadata> blocksToRead;
+  uint64_t numRowsNeeded =
+      limitOffset.upperBound(std::numeric_limits<uint64_t>::max());
+  uint64_t numRowsLowerBound = 0;
+  for (const auto& block : scanSpecAndBlocks.getBlockMetadataView()) {
+    if (numRowsLowerBound >= numRowsNeeded) {
+      break;
     }
-    currentCount += colIdCount;
-    return abort;
-  };
-
-  const auto& scanSpec = scanSpecAndBlocks.scanSpec_;
-  const auto& blocks = scanSpecAndBlocks.getBlockMetadataView();
-
-  // TODO<joka921> We have to read the other columns for the merging of the
-  // located triples. We could skip this for blocks with no updates, but that
-  // would require more arguments to the `decompressBlock` function.
-  auto scanConfig = getScanConfig(scanSpec, {}, locatedTriplesPerBlock);
-  // Iterate over the blocks and only read (and decompress) those whose
-  // contents are not known from the metadata (several `colId`s, delta triples,
-  // or a triple in several graphs, see `contentsAreKnownFromMetadata`). For
-  // the others, the count comes from the metadata.
-  for (const auto& [i, blockMetadata] : ranges::views::enumerate(blocks)) {
-    if (contentsAreKnownFromMetadata(blockMetadata, columnIndex + 1,
+    cancellationHandle->throwIfCancelled();
+    numRowsLowerBound +=
+        getNumRowsLowerBound(scanSpec, block, locatedTriplesPerBlock);
+    if (contentsAreKnownFromMetadata(block, columnIndex + 1,
                                      locatedTriplesPerBlock)) {
-      // All rows of the block have the same `colId` and the block has exactly
-      // `numRows_` of them.
-      const auto& first = blockMetadata.firstTriple_;
-      Id colId =
-          std::array{first.col0Id_, first.col1Id_, first.col2Id_}[columnIndex];
-      bool abort = processColId(colId, blockMetadata.numRows_);
-      if (abort) {
-        return std::move(table).toDynamic();
-      }
+      countsFromMetadata.emplace_back(block.firstTriple_.getId(columnIndex),
+                                      block.numRows_);
     } else {
-      // Read the block (the read merges the delta triples and removes the
-      // duplicates from several graphs).
-      const auto& optionalBlock = [&]() -> std::optional<DecompressedBlock> {
-        if (i == 0) {
-          return readPossiblyIncompleteBlock(scanSpec, scanConfig,
-                                             blockMetadata, std::nullopt,
-                                             locatedTriplesPerBlock);
-        } else {
-          auto optionalBlock =
-              readAndDecompressBlock(blockMetadata, scanConfig);
-          if (!optionalBlock.has_value()) {
-            return std::nullopt;
-          }
-          return std::move(optionalBlock.value().block_);
-        }
-      }();
-      cancellationHandle->throwIfCancelled();
-      if (!optionalBlock.has_value()) {
-        // The block was skipped because of the graph filter
-        continue;
-      }
-      const auto& block = optionalBlock.value();
-      // TODO<C++23>: use `ql::views::chunk_by`.
-      for (size_t j = 0; j < block.numRows(); ++j) {
-        Id colId = block(j, 0);
-        bool abort = processColId(colId, 1);
-        if (abort) {
-          return std::move(table).toDynamic();
-        }
-      }
+      blocksToRead.push_back(block);
     }
   }
-  // Don't forget to add the last `col1Id` and its count.
-  processColId(std::nullopt, 0);
+
+  // Read and decompress these blocks concurrently on the `executor`, with only
+  // the grouped column. This is the first column of the scan result, because
+  // the `columnIndex` is the first column that the `scanSpec` doesn't fix.
+  // Also on the `executor`, turn each block into its runs of equal `colId`s,
+  // one row with the `colId` and the length of the run per run.
+  auto runsOfBlocks = readBlocksConcurrently(
+      scanSpec, std::move(blocksToRead), {}, cancellationHandle,
+      locatedTriplesPerBlock, std::move(executor), ColumnIndices{0},
+      [this](const DecompressedBlock& block) {
+        IdTableStatic<2> runs(allocator_);
+        for (auto run :
+             ::ranges::views::chunk_by(block.getColumn(0), isSameId)) {
+          runs.push_back({run.front(), Id::makeFromInt(static_cast<int64_t>(
+                                           ::ranges::distance(run)))});
+        }
+        return runs;
+      });
+
+  // Append a run of `count` rows with the given `colId` to the result. If the
+  // last row of the result has the same `colId`, add the `count` to it instead
+  // (a run can continue in the next block).
+  auto appendRun = [&table](Id colId, int64_t count) {
+    size_t numRows = table.numRows();
+    if (numRows > 0 && isSameId(table(numRows - 1, 0), colId)) {
+      table(numRows - 1, 1) =
+          Id::makeFromInt(table(numRows - 1, 1).getInt() + count);
+    } else {
+      table.push_back({colId, Id::makeFromInt(count)});
+    }
+  };
+
+  // Append the counts from the metadata in order up to (and including) the
+  // `bound` (all of them if it is `std::nullopt`).
+  auto nextFromMetadata = countsFromMetadata.begin();
+  auto appendCountsFromMetadataUpTo = [&nextFromMetadata, &countsFromMetadata,
+                                       &appendRun](std::optional<Id> bound) {
+    for (; nextFromMetadata != countsFromMetadata.end() &&
+           (!bound.has_value() || nextFromMetadata->first <= bound.value());
+         ++nextFromMetadata) {
+      appendRun(nextFromMetadata->first,
+                static_cast<int64_t>(nextFromMetadata->second));
+    }
+  };
+
+  // Append the runs of all `colId`s in ascending order, by merging the counts
+  // from the metadata with the runs of the blocks that were read. Only the
+  // first run of a block can continue a previous run, the others are appended
+  // as a whole.
+  //
+  // NOTE: Before each block that was read, it suffices to append the counts
+  // from the metadata up to its first `colId`, because the blocks are sorted
+  // and only overlap in their first and last `colId`.
+  while (auto runsAndStats = runsOfBlocks->get()) {
+    cancellationHandle->throwIfCancelled();
+    const auto& runs = runsAndStats.value().first;
+    if (!runs.has_value() || runs.value().empty()) {
+      continue;
+    }
+    Id firstColId = runs.value()(0, 0);
+    appendCountsFromMetadataUpTo(firstColId);
+    appendRun(firstColId, runs.value()(0, 1).getInt());
+    table.insertAtEnd(runs.value(), 1);
+  }
+  appendCountsFromMetadataUpTo(std::nullopt);
+
+  // Apply the `limitOffset` to the rows of the scan that the counts stand for.
+  // Each group stands for the rows [groupBegin, groupEnd) of the scan. Keep
+  // the groups that intersect the rows [offset, end) of the `limitOffset`,
+  // with the size of that intersection as their count.
+  if (limitOffset.isUnconstrained()) {
+    return std::move(table).toDynamic();
+  }
+  const uint64_t offset = limitOffset._offset;
+  const uint64_t end =
+      limitOffset.upperBound(std::numeric_limits<uint64_t>::max());
+  auto counts = table.getColumn(1);
+  uint64_t groupBegin = 0;
+  size_t firstRow = 0;
+  size_t endRow = 0;
+  for (; endRow < table.numRows() && groupBegin < end; ++endRow) {
+    uint64_t groupEnd =
+        groupBegin + static_cast<uint64_t>(counts[endRow].getInt());
+    if (groupEnd <= offset) {
+      firstRow = endRow + 1;
+    } else {
+      counts[endRow] = Id::makeFromInt(static_cast<int64_t>(
+          std::min(groupEnd, end) - std::max(groupBegin, offset)));
+    }
+    groupBegin = groupEnd;
+  }
+  table.erase(table.begin() + endRow, table.end());
+  table.erase(table.begin(), table.begin() + firstRow);
   return std::move(table).toDynamic();
 }
+
 // _____________________________________________________________________________
 CompressedBlock CompressedRelationReader::readCompressedBlockFromFile(
     const CompressedBlockMetadata& blockMetaData,

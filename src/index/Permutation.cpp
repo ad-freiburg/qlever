@@ -134,7 +134,7 @@ std::pair<size_t, size_t> Permutation::getSizeEstimateForScan(
 // ____________________________________________________________________________
 IdTable Permutation::getDistinctCol1IdsAndCounts(
     Id col0Id, const CancellationHandle& cancellationHandle,
-    const LocatedTriplesState& locatedTriplesState,
+    const LocatedTriplesState& locatedTriplesState, qlever::Executor executor,
     const LimitOffsetClause& limitOffset) const {
   return reader().getDistinctColIdsAndCounts(
       1,
@@ -142,19 +142,19 @@ IdTable Permutation::getDistinctCol1IdsAndCounts(
           ScanSpecification{col0Id, std::nullopt, std::nullopt},
           locatedTriplesState),
       cancellationHandle, getLocatedTriplesForPermutation(locatedTriplesState),
-      limitOffset);
+      std::move(executor), limitOffset);
 }
 
 // ____________________________________________________________________________
 IdTable Permutation::getDistinctCol0IdsAndCounts(
     const CancellationHandle& cancellationHandle,
-    const LocatedTriplesState& locatedTriplesState,
+    const LocatedTriplesState& locatedTriplesState, qlever::Executor executor,
     const LimitOffsetClause& limitOffset) const {
   ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
   return reader().getDistinctColIdsAndCounts(
       0, getScanSpecAndBlocks(scanSpec, locatedTriplesState),
       cancellationHandle, getLocatedTriplesForPermutation(locatedTriplesState),
-      limitOffset);
+      std::move(executor), limitOffset);
 }
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
