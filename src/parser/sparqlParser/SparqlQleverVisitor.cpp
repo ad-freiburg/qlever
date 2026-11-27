@@ -1065,7 +1065,7 @@ GraphUpdate Visitor::visit(Parser::InsertDataContext* ctx) {
 
 // ____________________________________________________________________________________
 GraphUpdate Visitor::visit(Parser::DeleteDataContext* ctx) {
-  BlankNodeAdder bn{blankNodeManager_};
+  BlankNodeAdder bn{blankNodeManager_, allocator()};
   auto cleanup = setBlankNodeTreatmentForScope(TreatBlankNodesAs::Illegal);
   auto quads = visit(ctx->quadData());
   return {updateClause::UpdateTriples{allocator()},
@@ -1086,7 +1086,7 @@ ParsedQuery Visitor::visit(Parser::DeleteWhereContext* ctx) {
   triples.forAllVariables([this](const Variable& v) { addVisibleVariable(v); });
   parsedQuery_.registerVariablesVisibleInQueryBody(visibleVariables_);
   visibleVariables_.clear();
-  BlankNodeAdder bn{blankNodeManager_};
+  BlankNodeAdder bn{blankNodeManager_, allocator()};
   parsedQuery_._clause = parsedQuery::UpdateClause{
       allocator(), GraphUpdate{updateClause::UpdateTriples{allocator()},
                                triples.toTriplesWithGraph(std::monostate{}, bn,
@@ -1776,7 +1776,9 @@ auto Visitor::visitInFreshQueryContext(Ctx* ctx)
   auto blankNodeLabelsBackup =
       std::exchange(blankNodeLabelsInCurrentBasicGraphPattern_, {});
   // The restoring assignments are moves and cannot throw, so the cleanup
-  // is safe also during stack unwinding.
+  // is safe also during stack unwinding. The exception is `visibleVariables_`:
+  // moving a `qlm::vector` is only `noexcept` for some allocators, so it is
+  // restored via `swap` (`variablesBackup` has the same allocator).
   static_assert(std::is_nothrow_move_assignable_v<ParsedQuery>);
   static_assert(std::is_nothrow_move_assignable_v<qlm::vector<Variable>>);
   static_assert(std::is_nothrow_move_assignable_v<
@@ -1784,7 +1786,7 @@ auto Visitor::visitInFreshQueryContext(Ctx* ctx)
   absl::Cleanup restoreBackups{
       [this, &queryBackup, &variablesBackup, &blankNodeLabelsBackup]() {
         parsedQuery_ = std::move(queryBackup);
-        visibleVariables_ = std::move(variablesBackup);
+        visibleVariables_.swap(variablesBackup);
         blankNodeLabelsInCurrentBasicGraphPattern_ =
             std::move(blankNodeLabelsBackup);
       }};
