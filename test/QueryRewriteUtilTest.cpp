@@ -342,6 +342,16 @@ TEST(QueryRewriteUtilTest, RewriteFiltersWithFacts) {
   EXPECT_THAT(
       rewrite("geof:distance(?y, ?b) <= ?r && ?x != ?a", "VALUES ?r { 0.5 }"),
       ElementsAre("geof:metricDistance(?y, ?b) <= 500", "?x != ?a"));
+
+  // The same with a constant geometry that is not a point (which stays a
+  // literal, while a point becomes an `Id`).
+  std::string line =
+      "\"LINESTRING(7.8 48.0, 7.8 48.1)\"^^"
+      "<http://www.opengis.net/ont/geosparql#wktLiteral>";
+  EXPECT_THAT(
+      rewrite(absl::StrCat("geof:distance(?y, ", line, ") <= ?r"),
+              "VALUES ?r { 0.5 }"),
+      ElementsAre(absl::StrCat("geof:metricDistance(?y, ", line, ") <= 500")));
 }
 
 }  // namespace
