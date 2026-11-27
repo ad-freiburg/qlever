@@ -67,7 +67,8 @@ constexpr std::string_view existsMessage =
 
 }  // namespace
 
-// _____________________________________________________________________________
+// Test that `isPartOfOptionalJoinCondition` is true exactly for a FILTER that
+// uses a variable of the left side that is not always defined in the group.
 TEST(OptionalJoinConditionPlanning, isPartOfOptionalJoinCondition) {
   Variable x{"?x"};
   Variable y{"?y"};
@@ -85,7 +86,9 @@ TEST(OptionalJoinConditionPlanning, isPartOfOptionalJoinCondition) {
   EXPECT_FALSE(isCondition("FILTER(RAND() < 0.5)", {x, y}, {}));
 }
 
-// _____________________________________________________________________________
+// Test that `isPartOfOptionalJoinCondition` throws if the argument of an
+// `EXISTS` uses a variable of the left side that is not always defined in the
+// group.
 TEST(OptionalJoinConditionPlanning, isPartOfOptionalJoinConditionWithExists) {
   Variable x{"?x"};
   Variable y{"?y"};
@@ -111,7 +114,8 @@ TEST(OptionalJoinConditionPlanning, isPartOfOptionalJoinConditionWithExists) {
   expectThrow("?x <q> ?z FILTER(?z < 5 && !EXISTS { ?z <r> ?y })", {y}, {x, z});
 }
 
-// _____________________________________________________________________________
+// Test that a FILTER that is not part of the condition is applied to the group
+// of the OPTIONAL without a warning.
 TEST(OptionalJoinConditionPlanning, filterStaysInGroup) {
   auto scan = h::IndexScanFromStrings;
   // `?x` is bound on the left side, but also always bound in the group, and
@@ -153,7 +157,8 @@ TEST(OptionalJoinConditionPlanning, filterStaysInGroup) {
       "{ ?x <r> ?z } } }");
 }
 
-// _____________________________________________________________________________
+// Test that a FILTER of the condition is applied to the group of the OPTIONAL
+// with a warning, as long as the `OptionalJoin` can't evaluate it.
 TEST(OptionalJoinConditionPlanning, conditionIsAppliedToGroupWithWarning) {
   auto scan = h::IndexScanFromStrings;
   // `?y` is only bound on the left side. The FILTER is applied to the group,
@@ -229,7 +234,8 @@ TEST(OptionalJoinConditionPlanning, conditionIsAppliedToGroupWithWarning) {
   EXPECT_THAT(qet->getRootOperation()->collectWarnings(), ::testing::IsEmpty());
 }
 
-// _____________________________________________________________________________
+// Test that a query is rejected if the argument of an `EXISTS` in a FILTER of
+// an OPTIONAL depends on the left side.
 TEST(OptionalJoinConditionPlanning, existsThatDependsOnLeftSide) {
   // `?y` is only bound on the left side.
   expectNotSupported(
@@ -247,7 +253,7 @@ TEST(OptionalJoinConditionPlanning, existsThatDependsOnLeftSide) {
       existsMessage);
 }
 
-// _____________________________________________________________________________
+// Test the exact messages of the warning and of the exception.
 TEST(OptionalJoinConditionPlanning, messages) {
   // The messages name the FILTER and the variables that make it part of the
   // condition, but not the other variables, each only once.

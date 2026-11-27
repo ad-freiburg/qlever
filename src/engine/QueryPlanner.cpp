@@ -368,16 +368,23 @@ void QueryPlanner::applyRemainingFilters(
       return getIdsOfOptionalJoinConditionFilters(
                  plan, filters, variablesOfLeftSide) == idsOfConditionFilters;
     }));
+
+    // Store the FILTERs of the condition in each plan, except for those that
+    // are already part of the plan.
+    //
     // NOTE: A FILTER of the condition can already be part of a plan if
     // `applyFiltersIfPossible` has replaced it by a `SpatialJoin`. Such a plan
     // gets neither the FILTER as part of its condition nor a warning, and it
     // evaluates the FILTER on the content of the group, like before the
-    // condition was determined. This only happens if the variable of the left
-    // side occurs in the group, but might be UNDEF there (for example, from
-    // `VALUES ?y { <a> UNDEF }`): The substitute is added as soon as one of
-    // the variables of the FILTER is bound, but it is only completed by a join
-    // with a plan that binds the other one, and plans with an incomplete
-    // `SpatialJoin` never reach the final row of the dynamic programming.
+    // condition was determined.
+    //
+    // This only happens if the variable of the left side occurs in the group,
+    // but might be UNDEF there (for example, from `VALUES ?y { <a> UNDEF }`).
+    // The substitute is added as soon as one of the variables of the FILTER is
+    // bound, but it is only completed by a join with a plan that binds the
+    // other one, and plans with an incomplete `SpatialJoin` never reach the
+    // final row of the dynamic programming.
+    //
     // TODO<ninofrey> Such a plan should at least get the warning, and once the
     // `OptionalJoin` evaluates the condition, the FILTER must not be applied
     // in the group as well.
@@ -3431,9 +3438,9 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     if constexpr (std::is_same_v<T, p::Optional>) {
       for (auto& c : candidates) {
         c.type = SubtreePlan::OPTIONAL;
-        // TODO<ninofrey> Pass the condition to the `OptionalJoin`, which has
-        // to evaluate it on the joined rows.
       }
+      // TODO<ninofrey> Pass the condition to the `OptionalJoin`, which has to
+      // evaluate it on the joined rows.
       applyOptionalJoinConditionToGroup(candidates,
                                         variablesOfLeftSideOfOptional.value());
     }
