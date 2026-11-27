@@ -115,6 +115,9 @@ struct TestIndexConfig {
   std::optional<std::pair<float, float>> bAndKParam = std::nullopt;
   qlever::Filetype indexType = qlever::Filetype::Turtle;
   std::optional<VocabularyType> vocabularyType = std::nullopt;
+  // The level of the geo cell grid for WKT literals, 0 means no grid (see
+  // `GeoCellGrid`). Requires the `OnDiskCompressedGeoSplit` vocabulary type.
+  uint8_t geoCellGridLevel = 0;
   std::optional<std::vector<std::string>> encodedPrefixesWithoutAngleBrackets =
       std::nullopt;
   // The general patterns for IRIs that are encoded directly in an `Id`, see
@@ -174,6 +177,7 @@ struct TestIndexConfig {
         c.usePrefixCompression, c.rowsPerBlock, c.createTextIndex,
         c.addWordsFromLiterals, c.contentsOfWordsFileAndDocsfile,
         c.parserBufferSize, c.scoringMetric, c.bAndKParam, c.indexType,
+        c.vocabularyType, c.geoCellGridLevel,
         c.encodedPrefixesWithoutAngleBrackets, c.encodedIriPatterns,
         c.addHasWordTriples, c.hasWordRestrictPredicates, c.secondaryVocabWords,
         c.numThreads, c.parseInParallel, c.additionalSettings,
@@ -183,7 +187,7 @@ struct TestIndexConfig {
       TestIndexConfig, turtleInput, loadAllPermutations, usePatterns,
       usePrefixCompression, rowsPerBlock, createTextIndex, addWordsFromLiterals,
       contentsOfWordsFileAndDocsfile, parserBufferSize, scoringMetric,
-      bAndKParam, indexType, vocabularyType,
+      bAndKParam, indexType, vocabularyType, geoCellGridLevel,
       encodedPrefixesWithoutAngleBrackets, encodedIriPatterns,
       addHasWordTriples, hasWordNormalization, hasWordRestrictPredicates,
       secondaryVocabWords, numThreads, parseInParallel, additionalSettings,
