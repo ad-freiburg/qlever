@@ -420,10 +420,12 @@ class QueryPlanner {
    * @brief Merges two rows of the dp optimization table using various types of
    * joins.
    * @return A new row for the dp table that contains plans created by joining
-   * the result of a plan in a and a plan in b.
+   * the result of a plan in a and a plan in b, also via the substitutes of
+   * the `filters` (see `createJoinsWithSubstitutes`).
    */
   SubtreePlanVec merge(const SubtreePlanVec& a, const SubtreePlanVec& b,
-                       const TripleGraph& tg) const;
+                       const TripleGraph& tg,
+                       const FiltersAndOptionalSubstitutes& filters) const;
 
   // Create `SubtreePlan`s that join `a` and `b` together. The columns are
   // computed automatically.
@@ -498,6 +500,20 @@ class QueryPlanner {
                                                       const SubtreePlan& b,
                                                       const JoinColumns& jcs);
 
+  // Join `a` and `b` via each filter substitute among the `filters` that is
+  // connected to both of them, for example, a `SpatialJoin` with the left
+  // variable in `a` and the right variable in `b`. This is done only if `a` and
+  // `b` share no variable, otherwise no candidate is returned.
+  //
+  // NOTE: This is the only way in which a non-enforced substitute is applied.
+  // Applied to a single plan, it would give a partial `SpatialJoin` with one
+  // child and a dummy size estimate of 1. The greedy planner would choose such
+  // a partial `SpatialJoin` right away, and two of them for the same filter,
+  // one on each side, could never be merged (see #4015).
+  SubtreePlanVec createJoinsWithSubstitutes(
+      const SubtreePlan& a, const SubtreePlan& b,
+      const FiltersAndOptionalSubstitutes& filters) const;
+
   // Helper that generates `IndexScan` query plans on materialized views if they
   // can be used to avoid joins between some of the `triples`. The resulting
   // plans for part of the `triples` are given in a vector of query planning
@@ -546,19 +562,16 @@ class QueryPlanner {
     // already bind all the variables that are used in the filter. The plans
     // with the added filters are added to the candidate set. This mode is used
     // in the dynamic programming approach, where we don't apply the filters
-    // greedily. Applying filter substitutes is permitted in this mode.
+    // greedily. The enforced filter substitutes are applied in this mode, too.
     KeepUnfiltered,
     // Only apply matching filters (see above), but the plans with added filters
-    // replace the plans without filters. This is used in the greedy approach,
-    // where filters are always applied as early as possible. Applying filter
-    // substitutes is permitted in this mode.
-    ReplaceUnfiltered,
-    // Same as ReplaceUnfiltered, but do not apply filter substitutes.
+    // replace the plans without filters. Filter substitutes are not applied.
+    // This is used in the greedy approach, where filters are always applied as
+    // early as possible, and for the final plans of the dynamic programming.
     ReplaceUnfilteredNoSubstitutes,
-    // Only apply filter substitutes, but do not apply regular filters.
-    // Required by the dynamic programming approach for a connected component
-    // with fewer than 2 seeds, where a substitute is applicable. Currently
-    // needed for a `SpatialJoin` substitute with a fixed-value side.
+    // Only apply the enforced filter substitutes (currently a `SpatialJoin`
+    // with a fixed-value side), but do not apply regular filters. Used by the
+    // greedy approach and for the final plans of the dynamic programming.
     SeedSubstitutesOnly,
     // Apply all filters (also the nonmatching ones) and replace the unfiltered
     // plans. This has to be called at the end of parsing a group graph pattern
