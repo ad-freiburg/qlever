@@ -268,7 +268,7 @@ bool Index::hasPermutation(Permutation::Enum permutation) const {
 }
 
 // ____________________________________________________________________________
-std::vector<Permutation::Enum> Index::loadedPermutations() const {
+ql::span<const Permutation::Enum> Index::loadedPermutations() const {
   return pimpl_->loadedPermutations();
 }
 

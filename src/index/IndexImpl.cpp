@@ -1188,6 +1188,22 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
     }
   }
 
+  // Record which permutations are loaded, see `loadedPermutations()`. With
+  // `doNotLoadPermutations_`, none of them are.
+  auto recordLoadedPermutations = [this](auto allPermutations,
+                                         auto& loadedPermutations) {
+    loadedPermutations.clear();
+    if (doNotLoadPermutations_) {
+      return;
+    }
+    ql::ranges::copy_if(
+        allPermutations, std::back_inserter(loadedPermutations),
+        [this](auto permutation) { return hasPermutation(permutation); });
+  };
+  recordLoadedPermutations(Permutation::all<false>(), loadedPermutations_);
+  recordLoadedPermutations(Permutation::all<true>(),
+                           loadedInternalPermutations_);
+
   // We have to load the patterns first to figure out if the patterns were built
   // at all.
   if (usePatterns_) {

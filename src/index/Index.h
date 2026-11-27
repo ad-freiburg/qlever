@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "backports/span.h"
 #include "backports/three_way_comparison.h"
 #include "global/Id.h"
 #include "index/GraphNameManager.h"
@@ -239,7 +240,7 @@ class Index {
   bool hasPermutation(Permutation::Enum permutation) const;
 
   // Return the loaded permutations, in the order of `Permutation::ALL`.
-  std::vector<Permutation::Enum> loadedPermutations() const;
+  ql::span<const Permutation::Enum> loadedPermutations() const;
 
   // ___________________________________________________________________________
   std::vector<float> getMultiplicities(
