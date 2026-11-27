@@ -1060,6 +1060,14 @@ struct BlockZipperJoinImplCRTP {
         blocksLeft, blocksRight);
   }
 
+  // Report that the left rows from all previous calls to `addCartesianProduct`
+  // get no more partners, because all their partners have been passed already.
+  // The derived class may then finalize these rows, see
+  // `BlockZipperJoinImplForSpecialOptionalJoin::finishPreviousLeftRowsImpl`.
+  void finishPreviousLeftRows() {
+    static_cast<Derived*>(this)->finishPreviousLeftRowsImpl();
+  }
+
   // Handle non-matching rows from the left side for an optional join or a minus
   // join.
   template <bool DoOptionalJoinOrMinus>
@@ -1366,6 +1374,11 @@ struct BlockZipperJoinImplCRTP {
                           equalToCurrentElRight);
       addAll<DoOptionalJoinOrMinus>(equalToCurrentElLeft,
                                     equalToCurrentElRight);
+      // Unless more blocks from the right are missing, the left rows were just
+      // joined with all their partners.
+      if (blockStatus != BlockStatus::rightMissing) {
+        finishPreviousLeftRows();
+      }
       switch (blockStatus) {
         case BlockStatus::allFilled:
           removeEqualToCurrentEl(currentBlocksLeft, currentEl);
@@ -1390,6 +1403,7 @@ struct BlockZipperJoinImplCRTP {
     AD_CORRECTNESS_CHECK(blockStatus == BlockStatus::allFilled);
     joinWithUndefBlocks(blockStatus, equalToCurrentElLeft,
                         equalToCurrentElRight);
+    finishPreviousLeftRows();
     if (!currentBlocksLeft.empty()) {
       removeEqualToCurrentEl(currentBlocksLeft, currentEl);
     }
@@ -1624,6 +1638,10 @@ struct BlockZipperJoinImpl
   // Inherit constructors from the base class.
   using Base::Base;
 
+  // Implement the `finishPreviousLeftRows` customization point. All rows are
+  // already added in `addCartesianProductImpl`, so there is nothing to do.
+  void finishPreviousLeftRowsImpl() {}
+
   // Implement the `addCartesianProduct` customization point with the default
   // behavior. If `reversed` is false, we assume that the Cartesian product is
   // added not by matching iterating over the right side for every row of the
@@ -1716,6 +1734,14 @@ struct BlockZipperJoinImplForSpecialOptionalJoin
   // Store the number of join columns.
   NumJoinColumnsT numJoinColumns_;
 
+  // The right blocks with the current values in all but the last join column
+  // may be passed to `addCartesianProductImpl` in several parts, each time with
+  // the same left blocks. Until `finishPreviousLeftRowsImpl` is called, store
+  // the copy of these left blocks and which of their rows have already been
+  // added to the result (with a partner or without one).
+  std::optional<IdTableAndFirstCols<1, IdTable>> leftTable_;
+  std::vector<bool> leftRowIsAdded_;
+
   // Constructor that accepts numJoinColumns as a templated parameter.
   // This allows passing either std::integral_constant<size_t, N> for
   // compile-time optimization or plain size_t for runtime flexibility.
@@ -1782,13 +1808,22 @@ struct BlockZipperJoinImplForSpecialOptionalJoin
       // `getFirstCols` interface.
       return makeIdTableAndFirstCols<1>(std::move(table), std::move(vocab));
     };
-    auto leftTable = materializeBlocksAsTable(blocksLeft);
     auto rightTable = materializeBlocksAsTable(blocksRight);
+    // If the right table is empty, the base class has already added the left
+    // rows without a partner, so they must not be stored below.
+    if (rightTable.empty()) {
+      return;
+    }
+    if (!leftTable_.has_value()) {
+      leftTable_.emplace(materializeBlocksAsTable(blocksLeft));
+      leftRowIsAdded_.assign(leftTable_->size(), false);
+    }
+    const auto& leftTable = leftTable_.value();
 
-    // If either table is empty, we don't have to do anything (same as above).
+    // If the left table is empty, we don't have to do anything (same as above).
     // TODO<joka921> Check if this case can happen at all, or whether we can
     // simply put an assertion here.
-    if (leftTable.empty() || rightTable.empty()) {
+    if (leftTable.empty()) {
       return;
     }
 
@@ -1805,6 +1840,7 @@ struct BlockZipperJoinImplForSpecialOptionalJoin
                                                     const auto& itR) {
       size_t leftIdx = itL - begL;
       size_t rightIdx = itR - begR;
+      leftRowIsAdded_[leftIdx] = true;
       // Call the row adder with the full rows.
       this->compatibleRowAction_.addRow(leftIdx, rightIdx);
     };
@@ -1816,8 +1852,17 @@ struct BlockZipperJoinImplForSpecialOptionalJoin
       return ad_utility::IteratorRange{lastColLeft.begin(), endOfUndef};
     };
 
-    auto notFoundAction = [this, begL = lastColLeft.begin()](const auto& it) {
+    // A left row without a partner in this part of the right blocks may still
+    // get one in a later part, unless its value is less than the largest value
+    // in this part. Otherwise it is added in `finishPreviousLeftRowsImpl`, so
+    // the result stays sorted.
+    auto notFoundAction = [this, begL = lastColLeft.begin(),
+                           largestRight = lastColRight.back()](const auto& it) {
       size_t leftIdx = it - begL;
+      if (leftRowIsAdded_[leftIdx] || !(*it < largestRight)) {
+        return;
+      }
+      leftRowIsAdded_[leftIdx] = true;
       this->compatibleRowAction_.addOptionalRow(leftIdx);
     };
 
@@ -1828,6 +1873,28 @@ struct BlockZipperJoinImplForSpecialOptionalJoin
     AD_EXPENSIVE_CHECK(res == 0);
 
     this->compatibleRowAction_.flush();
+  }
+
+  // Implement the `finishPreviousLeftRows` customization point: Add the stored
+  // left rows that got no partner in any part of the right blocks. Their value
+  // in the last join column is larger than all the right values, so adding
+  // them after all other rows for the current value keeps the result sorted.
+  void finishPreviousLeftRowsImpl() {
+    if (!leftTable_.has_value()) {
+      return;
+    }
+    if (ql::ranges::find(leftRowIsAdded_, false) != leftRowIsAdded_.end()) {
+      auto& rowAction = this->compatibleRowAction_;
+      rowAction.setOnlyLeftInputForOptionalJoin(leftTable_.value());
+      for (size_t i : ad_utility::integerRange(leftTable_->size())) {
+        if (!leftRowIsAdded_[i]) {
+          rowAction.addOptionalRow(i);
+        }
+      }
+      // The rows refer to `leftTable_`, which is deleted below.
+      rowAction.flush();
+    }
+    leftTable_.reset();
   }
 
   // Implement joinSubranges customization point by forwarding to
@@ -1894,6 +1961,8 @@ void specialOptionalJoinForBlocks(LeftBlocks&& leftBlocks,
            CompareAllButLast{static_cast<size_t>(numJoinColumns)},
            compatibleRowAction};
   impl.template runJoin<JoinType::OPTIONAL>();
+  // All stored left rows have been added by `finishPreviousLeftRows`.
+  AD_CORRECTNESS_CHECK(!impl.leftTable_.has_value());
 }
 
 /**

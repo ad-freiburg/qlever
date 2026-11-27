@@ -5,11 +5,11 @@
 #include <gmock/gmock.h>
 
 #include "./PrefilterExpressionTestHelpers.h"
-#include "engine/ExistsJoin.h"
-#include "engine/Filter.h"
-#include "engine/IndexScan.h"
-#include "engine/StripColumns.h"
 #include "engine/ValuesForTesting.h"
+#include "engine/operation/ExistsJoin.h"
+#include "engine/operation/Filter.h"
+#include "engine/operation/IndexScan.h"
+#include "engine/operation/StripColumns.h"
 #include "engine/sparqlExpressions/BlankNodeExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"

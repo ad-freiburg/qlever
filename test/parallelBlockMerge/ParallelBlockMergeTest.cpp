@@ -36,6 +36,7 @@
 #include "backports/asio.h"
 #include "util/CancellationHandle.h"
 #include "util/SourceLocation.h"
+#include "util/Synchronized.h"
 #include "util/memorySize/MemorySize.h"
 #include "util/parallelBlockMerge/InMemoryBlockStorage.h"
 #include "util/parallelBlockMerge/ParallelBlockMerge.h"
@@ -645,6 +646,59 @@ TEST(ParallelBlockMerge, outputBlockMemoryLimit) {
     numElements += block.size();
   }
   EXPECT_EQ(numElements, 400u);
+}
+
+// An input policy that derives from `SizeInput` and overrides its
+// `reserveBlock` function (see `InputConcept`) to record the
+// `numElements` of every call. The recorded state is shared between all
+// copies, because the merge takes the input by value.
+struct ReservingInput : public SizeInput {
+  using State = ad_utility::Synchronized<std::vector<size_t>>;
+  std::shared_ptr<State> state_ = std::make_shared<State>();
+
+  void reserveBlock(Block& block, size_t numElements) const {
+    block.reserve(numElements);
+    state_->wlock()->push_back(numElements);
+  }
+};
+static_assert(InputConcept<ReservingInput>);
+
+// Test that the merge calls `reserveBlock` once per output block if and only
+// if the number of elements per output block is bounded.
+TEST(ParallelBlockMerge, reserveBlockOfTheInputIsCalled) {
+  auto runs = makeRandomRuns(4, 100, 100);
+  // If the number of elements per output block is bounded, every output block
+  // is reserved for exactly that number of elements up front.
+  {
+    ReservingInput input{makeVectorInput(runs, 16)};
+    auto state = input.state_;
+    size_t numBlocks = 0;
+    size_t numElements = 0;
+    for (const auto& block : serialBlockMergeToRange<false>(
+             std::move(input), std::less<>{}, optionsWithBlockSize(10))) {
+      ++numBlocks;
+      numElements += block.size();
+      EXPECT_GE(block.capacity(), 10u);
+    }
+    EXPECT_EQ(numElements, 400u);
+    EXPECT_EQ(state->rlock()->size(), numBlocks);
+    EXPECT_THAT(*state->rlock(), ::testing::Each(10u));
+  }
+  // If only the memory of an output block is bounded, nothing is reserved.
+  {
+    ReservingInput input{makeVectorInput(runs, 16)};
+    auto state = input.state_;
+    MergeOptions options;
+    options.outputBlockSize = OutputBlockSize::memory(
+        ad_utility::MemorySize::bytes(10 * sizeof(size_t)));
+    size_t numElements = 0;
+    for (const auto& block : serialBlockMergeToRange<false>(
+             std::move(input), std::less<>{}, options)) {
+      numElements += block.size();
+    }
+    EXPECT_EQ(numElements, 400u);
+    EXPECT_THAT(*state->rlock(), ::testing::IsEmpty());
+  }
 }
 
 // ___________________________________________________________________________

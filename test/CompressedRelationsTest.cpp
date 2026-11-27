@@ -26,6 +26,7 @@
 #include "index/compressedRelationWriter/CompressedRelationHelpersImpl.h"
 #include "index/compressedRelationWriter/CompressedRelationPermutationWriterImpl.h"
 #include "index/compressedRelationWriter/CompressedRelationWriter.h"
+#include "util/FilesystemHelpers.h"
 #include "util/GlobalExecutor.h"
 #include "util/IndexTestHelpers.h"
 #include "util/LocalVocabEntryTestHelpers.h"
@@ -52,8 +53,8 @@ auto I = &Id::makeFromInt;
 
 // Compute the distinct graph IDs contained in the SPO permutation of `index`,
 // mirroring the access pattern used by `DistinctGraphs::computeResult()`
-// (`src/engine/DistinctGraphs.cpp`), but starting from a plain `Index` instead
-// of an `Operation`.
+// (`src/engine/operation/DistinctGraphs.cpp`), but starting from a plain
+// `Index` instead of an `Operation`.
 ad_utility::HashSetWithMemoryLimit<Id::T> computeUniqueGraphIdsForIndex(
     const Index& index,
     ad_utility::SharedCancellationHandle cancellationHandle =
@@ -1633,6 +1634,30 @@ TEST(CompressedRelationReader, getDistinctCol0IdsChecksItsPreconditions) {
   }
 }
 
+// Test that `getDistinctColIdsAndCounts` counts a triple that occurs in several
+// graphs only once, like a scan without the graph column.
+TEST(CompressedRelationReader, getDistinctColIdsAndCountsDuplicatesInGraphs) {
+  // The triple `1 0 0` occurs in the graphs 0 and 1. All triples are in the
+  // same block, which has a single `col0Id` and a single `col1Id`.
+  std::vector<RelationInput> inputs{{1, {{0, 0, 0}, {0, 0, 1}, {0, 1, 0}}}};
+  auto [filename, cleanup] = testFilenameWithCleanup();
+  auto [blocks, metaData, reader] = writeAndOpenRelations(inputs, filename, 8);
+  auto locatedTriples = makeLocatedTriplesPerBlock(blocks, {}, true);
+  auto getCounts = [&](std::optional<Id> col0Id) {
+    return reader->getDistinctColIdsAndCounts(
+        col0Id.has_value() ? 1 : 0,
+        {ScanSpecification{col0Id, std::nullopt, std::nullopt},
+         getBlockMetadataRangesfromVec(blocks)},
+        std::make_shared<ad_utility::CancellationHandle<>>(), locatedTriples,
+        {});
+  };
+
+  // There are two distinct triples, both with `col0Id` 1 and `col1Id` 0.
+  EXPECT_THAT(getCounts(std::nullopt),
+              matchesIdTableFromVector({{V(1), I(2)}}));
+  EXPECT_THAT(getCounts(V(1)), matchesIdTableFromVector({{V(0), I(2)}}));
+}
+
 // Test that the `BlockSelector` of `getDistinctCol0Ids` requires a
 // cancellation handle that is not `nullptr`.
 TEST(CompressedRelationReader, blockSelectorRequiresCancellationHandle) {
@@ -1702,9 +1727,63 @@ TEST(CompressedRelationReader, getResultSizeImpl) {
   expectResultSizes(Permutation::PSO, {I(1), I(5), std::nullopt}, 0, 1, 0);
 }
 
+// Test that the exact size of a scan counts a triple that occurs in several
+// graphs only once, also when it is in a block that is neither the first nor
+// the last block of the scan (the metadata of such a block cannot be used).
+TEST(CompressedRelationReader, getResultSizeOfScanDuplicatesInGraphs) {
+  // A relation that spans three blocks, where the triple `1 0 16` occurs in
+  // the graphs 42 and 43 and both occurrences are in the middle block.
+  std::vector<RelationInput> inputs{{1, {}}};
+  for (int i = 0; i < 20; ++i) {
+    inputs.at(0).col1And2_.push_back({0, 2 * i, 42});
+    if (i == 8) {
+      inputs.at(0).col1And2_.push_back({0, 2 * i, 43});
+    }
+  }
+  auto [filename, cleanup] = testFilenameWithCleanup();
+  auto [blocks, metaData, reader] = writeAndOpenRelations(inputs, filename, 8);
+  ASSERT_EQ(blocks.size(), 3);
+  ASSERT_TRUE(blocks.at(1).containsDuplicatesWithDifferentGraphs_);
+  auto locatedTriples = makeLocatedTriplesPerBlock(blocks, {}, true);
+  CompressedRelationReader::ScanSpecAndBlocks scanSpecAndBlocks{
+      ScanSpecification{V(1), std::nullopt, std::nullopt},
+      getBlockMetadataRangesfromVec(blocks)};
+
+  // The 21 rows are 20 distinct triples.
+  EXPECT_EQ(reader->getResultSizeOfScan(
+                scanSpecAndBlocks, locatedTriples,
+                std::make_shared<ad_utility::CancellationHandle<>>()),
+            20u);
+
+  // The same holds when one of the two occurrences is deleted (the middle
+  // block then has only a deleted triple and is read for that reason alone).
+  auto oneOccurrenceDeleted = makeLocatedTriplesPerBlock(
+      blocks, {IdTriple<>{{V(1), V(0), V(16), V(43)}}}, false);
+  CompressedRelationReader::ScanSpecAndBlocks scanSpecAndAugmentedBlocks{
+      ScanSpecification{V(1), std::nullopt, std::nullopt},
+      getBlockMetadataRangesfromVec(
+          oneOccurrenceDeleted.getAugmentedMetadata())};
+  EXPECT_EQ(reader->getResultSizeOfScan(
+                scanSpecAndAugmentedBlocks, oneOccurrenceDeleted,
+                std::make_shared<ad_utility::CancellationHandle<>>()),
+            20u);
+
+  // Deleting a triple that occurs in one graph only reduces the size by one.
+  auto otherTripleDeleted = makeLocatedTriplesPerBlock(
+      blocks, {IdTriple<>{{V(1), V(0), V(18), V(42)}}}, false);
+  CompressedRelationReader::ScanSpecAndBlocks scanSpecAndAugmentedBlocks2{
+      ScanSpecification{V(1), std::nullopt, std::nullopt},
+      getBlockMetadataRangesfromVec(otherTripleDeleted.getAugmentedMetadata())};
+  EXPECT_EQ(reader->getResultSizeOfScan(
+                scanSpecAndAugmentedBlocks2, otherTripleDeleted,
+                std::make_shared<ad_utility::CancellationHandle<>>()),
+            19u);
+}
+
 // Test that the exact size computation of a scan checks the cancellation
 // handle before each block that it has to read (the first and the last block
-// of the scan, and the blocks in between that contain located triples).
+// of the scan, and the blocks in between that contain located triples or a
+// triple that occurs in several graphs).
 TEST(CompressedRelationReader, getResultSizeOfScanIsCancellable) {
   // A relation that spans three blocks, with a triple inserted into the middle
   // block, so that the exact size can only be computed by reading all three.
@@ -2287,11 +2366,8 @@ TEST(CompressedRelationWriter, blockMustHaveRoomForAtLeastOneRow) {
 // `CompressedRelationWriter::compressAndWriteColumn`.
 TEST(CompressedRelationWriter, fileMustBeEmpty) {
   auto [filename, cleanup] = testFilenameWithCleanup();
-  {
-    ad_utility::File file{filename, "w"};
-    const std::string content = "someContentThatMustNotBeOverwritten";
-    file.write(content.data(), content.size());
-  }
+  const std::string content = "someContentThatMustNotBeOverwritten";
+  qlever::util::writeFileAtomically(filename, content);
   AD_EXPECT_THROW_WITH_MESSAGE(
       (CompressedRelationWriter{1, ad_utility::File{filename, "r+"}, 2,
                                 executor()}),
