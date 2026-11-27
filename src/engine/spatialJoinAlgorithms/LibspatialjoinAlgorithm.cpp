@@ -63,25 +63,39 @@ LibspatialjoinAlgorithm::getBoundingBoxFromIdTable(
 bool LibspatialjoinAlgorithm::prefilterGeoByBoundingBox(
     const std::optional<::util::geo::DBox>& prefilterLatLngBox,
     const Index& index, VocabIndex vocabIndex,
-    const std::optional<ad_utility::BoundingBox>& precomputedBoundingBox) {
+    const std::optional<ad_utility::BoundingBox>& precomputedBoundingBox,
+    bool requireContainment) {
   if (prefilterLatLngBox.has_value()) {
-    auto hasNoIntersection =
-        [&prefilterLatLngBox](const ad_utility::BoundingBox& geomBoundingBox) {
-          return !::util::geo::intersects(
-              prefilterLatLngBox.value(),
-              ad_utility::detail::boundingBoxToUtilBox(geomBoundingBox));
-        };
+    auto canBeSkipped = [&prefilterLatLngBox, requireContainment](
+                            const ad_utility::BoundingBox& geomBoundingBox) {
+      auto geomBox = ad_utility::detail::boundingBoxToUtilBox(geomBoundingBox);
+      if (!requireContainment) {
+        return !::util::geo::intersects(prefilterLatLngBox.value(), geomBox);
+      }
+      // The prefilter box went through the integer web mercator projection of
+      // `libspatialjoin` and back, so pad it slightly before the containment
+      // test. Otherwise a geometry that touches the border of the prefilter
+      // box (in particular one equal to the geometry of the other side) could
+      // be wrongly discarded.
+      static constexpr double padding = 1e-6;
+      const auto& box = prefilterLatLngBox.value();
+      ::util::geo::DBox paddedBox{{box.getLowerLeft().getX() - padding,
+                                   box.getLowerLeft().getY() - padding},
+                                  {box.getUpperRight().getX() + padding,
+                                   box.getUpperRight().getY() + padding}};
+      return !::util::geo::contains(geomBox, paddedBox);
+    };
 
     // Use the `precomputedBoundingBox` for filtering if available.
     if (precomputedBoundingBox.has_value()) {
-      return hasNoIntersection(precomputedBoundingBox.value());
+      return canBeSkipped(precomputedBoundingBox.value());
     }
 
     // Otherwise, use the `GeoVocabulary` for filtering.
     auto geoInfo = index.getVocab().getGeoInfo(vocabIndex);
     if (geoInfo.has_value()) {
-      // We have a bounding box: Check intersection with prefilter box.
-      return hasNoIntersection(geoInfo.value().getBoundingBox());
+      // We have a bounding box: Check it against the prefilter box.
+      return canBeSkipped(geoInfo.value().getBoundingBox());
     } else {
       // Since we know that this function is only called if we have a
       // `GeoVocabulary`, we know that a geometry without precomputed bounding
@@ -198,7 +212,8 @@ void LibspatialjoinAlgorithm::prepareSweep(
 LibspatialjoinAlgorithm::ParseMetadata LibspatialjoinAlgorithm::parse(
     ParseInput input, sj::GeometryStore& store,
     const sj::PreparedGeomMetaCb& metaCb, size_t numThreads,
-    std::optional<util::geo::I32Box> prefilterBox) const {
+    std::optional<util::geo::I32Box> prefilterBox,
+    bool requireContainment) const {
   const auto [idTable, column, boundingBoxes] = input;
 
   // Convert prefilter box to lat lng coordinates for comparing against geometry
@@ -221,6 +236,10 @@ LibspatialjoinAlgorithm::ParseMetadata LibspatialjoinAlgorithm::parse(
     spatialJoin_.value()->runtimeInfo().addDetail(
         "prefilter-disabled-by-bounding-box-area", true);
   }
+  if (usePrefiltering && requireContainment) {
+    spatialJoin_.value()->runtimeInfo().addDetail(
+        "prefilter-requires-containment", true);
+  }
 
   // If the input is smaller than one batch for every thread, reduce the number
   // of threads accordingly to avoid spawning threads that will never be used.
@@ -233,7 +252,7 @@ LibspatialjoinAlgorithm::ParseMetadata LibspatialjoinAlgorithm::parse(
   // Initialize the parser.
   ad_utility::detail::parallel_wkt_parser::WKTParser parser(
       &store, metaCb, numThreads, usePrefiltering, prefilterLatLngBox,
-      qec_->getIndex());
+      requireContainment, qec_->getIndex());
 
   // Iterate over all rows in `idTable` and add the geometries from `column`
   // to the parallel WKT parser. Stop early if the query is cancelled or a
@@ -282,11 +301,28 @@ Result LibspatialjoinAlgorithm::run() {
   std::vector<std::vector<double>> resultDists(NUM_THREADS);
   AD_CORRECTNESS_CHECK(config_.getJoinType().has_value());
   auto joinTypeVal = config_.getJoinType().value();
-  // Within should be replaced by contains on swapped tables.
+  // Within should be replaced by contains on swapped tables. NOTE: The tables
+  // in `params_` are already swapped for `WITHIN` (see
+  // `SpatialJoin::getSwappedJoinSides`), only the result rows have to be
+  // swapped back below.
   auto swapBack = joinTypeVal == SpatialJoinType::WITHIN;
   if (swapBack) {
     joinTypeVal = SpatialJoinType::CONTAINS;
   }
+
+  // For these join types, a geometry of the given side (`true` for the right
+  // side, as in `parse`) can only be part of a result if it lies inside a
+  // geometry of the other side, so its bounding box has to lie inside the
+  // bounding box of the other side. The prefilter for that side may then
+  // require containment instead of mere intersection, see
+  // `prefilterGeoByBoundingBox`.
+  auto sideMustBeContained = [joinTypeVal](bool isRightSide) {
+    using enum SpatialJoinType::Enum;
+    if (joinTypeVal == CONTAINS || joinTypeVal == COVERS) {
+      return isRightSide;
+    }
+    return joinTypeVal == EQUALS;
+  };
 
   // Configure `libspatialjoin`. Half of the memory that is left is used for
   // the geometry cache (see `sweeperConfig`). The other half is split evenly
@@ -402,12 +438,15 @@ Result LibspatialjoinAlgorithm::run() {
       store.setFilterBox(boxSmall);
     }
 
-    // Parse and add the geometries from the larger side (except for those
-    // skipped by bounding box, see above).
+    // Parse and add the geometries from the larger side, except for those
+    // skipped by bounding box (see above): those whose bounding box does not
+    // intersect the bounding box of the smaller side, or does not lie inside
+    // it if the join type requires that (see `sideMustBeContained`).
     auto [boxLarge, countLarge, droppedLarge, droppedLargeByCell, invalidLarge,
           threadsLarge] =
         parse(larger, store, eventsLarge.addCb(storeId), NUM_THREADS,
-              store.getPaddedBoundingBox(boxSmall));
+              store.getPaddedBoundingBox(boxSmall),
+              sideMustBeContained(!smallerIsRight));
     auto numValidGeomsLarge = eventsLarge.numObjects();
     auto numValidGeomsTotal = numValidGeomsSmall + numValidGeomsLarge;
 
