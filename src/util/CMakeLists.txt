@@ -19,4 +19,14 @@ qlever_target_link_libraries(antlrErrorHandling stringUtils antlr4_umbrella)
 add_library(qlever_util GlobalExecutor.cpp FairShareExecutor.cpp BinaryDiffApplier.cpp RegexSet.cpp ParseableDuration.cpp UnitOfMeasurement.cpp Date.cpp DateYearDuration.cpp Duration.cpp CancellationHandle.cpp LazyJsonParser.cpp BlankNodeManager.cpp IoUringManager.cpp FilesystemHelpers.cpp QueryEventLog.cpp ResourceMonitor.cpp KernelBugWorkaround.cpp)
 qlever_target_link_libraries(qlever_util antlrErrorHandling s2 pb_util pb_util_geo pb_util_json rdfTypes antlr4_umbrella)
 
+# The ZSTD helpers for frames that consist of independently compressed
+# sections, see `compressionUsingZstd/SectionedZstdFrame.h`.
+add_library(zstdHelpers compressionUsingZstd/ZstdFrameHeader.cpp
+        compressionUsingZstd/ZstdFrameBlocks.cpp
+        compressionUsingZstd/ZstdSkippableFrame.cpp
+        compressionUsingZstd/ZstdHandWrittenBlocks.cpp
+        compressionUsingZstd/ZstdIndependentUnit.cpp
+        compressionUsingZstd/SectionedZstdFrame.cpp)
+qlever_target_link_libraries(zstdHelpers)
+
 add_subdirectory(metrics)
