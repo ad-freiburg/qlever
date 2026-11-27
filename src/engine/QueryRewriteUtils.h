@@ -15,6 +15,9 @@
 
 class QueryExecutionContext;
 class SpatialJoin;
+namespace filterFacts {
+struct Definitions;
+}
 
 // This module contains utilities for query rewriting, e.g. optimizing cartesian
 // product and filter by replacing it with an appropriate special join.
@@ -31,7 +34,13 @@ std::shared_ptr<SpatialJoin> rewriteFilterToSpatialJoin(
 // Split each FILTER in `filters` with a conjunct (of `&&`) that is a fact (see
 // `engine/filterFacts`) into its conjuncts. Then this conjunct can be rewritten
 // on its own (e.g. to a `SpatialJoin`), and the other conjuncts are applied as
-// regular FILTERs.
-void splitFiltersWithFacts(qlm::vector<SparqlFilter>& filters);
+// regular FILTERs. A conjunct that is a fact only with the definitions `defs`
+// of its group (e.g. `geof:distance(?a, ?b) <= ?max` with `VALUES ?max {
+// 500 }`) is replaced by an equivalent FILTER without them.
+//
+// NOTE: If the fact is not exact (e.g. for different values of `?max` in
+// different rows), the conjunct is kept in addition to this FILTER.
+void rewriteFiltersWithFacts(qlm::vector<SparqlFilter>& filters,
+                             const filterFacts::Definitions& defs);
 
 #endif  // QLEVER_SRC_ENGINE_QUERYREWRITEUTILS_H

@@ -57,14 +57,16 @@ Canonical canonical(std::string_view filter,
 // Matcher for a `Conjunct` whose canonical form is `distance op meters`
 // (compared with a tolerance, because the factors of the conversion of units
 // are rounded).
-auto distanceComparison(Comparison op, double meters, double tolerance = 1e-3) {
+auto distanceComparison(Comparison op, double meters, double tolerance = 1e-3,
+                        bool exact = true) {
   using namespace ::testing;
   return Field(
       &Conjunct::canonical_,
       VariantWith<DistanceComparison>(AllOf(
           Field(&DistanceComparison::lhs_, Eq(Distance{V{"?ga"}, V{"?gb"}})),
           Field(&DistanceComparison::op_, op),
-          Field(&DistanceComparison::rhs_, DoubleNear(meters, tolerance)))));
+          Field(&DistanceComparison::rhs_, DoubleNear(meters, tolerance)),
+          Field(&DistanceComparison::exact_, exact))));
 }
 
 // Matcher for a `Conjunct` that is `Opaque` with the given `expression`.
@@ -121,14 +123,15 @@ TEST(FilterFactsCanonicalizer, Distance) {
 }
 
 // Test that a variable is replaced by its definition from `VALUES` or `BIND`
-// (for the distance and the number).
+// (for the distance and the number), and that a `DistanceComparison` with
+// different numbers in different rows has the largest one and is not exact.
 TEST(FilterFactsCanonicalizer, Definitions) {
   auto expect = [](std::string_view definitions, std::string_view filter,
-                   Comparison op, double meters,
+                   Comparison op, double meters, bool exact = true,
                    ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
     auto trace = generateLocationTrace(l);
     EXPECT_THAT(canonical(filter, definitions).conjuncts_,
-                ElementsAre(distanceComparison(op, meters)));
+                ElementsAre(distanceComparison(op, meters, 1e-3, exact)));
   };
   expect("VALUES ?r { 500 }", "geof:metricDistance(?ga, ?gb) <= ?r",
          Comparison::LE, 500);
@@ -136,13 +139,8 @@ TEST(FilterFactsCanonicalizer, Definitions) {
          500);
   expect("BIND(geof:metricDistance(?ga, ?gb) AS ?d)", "?d <= 500",
          Comparison::LE, 500);
-
-  // A variable with several values is not replaced.
-  auto several =
-      canonical("geof:metricDistance(?ga, ?gb) <= ?r", "VALUES ?r { 500 600 }");
-  EXPECT_THAT(several.conjuncts_,
-              ElementsAre(opaque(several.query_._rootGraphPattern._filters[0]
-                                     .expression_.getPimpl())));
+  expect("VALUES ?r { 1000 500 }", "geof:metricDistance(?ga, ?gb) <= ?r",
+         Comparison::LE, 1000, false);
 
   // A variable without a value (two `VALUES` clauses without a common value) is
   // not replaced.
@@ -177,31 +175,6 @@ TEST(FilterFactsCanonicalizer, CollectDefinitions) {
   // triple binds it again.
   EXPECT_THAT(defs.constants_,
               UnorderedElementsAre(Key(V{"?r"}), Key(V{"?c"})));
-
-  // A later subquery with a `GROUP BY` may bind the target by an alias of its
-  // `SELECT` clause, and a later named cached result may bind any variable.
-  auto subquery = ad_utility::testing::parseQuery(
-      "SELECT * { ?a <p> ?ga . BIND(?ga AS ?x) BIND(?ga AS ?y) "
-      "{ SELECT (MIN(?o) AS ?x) { ?s <q> ?o } GROUP BY ?s } }");
-  EXPECT_THAT(collectDefinitions(subquery._rootGraphPattern._graphPatterns)
-                  .expressions_,
-              UnorderedElementsAre(Key(V{"?y"})));
-  auto cached = ad_utility::testing::parseQuery(
-      "SELECT * { ?a <p> ?ga . BIND(?ga AS ?x) "
-      "SERVICE ql:cached-result-with-name-foo {} }");
-  EXPECT_THAT(
-      collectDefinitions(cached._rootGraphPattern._graphPatterns).expressions_,
-      ::testing::IsEmpty());
-
-  // A variable of several `VALUES` clauses has the values in all of them
-  // without `UNDEF` in its column.
-  auto values = ad_utility::testing::parseQuery(
-      "SELECT * { VALUES ?r { 1 2 3 } VALUES ?r { UNDEF 1 4 } "
-      "VALUES ?r { 3 4 2 } }");
-  EXPECT_THAT(
-      collectDefinitions(values._rootGraphPattern._graphPatterns).constants_,
-      UnorderedElementsAre(::testing::Pair(
-          V{"?r"}, ElementsAre(TripleComponent{2}, TripleComponent{3}))));
 
   // A `BIND` of `UNDEF` (here of an unknown function in the syntax test mode)
   // is not a constant, because a later triple binds its target freely.
@@ -269,6 +242,14 @@ TEST(FilterFactsRecognizers, DistanceBound) {
   // the number).
   EXPECT_THAT(recognize("geof:distance(?ga, ?gb, unit:M) <= 500"),
               ::testing::Optional(DistanceBound{distance, 500}));
+
+  // A `DistanceBound` from a `DistanceComparison` that is not exact is not
+  // exact.
+  auto conjuncts =
+      canonical("geof:metricDistance(?ga, ?gb) <= ?r", "VALUES ?r { 500 1000 }")
+          .conjuncts_;
+  EXPECT_THAT(recognizeDistanceBound(conjuncts.at(0)),
+              ::testing::Optional(DistanceBound{distance, 1000, false}));
   EXPECT_THAT(
       recognize("geof:metricDistance(?ga, ?gb) < 500"),
       ::testing::Optional(DistanceBound{

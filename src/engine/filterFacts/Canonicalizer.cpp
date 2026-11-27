@@ -216,23 +216,22 @@ std::variant<DistanceComparison, Opaque> toCanonicalForm(
       resolve(*expression.children()[0], defs));
   auto numbers = getNumbers(*expression.children()[1], defs);
   if (!call.has_value() || !ad_utility::detail::isLengthUnit(call->unit_) ||
-      !numbers.has_value() || numbers->size() != 1) {
+      !numbers.has_value()) {
     return Opaque{};
   }
 
-  // Convert the number from the unit of the distance to meters.
+  // Convert the largest number from the unit of the distance to meters.
   //
   // NOTE: A number in meters is not converted to kilometers and back (which may
   // change it). For the other units, the conversion is exact only up to the
   // rounding of the conversion factor.
-  double number = numbers->front();
+  auto [min, max] = ql::ranges::minmax(numbers.value());
   double meters =
       call->unit_ == UnitOfMeasurement::METERS
-          ? number
-          : ad_utility::detail::valueInUnitToKilometer(number, call->unit_) *
-                1000;
+          ? max
+          : ad_utility::detail::valueInUnitToKilometer(max, call->unit_) * 1000;
   return DistanceComparison{Distance{call->left_, call->right_}, op.value(),
-                            meters};
+                            meters, min == max};
 }
 
 }  // namespace
