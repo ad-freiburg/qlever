@@ -2555,24 +2555,35 @@ SubtreePlanVec QueryPlanner::createJoinsWithSubstitutes(
 std::optional<SubtreePlan> QueryPlanner::createSemiJoinWithSubstitute(
     const SubtreePlan& plan,
     const FilterAndOptionalSubstitute& filterAndSubst) const {
-  if (!filterAndSubst.semiJoinVariable_.has_value()) {
+  // Return `std::nullopt` if `plan` is not deterministic, because its clones
+  // below could then have other rows than `plan` itself.
+  if (!filterAndSubst.semiJoinVariable_.has_value() ||
+      !plan._qet->getRootOperation()->isDeterministic()) {
     return std::nullopt;
   }
 
-  // Attach the column of each variable of the filter in `plan` as a child to
-  // the substitute. For example, for `geof:sfContains(?x, ?y)`, this gives a
-  // `SpatialJoin` of the values of `?x` and `?y` in `plan`.
+  // Attach the distinct values of each variable of the filter in `plan` as a
+  // child to the substitute. For example, for `geof:sfContains(?x, ?y)`, this
+  // gives a `SpatialJoin` of the distinct values of `?x` and `?y` in `plan`,
+  // with one row per pair of values in the relation.
   //
-  // NOTE: Each column is a `StripColumns` of a clone of `plan`, so that each
+  // NOTE 1: Without the `Distinct`, a value that occurs in `k` rows of `plan`
+  // would occur `k` times in a column, and the `SpatialJoin` would return each
+  // pair of values as often as the product of their numbers of occurrences.
+  //
+  // NOTE 2: Each column is a `StripColumns` of a clone of `plan`, so that each
   // operation occurs only once in the tree (for example, with its own runtime
-  // information). The clone has the same cache key, so `plan` is computed only
-  // once. `makeTreeWithStrippedColumns` would rebuild `plan` instead, which is
-  // more expensive during the planning.
+  // information). The clone has the same cache key, so `plan` is usually
+  // computed only once (not if its result is too large for the cache).
+  // `makeTreeWithStrippedColumns` would rebuild `plan` instead, which is more
+  // expensive during the planning.
   SubtreePlan substitute = filterAndSubst.substitute_.value();
   for (const auto* variable :
        filterAndSubst.filter_.expression_.containedVariables()) {
-    auto column = makeSubtreePlan<StripColumns>(_qec, plan._qet->clone(),
-                                                std::set<Variable>{*variable});
+    SubtreePlan column{QueryExecutionTree::createDistinctTree(
+        makeExecutionTree<StripColumns>(_qec, plan._qet->clone(),
+                                        std::set<Variable>{*variable}),
+        std::array<ColumnIndex, 1>{0})};
     auto candidates = createJoinCandidates(substitute, column,
                                            getJoinColumns(substitute, column));
     AD_CORRECTNESS_CHECK(!candidates.empty());

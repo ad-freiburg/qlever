@@ -12,6 +12,7 @@
 #include "./printers/PayloadVariablePrinters.h"
 #include "QueryPlannerTestHelpers.h"
 #include "engine/SpatialJoinConfig.h"
+#include "engine/operation/Distinct.h"
 #include "engine/operation/ExistsJoin.h"
 #include "engine/operation/SpatialJoin.h"
 #include "global/Constants.h"
@@ -1744,8 +1745,8 @@ TEST(QueryPlanner, SpatialJoinChildrenShareNoVariable) {
 
 // Test that the geometric relations that cannot connect two plans (because
 // their variables are already bound together, for example in a cycle) are
-// evaluated as a semi-join with a `SpatialJoin` (their regular filter is not
-// implemented), and only those.
+// evaluated as a semi-join with a `SpatialJoin` of the distinct values of
+// their variables (their regular filter is not implemented), and only those.
 TEST(QueryPlanner, SpatialJoinCycleAsSemiJoin) {
   using column_stripping_test_helpers::countOperations;
 
@@ -1801,7 +1802,8 @@ TEST(QueryPlanner, SpatialJoinCycleAsSemiJoin) {
   };
 
   // A triangle: `<t1>` is the only point in `<r1>` in `<f1>`, with both
-  // planners.
+  // planners. The `SpatialJoin` of the semi-join gets the distinct values of
+  // each of its two variables.
   std::vector<std::string> frt{"?f", "?r", "?t"};
   for (bool greedy : {false, true}) {
     auto qet = plan(
@@ -1809,6 +1811,7 @@ TEST(QueryPlanner, SpatialJoinCycleAsSemiJoin) {
         "FILTER geof:sfContains(?fg, ?tg) FILTER geof:sfContains(?rg, ?tg)",
         frt, greedy);
     EXPECT_EQ(countOperations<ExistsJoin>(*qet), 1);
+    EXPECT_EQ(countOperations<Distinct>(*qet), 2);
     EXPECT_THAT(columns(qet, frt), matchesIdTableFromVector(
                                        {{id("<f1>"), id("<r1>"), id("<t1>")}}));
   }
@@ -1819,8 +1822,22 @@ TEST(QueryPlanner, SpatialJoinCycleAsSemiJoin) {
       "FILTER geof:sfIntersects(?fg, ?rg) FILTER geof:sfContains(?fg, ?rg)",
       {"?f", "?r"});
   EXPECT_EQ(countOperations<ExistsJoin>(*parallel), 1);
+  EXPECT_EQ(countOperations<Distinct>(*parallel), 2);
   EXPECT_THAT(columns(parallel, {"?f", "?r"}),
               matchesIdTableFromVector({{id("<f1>"), id("<r1>")}}));
+
+  // A plan that is not deterministic (here because of `RAND()`): no
+  // semi-join, because its clones could have other rows, so the regular
+  // filter fails.
+  auto random = h::parseAndPlan(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE { { SELECT ?fg ?rg (RAND() AS ?x) WHERE { "
+      "?f <g> ?fg . ?r <p> ?rg . FILTER geof:sfIntersects(?fg, ?rg) } } "
+      "FILTER geof:sfContains(?fg, ?rg) }",
+      qec);
+  EXPECT_EQ(countOperations<ExistsJoin>(*random), 0);
+  AD_EXPECT_THROW_WITH_MESSAGE(random->getResult(),
+                               ::testing::HasSubstr("only implemented"));
 
   // Two relations with the same region but without a cycle: no semi-join.
   auto chain = plan(

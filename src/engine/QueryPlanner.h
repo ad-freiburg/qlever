@@ -521,9 +521,10 @@ class QueryPlanner {
 
   // Apply the filter of `filterAndSubst` to `plan`, which binds all of its
   // variables, via its substitute: a semi-join of `plan` with the substitute,
-  // whose children are the columns of these variables in `plan`. Return
-  // `std::nullopt` if the filter has no `semiJoinVariable_` (because it can be
-  // evaluated regularly, see `seedFilterSubstitutes`).
+  // whose children are the distinct values of these variables in `plan`.
+  // Return `std::nullopt` if the filter has no `semiJoinVariable_` (because it
+  // can be evaluated regularly, see `seedFilterSubstitutes`) or if `plan` is
+  // not deterministic.
   //
   // NOTE: This is needed for a `SpatialJoin` substitute that cannot connect two
   // plans, because its variables were bound together by other joins or
