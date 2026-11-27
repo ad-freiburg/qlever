@@ -658,6 +658,8 @@ addLinkAndDiscoverTest(QueryRewriteUtilTest engine)
 
 addLinkAndDiscoverTest(FilterFactsTest filterFacts sparqlParser)
 
+addLinkAndDiscoverTest(QueryPlannerFilterFactsTest engine)
+
 addLinkAndDiscoverTest(HttpErrorTest engine)
 
 addLinkAndDiscoverTest(TimeTracerTest)

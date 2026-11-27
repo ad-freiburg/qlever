@@ -86,7 +86,7 @@ struct Conjunct {
 // its conjuncts, and bring each comparison `distance < number` or
 // `distance <= number` into a `DistanceComparison` (with the number in meters).
 // A variable with a definition in `defs` is replaced by its definition (for the
-// distance and the number).
+// distance, the number and the unit).
 std::vector<Conjunct> canonicalize(
     const sparqlExpression::SparqlExpressionPimpl& filter,
     const Definitions& defs = {});

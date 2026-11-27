@@ -121,7 +121,7 @@ TEST(FilterFactsCanonicalizer, Distance) {
 }
 
 // Test that a variable is replaced by its definition from `VALUES` or `BIND`
-// (for the distance and the number).
+// (for the distance, the number and the unit).
 TEST(FilterFactsCanonicalizer, Definitions) {
   auto expect = [](std::string_view definitions, std::string_view filter,
                    Comparison op, double meters,
@@ -134,6 +134,10 @@ TEST(FilterFactsCanonicalizer, Definitions) {
          Comparison::LE, 500);
   expect("BIND(0.5 AS ?r)", "geof:distance(?ga, ?gb) < ?r", Comparison::LT,
          500);
+  expect("VALUES ?u { unit:MI }", "geof:distance(?ga, ?gb, ?u) <= 1",
+         Comparison::LE, 1609.344);
+  expect("BIND(unit:MI AS ?u)", "geof:distance(?ga, ?gb, ?u) <= 1",
+         Comparison::LE, 1609.344);
   expect("BIND(geof:metricDistance(?ga, ?gb) AS ?d)", "?d <= 500",
          Comparison::LE, 500);
 

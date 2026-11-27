@@ -213,7 +213,14 @@ std::variant<DistanceComparison, Opaque> toCanonicalForm(
     return Opaque{};
   }
   auto call = sparqlExpression::getGeoDistanceExpressionParameters(
-      resolve(*expression.children()[0], defs));
+      resolve(*expression.children()[0], defs),
+      [&defs](const Variable& variable) -> std::optional<TripleComponent> {
+        auto constants = getConstants(variable, defs);
+        if (!constants.has_value() || constants->size() != 1) {
+          return std::nullopt;
+        }
+        return constants->front();
+      });
   auto numbers = getNumbers(*expression.children()[1], defs);
   if (!call.has_value() || !ad_utility::detail::isLengthUnit(call->unit_) ||
       !numbers.has_value() || numbers->size() != 1) {
