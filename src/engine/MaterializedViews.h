@@ -74,10 +74,11 @@ class MaterializedViewWriter {
   uint8_t numAddEmptyColumns_;
 
   using RangeOfIdTables = ad_utility::InputRangeTypeErased<IdTableStatic<0>>;
-  // SPO comparator
-  using Comparator = SortTriple<0, 1, 2>;
-  // Sorter for SPO permutation with a dynamic number of columns (template
-  // argument `NumStaticCols == 0`)
+  // A view is stored sorted lexicographically by all its columns in the
+  // internal order of the `Id`s, so the comparator compares whole rows.
+  using Comparator = SortText;
+  // Sorter for the view's permutation with a dynamic number of columns
+  // (template argument `NumStaticCols == 0`).
   using Sorter = ad_utility::CompressedExternalIdTableSorter<Comparator, 0>;
 
   using PlannedQuery = qlever::PlannedQuery;
@@ -91,16 +92,16 @@ class MaterializedViewWriter {
                          ad_utility::AllocatorWithLimit<Id> allocator);
 
   // Called from the constructor. A view is always stored sorted by the
-  // internal order of its first three columns (SPO). An `ORDER BY`, which
-  // requests the semantic order, is therefore never consistent with the
-  // view's storage order and always rejected; an `INTERNAL SORT BY` that does
-  // not request a prefix of the view's columns would have its requested order
-  // silently discarded when writing the view and is therefore also rejected.
+  // internal order of all its columns. An `ORDER BY`, which requests the
+  // semantic order, is therefore never consistent with the view's storage
+  // order and always rejected; an `INTERNAL SORT BY` that does not request a
+  // prefix of the view's columns would have its requested order silently
+  // discarded when writing the view and is therefore also rejected.
   void throwIfOrderByInconsistentWithViewOrder() const;
 
-  // Called from the constructor. A view is always re-sorted into SPO order for
-  // on-disk storage, so a `LIMIT`/`OFFSET` in the defining query would not even
-  // consistently determine which rows end up in the view. It is therefore
+  // Called from the constructor. A view is always re-sorted by all its columns
+  // for on-disk storage, so a `LIMIT`/`OFFSET` in the defining query would not
+  // even consistently determine which rows end up in the view. It is therefore
   // rejected. If the user wants to circumvent this, they can use an explicit
   // subquery.
   void throwIfLimitOffset() const;
@@ -179,6 +180,9 @@ class MaterializedView : public std::enable_shared_from_this<MaterializedView> {
   // The number of distinct values of each column over the whole view (if
   // stored in the view's info JSON), see `numDistinct` below.
   std::vector<std::optional<size_t>> numDistinct_;
+  // Whether the view is stored sorted by all its columns, see
+  // `isSortedOnAllColumns` below.
+  bool isSortedOnAllColumns_ = false;
   std::shared_ptr<LocatedTriplesState> locatedTriplesState_;
   std::optional<std::string> originalQuery_;
   std::optional<ParsedQuery> parsedQuery_;
@@ -229,6 +233,10 @@ class MaterializedView : public std::enable_shared_from_this<MaterializedView> {
   std::optional<size_t> numDistinct(ColumnIndex col) const {
     return col < numDistinct_.size() ? numDistinct_[col] : std::nullopt;
   }
+
+  // Return true iff the view is stored sorted by all its columns. Views written
+  // by older versions of QLever are only sorted by their first four columns.
+  bool isSortedOnAllColumns() const { return isSortedOnAllColumns_; }
 
   // Get the original query string used for writing the view.
   const std::optional<std::string>& originalQuery() const {

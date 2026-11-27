@@ -32,6 +32,7 @@
 #include "index/TripleComponentConversions.h"
 #include "parser/RdfParser.h"
 #include "parser/Tokenizer.h"
+#include "util/FilesystemHelpers.h"
 #include "util/LocalVocabEntryTestHelpers.h"
 
 using ad_utility::testing::makeLocalVocab;
@@ -712,8 +713,9 @@ TEST_F(DeltaTriplesTest, hasWordTriplesForUpdatedLiterals) {
   // Run the `update` via the `DeltaTriplesManager` of the index.
   auto runUpdate = [&](const std::string& update) {
     ad_utility::BlankNodeManager blankNodeManager;
-    auto parsedUpdates = SparqlParser::parseUpdate(&blankNodeManager,
-                                                   encodedIriManager(), update);
+    auto parsedUpdates =
+        SparqlParser::parseUpdate(&blankNodeManager, encodedIriManager(),
+                                  ad_utility::testing::makeAllocator(), update);
     index->deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
       qec.setLocatedTriplesForEvaluation(
           deltaTriples.getLocatedTriplesSharedStateReference());
@@ -1126,15 +1128,9 @@ TEST_F(DeltaTriplesTest, storeAndRestoreFromEmptySet) {
       0,
   };
 
-  std::array<char, expectedContent.size()> actualContent{};
-
-  std::ifstream tmpFileStream{tmpFile.string(), std::ios::binary};
-  tmpFileStream.read(actualContent.data(), actualContent.size());
-  EXPECT_TRUE(tmpFileStream.good());
-  EXPECT_EQ(tmpFileStream.peek(), std::char_traits<char>::eof());
-  tmpFileStream.close();
-
-  ASSERT_EQ(expectedContent, actualContent);
+  // Compare the content and the exact size of the file.
+  ASSERT_THAT(qlever::util::readBinaryFile(tmpFile),
+              ::testing::ElementsAreArray(expectedContent));
 
   // Check if restoring from empty file works
   EXPECT_NO_THROW(deltaTriples.readFromDisk());

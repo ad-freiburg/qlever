@@ -138,9 +138,11 @@ class IndexImpl {
 
   // Pattern trick data
   bool usePatterns_ = false;
-  double avgNumDistinctPredicatesPerSubject_;
-  double avgNumDistinctSubjectsPerPredicate_;
-  uint64_t numDistinctSubjectPredicatePairs_;
+  // Always set by building, loading, or rebuilding the index before they are
+  // read; the zeros only guard against a path that forgets to set them.
+  double avgNumDistinctPredicatesPerSubject_ = 0;
+  double avgNumDistinctSubjectsPerPredicate_ = 0;
+  uint64_t numDistinctSubjectPredicatePairs_ = 0;
 
   // If true, add `ql:has-word` triples for each word in each literal.
   bool addHasWordTriples_ = false;
@@ -1169,7 +1171,8 @@ class IndexImpl {
 
   // Overwrite the config of this instance of `IndexImpl` with the config of
   // `other`, adjusting the name to `newName` and the statistics to
-  // `newStats`.
+  // `newStats`. The pattern statistics are copied from `other`, matching the
+  // patterns, which the rebuild also copies from `other`.
   void loadConfigFromOldIndex(const std::string& newName,
                               const IndexImpl& other,
                               const nlohmann::json& newStats);
