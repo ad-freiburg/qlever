@@ -819,6 +819,19 @@ TEST(ServerTest, handleHttpRequest) {
                                           "' must be strictly positive")));
     }
   }
+
+  // A `timeout` that cannot be parsed or that overflows the time limit in
+  // milliseconds is rejected likewise: `HttpError` -> bad_request.
+  for (std::string_view timeout :
+       {"abc", "9300000000000000s", "-9300000000000000s"}) {
+    response = server.handleHttpRequest(
+        makePostRequest(absl::StrCat("/?timeout=", timeout),
+                        "application/sparql-query", "ASK { ?s ?p ?o }"));
+    EXPECT_THAT(response, StatusIs(http::status::bad_request));
+    EXPECT_THAT(responseBodyToString(std::move(response.body())),
+                testing::HasSubstr(absl::StrCat("Failed to convert string '",
+                                                timeout, "' to duration")));
+  }
 }
 
 // _____________________________________________________________________________

@@ -514,7 +514,8 @@ class Server {
   /// Check if user-provided timeout is authorized with a valid access-token or
   /// lower than the server default. Throw an `HttpError` (403 Forbidden) if
   /// the change is not allowed, and an `HttpError` (400 Bad Request) if the
-  /// timeout is not strictly positive. For queries and updates,
+  /// timeout cannot be parsed or is not strictly positive. For queries and
+  /// updates,
   /// `processOperation` catches it and builds the standard JSON error response.
   /// On the `cmd=` paths it unwinds to `handleHttpRequest`, which builds a
   /// plain-text response. Return the new timeout otherwise.

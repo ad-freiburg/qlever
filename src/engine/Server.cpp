@@ -259,14 +259,22 @@ Server::TimeLimit Server::verifyUserSubmittedQueryTimeout(
   auto defaultTimeout =
       getRuntimeParameter<&RuntimeParameters::defaultQueryTimeout_>();
   if (userTimeout.has_value()) {
-    auto timeoutCandidate =
-        ad_utility::ParseableDuration<TimeLimit>::fromString(
+    // Reject a timeout that cannot be parsed or is out of range.
+    auto parseTimeout = [&userTimeout]() {
+      try {
+        return ad_utility::ParseableDuration<TimeLimit>::fromString(
             userTimeout.value());
+      } catch (const std::runtime_error& e) {
+        throw HttpError(boost::beast::http::status::bad_request, e.what());
+      }
+    };
+    auto timeoutCandidate = parseTimeout();
+
     // Reject a timeout that is not strictly positive.
     //
     // NOTE: A negative timeout would pass the comparison with the default
-    // timeout below. A large negative one overflows in the conversion to
-    // nanoseconds for the timer and becomes a timeout of many years.
+    // timeout below. A large negative one would overflow in the conversion to
+    // nanoseconds for the timer and become a timeout of many years.
     if (timeoutCandidate <= TimeLimit::zero()) {
       throw HttpError(
           boost::beast::http::status::bad_request,
