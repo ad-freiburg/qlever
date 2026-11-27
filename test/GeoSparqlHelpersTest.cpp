@@ -25,6 +25,9 @@ using ad_utility::WktLatitude;
 using ad_utility::WktLongitude;
 using ad_utility::detail::parseWktPoint;
 
+// Helper matcher used for `WktLongitude/Latitude` tests.
+MATCHER(nanMatcher, "Test that input is Nan") { return std::isnan(arg); }
+
 // _____________________________________________________________________________
 TEST(GeoSparqlHelpers, ParseWktPoint) {
   // Test that the given WKT point parses correctly (with all three of
@@ -76,6 +79,67 @@ TEST(GeoSparqlHelpers, ParseWktPoint) {
   testWktPointInvalid("POINT(+42.0 7.8)");
   testWktPointInvalid("POINT(42.0 +7.8)");
   testWktPointInvalid("POINT(42e3 7.8)");
+}
+
+// Test that `WktLongitude` and `WktLatitude` work correctly (with all supported
+// coordinate reference systems).
+TEST(GeoSparqlHelpers, WktLongitudeLatitude) {
+  using ::testing::AllOf;
+  using ::testing::DoubleEq;
+  using ::testing::ResultOf;
+  auto testWktPointCorrect = [](const std::string& pointWkt,
+                                double expected_lng, double expected_lat) {
+    EXPECT_THAT(pointWkt,
+                AllOf(ResultOf(WktLongitude(), DoubleEq(expected_lng)),
+                      ResultOf(WktLatitude(), DoubleEq(expected_lat))));
+  };
+
+  // Test that the given WKT point is invalid (with all three of
+  // parseWktPoint, wktLongitude, and wktLatitude).
+  auto testWktPointInvalid = [](const std::string& pointWkt) {
+    EXPECT_THAT(pointWkt, AllOf(ResultOf(WktLongitude(), nanMatcher()),
+                                ResultOf(WktLatitude(), nanMatcher())));
+  };
+
+  // Test same point in different coordinate reference systems.
+  testWktPointCorrect(
+      "\"POINT(7 8)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+      7, 8);
+  testWktPointCorrect(
+      "\"<http://www.opengis.net/def/crs/OGC/1.3/CRS84> POINT(7 8)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+      7, 8);
+  testWktPointCorrect(
+      "\"<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(8 7)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+      7, 8);
+  testWktPointCorrect(
+      "\"<http://www.opengis.net/def/crs/EPSG/0/3857> POINT(779236.435552915 "
+      "893463.751012646)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>",
+      7, 8);
+
+  // Test invalid or unsupported coordinate reference systems.
+  testWktPointInvalid(
+      "\"<http://www.opengis.net/def/crs/EPSG/0/2154> POINT(7 8)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
+  testWktPointInvalid(
+      "\"<http://www.opengis.net/invalid> POINT(7 8)\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
+  // Test invalid for other WKT types.
+  testWktPointInvalid(
+      "\"POLYGON((1 2,3 4,1 4,1 2))\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
+  // Test empty POINT.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      WktLongitude()(
+          "\"POINT EMPTY\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"),
+      ::testing::HasSubstr("Cannot parse point from WKT"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      WktLatitude()(
+          "\"POINT EMPTY\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"),
+      ::testing::HasSubstr("Cannot parse point from WKT"));
 }
 
 // _____________________________________________________________________________

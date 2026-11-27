@@ -564,6 +564,73 @@ struct ParseGeoPointOrWktVisitor {
 
 static constexpr ParseGeoPointOrWktVisitor parseGeoPointOrWkt;
 
+// Helper to extract the longitude or latitude coordinate from an instance of
+// the `GeoPointOrWkt` variant.
+enum class Coordinate { Longitude, Latitude };
+template <Coordinate C>
+struct CoordinateFromGeoPointOrWktVisitor {
+  double operator()(const GeoPoint& point) const {
+    if constexpr (C == Coordinate::Longitude) {
+      return point.getLng();
+    } else if constexpr (C == Coordinate::Latitude) {
+      return point.getLat();
+    } else {
+      return std::numeric_limits<double>::quiet_NaN();
+    }
+  }
+
+  double operator()(const std::string& wkt) const {
+    auto c = wkt.c_str();
+    auto crsType = getCRSType(c, &c);
+    // Cannot compute longitude/latitude from WKT literal in unsupported CRS.
+    if (crsType == ::util::geo::CRSType::UNSUPPORTED) {
+      return std::numeric_limits<double>::quiet_NaN();
+    }
+    auto wktType = getWKTType(c, &c);
+    // Only compute longitude/latitude if the WKT literal describes a `POINT`.
+    if (wktType != ::util::geo::WKTType::POINT) {
+      return std::numeric_limits<double>::quiet_NaN();
+    }
+    auto projFunc = [](const Point<double>& p, CRSType sourceCrs) {
+      return projectToCRS(p, sourceCrs, defaultCrs);
+    };
+    auto point = pointFromWKTProj<double>(c, &c, projFunc, crsType);
+    // `POINT EMPTY` yields a point with sentinel coordinates.
+    if (point.empty()) {
+      throw std::runtime_error("Cannot parse point from WKT");
+    }
+
+    if constexpr (C == Coordinate::Longitude) {
+      return point.getX();
+    } else if constexpr (C == Coordinate::Latitude) {
+      return point.getY();
+    } else {
+      return std::numeric_limits<double>::quiet_NaN();
+    }
+  }
+
+  double operator()(const GeoPointOrWkt& geoPointOrWkt) const {
+    return std::visit(
+        [](const auto& value) {
+          return CoordinateFromGeoPointOrWktVisitor<C>{}(value);
+        },
+        geoPointOrWkt);
+  }
+
+  template <typename T>
+  double operator()(const std::optional<T>& geoPointOrWkt) const {
+    if (!geoPointOrWkt.has_value()) {
+      return std::numeric_limits<double>::quiet_NaN();
+    }
+    return CoordinateFromGeoPointOrWktVisitor<C>{}(geoPointOrWkt.value());
+  }
+};
+
+static constexpr CoordinateFromGeoPointOrWktVisitor<Coordinate::Longitude>
+    longitudeFromGeoPointOrWkt;
+static constexpr CoordinateFromGeoPointOrWktVisitor<Coordinate::Latitude>
+    latitudeFromGeoPointOrWkt;
+
 // Helper to get the CRS of a `GeoPointOrWkt` variant. A `GeoPoint` is always
 // in the default CRS. For a WKT literal (with quotation marks and datatype),
 // the CRS is given by the IRI at its start, or it is the default CRS if there
