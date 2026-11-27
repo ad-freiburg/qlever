@@ -211,6 +211,12 @@ Qlever::~Qlever() {
 
 // _____________________________________________________________________________
 void Qlever::buildIndex(IndexBuilderConfig config) {
+  buildIndex(std::move(config), ParserFactory{});
+}
+
+// _____________________________________________________________________________
+void Qlever::buildIndex(IndexBuilderConfig config,
+                        ParserFactory parserFactory) {
   // Reject invalid configurations early and with an informative error message.
   config.validate();
   // Make the size of the global thread pool respect the number of threads that
@@ -267,8 +273,13 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
 
   // Build text index if requested (various options).
   if (!config.onlyAddTextIndex_) {
-    AD_CONTRACT_CHECK(!config.inputFiles_.empty());
-    index.createFromFiles(config.inputFiles_, config.numThreads_);
+    if (parserFactory) {
+      index.getImpl().createFromParser(std::move(parserFactory),
+                                       config.numThreads_);
+    } else {
+      AD_CONTRACT_CHECK(!config.inputFiles_.empty());
+      index.createFromFiles(config.inputFiles_, config.numThreads_);
+    }
   }
 
   if (config.wordsAndDocsFileSpecified() || config.addWordsFromLiterals_) {

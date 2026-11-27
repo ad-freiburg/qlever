@@ -7,6 +7,7 @@
 #ifndef QLEVER_SRC_INDEX_INDEXIMPL_H
 #define QLEVER_SRC_INDEX_INDEXIMPL_H
 
+#include <absl/functional/any_invocable.h>
 #include <absl/strings/str_cat.h>
 #include <absl/time/time.h>
 #include <gtest/gtest_prod.h>
@@ -289,15 +290,42 @@ class IndexImpl {
       ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
       size_t numThreads);
 
+  // Type-erased parser factory for programmatic index building (triples
+  // supplied by an embedding application instead of input files). It is a
+  // factory rather than a parser because the `EncodedIriManager` is only
+  // configured during index building, shortly before the parser is needed.
+  // It is called (and thus destroyed) exactly once.
+  using ParserFactory = absl::AnyInvocable<std::unique_ptr<RdfParserBase>(
+                                               const EncodedIriManager*) &&>;
+
+  // Creates an index from the triples yielded by the parser produced by
+  // `parserFactory`. Same orchestration as `createFromFiles` (vocabulary
+  // creation, conversion to global IDs, permutations, patterns), with the
+  // input source injected. The batches of the parser are fetched one at a time
+  // (see `AsyncSerialParserAdapter`). `numThreads` and the restriction on the
+  // use of the index afterwards are the same as for `createFromFiles`.
+  void createFromParser(ParserFactory parserFactory, size_t numThreads);
+
  private:
-  // Check the configuration and read the settings file, before the input files
-  // of `createFromFiles` are processed.
+  // Creates the asynchronous parser for the first pass of the index build,
+  // given the executor of its thread pool (see `runTaskChains`).
+  using AsyncParserMaker =
+      absl::AnyInvocable<std::unique_ptr<AsyncRdfParserBase>(
+                             const ql::any_io_executor&) &&>;
+
+  // Check the configuration and read the settings file, before the input of
+  // `createFromFiles` or `createFromParser` is processed.
   void prepareIndexBuild();
 
   // The part of `createFromFiles` after `prepareIndexBuild`.
   void createFromFilesAfterPreparation(
       ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
       size_t numThreads);
+
+  // The part of `createFromFiles` and `createFromParser` after
+  // `prepareIndexBuild`.
+  void createFromParserAfterPreparation(AsyncParserMaker makeParser,
+                                        size_t numThreads);
 
  public:
   // Creates an index object from an on disk index that has previously been
@@ -722,24 +750,22 @@ class IndexImpl {
   // set up and it would be a waste of RAM. `numThreads` is the number of
   // threads used during the index build (see `Index::createFromFiles`).
   IndexBuilderDataAsFirstPermutationSorter createIdTriplesAndVocab(
-      ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
-      size_t numThreads);
+      AsyncParserMaker makeParser, size_t numThreads);
 
-  // Parse all triples from `files` and build the partial vocabularies, one per
-  // batch of (approximately) `linesPerPartial` triples, together with the
-  // corresponding ID triples (see `writePartialVocabulary`). This is the first
-  // pass of the index building. It runs as a fully asynchronous pipeline on a
-  // thread pool with `numThreads` threads for efficient CPU utilization (see
+  // Parse all triples from the parser created by `makeParser` and build the
+  // partial vocabularies, one per batch of (approximately) `linesPerPartial`
+  // triples, together with the corresponding ID triples (see
+  // `writePartialVocabulary`). This is the first pass of the index building.
+  // It runs as a fully asynchronous pipeline on a thread pool with
+  // `numThreads` threads for efficient CPU utilization (see
   // `PartialVocabularyBuilder.h` for the details). If parsing or writing
   // fails, the first error is rethrown after the pipeline has stopped.
   BuildPartialVocabulariesResult buildPartialVocabularies(
-      ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
-      size_t linesPerPartial, size_t numThreads);
+      AsyncParserMaker makeParser, size_t linesPerPartial, size_t numThreads);
 
   // ___________________________________________________________________
   IndexBuilderDataAsExternalVector passFileForVocabulary(
-      ad_utility::InputRangeTypeErased<qlever::InputFileSpecification> files,
-      size_t linesPerPartial, size_t numThreads);
+      AsyncParserMaker makeParser, size_t linesPerPartial, size_t numThreads);
 
   // Write the partial vocabulary with index `partialVocabIdx` given by `items`
   // to its `partialVocabularyWordsFilename` and the corresponding triples in
