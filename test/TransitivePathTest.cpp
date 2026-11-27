@@ -18,8 +18,8 @@
 #include "engine/ValuesForTesting.h"
 #include "engine/operation/EmptyPath.h"
 #include "engine/operation/IndexScan.h"
-#include "engine/operation/StripColumns.h"
 #include "engine/operation/NeutralOptional.h"
+#include "engine/operation/StripColumns.h"
 #include "engine/operation/TransitivePathBase.h"
 #include "engine/operation/TransitivePathBinSearch.h"
 #include "engine/operation/TransitivePathHashMap.h"
@@ -2904,8 +2904,8 @@ TEST_P(TransitivePathTest, makeTreeWithStrippedColumns) {
   }
 
   // `minDist == 0`: the side tree is already wrapped into an `EmptyPath` by
-  // `bindSides`. Binding the stripped side tree again must not add a second
-  // `EmptyPath`.
+  // `bindSides`. The original side tree below this `EmptyPath` is stripped
+  // (`?y` is removed), and binding it again adds exactly one new `EmptyPath`.
   {
     auto T = makeLeftBound(0);
     auto tree = strip(*T, {V{"?target"}, V{"?x"}});
@@ -2916,6 +2916,40 @@ TEST_P(TransitivePathTest, makeTreeWithStrippedColumns) {
         isStrippedColumns<StripColumns>(
             {V{"?target"}, V{"?x"}},
             rows({{1, 10}, {2, 10}, {3, 10}, {4, 10}, {3, 11}, {4, 11}})));
+
+    const auto* path = tree->getRootOperation()->getChildren().at(0);
+    const auto* emptyPath = path->getRootOperation()->getChildren().at(0);
+    EXPECT_THAT(emptyPath, hasRootOperation<EmptyPath>());
+    EXPECT_THAT(emptyPath->getRootOperation()->getChildren().at(0),
+                hasVariables({V{"?x"}, V{"?start"}}));
+  }
+
+  // `minDist == 0` without a graph variable, but only the default graph is
+  // active (as with a `FROM` clause): in this case `bindSides` always wraps the
+  // side tree into an `EmptyPath`, also when the side tree already is one. The
+  // original side tree below this `EmptyPath` is stripped (`?y` is removed),
+  // and binding it again adds exactly one new `EmptyPath`.
+  {
+    auto [unboundPath, qec] = makePath(
+        sub.clone(), subVars, left, right, 0, inf, std::nullopt, std::nullopt,
+        Graphs::Whitelist({TripleComponent{iri(DEFAULT_GRAPH_IRI)}}));
+    std::variant<IdTable, std::vector<IdTable>> sideTable = leftOpTable.clone();
+    auto T = unboundPath->bindSides(
+        getOperation(qec, sideTable, leftOpVars, 1, std::nullopt, false), 1);
+    auto tree = strip(*T, {V{"?target"}, V{"?x"}});
+    EXPECT_EQ(countOperations<EmptyPath>(*T), 1u);
+    EXPECT_EQ(countOperations<EmptyPath>(*tree), 1u);
+    EXPECT_THAT(
+        tree.get(),
+        isStrippedColumns<StripColumns>(
+            {V{"?target"}, V{"?x"}},
+            rows({{1, 10}, {2, 10}, {3, 10}, {4, 10}, {3, 11}, {4, 11}})));
+
+    const auto* path = tree->getRootOperation()->getChildren().at(0);
+    const auto* emptyPath = path->getRootOperation()->getChildren().at(0);
+    EXPECT_THAT(emptyPath, hasRootOperation<EmptyPath>());
+    EXPECT_THAT(emptyPath->getRootOperation()->getChildren().at(0),
+                hasVariables({V{"?x"}, V{"?start"}}));
   }
 
   // Right side bound to a table with the payload column `?z`, only `?start`
@@ -2984,8 +3018,7 @@ TEST_P(TransitivePathTest, makeTreeWithStrippedColumns) {
 
   // Graph variable `?g` available, left side bound to a table that provides the
   // graph, only `?target` and `?x` requested: the side tree keeps the join
-  // variable
-  // `?start` and the graph variable `?g`, only `?y` is stripped.
+  // variable `?start` and the graph variable `?g`, only `?y` is stripped.
   {
     auto T = makePathBound(
         true,
@@ -3015,8 +3048,10 @@ TEST_P(TransitivePathTest, makeTreeWithStrippedColumns) {
 
   // Graph variable `?g` that is also the join variable of the left side and
   // `minDist == 0`: the `EmptyPath` that `bindSides` adds writes the graph to
-  // an internal helper variable. The side tree keeps `?g` and this helper,
-  // only `?other` is stripped.
+  // an internal helper variable. The original side tree below this `EmptyPath`
+  // is stripped to the join variable `?g` (`?other` is removed), and binding it
+  // again adds exactly one new `EmptyPath`, which creates the helper variable
+  // again.
   {
     TransitivePathSide graphLeft(std::nullopt, 0, V{"?g"}, 0);
     auto T =
@@ -3041,11 +3076,14 @@ TEST_P(TransitivePathTest, makeTreeWithStrippedColumns) {
     const auto* path = tree->getRootOperation()->getChildren().at(0);
     auto children = path->getRootOperation()->getChildren();
     ASSERT_EQ(children.size(), 2u);
-    // `?g` and the internal helper variable.
-    const auto& sideVars = children.at(0)->getVariableColumns();
+    const auto* emptyPath = children.at(0);
+    EXPECT_THAT(emptyPath, hasRootOperation<EmptyPath>());
+    EXPECT_THAT(emptyPath->getRootOperation()->getChildren().at(0),
+                hasVariables({V{"?g"}}));
+    // The `EmptyPath` provides `?g` and the internal helper variable.
+    const auto& sideVars = emptyPath->getVariableColumns();
     EXPECT_EQ(sideVars.size(), 2u);
     EXPECT_TRUE(sideVars.contains(V{"?g"}));
-    EXPECT_FALSE(sideVars.contains(V{"?other"}));
   }
 
   // All variables requested: nothing is stripped from the side tree and the
