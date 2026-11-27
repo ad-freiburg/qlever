@@ -3,7 +3,7 @@ description: "Install the dependencies and the compiler, then configure, build, 
 
 inputs:
   matrix:
-    description: "The build matrix entry of the calling job, as JSON (pass the `toJSON` of the `matrix` context). Used keys: `compiler`, `compiler-version`, `warnings`, `asan-flags`, `ubsan-flags`, `build-type`, `expensive-tests`, `additional-cmake-options`, `allocator-backend`."
+    description: "The build matrix entry of the calling job, as JSON (pass the `toJSON` of the `matrix` context). Used keys: `compiler`, `compiler-version`, `warnings`, `asan-flags`, `ubsan-flags`, `build-type`, `expensive-tests`, `additional-cmake-options`, `allocator-backend`, `install-gdal`."
     required: true
   in-container:
     description: "Must be set to true for jobs that run in a `container`. The disk space of the host can't be freed from inside a container, and the kernel parameter for the sanitizers can't be set there (no job in a container uses sanitizers, so it isn't needed there either). The `mold` linker isn't used there either, because the `mold` of Ubuntu 26.04 can't read the linker script `libatomic_asneeded.so` that the GCC packages of that release add (`mold: fatal: ... INPUT ( AS_NEEDED ( -latomic ) )`)."
@@ -17,6 +17,7 @@ runs:
       uses: ./.github/workflows/install-dependencies-ubuntu
       with:
         free-disk-space: ${{ inputs.in-container == 'true' && 'false' || 'true' }}
+        install-gdal: ${{ fromJSON(inputs.matrix).install-gdal || 'false' }}
     - name: Install compiler
       uses: ./.github/workflows/install-compiler-ubuntu
       with:

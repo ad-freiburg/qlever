@@ -721,3 +721,8 @@ addLinkAndDiscoverTest(InstrumentedExecutorTest metrics)
 addLinkAndDiscoverTest(ResourceMonitorTest qlever_util)
 
 addLinkAndDiscoverTest(KernelBugWorkaroundTest qlever_util)
+
+if (USE_GDAL)
+    # Links GDAL itself, because the test writes its raster files with GDAL.
+    addLinkAndDiscoverTest(RasterFileTest raster GDAL::GDAL)
+endif ()
