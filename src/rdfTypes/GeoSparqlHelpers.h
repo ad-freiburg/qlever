@@ -24,6 +24,7 @@
 #include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/Iri.h"
 #include "rdfTypes/Literal.h"
+#include "util/BitUtils.h"
 #include "util/UnitOfMeasurement.h"
 
 // If `filter` is a syntactically valid DE-9IM filter pattern (i.e. exactly 9
@@ -437,7 +438,8 @@ class WktGeometryStoreId {
     if (!id.has_value()) {
       return ValueId::makeUndefined();
     }
-    AD_CORRECTNESS_CHECK(id.value().id_ >> GEOMETRY_STORE_ID_BITS == 0);
+    AD_CORRECTNESS_CHECK(id.value().id_ <=
+                         bitMaskForLowerBits(GEOMETRY_STORE_ID_BITS));
     return ValueId::makeFromInt(static_cast<int64_t>(id.value().id_));
   }
 };
@@ -450,7 +452,7 @@ inline std::optional<uint64_t> geometryStoreIdFromValueId(ValueId id) {
     return std::nullopt;
   }
   return static_cast<uint64_t>(id.getInt()) &
-         ((uint64_t{1} << GEOMETRY_STORE_ID_BITS) - 1);
+         bitMaskForLowerBits(GEOMETRY_STORE_ID_BITS);
 }
 
 // Compute the area of a WKT geometry.
