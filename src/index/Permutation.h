@@ -128,15 +128,16 @@ class Permutation {
 
   // For a given relation, determine the `col1Id`s and their counts. This is
   // used for `computeGroupByObjectWithCount`. The `col0Id` must have metadata
-  // in `meta_`.
+  // in `meta_`. The blocks are read on the `executor`, see
+  // `CompressedRelationReader::getDistinctColIdsAndCounts`.
   IdTable getDistinctCol1IdsAndCounts(
       Id col0Id, const CancellationHandle& cancellationHandle,
-      const LocatedTriplesState& locatedTriplesState,
+      const LocatedTriplesState& locatedTriplesState, qlever::Executor executor,
       const LimitOffsetClause& limitOffset) const;
 
   IdTable getDistinctCol0IdsAndCounts(
       const CancellationHandle& cancellationHandle,
-      const LocatedTriplesState& locatedTriplesState,
+      const LocatedTriplesState& locatedTriplesState, qlever::Executor executor,
       const LimitOffsetClause& limitOffset) const;
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17

@@ -1025,7 +1025,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByObjectWithCount() const {
   const auto& permutation = indexScan->permutation();
   auto result = permutation.getDistinctCol1IdsAndCounts(
       col0Id.value(), cancellationHandle(), indexScan->locatedTriplesState(),
-      indexScan->getLimitOffset());
+      executor(), indexScan->getLimitOffset());
 
   indexScan->updateRuntimeInformationWhenOptimizedOut({});
 
@@ -1085,7 +1085,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByForFullIndexScan() const {
   // NOTE: Use the `LocatedTriplesState` of the `IndexScan` (see
   // `computeGroupByForSingleIndexScan` for details).
   auto table = permutation.value().getDistinctCol0IdsAndCounts(
-      cancellationHandle(), operation->locatedTriplesState(),
+      cancellationHandle(), operation->locatedTriplesState(), executor(),
       operation->getLimitOffset());
   if (numCounts == 0) {
     table.setColumnSubset(std::array{ColumnIndex{0}});
