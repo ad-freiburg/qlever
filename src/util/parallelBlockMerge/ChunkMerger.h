@@ -11,6 +11,7 @@
 #define QLEVER_SRC_UTIL_PARALLELBLOCKMERGE_CHUNKMERGER_H
 
 #include <cstddef>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <utility>
@@ -144,6 +145,17 @@ class ChunkMerger : public ad_utility::InputRangeFromGet<OutputBlockT<Input>>,
     AD_CONTRACT_CHECK(chunkIdx_ < state_->chunkBoundaries_.size());
   }
 
+  // If the number of elements per output block is bounded, reserve the memory
+  // of a complete output block up front via `input.reserveBlock`, so that the
+  // block doesn't grow in several steps.
+  static void reserveBlockIfPossible(const Input& input, OutputBlock& block,
+                                     const MergeOptions& options) {
+    size_t maxNumElements = options.outputBlockSize.maxNumElements();
+    if (maxNumElements != std::numeric_limits<size_t>::max()) {
+      input.reserveBlock(block, maxNumElements);
+    }
+  }
+
   // Return the next output block, or `std::nullopt` if the chunk is exhausted
   // (the `ChunkMerger` is itself a lazy range of the output blocks of its
   // chunk). The returned block is never empty, because an `OutputBlockSize` is
@@ -156,6 +168,7 @@ class ChunkMerger : public ad_utility::InputRangeFromGet<OutputBlockT<Input>>,
     }
     const Input& input = state_->input_;
     auto block = input.makeEmptyBlock();
+    reserveBlockIfPossible(input, block, state_->options_);
     size_t numElements = 0;
     MemorySize memory = MemorySize::bytes(0);
     auto comparator = heapComparator();
