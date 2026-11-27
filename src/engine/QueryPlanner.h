@@ -28,6 +28,31 @@
 #include "parser/data/Types.h"
 #include "util/ContainersWithAllocator.h"
 
+// How the `QueryPlanner` evaluates a triple of a basic graph pattern: a plain
+// index scan or a special operation for a special predicate.
+//
+// NOTE: Each special predicate must have its own kind, on which
+// `createTripleGraph` and `seedWithScansAndText` dispatch (the latter with a
+// `switch` without `default`, so a kind without a handler is a compiler
+// warning). Do not special-case a predicate of kind `IndexScan` elsewhere: only
+// in triples of this kind, variables may be replaced by constants (see
+// `substituteConstants` in `QueryPlanner.cpp`).
+enum class TripleKind {
+  IndexScan,
+  TextWord,
+  TextEntity,
+  SpatialJoin,
+  MaterializedView,
+  HasPredicate
+};
+
+// Return the `TripleKind` of a triple with the predicate `iri`.
+TripleKind getTripleKind(std::string_view iri);
+
+// Return the `TripleKind` of `triple`, the predicate of which must be an IRI or
+// a variable (property paths are transformed before planning).
+TripleKind getTripleKind(const SparqlTriple& triple);
+
 class QueryPlanner {
   using TextLimitMap =
       ad_utility::HashMap<Variable, parsedQuery::TextLimitMetaObject>;
@@ -731,6 +756,10 @@ class QueryPlanner {
     // substitutes. The substitutes for the actual planning are seeded in
     // `fillDpTab`.
     FiltersAndOptionalSubstitutes filtersAndSubst_;
+
+    // The number of children of the `rootPattern_` that have been visited so
+    // far, including the one that is currently visited (see `optimize`).
+    size_t numVisitedChildren_ = 0;
 
     // ________________________________________________________________________
     GraphPatternPlanner(QueryPlanner& planner,

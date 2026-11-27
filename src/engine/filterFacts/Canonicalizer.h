@@ -50,6 +50,10 @@ struct Definitions {
   // `?v`. The pointers point into the group, which must outlive this struct.
   ad_utility::HashMap<Variable, const sparqlExpression::SparqlExpression*>
       expressions_;
+
+  // Return the value of `variable` if `constants_` has exactly one for it, and
+  // `std::nullopt` otherwise.
+  std::optional<TripleComponent> getConstant(const Variable& variable) const;
 };
 
 // Collect the `Definitions` from the direct children of a group graph pattern.
