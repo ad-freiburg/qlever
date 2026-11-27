@@ -23,7 +23,6 @@
 #include <boost/asio/thread_pool.hpp>
 #include <boost/asio/use_awaitable.hpp>
 #include <cstdint>
-#include <fstream>
 #include <functional>
 #include <mutex>
 #include <string>
@@ -45,7 +44,6 @@
 #include "util/Exception.h"
 #include "util/ExceptionHandling.h"
 #include "util/FairShareExecutor.h"
-#include "util/HashMap.h"
 #include "util/InputRangeUtils.h"
 #include "util/Log.h"
 #include "util/ProgressBar.h"

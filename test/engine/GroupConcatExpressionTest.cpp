@@ -9,6 +9,7 @@
 #include "../util/IndexTestHelpers.h"
 #include "../util/LocalVocabEntryTestHelpers.h"
 #include "../util/LocalVocabTestHelpers.h"
+#include "../util/VariableToColumnMapTestHelpers.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 
@@ -30,8 +31,8 @@ void expectIdsAreConcatenatedTo(
   LocalVocab localVocab = makeLocalVocab();
   ad_utility::SharedCancellationHandle cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
-  VariableToColumnMap map{
-      {var, {0, ColumnIndexAndTypeInfo::PossiblyUndefined}}};
+  auto map = makeVariableToColumnMap(
+      {{var, {0, ColumnIndexAndTypeInfo::PossiblyUndefined}}});
 
   EvaluationContext context{*qec,
                             map,
@@ -142,8 +143,8 @@ TEST(GroupConcatExpression, concatenationWithLanguageTags) {
 // _____________________________________________________________________________
 TEST(GroupConcatExpression, getCacheKey) {
   Variable var{"?x"};
-  VariableToColumnMap map{
-      {var, {0, ColumnIndexAndTypeInfo::PossiblyUndefined}}};
+  auto map = makeVariableToColumnMap(
+      {{var, {0, ColumnIndexAndTypeInfo::PossiblyUndefined}}});
 
   std::string sep = "👻";
 

@@ -37,6 +37,7 @@
 #include "util/Exception.h"
 #include "util/GeoConverters.h"
 #include "util/Log.h"
+#include "util/OverloadCallOperator.h"
 #include "util/TypeTraits.h"
 #include "util/Views.h"
 #include "util/json.h"
@@ -563,6 +564,17 @@ struct ParseGeoPointOrWktVisitor {
 
 static constexpr ParseGeoPointOrWktVisitor parseGeoPointOrWkt;
 
+// Helper to get the CRS of a `GeoPointOrWkt` variant. A `GeoPoint` is always
+// in the default CRS. For a WKT literal (with quotation marks and datatype),
+// the CRS is given by the IRI at its start, or it is the default CRS if there
+// is none (`getCRSType` skips the opening quotation mark).
+inline CRSType sourceCrsFromGeoPointOrWkt(const GeoPointOrWkt& geoPointOrWkt) {
+  return std::visit(ad_utility::OverloadCallOperator{
+                        [](const GeoPoint&) { return defaultCrs; },
+                        [](const std::string& wkt) { return getCRSType(wkt); }},
+                    geoPointOrWkt);
+}
+
 // Helper to convert a geometry from `pb_util` (in CRS84) to a WKT string,
 // projected to `projCrs` (with the IRI of `projCrs` unless it is CRS84).
 struct UtilGeomToWktVisitor {
@@ -605,6 +617,23 @@ struct UtilGeomToWktVisitor {
 };
 
 static constexpr UtilGeomToWktVisitor utilGeomToWkt;
+
+// Helper to get the WKT string (without quotation marks and datatype) of a
+// `GeoPointOrWkt` variant. The `std::string` alternative holds the full
+// literal with quotation marks and datatype, as the `GeoPointOrWktValueGetter`
+// yields it.
+inline std::optional<std::string> wktFromGeoPointOrWkt(
+    const GeoPointOrWkt& geoPointOrWkt) {
+  return std::visit(
+      ad_utility::OverloadCallOperator{
+          [](const GeoPoint& point) -> std::optional<std::string> {
+            return utilGeomToWkt(geoPointToUtilPoint(point));
+          },
+          [](const std::string& wkt) -> std::optional<std::string> {
+            return removeDatatype(wkt);
+          }},
+      geoPointOrWkt);
+}
 
 // Helper to convert a geometry from `pb_util` to a GeoJSON geometry object (RFC
 // 7946). The input is expected to be in CRS84, as GeoJSON only supports this

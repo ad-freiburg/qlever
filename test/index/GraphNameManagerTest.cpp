@@ -103,3 +103,10 @@ TEST(GraphNameManager, readFromDisk) {
     ad_utility::deleteFile("state_file");
   }
 }
+
+// Test that `writeToDisk` does nothing (and in particular does not throw) if no
+// file for persisting the state has been set.
+TEST(GraphNameManager, writeToDiskWithoutFilename) {
+  const auto manager = GraphNameManager("http://example.org/g/", 7);
+  EXPECT_NO_THROW(manager.writeToDisk());
+}

@@ -6,7 +6,6 @@
 
 #include <absl/strings/str_cat.h>
 
-#include <exception>
 #include <string>
 
 namespace ad_utility {

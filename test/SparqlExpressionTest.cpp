@@ -37,6 +37,7 @@
 #include "util/AllocatorTestHelpers.h"
 #include "util/IdTestHelpers.h"
 #include "util/LocalVocabEntryTestHelpers.h"
+#include "util/VariableToColumnMapTestHelpers.h"
 
 using ad_utility::testing::localVocabEntry;
 
@@ -215,7 +216,7 @@ auto testNaryExpressionImpl = [](auto&& makeExpression, auto const& expected,
              (SingleExpressionResult<decltype(operands)> && ...));
   ad_utility::AllocatorWithLimit<Id> alloc{
       ad_utility::testing::makeAllocator()};
-  VariableToColumnMap map;
+  auto map = makeVariableToColumnMap();
   LocalVocab localVocab{ad_utility::testing::makeAllocator()};
   IdTable table{alloc};
 
@@ -851,7 +852,8 @@ TEST(SparqlExpression, sharedDateDispatchBypassesVariants) {
   context._endIndex = 2;
   const Id date = Dat(DateYearOrDuration::parseXsdDate, "2020-01-01");
   V<Id> dates{{date, date}, alloc};
-  ConstIdColumnRef column{dates.data(), dates.size()};
+  IdColumn dateColumn{date, date};
+  ConstIdColumnRef column{dateColumn};
   auto result =
       hn::evaluateHomogeneousNumericOperation<TypedOnly, DateYearOrDuration,
                                               DateYearOrDuration>(
@@ -1351,23 +1353,24 @@ TEST(SparqlExpression, stringOperators) {
                                    ValueId::makeUndefined(), nullptr),
                                ::testing::HasSubstr("unreachable"));
 
+  const auto emptyMap = makeVariableToColumnMap();
   // A simple test for uniqueness of the cache key.
   auto c1a = makeStrlenExpression(std::make_unique<IriExpression>(iri("<bim>")))
-                 ->getCacheKey({});
+                 ->getCacheKey(emptyMap);
   auto c1b = makeStrlenExpression(std::make_unique<IriExpression>(iri("<bim>")))
-                 ->getCacheKey({});
+                 ->getCacheKey(emptyMap);
   auto c2a = makeStrExpression(std::make_unique<IriExpression>(iri("<bim>")))
-                 ->getCacheKey({});
+                 ->getCacheKey(emptyMap);
   auto c2b = makeStrExpression(std::make_unique<IriExpression>(iri("<bim>")))
-                 ->getCacheKey({});
+                 ->getCacheKey(emptyMap);
   auto c3a =
       makeStrlenExpression(
           makeStrExpression(std::make_unique<IriExpression>(iri("<bim>"))))
-          ->getCacheKey({});
+          ->getCacheKey(emptyMap);
   auto c3b =
       makeStrlenExpression(
           makeStrExpression(std::make_unique<IriExpression>(iri("<bim>"))))
-          ->getCacheKey({});
+          ->getCacheKey(emptyMap);
 
   EXPECT_EQ(c1a, c1b);
   EXPECT_EQ(c2a, c2b);
@@ -2400,6 +2403,24 @@ TEST(SparqlExpression, geoSparqlExpressions) {
       },
       exampleMultiGeoms, Ids{I(2), I(2), I(2), I(2), I(2)});
 
+  // The function `geof:transform`: an unknown CRS IRI yields `UNDEF`.
+  auto checkTransform =
+      std::bind_front(testNaryExpression, &makeTransformExpression);
+  auto examplePoint = geoLit("POINT(1 2)");
+  checkTransform(
+      IdOrLocalVocabEntryVec{
+          geoLit("POINT(1 2)"), U,
+          geoLit("<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(2 1)"),
+          geoLit("<http://www.opengis.net/def/crs/EPSG/0/3857> "
+                 "POINT(111319.490793 222684.208506)")},
+      IdOrLocalVocabEntryVec{examplePoint, examplePoint, examplePoint,
+                             examplePoint},
+      IdOrLocalVocabEntryVec{
+          iriref("<http://www.opengis.net/def/crs/OGC/1.3/CRS84>"),
+          iriref("<http://www.opengis.net/bla/bli/>"),
+          iriref("<http://www.opengis.net/def/crs/EPSG/0/4326>"),
+          iriref("<http://www.opengis.net/def/crs/EPSG/0/3857>")});
+
   // The internal function `ql:simplifyGeometry`.
   auto checkSimplify =
       std::bind_front(testNaryExpression, &makeSimplifyGeometryExpression);
@@ -2562,7 +2583,7 @@ TEST(SparqlExpression, ifAndCoalesce) {
   auto coalesceExpr = makeCoalesceExpressionVariadic(
       std::make_unique<IriExpression>(iri("<bim>")),
       std::make_unique<IriExpression>(iri("<bam>")));
-  ASSERT_THAT(coalesceExpr->getCacheKey({}),
+  ASSERT_THAT(coalesceExpr->getCacheKey(makeVariableToColumnMap()),
               testing::AllOf(::testing::ContainsRegex("CoalesceExpression"),
                              ::testing::HasSubstr("<bim>"),
                              ::testing::HasSubstr("<bam>")));
@@ -2607,7 +2628,7 @@ TEST(SparqlExpression, concatExpression) {
   auto coalesceExpr = makeConcatExpressionVariadic(
       std::make_unique<IriExpression>(iri("<bim>")),
       std::make_unique<IriExpression>(iri("<bam>")));
-  ASSERT_THAT(coalesceExpr->getCacheKey({}),
+  ASSERT_THAT(coalesceExpr->getCacheKey(makeVariableToColumnMap()),
               testing::AllOf(::testing::ContainsRegex("ConcatExpression"),
                              ::testing::HasSubstr("<bim>"),
                              ::testing::HasSubstr("<bam>")));
@@ -2858,7 +2879,8 @@ TEST(SparqlExpression, literalExpression) {
 TEST(SparqlExpression, unboundVariableExpression) {
   TestContext ctx;
   VariableExpression var{Variable{"?notFoundAnywhere"}};
-  EXPECT_THAT(var.getCacheKey({}), ::testing::HasSubstr("Unbound Variable"));
+  EXPECT_THAT(var.getCacheKey(makeVariableToColumnMap()),
+              ::testing::HasSubstr("Unbound Variable"));
   EXPECT_THAT(var.evaluate(&ctx.context),
               ::testing::VariantWith<Id>(Id::makeUndefined()));
 }
@@ -3000,7 +3022,7 @@ TEST(SingleUseExpression, simpleMembersForTestCoverage) {
   EXPECT_ANY_THROW(expression.evaluate(nullptr));
   EXPECT_THAT(expression.childrenForTesting(), IsEmpty());
   EXPECT_ANY_THROW(expression.getUnaggregatedVariables());
-  EXPECT_ANY_THROW(expression.getCacheKey({}));
+  EXPECT_ANY_THROW(expression.getCacheKey(makeVariableToColumnMap()));
 }
 
 // This just tests basic functionality of the `ExistsExpression` class. Since
@@ -3009,7 +3031,7 @@ TEST(SingleUseExpression, simpleMembersForTestCoverage) {
 // `test/engine/ExistsJoinTest.cpp`.
 TEST(ExistsExpression, basicFunctionality) {
   using namespace ::testing;
-  ParsedQuery pq;
+  ParsedQuery pq{alloc};
   pq.selectClause().addVisibleVariable(Variable{"?testVar42"});
   pq.selectClause().setAsterisk();
   ExistsExpression exists{std::move(pq)};
@@ -3190,8 +3212,8 @@ TEST(NaryExpressionTypeErased, basicTests) {
               ElementsAre(typeMatcher(ti<IdExpression>),
                           typeMatcher(ti<VariableExpression>)));
 
-  VariableToColumnMap varColMap;
-  varColMap[Variable{"?x"}] = makeAlwaysDefinedColumn(42);
+  auto varColMap =
+      makeVariableToColumnMap({{Variable{"?x"}, makeAlwaysDefinedColumn(42)}});
 
   auto getKey = [&varColMap](const SparqlExpression::Ptr& ptr) {
     return ptr->getCacheKey(varColMap);

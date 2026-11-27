@@ -14,8 +14,8 @@
 #include <optional>
 #include <vector>
 
-#include "engine/IndexScan.h"
 #include "engine/idTable/IdTable.h"
+#include "engine/operation/IndexScan.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "util/AllocatorWithLimit.h"
 
