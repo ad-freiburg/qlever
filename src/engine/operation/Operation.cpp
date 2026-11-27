@@ -13,6 +13,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoinCachedIndex.h"
 #include "engine/VariableToColumnMap.h"
+#include "engine/sparqlExpressions/PrefilterExpressionIndex.h"
 #include "global/RuntimeParameters.h"
 #include "parser/GraphPatternOperation.h"
 #include "util/Algorithm.h"
@@ -661,6 +662,10 @@ void Operation::createRuntimeInfoFromEstimates(
   _runtimeInfo->numCols_ = numCols;
   _runtimeInfo->descriptor_ = getDescriptor();
 
+  // This function may run a second time on an operation that is shared
+  // between the original tree and a tree rebuilt at execution time (see
+  // `SpatialJoin::prepareJoin`), so the children are set anew, not appended.
+  _runtimeInfo->children_.clear();
   auto chargedCosts = getCostEstimatesChargedForChildren();
   auto children = getChildren();
   AD_CORRECTNESS_CHECK(chargedCosts.size() == children.size());
@@ -822,6 +827,17 @@ uint64_t Operation::getSizeEstimate() {
   } else {
     return getSizeEstimateBeforeLimit();
   }
+}
+
+// _____________________________________________________________________________
+std::vector<Operation::PrefilterVariablePair> Operation::clonePrefilters(
+    const std::vector<PrefilterVariablePair>& prefilters) {
+  std::vector<PrefilterVariablePair> result;
+  result.reserve(prefilters.size());
+  for (const auto& [expression, variable] : prefilters) {
+    result.emplace_back(expression->clone(), variable);
+  }
+  return result;
 }
 
 // _____________________________________________________________________________

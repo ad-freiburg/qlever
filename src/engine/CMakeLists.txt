@@ -9,7 +9,7 @@ add_library(engine
         CountConnectedSubgraphs.cpp ExecuteUpdate.cpp
         GraphStoreProtocol.cpp SpatialJoinParser.cpp SpatialJoinCachedIndex.cpp
         QueryExecutionContext.cpp SparqlProtocol.cpp ParsedRequestBuilder.cpp
-        NamedResultCache.cpp MaterializedViews.cpp
+        NamedResultCache.cpp MaterializedViews.cpp GeoRectangleRowFilter.cpp
         PermutationSelector.cpp ConstructTripleGenerator.cpp
         ConstructTemplatePreprocessor.cpp ConstructTripleInstantiator.cpp ConstructBatchEvaluator.cpp
         ConstructDeduplicator.cpp MaterializedViewsQueryAnalysis.cpp
