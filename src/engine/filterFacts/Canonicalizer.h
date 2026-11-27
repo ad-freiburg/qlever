@@ -13,6 +13,7 @@
 #include <variant>
 #include <vector>
 
+#include "backports/span.h"
 #include "backports/three_way_comparison.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "global/ValueIdComparators.h"
@@ -53,7 +54,7 @@ struct Definitions {
 
 // Collect the `Definitions` from the direct children of a group graph pattern.
 Definitions collectDefinitions(
-    const std::vector<parsedQuery::GraphPatternOperation>& group);
+    ql::span<const parsedQuery::GraphPatternOperation> group);
 
 // `geof:distance(a_, b_)` in meters. `a_` and `b_` are variables or constants.
 struct Distance {

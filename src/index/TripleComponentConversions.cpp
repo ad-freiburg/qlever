@@ -66,6 +66,9 @@ std::optional<Id> toValueIdIfNotString(
       return Id::makeFromDate(value);
     } else if constexpr (std::is_same_v<T, GeoPoint>) {
       return Id::makeFromGeoPoint(value);
+    } else if constexpr (std::is_same_v<T, TripleComponent::TripleTerm>) {
+      // TODO<Prashanth0703> Implement triple-term indexing and ID conversion.
+      AD_THROW("Converting parsed triple terms to IDs is not supported");
     } else if constexpr (std::is_same_v<T, Variable>) {
       // Cannot turn a variable into a ValueId.
       AD_FAIL();

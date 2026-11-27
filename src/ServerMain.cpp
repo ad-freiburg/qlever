@@ -19,7 +19,6 @@
 #include "libqlever/Qlever.h"
 #include "util/Algorithm.h"
 #include "util/KernelBugWorkaround.h"
-#include "util/ParseableDuration.h"
 #include "util/ProgramOptionsHelpers.h"
 #include "util/ReadableNumberFacet.h"
 #include "util/ResourceMonitor.h"

@@ -13,11 +13,14 @@
 #include <numeric>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 
 #include "backports/algorithm.h"
 #include "backports/iterator.h"
 #include "backports/shift.h"
+#include "util/Allocator.h"
+#include "util/ContainersWithAllocator.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
 #include "util/HashSet.h"
@@ -104,18 +107,37 @@ bool contains_if(const Container& container, const Predicate& predicate) {
 }
 
 /**
- * Appends the second vector to the first one.
+ * Appends the second vector to the first one. The vectors may have different
+ * allocators (for example a `qlm::vector` and a `std::vector`), and `source`
+ * may be any range with the same value type.
  *
  * @param destination Vector& to which to append
  * @param source Vector&& to append
  */
-CPP_template(typename T, typename U)(
-    requires ad_utility::SimilarTo<std::vector<T>, U>)
-void appendVector(std::vector<T>& destination, U&& source) {
+CPP_template(typename T, typename Alloc, typename U)(
+    requires ql::ranges::input_range<U> &&
+    ad_utility::SimilarTo<T, ql::ranges::range_value_t<U>>)
+void appendVector(std::vector<T, Alloc>& destination, U&& source) {
   destination.insert(destination.end(),
                      ad_utility::makeForwardingIterator<U>(source.begin()),
                      ad_utility::makeForwardingIterator<U>(source.end()));
 }
+
+namespace algorithm::detail {
+// Apply `unaryOp` to all elements of `input` and collect the results in a
+// `Vector` (a class template like `std::vector` or `qlm::vector`), which is
+// constructed with the `vectorArgs` (for example an allocator).
+template <template <typename...> typename Vector, typename Range, typename F,
+          typename... VectorArgs>
+auto transformToVector(Range&& input, F unaryOp,
+                       const VectorArgs&... vectorArgs) {
+  return ql::ranges::subrange(
+             ad_utility::makeForwardingIterator<Range>(input.begin()),
+             ad_utility::makeForwardingIterator<Range>(input.end())) |
+         ql::views::transform(std::move(unaryOp)) |
+         ::ranges::to<Vector>(vectorArgs...);
+}
+}  // namespace algorithm::detail
 
 /**
  * Applies the UnaryOperation to all elements of the range and return a new
@@ -123,11 +145,21 @@ void appendVector(std::vector<T>& destination, U&& source) {
  */
 template <typename Range, typename F>
 auto transform(Range&& input, F unaryOp) {
-  return ql::ranges::subrange(
-             ad_utility::makeForwardingIterator<Range>(input.begin()),
-             ad_utility::makeForwardingIterator<Range>(input.end())) |
-         ql::views::transform(std::move(unaryOp)) | ::ranges::to_vector;
+  return algorithm::detail::transformToVector<std::vector>(AD_FWD(input),
+                                                           std::move(unaryOp));
 }
+
+/**
+ * Like the overload above, but the result is a `qlm::vector` that uses the
+ * given `allocator`, which has to be a `qlever::Allocator`.
+ */
+CPP_template(typename Range, typename F, typename Alloc)(
+    requires qlever::isQleverAllocator<Alloc>)
+auto transform(Range&& input, F unaryOp, const Alloc& allocator) {
+  return algorithm::detail::transformToVector<qlm::vector>(
+      AD_FWD(input), std::move(unaryOp), allocator);
+}
+
 /*
 @brief Takes two vectors, pairs up their content at the same index positions
 and copies them into `std::pair`s, who are returned inside a vector.
