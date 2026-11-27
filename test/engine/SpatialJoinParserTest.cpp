@@ -59,7 +59,8 @@ TEST(SpatialJoinParser, AddValueIdToQueue) {
 
   // Without a prefilter box, all geometries are parsed.
   std::optional<util::geo::DBox> prefilterBox = std::nullopt;
-  WKTParser parser1(&store, events.addCb(0), 5, true, prefilterBox, index);
+  WKTParser parser1(&store, events.addCb(0), 5, true, prefilterBox, false,
+                    index);
   EXPECT_EQ(parser1.getParseCounter(), 0);
   EXPECT_EQ(parser1.getPrefilterCounter(), 0);
   parser1.addValueIdToQueue(idxUni, 0, std::nullopt);
@@ -80,7 +81,8 @@ TEST(SpatialJoinParser, AddValueIdToQueue) {
   std::optional<util::geo::DBox> newYorkUtilBox =
       ad_utility::detail::boundingBoxToUtilBox(newYorkBox.value());
 
-  WKTParser parser2(&store, events.addCb(0), 5, true, newYorkUtilBox, index);
+  WKTParser parser2(&store, events.addCb(0), 5, true, newYorkUtilBox, false,
+                    index);
   EXPECT_EQ(parser2.getParseCounter(), 0);
   EXPECT_EQ(parser2.getPrefilterCounter(), 0);
   parser2.addValueIdToQueue(idxUni, 0, std::nullopt);
@@ -102,7 +104,7 @@ TEST(SpatialJoinParser, AddValueIdToQueue) {
   // The same with more geometries than fit into two batches (of 10'000 each)
   // and a prefilter box around Uni Freiburg and London.
   WKTParser parser3(&store, events.addCb(0), 5, true, boundingBoxUniAndLondon,
-                    index);
+                    false, index);
   EXPECT_EQ(parser3.getParseCounter(), 0);
   EXPECT_EQ(parser3.getPrefilterCounter(), 0);
   for (size_t i = 0; i < 25'000; ++i) {
@@ -142,7 +144,8 @@ TEST(SpatialJoinParser, DestroyWithoutDone) {
   sj::SweepEventList events{cfg, ".", sweeperPath};
 
   for (size_t numBatches : {0, 1, 5}) {
-    WKTParser parser(&store, events.addCb(0), 4, true, std::nullopt, index);
+    WKTParser parser(&store, events.addCb(0), 4, true, std::nullopt, false,
+                     index);
     for (size_t i = 0; i < numBatches * WKT_PARSER_BATCH_SIZE; ++i) {
       parser.addValueIdToQueue(idxUni, i, std::nullopt);
     }
@@ -175,7 +178,7 @@ TEST(SpatialJoinParser, InvalidWktIsSkipped) {
   std::string sweeperPath = qec->getIndex().getOnDiskBase() + ".spatialjoin";
   sj::GeometryStore store{cfg, ".", sweeperPath, false};
   sj::SweepEventList events{cfg, ".", sweeperPath};
-  WKTParser parser(&store, events.addCb(0), 2, false, std::nullopt,
+  WKTParser parser(&store, events.addCb(0), 2, false, std::nullopt, false,
                    qec->getIndex());
 
   size_t row = 0;
@@ -228,7 +231,7 @@ TEST(SpatialJoinParser, WorkerExceptionIsRethrown) {
   {
     sj::GeometryStore store{cfg, "/nonexistent-directory", sweeperPath, false,
                             0};
-    WKTParser parser(&store, events.addCb(0), 2, true, std::nullopt,
+    WKTParser parser(&store, events.addCb(0), 2, true, std::nullopt, false,
                      qec->getIndex());
     parser.addValueIdToQueue(uni, 0, std::nullopt);
     AD_EXPECT_THROW_WITH_MESSAGE(parser.done(), matcher);
@@ -239,7 +242,7 @@ TEST(SpatialJoinParser, WorkerExceptionIsRethrown) {
   {
     sj::GeometryStore store{cfg, "/nonexistent-directory", sweeperPath, false,
                             0};
-    WKTParser parser(&store, events.addCb(0), 2, true, std::nullopt,
+    WKTParser parser(&store, events.addCb(0), 2, true, std::nullopt, false,
                      qec->getIndex());
     for (size_t row = 0; row < WKT_PARSER_BATCH_SIZE; ++row) {
       parser.addValueIdToQueue(uni, row, std::nullopt);
