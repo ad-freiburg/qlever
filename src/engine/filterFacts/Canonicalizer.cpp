@@ -91,8 +91,10 @@ void addValues(const parsedQuery::Values& values, Definitions& defs,
     alwaysBound.insert(variables[i]);
     auto [it, isNew] = defs.constants_.try_emplace(variables[i], column);
     if (!isNew) {
-      ql::erase_if(it->second, [&column](const auto& value) {
-        return !ad_utility::contains(column, value);
+      ad_utility::HashSet<TripleComponent> inColumn(column.begin(),
+                                                    column.end());
+      ql::erase_if(it->second, [&inColumn](const auto& value) {
+        return !inColumn.contains(value);
       });
     }
   }
