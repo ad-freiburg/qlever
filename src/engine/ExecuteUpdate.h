@@ -29,6 +29,16 @@ class ExecuteUpdate {
       ad_utility::timer::TimeTracer& tracer =
           ad_utility::timer::DEFAULT_TIME_TRACER);
 
+  // After the operation the vector is sorted and contains no duplicate
+  // elements.
+  static void sortAndRemoveDuplicates(std::vector<IdTriple<>>& container);
+
+  // For two sorted vectors `A` and `B` return a new vector
+  // that contains the element of `A\B`.
+  // Precondition: the inputs must be sorted.
+  static std::vector<IdTriple<>> setMinus(const std::vector<IdTriple<>>& a,
+                                          const std::vector<IdTriple<>>& b);
+
  private:
   // Resolve all `TripleComponent`s and `Graph`s in a vector of
   // `SparqlTripleSimpleWithGraph` into `Variable`s or `Id`s.
@@ -72,18 +82,6 @@ class ExecuteUpdate {
                           ad_utility::timer::TimeTracer& tracer =
                               ad_utility::timer::DEFAULT_TIME_TRACER);
   FRIEND_TEST(ExecuteUpdate, computeGraphUpdateQuads);
-
-  // After the operation the vector is sorted and contains no duplicate
-  // elements.
-  static void sortAndRemoveDuplicates(std::vector<IdTriple<>>& container);
-  FRIEND_TEST(ExecuteUpdate, sortAndRemoveDuplicates);
-
-  // For two sorted vectors `A` and `B` return a new vector
-  // that contains the element of `A\B`.
-  // Precondition: the inputs must be sorted.
-  static std::vector<IdTriple<>> setMinus(const std::vector<IdTriple<>>& a,
-                                          const std::vector<IdTriple<>>& b);
-  FRIEND_TEST(ExecuteUpdate, setMinus);
 };
 
 #endif  // QLEVER_SRC_ENGINE_EXECUTEUPDATE_H

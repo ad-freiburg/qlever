@@ -1200,7 +1200,11 @@ TEST(LibQlever, loadFromCompressedBlobFile) {
           std::make_shared<ad_utility::CancellationHandle<>>()),
       HasSubstr("Vacuuming the delta triples is not supported"));
   AD_EXPECT_THROW_WITH_MESSAGE(
-      qlever.applyTripleDelta(blobDiff::TripleDelta{}),
+      qlever.applyTripleDelta(blobDiff::TripleDelta{
+          qlever.indexSnapshot(),
+          LocalVocab{qlever.indexSnapshot()->getImpl().allocator()},
+          {},
+          {}}),
       HasSubstr("Applying a triple delta is not supported"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       qlever.writeMaterializedView("someView", "SELECT * { ?s ?p ?o }"),

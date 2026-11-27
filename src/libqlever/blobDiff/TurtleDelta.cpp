@@ -11,15 +11,14 @@
 
 #include <absl/strings/str_cat.h>
 
-#include <algorithm>
-#include <iterator>
 #include <range/v3/range/conversion.hpp>
 #include <range/v3/view/enumerate.hpp>
 #include <stdexcept>
 #include <string>
-#include <string_view>
 
 #include "backports/algorithm.h"
+#include "engine/ExecuteUpdate.h"
+#include "index/IndexImpl.h"
 #include "index/TripleComponentConversions.h"
 #include "parser/RdfParser.h"
 #include "parser/Tokenizer.h"
@@ -32,11 +31,10 @@ namespace detail {
 std::vector<TurtleTriple> parseTurtleFile(const ql::filesystem::path& path,
                                           const Index& index,
                                           const RdfParserSettings& settings) {
-  auto bytes = util::readBinaryFile(path);
-  std::string_view content{bytes.data(), bytes.size()};
   auto triples =
       RdfStringParser<TurtleParser<Tokenizer>>::parseTriplesFromString(
-          content, &index.encodedIriManager(), settings, path.string());
+          util::readBinaryFile<qlever::parser::ByteBlock>(path),
+          &index.encodedIriManager(), settings, path.string());
   // The RDF parsers represent blank nodes (both labeled and anonymous ones) as
   // plain strings, see `BlankNodeAdder::resolveParsedComponent`.
   for (const auto& [i, triple] : ::ranges::views::enumerate(triples)) {
@@ -54,11 +52,11 @@ std::vector<TurtleTriple> parseTurtleFile(const ql::filesystem::path& path,
 // _____________________________________________________________________________
 std::vector<IdTriple<0>> toIdTriples(std::vector<TurtleTriple> triples,
                                      const Index& index,
-                                     BlankNodeAdder& adder) {
-  auto toId = [&index, &adder](TripleComponent&& component) {
+                                     LocalVocab& localVocab) {
+  auto toId = [&index, &localVocab](TripleComponent&& component) {
     AD_CONTRACT_CHECK(!component.isString(),
                       "Blank nodes are not supported by `toIdTriples`");
-    return toValueId(std::move(component), index.getImpl(), adder.localVocab_);
+    return toValueId(std::move(component), index.getImpl(), localVocab);
   };
   // NOTE: The default graph of the triples in the index is the `Id` of the
   // default graph IRI in the vocabulary (as in `ExecuteUpdate`), which is not
@@ -71,8 +69,7 @@ std::vector<IdTriple<0>> toIdTriples(std::vector<TurtleTriple> triples,
         toId(std::move(triple.object_)), defaultGraph}};
   };
   auto result = ::ranges::to_vector(triples | ql::views::transform(toIdTriple));
-  ql::ranges::sort(result);
-  result.erase(std::unique(result.begin(), result.end()), result.end());
+  ExecuteUpdate::sortAndRemoveDuplicates(result);
   return result;
 }
 }  // namespace detail
@@ -80,22 +77,22 @@ std::vector<IdTriple<0>> toIdTriples(std::vector<TurtleTriple> triples,
 // _____________________________________________________________________________
 TripleDelta computeTripleDelta(const ql::filesystem::path& oldTurtleFile,
                                const ql::filesystem::path& newTurtleFile,
-                               const Index& index,
-                               const RdfParserSettings& settings,
-                               BlankNodeAdder& adder) {
-  auto parseToIdTriples = [&index, &settings,
-                           &adder](const ql::filesystem::path& turtleFile) {
-    return detail::toIdTriples(
-        detail::parseTurtleFile(turtleFile, index, settings), index, adder);
-  };
+                               std::shared_ptr<const Index> index,
+                               const RdfParserSettings& settings) {
+  AD_CONTRACT_CHECK(index != nullptr);
+  LocalVocab localVocab{index->getImpl().allocator()};
+  auto parseToIdTriples =
+      [&index, &settings, &localVocab](const ql::filesystem::path& turtleFile) {
+        return detail::toIdTriples(
+            detail::parseTurtleFile(turtleFile, *index, settings), *index,
+            localVocab);
+      };
   auto oldIdTriples = parseToIdTriples(oldTurtleFile);
   auto newIdTriples = parseToIdTriples(newTurtleFile);
-  TripleDelta result;
-  ql::ranges::set_difference(newIdTriples, oldIdTriples,
-                             std::back_inserter(result.toInsert_));
-  ql::ranges::set_difference(oldIdTriples, newIdTriples,
-                             std::back_inserter(result.toDelete_));
-  return result;
+  auto toInsert = ExecuteUpdate::setMinus(newIdTriples, oldIdTriples);
+  auto toDelete = ExecuteUpdate::setMinus(oldIdTriples, newIdTriples);
+  return TripleDelta{std::move(index), std::move(localVocab),
+                     std::move(toInsert), std::move(toDelete)};
 }
 
 }  // namespace qlever::blobDiff

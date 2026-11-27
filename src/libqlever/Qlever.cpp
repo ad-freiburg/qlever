@@ -382,6 +382,14 @@ UpdateMetadata Qlever::applyUpdate(
 // _____________________________________________________________________________
 UpdateMetadata Qlever::applyTripleDelta(blobDiff::TripleDelta delta) {
   auto snapshot = indexAndViewsSnapshot();
+  // Both the index of the `snapshot` and the locked index of the `delta` are
+  // alive, so equal addresses mean the same index.
+  auto deltaIndex = delta.index_.lock();
+  if (deltaIndex.get() != &snapshot->index_) {
+    throw std::runtime_error(
+        "The triple delta was not computed for the current index of this "
+        "`Qlever` instance (or that index no longer exists)");
+  }
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
   // The deletions come first, as in `ExecuteUpdate::executeUpdate`. The sets
   // are disjoint by construction.

@@ -17,9 +17,9 @@
 #include "../../util/IndexTestHelpers.h"
 #include "../../util/TripleComponentTestHelpers.h"
 #include "../QleverTestHelpers.h"
+#include "index/LocalVocab.h"
 #include "libqlever/Qlever.h"
 #include "libqlever/blobDiff/TurtleDelta.h"
-#include "parser/BlankNodeAdder.h"
 #include "parser/RdfParser.h"
 #include "parser/Tokenizer.h"
 #include "util/File.h"
@@ -84,7 +84,7 @@ TEST(TurtleDelta, parseTurtleFile) {
 TEST(TurtleDelta, toIdTriples) {
   const Index& index =
       ad_utility::testing::getQec(std::string{oldData})->getIndex();
-  BlankNodeAdder adder{index.getBlankNodeManager()};
+  LocalVocab localVocab{index.getImpl().allocator()};
   auto triples =
       RdfStringParser<TurtleParser<Tokenizer>>::parseTriplesFromString(
           "<a> <p> \"1\"^^<http://www.w3.org/2001/XMLSchema#int> .\n"
@@ -94,7 +94,7 @@ TEST(TurtleDelta, toIdTriples) {
           "<c> <p> \"brand new\" .\n",
           &index.encodedIriManager());
   auto idTriples =
-      blobDiff::detail::toIdTriples(std::move(triples), index, adder);
+      blobDiff::detail::toIdTriples(std::move(triples), index, localVocab);
   ASSERT_EQ(idTriples.size(), 3u);
   EXPECT_TRUE(ql::ranges::is_sorted(idTriples));
   for (const auto& triple : idTriples) {
@@ -116,9 +116,9 @@ TEST(TurtleDelta, toIdTriples) {
   auto withBlankNode =
       RdfStringParser<TurtleParser<Tokenizer>>::parseTriplesFromString(
           "<a> <p> _:b .\n", &index.encodedIriManager());
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      blobDiff::detail::toIdTriples(std::move(withBlankNode), index, adder),
-      HasSubstr("Blank nodes are not supported"));
+  AD_EXPECT_THROW_WITH_MESSAGE(blobDiff::detail::toIdTriples(
+                                   std::move(withBlankNode), index, localVocab),
+                               HasSubstr("Blank nodes are not supported"));
 }
 
 // Test `computeTripleDelta` and `Qlever::applyTripleDelta` end to end on a
@@ -143,14 +143,15 @@ TEST(TurtleDelta, computeAndApplyTripleDelta) {
   }
   {
     // A change of the lexical form of the integer is no change, a duplicate
-    // triple counts once, a literal that is not in the vocabulary of the index
-    // and a change of the type (from integer to decimal) are changes.
+    // triple counts once, and a literal that is not in the vocabulary of the
+    // index is a change. The decimal `1.0` is a different value than the
+    // integer `1`, so both are stored for the same predicate.
     auto stream = ad_utility::makeOfstream(newFile);
     stream << "<a> <p> \"01\"^^<http://www.w3.org/2001/XMLSchema#int> .\n"
               "<a> <p> \"01\"^^<http://www.w3.org/2001/XMLSchema#int> .\n"
+              "<a> <p> 1.0 .\n"
               "<a> <q> \"new word\" .\n"
-              "<a> <r> <b> .\n"
-              "<a> <s> 1.0 .\n";
+              "<a> <r> <b> .\n";
   }
 
   std::string blankFile = absl::StrCat(gtestCurrentTestName(), ".blank.ttl");
@@ -160,32 +161,46 @@ TEST(TurtleDelta, computeAndApplyTripleDelta) {
   ad_utility::makeOfstream(blankFile) << "<a> <p> _:b .\n";
 
   Qlever qlever{EngineConfig{indexConfig}};
-  auto snapshot = qlever.indexAndViewsSnapshot();
-  Index& index = snapshot->index_;
-  BlankNodeAdder adder{index.getBlankNodeManager()};
+  auto index = qlever.indexSnapshot();
 
   // A blank node in either of the two files is rejected.
   AD_EXPECT_THROW_WITH_MESSAGE(
-      computeTripleDelta(blankFile, newFile, index, {}, adder),
+      computeTripleDelta(blankFile, newFile, index, {}),
       HasSubstr("contains a blank node"));
   AD_EXPECT_THROW_WITH_MESSAGE(
-      computeTripleDelta(oldFile, blankFile, index, {}, adder),
+      computeTripleDelta(oldFile, blankFile, index, {}),
       HasSubstr("contains a blank node"));
 
   // Without changes, the delta is empty.
-  auto unchanged = computeTripleDelta(oldFile, oldFile, index, {}, adder);
+  auto unchanged = computeTripleDelta(oldFile, oldFile, index, {});
   EXPECT_TRUE(unchanged.toInsert_.empty());
   EXPECT_TRUE(unchanged.toDelete_.empty());
 
-  auto delta = computeTripleDelta(oldFile, newFile, index, {}, adder);
+  auto delta = computeTripleDelta(oldFile, newFile, index, {});
   EXPECT_EQ(delta.toInsert_.size(), 2u);
   EXPECT_EQ(delta.toDelete_.size(), 1u);
   EXPECT_TRUE(ql::ranges::is_sorted(delta.toInsert_));
+  EXPECT_EQ(delta.index_.lock(), index);
+  // Only the word `"new word"` is not in the vocabulary of the index.
+  EXPECT_EQ(delta.localVocab_.size(), 1u);
 
-  // The reverse delta swaps the insertions and the deletions.
-  auto reverse = computeTripleDelta(newFile, oldFile, index, {}, adder);
-  EXPECT_EQ(reverse.toInsert_, delta.toDelete_);
-  EXPECT_EQ(reverse.toDelete_, delta.toInsert_);
+  // The reverse delta swaps the insertions and the deletions. (The `Id`s of
+  // `"new word"` differ, because each delta has its own local vocabulary.)
+  auto reverse = computeTripleDelta(newFile, oldFile, index, {});
+  EXPECT_EQ(reverse.toInsert_.size(), delta.toDelete_.size());
+  EXPECT_EQ(reverse.toDelete_.size(), delta.toInsert_.size());
+
+  // A delta that was computed for a different index, or for an index that no
+  // longer exists, is rejected.
+  Qlever otherQlever{EngineConfig{indexConfig}};
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      qlever.applyTripleDelta(computeTripleDelta(
+          oldFile, newFile, otherQlever.indexSnapshot(), {})),
+      HasSubstr("not computed for the current index"));
+  auto expired = computeTripleDelta(oldFile, newFile, index, {});
+  expired.index_.reset();
+  AD_EXPECT_THROW_WITH_MESSAGE(qlever.applyTripleDelta(std::move(expired)),
+                               HasSubstr("not computed for the current index"));
 
   // Applying the delta clears the caches and reports the counts.
   std::string query = "SELECT ?p ?o { <a> ?p ?o } ORDER BY ?p";
@@ -198,5 +213,12 @@ TEST(TurtleDelta, computeAndApplyTripleDelta) {
   EXPECT_EQ(metadata.countAfter_, (DeltaTriplesCount{2, 1}));
   EXPECT_EQ(qlever.namedResultCache().numEntries(), 0u);
   EXPECT_EQ(qlever.query(query, ad_utility::MediaType::tsv),
-            "?p\t?o\n<p>\t1\n<q>\t\"new word\"\n<r>\t<b>\n<s>\t1.0\n");
+            "?p\t?o\n<p>\t1\n<p>\t1.0\n<q>\t\"new word\"\n<r>\t<b>\n");
+
+  // Applying the reverse delta (computed after the `delta` was applied) gives
+  // the original data again.
+  qlever.applyTripleDelta(
+      computeTripleDelta(newFile, oldFile, qlever.indexSnapshot(), {}));
+  EXPECT_EQ(qlever.query(query, ad_utility::MediaType::tsv),
+            "?p\t?o\n<p>\t1\n<q>\t\"x\"\n<r>\t<b>\n");
 }

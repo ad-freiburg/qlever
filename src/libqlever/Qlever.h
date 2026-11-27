@@ -624,7 +624,7 @@ class Qlever : public ad_utility::NoCopyNoMove {
   // the update (the counts before and after). Like `applyUpdate`, also clear
   // the query and named-result caches, and throw if the index was loaded from a
   // blob. The `delta` must have been computed for the current index, that is
-  // `indexAndViewsSnapshot()->index_`.
+  // `indexSnapshot()`, which is checked.
   UpdateMetadata applyTripleDelta(blobDiff::TripleDelta delta);
 
   // Plan, parse, and execute the given `query` and pin the result to the cache
@@ -758,6 +758,12 @@ class Qlever : public ad_utility::NoCopyNoMove {
   // between two reads.
   std::shared_ptr<IndexAndViews> indexAndViewsSnapshot() const {
     return *indexAndViews_.rlock();
+  }
+
+  // Return the `Index` of `indexAndViewsSnapshot()`. The returned pointer keeps
+  // the complete snapshot alive (via the aliasing constructor of `shared_ptr`).
+  std::shared_ptr<const Index> indexSnapshot() const {
+    return getPointerPair(indexAndViewsSnapshot()).first;
   }
 
   // Atomically swap in a freshly built `IndexAndViews`. The old instance stays

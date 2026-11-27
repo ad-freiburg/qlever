@@ -595,11 +595,22 @@ class RdfStringParser : public Parser {
       std::string_view content, const EncodedIriManager* encodedIriManager,
       RdfParserSettings settings = {},
       std::optional<std::string> inputName = std::nullopt) {
+    return parseTriplesFromString(
+        qlever::parser::ByteBlock(content.begin(), content.end()),
+        encodedIriManager, settings, std::move(inputName));
+  }
+
+  // Same as above, but take ownership of the `content` instead of copying it.
+  static std::vector<TurtleTriple> parseTriplesFromString(
+      qlever::parser::ByteBlock&& content,
+      const EncodedIriManager* encodedIriManager,
+      RdfParserSettings settings = {},
+      std::optional<std::string> inputName = std::nullopt) {
     RdfStringParser parser{encodedIriManager, settings};
     if (inputName.has_value()) {
       parser.setInputName(std::move(inputName.value()));
     }
-    parser.setInputStream(content);
+    parser.setInputStream(std::move(content));
     return parser.parseAndReturnAllTriples();
   }
 
