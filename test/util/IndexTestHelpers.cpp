@@ -274,7 +274,7 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
     index.setOnDiskBase(indexBasename);
     index.usePatterns() = c.usePatterns;
     index.setSettingsFile(inputFilename + ".settings.json");
-    index.loadAllPermutations() = c.loadAllPermutations;
+    index.permutationsToBuildOrLoad() = c.permutationsToBuildOrLoad();
     index.addHasWordTriples() = c.addHasWordTriples;
     index.getImpl().setHasWordNormalization(c.hasWordNormalization);
     index.getImpl().setHasWordRestrictPredicates(c.hasWordRestrictPredicates);
@@ -349,21 +349,21 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
 #endif
     }
   }
-  if (!c.usePatterns || !c.loadAllPermutations) {
-    // If we have no patterns, or only two permutations, then check the graceful
-    // fallback even if the options were not explicitly specified during the
-    // loading of the server.
+  auto permutations = c.permutationsToBuildOrLoad();
+  if (!c.usePatterns || permutations.has_value()) {
+    // If we have no patterns, or only some permutations, then check the
+    // graceful fallback even if the options were not explicitly specified
+    // during the loading of the server.
     Index index{ad_utility::makeUnlimitedAllocator<Id>()};
     index.usePatterns() = true;
-    index.loadAllPermutations() = true;
     EXPECT_NO_THROW(index.createFromOnDiskIndex(indexBasename, false));
-    EXPECT_EQ(index.loadAllPermutations(), c.loadAllPermutations);
+    EXPECT_EQ(index.hasAllPermutations(), !permutations.has_value());
     EXPECT_EQ(index.usePatterns(), c.usePatterns);
   }
 
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
   index.usePatterns() = c.usePatterns;
-  index.loadAllPermutations() = c.loadAllPermutations;
+  index.permutationsToBuildOrLoad() = permutations;
   index.createFromOnDiskIndex(indexBasename, false);
   if (c.createTextIndex) {
     index.addTextFromOnDiskIndex();
@@ -374,7 +374,7 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
         std::make_shared<SecondaryVocabulary>(c.secondaryVocabWords.value()));
   }
 
-  if (c.usePatterns && c.loadAllPermutations) {
+  if (c.usePatterns && index.hasAllPermutations()) {
     checkConsistencyBetweenPatternPredicateAndAdditionalColumn(index);
   }
   return index;

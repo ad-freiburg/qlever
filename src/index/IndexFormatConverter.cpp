@@ -928,11 +928,10 @@ void checkUpgradedIndex(const std::string& newBasename,
   ad_utility::ScopedLogLevel scopedLogLevel{LogLevel::Enum::WARN};
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
   // Load what the index has: the patterns and the permutations beyond `PSO`
-  // and `POS` are optional.
+  // and `POS` are optional (by default, all permutations of the index are
+  // loaded).
   index.usePatterns() =
       fs::exists(absl::StrCat(newBasename, PATTERNS_FILE_SUFFIX));
-  index.loadAllPermutations() =
-      fs::exists(absl::StrCat(newBasename, PERMUTATION_FILE_INFIX, ".ops"));
   index.createFromOnDiskIndex(newBasename, false);
 
   auto checkNumTriples = [](const Permutation& permutation, size_t expected) {
@@ -946,14 +945,7 @@ void checkUpgradedIndex(const std::string& newBasename,
           "the original index was not modified.")};
     }
   };
-  std::vector<Permutation::Enum> permutations{Permutation::Enum::PSO,
-                                              Permutation::Enum::POS};
-  if (index.loadAllPermutations()) {
-    permutations.insert(permutations.end(),
-                        {Permutation::Enum::SPO, Permutation::Enum::SOP,
-                         Permutation::Enum::OSP, Permutation::Enum::OPS});
-  }
-  for (auto p : permutations) {
+  for (auto p : index.loadedPermutations()) {
     checkNumTriples(index.getImpl().getPermutation(p),
                     expectedNumTriples.normal);
   }

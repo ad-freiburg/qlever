@@ -193,7 +193,9 @@ class Index {
 
   bool& usePatterns();
 
-  bool& loadAllPermutations();
+  // The permutations that are built or loaded, see
+  // `IndexImpl::permutationsToBuildOrLoad_`.
+  std::optional<std::vector<Permutation::Enum>>& permutationsToBuildOrLoad();
 
   bool& addHasWordTriples();
 
@@ -233,7 +235,15 @@ class Index {
   NumNormalAndInternal numDistinctObjects() const;
   NumNormalAndInternal numDistinctPredicates() const;
 
+  // Return true iff all six permutations that have the graph as their last
+  // column are loaded.
   bool hasAllPermutations() const;
+
+  // Return true iff the `permutation` is loaded.
+  bool hasPermutation(Permutation::Enum permutation) const;
+
+  // Return the loaded permutations, in the order of `Permutation::ALL`.
+  std::vector<Permutation::Enum> loadedPermutations() const;
 
   // ___________________________________________________________________________
   std::vector<float> getMultiplicities(

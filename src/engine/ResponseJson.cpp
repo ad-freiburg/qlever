@@ -26,12 +26,22 @@ json composeIndexStats(const Index& index) {
       *qlever::version::gitShortHashWithoutLinking.wlock();
   result["version-server"] =
       *qlever::version::projectVersionWithoutLinking.wlock();
-  result["num-permutations"] = (index.hasAllPermutations() ? 6 : 2);
+  auto permutations = index.loadedPermutations();
+  result["num-permutations"] = permutations.size();
+  result["permutations"] = json::array();
+  for (auto permutation : permutations) {
+    result["permutations"].push_back(Permutation::toString(permutation));
+  }
   result["num-predicates-normal"] = index.numDistinctPredicates().normal;
   result["num-predicates-internal"] = index.numDistinctPredicates().internal;
-  if (index.hasAllPermutations()) {
+  auto has = [&permutations](Permutation::Enum p) {
+    return ad_utility::contains(permutations, p);
+  };
+  if (has(Permutation::SPO) || has(Permutation::SOP)) {
     result["num-subjects-normal"] = index.numDistinctSubjects().normal;
     result["num-subjects-internal"] = index.numDistinctSubjects().internal;
+  }
+  if (has(Permutation::OSP) || has(Permutation::OPS)) {
     result["num-objects-normal"] = index.numDistinctObjects().normal;
     result["num-objects-internal"] = index.numDistinctObjects().internal;
   }

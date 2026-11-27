@@ -10,6 +10,7 @@
 #include "engine/operation/ExplicitIdTableOperation.h"
 #include "engine/operation/IndexScan.h"
 #include "engine/operation/Join.h"
+#include "index/IndexImpl.h"
 #include "index/TripleComponentConversions.h"
 #include "util/ChunkedForLoop.h"
 
@@ -182,8 +183,16 @@ IdTable Describe::makeAndExecuteJoinWithFullIndex(
       absl::StrCat("INTERNAL DESCRIBE ", uniqueCounter++));
   SparqlTripleSimple triple{subjectVar, V{"?predicate"}, V{"?object"}};
   auto activeGraphs = describe_.datasetClauses_.activeDefaultGraphs();
+  // Prefer a permutation that is sorted by the subject. Otherwise, the `Join`
+  // below sorts the (complete) scan of the PSO permutation, which is always
+  // loaded.
+  const auto* scanPermutation = getIndex().getImpl().firstLoadedPermutation(
+      {Permutation::SPO, Permutation::SOP});
   auto indexScan = ad_utility::makeExecutionTree<IndexScan>(
-      getExecutionContext(), Permutation::SPO, triple,
+      getExecutionContext(),
+      scanPermutation != nullptr ? scanPermutation->permutation()
+                                 : Permutation::PSO,
+      triple,
       activeGraphs.has_value()
           ? IndexScan::Graphs::Whitelist(std::move(activeGraphs).value())
           : IndexScan::Graphs::All());

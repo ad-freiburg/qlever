@@ -25,14 +25,36 @@
 using std::string;
 using LazyScanMetadata = CompressedRelationReader::LazyScanMetadata;
 
-// Return the number of `Variables` given the `TripleComponent` values for
-// `subject_`, `predicate` and `object`.
-static size_t getNumberOfVariables(const TripleComponent& subject,
+// Return the first three of the `subject`, `predicate`, `object`, and `graph`
+// in the order of the `permutation`.
+static std::array<const TripleComponent* const, 3> permuteTriple(
+    const Permutation& permutation, const TripleComponent& subject,
+    const TripleComponent& predicate, const TripleComponent& object,
+    const TripleComponent& graph) {
+  auto permuted =
+      permutation.keyOrder().permuteTuple(std::array<const TripleComponent*, 4>{
+          &subject, &predicate, &object, &graph});
+  return {permuted[0], permuted[1], permuted[2]};
+}
+
+// Return the number of `Variables` among the first three columns of the
+// `permutation`, given the `TripleComponent` values for the `subject`,
+// `predicate`, `object`, and `graph`.
+static size_t getNumberOfVariables(const Permutation& permutation,
+                                   const TripleComponent& subject,
                                    const TripleComponent& predicate,
-                                   const TripleComponent& object) {
-  return static_cast<size_t>(subject.isVariable()) +
-         static_cast<size_t>(predicate.isVariable()) +
-         static_cast<size_t>(object.isVariable());
+                                   const TripleComponent& object,
+                                   const TripleComponent& graph) {
+  return ql::ranges::count_if(
+      permuteTriple(permutation, subject, predicate, object, graph),
+      [](const TripleComponent* tc) { return tc->isVariable(); });
+}
+
+// Return `*permutation`, and throw if it is `nullptr`.
+static const Permutation& derefOrThrow(
+    const std::shared_ptr<const Permutation>& permutation) {
+  AD_CONTRACT_CHECK(permutation != nullptr);
+  return *permutation;
 }
 
 // Return true iff `id` can be the `Id` of a constant column (see
@@ -45,22 +67,82 @@ static bool isValidConstantColumnId(Id id) {
 }
 
 // _____________________________________________________________________________
+struct IndexScan::NormalizedTriple {
+  SparqlTripleSimple triple_;
+  TripleComponent graph_;
+  Graphs graphsToFilter_;
+};
+
+// _____________________________________________________________________________
 IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
                      LocatedTriplesSharedState locatedTriplesSharedState,
                      const SparqlTripleSimple& triple, Graphs graphsToFilter,
                      std::optional<ScanSpecAndBlocks> scanSpecAndBlocks,
                      VarsToKeep varsToKeep)
+    : IndexScan(qec, permutation, std::move(locatedTriplesSharedState),
+                normalizeForPermutation(derefOrThrow(permutation), triple,
+                                        std::move(graphsToFilter)),
+                std::move(scanSpecAndBlocks), std::move(varsToKeep)) {}
+
+// _____________________________________________________________________________
+auto IndexScan::normalizeForPermutation(
+    const Permutation& permutation, SparqlTripleSimple triple,
+    Graphs graphsToFilter) -> NormalizedTriple {
+  if (Permutation::hasGraphLast(permutation.permutation())) {
+    return {std::move(triple), TripleComponent::UNDEF{},
+            std::move(graphsToFilter)};
+  }
+  auto& additionalColumns = triple.additionalScanColumns_;
+  auto graphColumn = ql::ranges::find(
+      additionalColumns, ADDITIONAL_COLUMN_GRAPH_ID,
+      [](const auto& columnAndVariable) { return columnAndVariable.first; });
+  TripleComponent graph = TripleComponent::UNDEF{};
+  if (graphColumn != additionalColumns.end()) {
+    AD_CONTRACT_CHECK(graphsToFilter.areAllGraphsAllowed(),
+                      "A scan with a graph variable on a permutation that "
+                      "doesn't have the graph as its last column must not "
+                      "filter the graphs");
+    graph = graphColumn->second;
+    additionalColumns.erase(graphColumn);
+  } else {
+    const auto* whitelist = graphsToFilter.whitelistIfPresent();
+    AD_CONTRACT_CHECK(whitelist != nullptr && whitelist->size() == 1,
+                      "A scan on a permutation that doesn't have the graph as "
+                      "its last column requires either a graph variable or a "
+                      "single fixed graph");
+    graph = *whitelist->begin();
+  }
+  std::array<const TripleComponent*, 4> components{&triple.s_, &triple.p_,
+                                                   &triple.o_, &graph};
+  const auto& fourthColumn =
+      *components.at(permutation.keyOrder().keys().at(3));
+  AD_CONTRACT_CHECK(fourthColumn.isVariable(),
+                    "The fourth column of a scan must be a variable");
+  additionalColumns.insert(additionalColumns.begin(),
+                           std::pair{ColumnIndex{ADDITIONAL_COLUMN_GRAPH_ID},
+                                     fourthColumn.getVariable()});
+  return {std::move(triple), std::move(graph), Graphs::All()};
+}
+
+// _____________________________________________________________________________
+IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
+                     LocatedTriplesSharedState locatedTriplesSharedState,
+                     NormalizedTriple normalizedTriple,
+                     std::optional<ScanSpecAndBlocks> scanSpecAndBlocks,
+                     VarsToKeep varsToKeep)
     : Operation(qec),
       permutation_(std::move(permutation)),
       locatedTriplesSharedState_(std::move(locatedTriplesSharedState)),
-      subject_(triple.s_),
-      predicate_(triple.p_),
-      object_(triple.o_),
-      graphsToFilter_{std::move(graphsToFilter)},
+      subject_(normalizedTriple.triple_.s_),
+      predicate_(normalizedTriple.triple_.p_),
+      object_(normalizedTriple.triple_.o_),
+      graph_(std::move(normalizedTriple.graph_)),
+      graphsToFilter_{std::move(normalizedTriple.graphsToFilter_)},
       scanSpecAndBlocks_{
           std::move(scanSpecAndBlocks).value_or(getScanSpecAndBlocks())},
       scanSpecAndBlocksIsPrefiltered_{scanSpecAndBlocks.has_value()},
-      numVariables_(getNumberOfVariables(subject_, predicate_, object_)),
+      numVariables_(getNumberOfVariables(*permutation_, subject_, predicate_,
+                                         object_, graph_)),
       varsToKeep_(std::move(varsToKeep)) {
   AD_CONTRACT_CHECK(permutation_ != nullptr);
   AD_CONTRACT_CHECK(locatedTriplesSharedState_ != nullptr);
@@ -68,6 +150,7 @@ IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
   // We previously had `nullptr`s here in unit tests. This is no longer
   // necessary nor allowed.
   AD_CONTRACT_CHECK(qec != nullptr);
+  const auto& triple = normalizedTriple.triple_;
   for (auto& [idx, variable] : triple.additionalScanColumns_) {
     additionalColumns_.push_back(idx);
     additionalVariables_.push_back(variable);
@@ -107,17 +190,20 @@ IndexScan::IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
                      ConstantColumns constantColumns, Graphs graphsToFilter,
                      ScanSpecAndBlocks scanSpecAndBlocks,
                      bool scanSpecAndBlocksIsPrefiltered, VarsToKeep varsToKeep,
-                     bool sizeEstimateIsExact, size_t sizeEstimate)
+                     bool sizeEstimateIsExact, size_t sizeEstimate,
+                     TripleComponent graph)
     : Operation(qec),
       permutation_(std::move(permutation)),
       locatedTriplesSharedState_(std::move(locatedTriplesSharedState)),
       subject_(s),
       predicate_(p),
       object_(o),
+      graph_(std::move(graph)),
       graphsToFilter_(std::move(graphsToFilter)),
       scanSpecAndBlocks_(std::move(scanSpecAndBlocks)),
       scanSpecAndBlocksIsPrefiltered_(scanSpecAndBlocksIsPrefiltered),
-      numVariables_(getNumberOfVariables(subject_, predicate_, object_)),
+      numVariables_(getNumberOfVariables(*permutation_, subject_, predicate_,
+                                         object_, graph_)),
       sizeEstimate_{sizeEstimate},
       sizeEstimateIsExact_{sizeEstimateIsExact},
       additionalColumns_(std::move(additionalColumns)),
@@ -189,9 +275,13 @@ string IndexScan::getDescriptor() const {
   auto isNotStripped = [this](const Variable& var) {
     return !varsToKeep_.has_value() || varsToKeep_.value().contains(var);
   };
-  auto triple = ::ranges::views::concat(ql::ranges::views::single(subject_),
-                                        ql::ranges::views::single(predicate_),
-                                        ql::ranges::views::single(object_));
+  // For a permutation that doesn't have the graph last, show its first three
+  // columns (the fourth one is one of the additional variables).
+  auto permutedTriple = getPermutedTriple();
+  auto triple = graph_.isUndef()
+                    ? std::vector{subject_, predicate_, object_}
+                    : std::vector{*permutedTriple[0], *permutedTriple[1],
+                                  *permutedTriple[2]};
   auto components = ::ranges::views::concat(
       // All IRIs/literals and non-stripped variables from the scan triple.
       triple | ql::views::filter([&isNotStripped](const TripleComponent& tc) {
@@ -444,7 +534,7 @@ IndexScan::makeCopyWithPrefilteredScanSpecAndBlocks(
       getExecutionContext(), permutation_, locatedTriplesSharedState_, subject_,
       predicate_, object_, additionalColumns_, additionalVariables_,
       constantColumns_, graphsToFilter_, std::move(scanSpecAndBlocks), true,
-      varsToKeep_, false, size_t{0});
+      varsToKeep_, false, size_t{0}, graph_);
 
   // Compute the size estimate for the prefiltered `scanSpecAndBlocks`.
   //
@@ -672,11 +762,7 @@ void IndexScan::determineMultiplicities() {
 // _____________________________________________________________________________
 std::array<const TripleComponent* const, 3> IndexScan::getPermutedTriple()
     const {
-  std::array<const TripleComponent* const, 3> triple{&subject_, &predicate_,
-                                                     &object_};
-  // TODO<joka921> This place has to be changed once we have a permutation
-  // that is primarily sorted by G (the graph id).
-  return permutation().keyOrder().permuteTriple(triple);
+  return permuteTriple(permutation(), subject_, predicate_, object_, graph_);
 }
 
 // _____________________________________________________________________________
@@ -1197,7 +1283,7 @@ std::unique_ptr<Operation> IndexScan::cloneImpl() const {
       predicate_, object_, additionalColumns_, additionalVariables_,
       constantColumns_, graphsToFilter_, scanSpecAndBlocks_,
       scanSpecAndBlocksIsPrefiltered_, varsToKeep_, sizeEstimateIsExact_,
-      sizeEstimate_);
+      sizeEstimate_, graph_);
 }
 
 // _____________________________________________________________________________
@@ -1233,7 +1319,7 @@ IndexScan::makeTreeWithStrippedColumns(
       predicate_, object_, additionalColumns_, additionalVariables_,
       std::move(newConstantColumns), graphsToFilter_, scanSpecAndBlocks_,
       scanSpecAndBlocksIsPrefiltered_, VarsToKeep{std::move(newVariables)},
-      sizeEstimateIsExact_, sizeEstimate_);
+      sizeEstimateIsExact_, sizeEstimate_, graph_);
 }
 
 // _____________________________________________________________________________
@@ -1352,7 +1438,8 @@ IndexScan::makeTreeWithBindColumn(const parsedQuery::Bind& bind) const {
       newPredicate, newObject, std::move(newAdditionalColumns),
       std::move(newAdditionalVariables), constantColumns_, graphsToFilter_,
       scanSpecAndBlocks_, scanSpecAndBlocksIsPrefiltered_,
-      VarsToKeep{std::move(newVariables)}, sizeEstimateIsExact_, sizeEstimate_);
+      VarsToKeep{std::move(newVariables)}, sizeEstimateIsExact_, sizeEstimate_,
+      graph_);
 }
 
 // _____________________________________________________________________________
@@ -1390,7 +1477,7 @@ IndexScan::makeTreeWithConstantBindColumn(const parsedQuery::Bind& bind) const {
       predicate_, object_, additionalColumns_, additionalVariables_,
       std::move(newConstantColumns), graphsToFilter_, scanSpecAndBlocks_,
       scanSpecAndBlocksIsPrefiltered_, std::move(newVariables),
-      sizeEstimateIsExact_, sizeEstimate_);
+      sizeEstimateIsExact_, sizeEstimate_, graph_);
 }
 
 // _____________________________________________________________________________

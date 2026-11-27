@@ -184,10 +184,22 @@ uint64_t EmptyPath::getSizeEstimateBeforeLimit() {
     // entity, so we simply use the child's estimate.
     return child().getSizeEstimate();
   }
-  const auto& index = getIndex();
+  const auto& index = getIndex().getImpl();
+  // The number of distinct subjects and objects is only known if a permutation
+  // that starts with them is loaded, otherwise the number of triples is an
+  // upper bound.
+  auto numDistinct = [&index](std::initializer_list<Permutation::Enum> perms,
+                              auto getNumDistinct) {
+    return index.firstLoadedPermutation(perms) != nullptr
+               ? std::invoke(getNumDistinct, index).normal
+               : index.numTriples().normal;
+  };
   // We don't know how much the subjects and the objects overlap, so we use the
   // (pessimistic) upper bound for the size of their union.
-  return index.numDistinctSubjects().normal + index.numDistinctObjects().normal;
+  return numDistinct({Permutation::SPO, Permutation::SOP},
+                     &IndexImpl::numDistinctSubjects) +
+         numDistinct({Permutation::OSP, Permutation::OPS},
+                     &IndexImpl::numDistinctObjects);
 }
 
 // _____________________________________________________________________________
@@ -283,6 +295,46 @@ std::unique_ptr<Operation> EmptyPath::cloneImpl() const {
 }
 
 // _____________________________________________________________________________
+IdTable EmptyPath::distinctCol1IdsViaFullScan(
+    const Permutation& permutation, const ScanSpecification& scanSpec,
+    bool addGraphColumn, const std::optional<std::vector<Id>>& idFilter) const {
+  AD_LOG_WARN << "The " << permutation.readableName()
+              << " permutation is fully scanned to compute an empty path, "
+                 "because no better permutation is loaded"
+              << std::endl;
+  std::vector<ColumnIndex> additionalColumns;
+  if (addGraphColumn) {
+    additionalColumns.push_back(ADDITIONAL_COLUMN_GRAPH_ID);
+  }
+  IdTable fullScan = permutation.scan(
+      permutation.getScanSpecAndBlocks(scanSpec, locatedTriplesState()),
+      additionalColumns, cancellationHandle(), locatedTriplesState(),
+      executor());
+  std::optional<ad_utility::HashSet<Id>> allowedIds;
+  if (idFilter.has_value()) {
+    allowedIds.emplace(idFilter->begin(), idFilter->end());
+  }
+  IdTable result{numKgColumns(), allocator()};
+  for (const auto& row : fullScan) {
+    checkCancellation();
+    Id id = row[1];
+    if (allowedIds.has_value() && !allowedIds->contains(id)) {
+      continue;
+    }
+    result.emplace_back();
+    result.back()[0] = id;
+    if (addGraphColumn) {
+      result.back()[1] = row[3];
+    }
+  }
+  // The scan has the columns (col0, col1, col2, graph), so the result is
+  // neither sorted nor free of duplicates.
+  ql::ranges::sort(result, ql::ranges::lexicographical_compare);
+  result.erase(std::unique(result.begin(), result.end()), result.end());
+  return result;
+}
+
+// _____________________________________________________________________________
 cppcoro::generator<IdTable> EmptyPath::scanIndex(
     std::optional<std::vector<Id>> idFilter) const {
   const IndexImpl& index = getIndex().getImpl();
@@ -312,10 +364,32 @@ cppcoro::generator<IdTable> EmptyPath::scanIndex(
                                   return entityAndGraph(row, numColumns);
                                 });
   };
+  // If no permutation that starts with the subject (object) is loaded, the
+  // distinct subjects (objects) are computed from a full scan of the PSO (POS)
+  // permutation, which is always loaded. This is slow, but correct.
+  auto fullScan = [this, &index, &scanSpec, addGraphColumn](
+                      Permutation::Enum permutation,
+                      std::optional<std::vector<Id>> ids) {
+    std::vector<IdTable> tables;
+    tables.push_back(distinctCol1IdsViaFullScan(
+        index.getPermutation(permutation), scanSpec, addGraphColumn, ids));
+    return ad_utility::InputRangeTypeErased<IdTable>{std::move(tables)};
+  };
+  auto scanOrFullScan = [&index, &scan, &fullScan](
+                            std::initializer_list<Permutation::Enum> preferred,
+                            Permutation::Enum fallback,
+                            std::optional<std::vector<Id>> ids) {
+    const auto* permutation = index.firstLoadedPermutation(preferred);
+    return permutation != nullptr
+               ? scan(permutation->permutation(), std::move(ids))
+               : fullScan(fallback, std::move(ids));
+  };
   // Separate statements, because the second scan moves out of `idFilter` and
   // argument evaluation order is unspecified.
-  auto subjectRows = rows(scan(Permutation::SPO, idFilter));
-  auto objectRows = rows(scan(Permutation::OPS, std::move(idFilter)));
+  auto subjectRows = rows(scanOrFullScan({Permutation::SPO, Permutation::SOP},
+                                         Permutation::PSO, idFilter));
+  auto objectRows = rows(scanOrFullScan({Permutation::OPS, Permutation::OSP},
+                                        Permutation::POS, std::move(idFilter)));
   // Merge the distinct subjects and the distinct objects. Both ranges are
   // sorted and free of duplicates, so `set_union` yields each row exactly once.
   auto merged =

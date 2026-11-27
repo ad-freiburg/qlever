@@ -85,6 +85,20 @@ boost::asio::awaitable<void> createPermutationWriterTask(
     qlever::Executor executor,
     std::function<void(size_t)> progress = ad_utility::noop);
 
+// Like `createPermutationWriterTask`, but for a single (non-internal)
+// `permutation` whose twin (the permutation with the same first column and the
+// other two columns swapped) is not loaded, see
+// `IndexImpl::createPermutationWithoutTwin`.
+boost::asio::awaitable<void> createSinglePermutationWriterTask(
+    IndexImpl& newIndex, const Permutation& permutation,
+    const LocatedTriplesSharedState& locatedTriplesSharedState,
+    const LocalVocabMapping& localVocabMapping,
+    const InsertionPositions& insertionPositions,
+    const BlankNodeBlocks& blankNodeBlocks, uint64_t minBlankNodeIndex,
+    const ad_utility::SharedCancellationHandle& cancellationHandle,
+    qlever::Executor executor,
+    std::function<void(size_t)> progress = ad_utility::noop);
+
 // Analyze how many columns the new permutation will have and which additional
 // columns it will have based on the given `blockMetadataRanges`. The number of
 // columns is determined by the number of offsets in the metadata of the first
