@@ -487,9 +487,9 @@ NamedCachedQueryBlobManager::tryToSkipAndVerifyBlobHeader(
 
 // _____________________________________________________________________________
 std::vector<char> NamedCachedQueryBlobManager::compressBlob(
-    ql::span<const char> uncompressedBlob) {
-  return ZstdWrapper::compress(uncompressedBlob.data(),
-                               uncompressedBlob.size());
+    ql::span<const char> uncompressedBlob,
+    const blobCompression::BlobEncoding& encoding) {
+  return blobCompression::compressBlob(uncompressedBlob, encoding);
 }
 
 // _____________________________________________________________________________
@@ -573,6 +573,10 @@ std::vector<char> NamedCachedQueryBlobManager::serialize(
   writeBlobHeader(serializer, useNewFormat
                                   ? formatVersionWithSecondaryVocab
                                   : formatVersionWithoutSecondaryVocab);
+  // The header is a segment of its own (see
+  // `BlobSerializationConfig::writeSegments_`), so that the following
+  // vocabulary segment does not depend on the format of the blob.
+  const uint64_t headerEnd = serializer.getCurrentPosition();
   // Serialize the index metadata JSON together with the vocabulary, so that the
   // blob is self-contained and the loading side can set up the vocabulary
   // configuration without access to the on-disk index. Without excluded
@@ -588,9 +592,13 @@ std::vector<char> NamedCachedQueryBlobManager::serialize(
         serializer, indexImpl, indexImpl.getVocab().getUnderlyingVocabulary(),
         config.excludedEntryRegexes_);
   }
+  // The next two segments of the blob end here and after the secondary
+  // vocabulary.
+  const uint64_t vocabularyEnd = serializer.getCurrentPosition();
   if (useNewFormat) {
     serializer << secondaryVocab;
   }
+  const uint64_t secondaryVocabEnd = serializer.getCurrentPosition();
   const uint16_t entriesVersion =
       useNewFormat ? namedResultCacheSerializer::formatVersion
                    : namedResultCacheSerializer::legacyFormatVersion;
@@ -618,7 +626,14 @@ std::vector<char> NamedCachedQueryBlobManager::serialize(
       entriesVersion);
   auto uncompressed = std::move(serializer).data();
 
-  return compressBlob(uncompressed);
+  blobCompression::BlobEncoding encoding{config.compressionLevel_,
+                                         std::nullopt};
+  if (config.writeSegments_) {
+    encoding.segmentSizes_ = std::vector<uint64_t>{
+        headerEnd, vocabularyEnd - headerEnd, secondaryVocabEnd - vocabularyEnd,
+        uncompressed.size() - secondaryVocabEnd};
+  }
+  return compressBlob(uncompressed, encoding);
 }
 
 // _____________________________________________________________________________

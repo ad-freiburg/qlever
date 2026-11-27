@@ -1,1 +1,2 @@
 addLinkAndDiscoverTestNoLibs(BlobDiffTest qlever testUtil)
+addLinkAndDiscoverTestNoLibs(SegmentedBlobDiffTest qlever testUtil)

@@ -38,6 +38,11 @@ namespace qlever::blobDiff {
 // The diff knows nothing about the layout of a blob, which makes it robust
 // against changes of the blob format.
 //
+// For segmented blobs, there is also a segmented diff (format version 3, see
+// `SegmentedBlobDiff.h`), which is much faster to apply.
+// `applyBlobDiffToCompressedBase` and `describeBlobDiff` accept both kinds of
+// diffs, the other functions only the diff that is described here.
+//
 // FILE FORMAT (all integers in the native byte order, which is little endian
 // on all platforms that QLever currently supports):
 //   8 bytes   the magic bytes `QLVRBDIF`
