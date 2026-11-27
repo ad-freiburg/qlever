@@ -766,14 +766,12 @@ const Variable TransitivePathBase::internalGraphHelper_{
 std::optional<std::shared_ptr<QueryExecutionTree>>
 TransitivePathBase::makeTreeWithStrippedColumns(
     const std::set<Variable>& requestedVariables) const {
-  auto* qec = getExecutionContext();
-  auto subVar = [this](ColumnIndex c) {
-    return subtree_->getVariableAndInfoByColumnIndex(c).first;
-  };
-
   // Strip the `subtree_`. The stripped subtree has to provide the start and
   // target column of each edge of the path relation, plus the graph column (if
   // available).
+  auto subVar = [this](ColumnIndex c) {
+    return subtree_->getVariableAndInfoByColumnIndex(c).first;
+  };
   std::set<Variable> subtreeVars{subVar(lhs_.subCol_), subVar(rhs_.subCol_)};
   if (graphVariable_) subtreeVars.insert(*graphVariable_);
   auto subtree =
@@ -789,6 +787,7 @@ TransitivePathBase::makeTreeWithStrippedColumns(
     return copy;
   };
   bool useBinSearch = dynamic_cast<const TransitivePathBinSearch*>(this);
+  auto* qec = getExecutionContext();
   std::shared_ptr<TransitivePathBase> path =
       makeTransitivePath(qec, subtree, unbind(lhs_), unbind(rhs_), minDist_,
                          maxDist_, useBinSearch, activeGraphs_, graphVariable_);
@@ -815,15 +814,17 @@ TransitivePathBase::makeTreeWithStrippedColumns(
       varsRequiredFromSubtree.add(internalGraphHelper_);
     }
     // Strip the sideTree.
-    const auto& [sideTree, _] = lb ? *lhs_.treeAndCol_ : *rhs_.treeAndCol_;
+    const auto& sideTree =
+        lb ? (*lhs_.treeAndCol_).first : (*rhs_.treeAndCol_).first;
     auto strippedSideTree = varsRequiredFromSubtree.stripSubtree(sideTree);
-    // Update the column of the join variable after stripping the sideTree.
+
+    // Update the column of the join variable after stripping the sideTree
+    // and bind the `strippedSideTree` to the new `TransitivePath` operation.
     auto updateJoinVarCol = [&](bool bound, const TransitivePathSide& s) {
       return bound ? std::optional{strippedSideTree->getVariableColumn(
                          joinVar(s))}
                    : std::nullopt;
     };
-    // Bind the `strippedSideTree` to the new `TransitivePath` operation.
     path = path->bindSides(strippedSideTree, updateJoinVarCol(lb, lhs_),
                            updateJoinVarCol(rb, rhs_));
   }
