@@ -130,7 +130,6 @@ TEST(SpatialJoinParser, StoredGeometryFromPrecomputedColumns) {
   ad_utility::testing::TestIndexConfig config{buildLibSJTestDataset()};
   config.vocabularyType = ad_utility::VocabularyType{
       ad_utility::VocabularyType::Enum::OnDiskCompressedGeoSplit};
-  config.buildGeometryStore = true;
   config.parserBufferSize = 10_kB;
   auto qec = ad_utility::testing::getQec(std::move(config));
   const auto& index = qec->getIndex();

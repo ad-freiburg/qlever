@@ -564,23 +564,33 @@ TYPED_TEST(GeoVocabularyUnderlyingVocabTypedTest, GeoCellGridIndices) {
 // store under their position, such that a spatial join can use them via the
 // ID and the bounding box in their `GeometryInfo`, without parsing.
 TEST(GeoVocabularyTest, GeometryStore) {
-  // Two overlapping squares, a line that crosses both, a square far away and
-  // an invalid literal.
-  const std::string filename = absl::StrCat(gtestCurrentTestName(), ".dat");
-  auto cleanup = vocabulary_test::makeVocabFileCleanup<AnyGeoVocab>(filename);
+  // Two overlapping squares, a line that crosses both, a multipolygon with one
+  // part inside the second square, a square far away and an invalid literal,
+  // and the `gid` of each of them in the geometry store (from its position).
   auto wkt = [](std::string_view content) {
     return absl::StrCat("\"", content, GEO_LITERAL_SUFFIX);
   };
   std::string line = wkt("LINESTRING(1.5 0, 1.5 3)");
   std::string square1 = wkt("POLYGON((0 0, 2 0, 2 2, 0 2, 0 0))");
   std::string square2 = wkt("POLYGON((1 1, 3 1, 3 3, 1 3, 1 1))");
+  std::string multi =
+      wkt("MULTIPOLYGON(((10 10, 11 10, 11 11, 10 11, 10 10)), "
+          "((2.5 2.5, 2.8 2.5, 2.8 2.8, 2.5 2.8, 2.5 2.5)))");
   std::string farSquare = wkt("POLYGON((50 50, 51 50, 51 51, 50 51, 50 50))");
   std::string invalid = wkt("NOTAGEOMETRY");
-  std::vector<std::string> literals{line, square1, square2, farSquare, invalid};
+  std::vector<std::string> literals{line,  square1,   square2,
+                                    multi, farSquare, invalid};
   ql::ranges::sort(literals);
+  auto gidOf = [&literals](const std::string& literal) {
+    return geometryStoreGid(ql::ranges::find(literals, literal) -
+                            literals.begin());
+  };
+
+  // Write the literals with the `WordWriter` and open the vocabulary.
+  const std::string filename = absl::StrCat(gtestCurrentTestName(), ".dat");
+  auto cleanup = vocabulary_test::makeVocabFileCleanup<AnyGeoVocab>(filename);
   {
     AnyGeoVocab writerVocab;
-    writerVocab.setBuildGeometryStore(true);
     auto ww = writerVocab.makeDiskWriterPtr(filename);
     for (const auto& lit : literals) {
       (*ww)(lit, true);
@@ -589,12 +599,8 @@ TEST(GeoVocabularyTest, GeometryStore) {
   }
   AnyGeoVocab geoVocab;
   geoVocab.open(filename);
-  auto position = [&literals](const std::string& literal) {
-    return geometryStoreGid(ql::ranges::find(literals, literal) -
-                            literals.begin());
-  };
 
-  // Exactly the valid geometries are in the store.
+  // Every valid geometry of this test is in the store.
   for (size_t i = 0; i < literals.size(); ++i) {
     auto info = geoVocab.getGeoInfo(i);
     EXPECT_EQ(info.has_value(), literals[i] != invalid);
@@ -608,8 +614,8 @@ TEST(GeoVocabularyTest, GeometryStore) {
   EXPECT_EQ(positionOfGeometryStoreGid("42"), std::nullopt);
   EXPECT_EQ(positionOfGeometryStoreGid("vx"), std::nullopt);
 
-  // A self join on the stored geometries reports the pairs of the first three
-  // geometries as intersecting, by the `gid`s of their positions.
+  // A spatial join that collects the pairs of different geometries that
+  // intersect, by their `gid`s.
   sj::SpatialJoinCfg cfg;
   cfg.numThreads = 1;
   cfg.numCacheBuckets = 1;
@@ -623,6 +629,9 @@ TEST(GeoVocabularyTest, GeometryStore) {
       intersecting.insert(std::minmax(first, second));
     }
   };
+
+  // One sweep event per stored geometry, from the ID and the bounding box in
+  // its `GeometryInfo`, without parsing.
   sj::GeometryStore store{cfg, "",
                           AnyGeoVocab::getGeometryStorePrefix(filename)};
   sj::GeometryCache cache{cfg};
@@ -637,11 +646,15 @@ TEST(GeoVocabularyTest, GeometryStore) {
     }
   }
   events.finalize(1);
+
+  // A self join reports the pairs among the line and the two squares, and the
+  // multipolygon with the second square, but nothing for the far square.
   sj::Sweeper{cfg, &cache}.sweep(&events);
   std::set<std::pair<std::string, std::string>> expected{
-      std::minmax(position(line), position(square1)),
-      std::minmax(position(line), position(square2)),
-      std::minmax(position(square1), position(square2))};
+      std::minmax(gidOf(line), gidOf(square1)),
+      std::minmax(gidOf(line), gidOf(square2)),
+      std::minmax(gidOf(square1), gidOf(square2)),
+      std::minmax(gidOf(multi), gidOf(square2))};
   EXPECT_EQ(intersecting, expected);
 }
 

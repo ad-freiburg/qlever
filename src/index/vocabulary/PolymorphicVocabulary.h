@@ -94,20 +94,6 @@ class PolymorphicVocabulary {
         });
   }
 
-  // Forward `setBuildGeometryStore` to the currently active vocabulary if it
-  // is a `SplitVocabulary` (see `GeoVocabulary::setBuildGeometryStore`); no-op
-  // otherwise.
-  void setBuildGeometryStore(bool buildGeometryStore) {
-    ad_utility::visitIf(
-        vocab_,
-        [buildGeometryStore](OnDiskCompressedGeoSplit& vocab) {
-          vocab.setBuildGeometryStore(buildGeometryStore);
-        },
-        [](const auto& vocab) {
-          static_assert(
-              NeverProvidesGeometryInfo<std::decay_t<decltype(vocab)>>);
-        });
-  }
 
   // The geo cell grid of an underlying `GeoVocabulary`, or `std::nullopt` if
   // the active vocabulary is not a `SplitVocabulary` holding one with a grid.

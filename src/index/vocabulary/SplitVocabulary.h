@@ -363,20 +363,6 @@ class SplitVocabulary {
     }
   }
 
-  // Forward `setBuildGeometryStore` to the underlying `GeoVocabulary`, if
-  // there is one (see there for the effect). No-op otherwise.
-  void setBuildGeometryStore(bool buildGeometryStore) {
-    for (auto& vocab : underlying_) {
-      std::visit(
-          [buildGeometryStore](auto& v) {
-            using T = std::decay_t<decltype(v)>;
-            if constexpr (ad_utility::isInstantiation<T, GeoVocabulary>) {
-              v.setBuildGeometryStore(buildGeometryStore);
-            }
-          },
-          vocab);
-    }
-  }
 
   // The geo cell grid of the underlying `GeoVocabulary` (there is at most
   // one, see the `static_assert` above), or `std::nullopt` if there is none

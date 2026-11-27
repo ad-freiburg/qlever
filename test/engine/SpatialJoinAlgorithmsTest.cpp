@@ -2220,9 +2220,9 @@ TEST(SpatialJoin, LibspatialJoinWithAbsoluteOnDiskBase) {
 }  // namespace runtimeParameters
 
 // Test that a `libspatialjoin` spatial join on an index with a geometry store
-// (see `GeoVocabulary::setBuildGeometryStore`) takes the geometries of the
-// geo vocabulary from the store, and has the same result as without the store
-// for each join type.
+// (built with the geo split vocabulary, see `GeoVocabulary`) takes the
+// geometries of the geo vocabulary from the store, and has the same result as
+// on an index without a geometry store for each join type.
 TEST(SpatialJoin, LibspatialJoinWithGeometryStore) {
   // Areas, of which one is the object of two subjects, a line, an invalid
   // literal and points, which are `GeoPoint`s and thus not in the store.
@@ -2230,16 +2230,15 @@ TEST(SpatialJoin, LibspatialJoinWithGeometryStore) {
   addArea(kg, "7", "\"Minster Freiburg Area again\"", areaMuenster);
   addArea(kg, "8", "\"Georges-Koehler-Allee\"", lineSegmentGeorgesKoehlerAllee);
   addArea(kg, "9", "\"Invalid\"", invalidWkt);
-  auto makeQec = [&kg](bool buildGeometryStore) {
+  using VocabEnum = ad_utility::VocabularyType::Enum;
+  auto makeQec = [&kg](VocabEnum vocabularyType) {
     ad_utility::testing::TestIndexConfig config{kg};
-    config.vocabularyType = ad_utility::VocabularyType{
-        ad_utility::VocabularyType::Enum::OnDiskCompressedGeoSplit};
-    config.buildGeometryStore = buildGeometryStore;
+    config.vocabularyType = ad_utility::VocabularyType{vocabularyType};
     config.parserBufferSize = 10_kB;
     return ad_utility::testing::getQec(std::move(config));
   };
-  auto qecWithoutStore = makeQec(false);
-  auto qecWithStore = makeQec(true);
+  auto qecWithoutStore = makeQec(VocabEnum::OnDiskCompressed);
+  auto qecWithStore = makeQec(VocabEnum::OnDiskCompressedGeoSplit);
 
   // Join all geometries with all geometries using the given `task` and return
   // the sorted result rows and the number of rows from the geometry store.
@@ -2292,7 +2291,6 @@ TEST(SpatialJoin, LibspatialJoinWithGeometryStoreIdColumns) {
   ad_utility::testing::TestIndexConfig indexConfig{createTrueDistanceDataset()};
   indexConfig.vocabularyType = ad_utility::VocabularyType{
       ad_utility::VocabularyType::Enum::OnDiskCompressedGeoSplit};
-  indexConfig.buildGeometryStore = true;
   indexConfig.parserBufferSize = 10_kB;
   auto qec = ad_utility::testing::getQec(std::move(indexConfig));
 

@@ -286,7 +286,6 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
     }
     index.getImpl().setVocabularyTypeForIndexBuilding(vocabularyType);
     index.getImpl().setGeoPointEncodingForIndexBuilding(c.geoPointEncoding);
-    index.getImpl().setBuildGeometryStoreForIndexBuilding(c.buildGeometryStore);
     if (c.encodedPrefixesWithoutAngleBrackets.has_value() ||
         !c.encodedIriPatterns.empty()) {
       index.getImpl().setPrefixesForEncodedValues(
