@@ -23,20 +23,24 @@
 namespace qlever::blobDiff {
 
 // Return the length of the prologue of the `query`, that is, of its leading
-// `PREFIX` and `BASE` declarations (each of which ends with an IRI in angle
-// brackets). The prologue has to be repeated in front of a query that contains
-// the `query` as a subquery (see `withCanonicalSortOrder`).
+// `PREFIX` and `BASE` declarations, including the whitespace and comments that
+// follow them. The prologue is determined by QLever's SPARQL parser and has to
+// be repeated in front of a query that contains the `query` as a subquery (see
+// `withCanonicalSortOrder`). Throw if the prologue is malformed.
 size_t prologueLength(std::string_view query);
 
 // Return the `query`, wrapped in a query that sorts its result by all of its
-// variables in the lexicographic order of their names (via QLever's
-// `INTERNAL SORT BY` modifier, which is part of the query and is therefore
-// kept when the result is written to a blob, see
+// variables (via QLever's `INTERNAL SORT BY` modifier, which is part of the
+// query and is therefore kept when the result is written to a blob, see
 // `canonicalizeForSerialization` in `NamedCacheSecondaryVocabRewriter.h`).
+// If the `query` has an explicit `INTERNAL SORT BY` itself, then its keys come
+// first (in their order), such that this deliberate sort order is kept. All
+// remaining variables follow in the lexicographic order of their names.
 // The sort order that the plan of the `query` itself produces may differ
 // between two runs (even for the same data), which would make the blobs, and
 // hence the diffs, depend on the plan. The variables are obtained by parsing
-// the `query` with `qlever`.
+// the `query` with `qlever`. Throw if the `query` is not a `SELECT` query, or
+// if a key of its `INTERNAL SORT BY` is not selected.
 std::string withCanonicalSortOrder(const Qlever& qlever,
                                    const std::string& query);
 

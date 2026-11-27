@@ -57,14 +57,27 @@ struct BlobDiffConfig {
     std::optional<double> simplificationMeters_;
   };
 
-  // The vocabulary of the index. It has to be one that is held in memory,
-  // because the on-disk vocabularies cannot be serialized into a blob.
+  // The settings of the `index` section. They are passed on unchanged to the
+  // fields of `IndexBuilderConfig` (see `Qlever.h`) with the same names (the
+  // `vocabularyType_` to its `vocabType_`), which correspond to the options of
+  // `qlever-index` that are named below. See there for their meaning.
+
+  // The vocabulary of the index (`--vocabulary-type`). It has to be one that is
+  // held in memory, because the on-disk vocabularies cannot be serialized into
+  // a blob.
   ad_utility::VocabularyType vocabularyType_{
       ad_utility::VocabularyType::Enum::InMemoryCompressed};
-  // The number of threads for building the index (the default if unset).
+  // The number of threads for building the index (`--num-threads`, the default
+  // of `IndexBuilderConfig` if unset).
   std::optional<size_t> numThreads_;
+  // The regexes of the IRIs that are treated as blank nodes
+  // (`--iri-as-blank-node-regexes`).
   std::vector<std::string> blankNodeIriRegexes_;
+  // The IRI prefixes whose IRIs (the prefix followed by digits) are encoded
+  // directly into their `Id` (`--encode-as-id`).
   std::vector<std::string> prefixesForIdEncodedIris_;
+  // The JSON file with further settings of the index build
+  // (`--settings-file`), no file if empty.
   std::string settingsFile_;
 
   // The vocabulary entries that are left out of the blob, see

@@ -52,11 +52,20 @@ TEST(BlobDiffQueries, prologueLength) {
   // The keywords are case-insensitive.
   query = "Prefix ex: <http://ex.org/> pReFiX ex2: <http://ex2/> ASK {}";
   EXPECT_EQ(prologueLength(query), query.find("ASK"));
-  // A declaration without a closing `>` ends the prologue.
-  query = "PREFIX ex: <http://ex.org/> PREFIX broken: <http";
-  EXPECT_EQ(prologueLength(query), query.find("PREFIX broken"));
+  // Comments and whitespace between and after the declarations belong to the
+  // prologue, an IRI may contain a `#`.
+  query =
+      "# A comment.\nPREFIX ex: <http://ex.org/#> # PREFIX x: <y>\n"
+      "SELECT * {}";
+  EXPECT_EQ(prologueLength(query), query.find("SELECT"));
+  // Multibyte characters are counted in bytes.
+  query = "PREFIX ex: <http://ex.org/\u00e4\u00f6> SELECT * {}";
+  EXPECT_EQ(prologueLength(query), query.find("SELECT"));
   // A keyword that is only a prefix of the remaining query does not match.
   EXPECT_EQ(prologueLength("PREFI"), 0u);
+  // A malformed prologue is rejected.
+  EXPECT_ANY_THROW(
+      prologueLength("PREFIX ex: <http://ex.org/> PREFIX broken: <http"));
 }
 
 // _____________________________________________________________________________
@@ -75,6 +84,24 @@ TEST(BlobDiffQueries, withCanonicalSortOrder) {
   EXPECT_EQ(withCanonicalSortOrder(qlever, "SELECT * { ?s <p> ?o }"),
             " SELECT * WHERE { { SELECT * { ?s <p> ?o } } } INTERNAL SORT BY "
             "?o ?s");
+
+  // The keys of an explicit `INTERNAL SORT BY` come first (deduplicated), the
+  // remaining variables follow in the order of their names.
+  EXPECT_EQ(withCanonicalSortOrder(qlever,
+                                   "SELECT ?a ?b ?c { ?a <p> ?b . ?a <p> ?c } "
+                                   "INTERNAL SORT BY ?c ?b ?c"),
+            " SELECT * WHERE { { SELECT ?a ?b ?c { ?a <p> ?b . ?a <p> ?c } "
+            "INTERNAL SORT BY ?c ?b ?c } } INTERNAL SORT BY ?c ?b ?a");
+  // A semantic `ORDER BY` is not kept.
+  EXPECT_EQ(withCanonicalSortOrder(
+                qlever, "SELECT ?x ?y { ?x <p> ?y } ORDER BY DESC(?y)"),
+            " SELECT * WHERE { { SELECT ?x ?y { ?x <p> ?y } ORDER BY DESC(?y) "
+            "} } INTERNAL SORT BY ?x ?y");
+  // The keys of an `INTERNAL SORT BY` have to be selected.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      withCanonicalSortOrder(qlever,
+                             "SELECT ?x { ?x <p> ?y } INTERNAL SORT BY ?y"),
+      HasSubstr("The variable ?y of the `INTERNAL SORT BY` clause"));
 
   // A query without variables is returned unchanged.
   std::string noVariables = "SELECT * { <a> <p> <b> }";
@@ -117,4 +144,15 @@ TEST(BlobDiffQueries, pinAllQueries) {
   EXPECT_FALSE(qlever.namedResultCache().contains("first"));
   EXPECT_FALSE(qlever.namedResultCache().contains("second"));
   EXPECT_TRUE(qlever.namedResultCache().contains("third"));
+
+  // An explicit `INTERNAL SORT BY` of a pinned query is respected (without it,
+  // the result would be sorted by `?o` first).
+  BlobDiffConfig explicitlySorted;
+  explicitlySorted.namedQueries_.push_back(
+      {"sorted",
+       "SELECT ?s ?o { VALUES (?s ?o) { (<a> <d>) (<c> <b>) } } INTERNAL SORT "
+       "BY ?s",
+       std::nullopt, std::nullopt});
+  pinAllQueries(qlever, explicitlySorted);
+  EXPECT_EQ(readPinned("sorted"), "?s\t?o\n<a>\t<d>\n<c>\t<b>\n");
 }

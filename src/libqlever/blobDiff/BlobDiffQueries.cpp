@@ -13,11 +13,12 @@
 #include <absl/strings/str_join.h>
 
 #include <algorithm>
-#include <cctype>
 #include <stdexcept>
 #include <vector>
 
 #include "backports/algorithm.h"
+#include "parser/ParserAndVisitorBase.h"
+#include "util/Algorithm.h"
 
 namespace qlever::blobDiff {
 
@@ -38,28 +39,19 @@ PinOptions pinOptionsOf(const BlobDiffConfig::NamedQuery& query) {
 
 // _____________________________________________________________________________
 size_t prologueLength(std::string_view query) {
-  size_t pos = 0;
-  auto startsWithKeyword = [&query, &pos](std::string_view keyword) {
-    return query.size() - pos >= keyword.size() &&
-           ql::ranges::equal(
-               query.substr(pos, keyword.size()), keyword, [](char a, char b) {
-                 return std::tolower(static_cast<unsigned char>(a)) == b;
-               });
+  // The visitor only has to accept the prologue, its content is not needed.
+  struct PrologueVisitor {
+    bool visit([[maybe_unused]] SparqlAutomaticParser::PrologueContext* ctx) {
+      return true;
+    }
   };
-  while (true) {
-    while (pos < query.size() &&
-           std::isspace(static_cast<unsigned char>(query[pos]))) {
-      ++pos;
-    }
-    if (!startsWithKeyword("prefix") && !startsWithKeyword("base")) {
-      return pos;
-    }
-    auto end = query.find('>', pos);
-    if (end == std::string_view::npos) {
-      return pos;
-    }
-    pos = end + 1;
-  }
+  sparqlParserHelpers::ParserAndVisitorBase<PrologueVisitor> parserAndVisitor{
+      std::string{query}};
+  auto remaining =
+      parserAndVisitor.parseTypesafe(&SparqlAutomaticParser::prologue)
+          .remainingText_;
+  AD_CORRECTNESS_CHECK(remaining.size() <= query.size());
+  return query.size() - remaining.size();
 }
 
 // _____________________________________________________________________________
@@ -80,11 +72,36 @@ std::string withCanonicalSortOrder(const Qlever& qlever,
   if (variables.empty()) {
     return query;
   }
+
+  // The keys of an explicit `INTERNAL SORT BY` of the `query` come first, such
+  // that its deliberate sort order is kept.
+  std::vector<std::string> sortKeys;
+  auto addSortKey = [&sortKeys](const std::string& variable) {
+    if (!ad_utility::contains(sortKeys, variable)) {
+      sortKeys.push_back(variable);
+    }
+  };
+  if (parsedQuery._isInternalSort == IsInternalSort::True) {
+    for (const auto& key : parsedQuery._orderBy) {
+      const auto& name = key.variable_.name();
+      if (!ql::ranges::binary_search(variables, name)) {
+        throw std::runtime_error{absl::StrCat(
+            "The variable ", name,
+            " of the `INTERNAL SORT BY` clause of a pinned query has to be "
+            "selected, because otherwise the sort order cannot be kept. The "
+            "query is: ",
+            query)};
+      }
+      addSortKey(name);
+    }
+  }
+  ql::ranges::for_each(variables, addSortKey);
+
   std::string_view queryView{query};
   auto prologue = queryView.substr(0, prologueLength(queryView));
   auto body = queryView.substr(prologue.size());
   return absl::StrCat(prologue, " SELECT * WHERE { { ", body,
-                      " } } INTERNAL SORT BY ", absl::StrJoin(variables, " "));
+                      " } } INTERNAL SORT BY ", absl::StrJoin(sortKeys, " "));
 }
 
 // _____________________________________________________________________________
