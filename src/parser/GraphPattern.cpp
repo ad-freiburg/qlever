@@ -3,11 +3,12 @@
 
 #include "parser/GraphPattern.h"
 
-// These includes are required because of the forward declaration of
-// `GraphPatternOperation` in `GraphPattern.h` and its subsequent usage inside
-// `std::vector`.
+// These includes are required because of the forward declarations of
+// `GraphPatternOperation` in `GraphPattern.h` and of `SparqlTriple` in
+// `GraphPatternOperation.h`. Both types are stored inside a `std::vector`, so
+// they must be complete for the defaulted special member functions below.
 #include "parser/GraphPatternOperation.h"
-#include "parser/ParsedQuery.h"
+#include "parser/SparqlTriple.h"
 
 namespace parsedQuery {
 GraphPattern::GraphPattern(GraphPattern&& other) noexcept = default;

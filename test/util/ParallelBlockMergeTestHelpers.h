@@ -124,6 +124,11 @@ class VectorInput {
   Block makeEmptyBlock() const { return Block{}; }
 
   // ________________________________________________________________________
+  void reserveBlock(Block& block, size_t numElements) const {
+    block.reserve(numElements);
+  }
+
+  // ________________________________________________________________________
   template <typename U>
   void appendToBlock(Block& block, U&& element) const {
     block.push_back(AD_FWD(element));

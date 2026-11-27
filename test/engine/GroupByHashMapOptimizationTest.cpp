@@ -16,7 +16,7 @@ auto D = ad_utility::testing::DoubleId;
 class GroupByHashMapOptimizationTest : public ::testing::Test {
  protected:
   QueryExecutionContext* qec_ = ad_utility::testing::getQec();
-  VariableToColumnMap varToColMap_;
+  VariableToColumnMap varToColMap_{qec_->getAllocator()};
   LocalVocab localVocab_{ad_utility::testing::makeAllocator()};
   IdTable table_{qec_->getAllocator()};
   sparqlExpression::EvaluationContext context_{
