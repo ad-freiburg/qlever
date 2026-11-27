@@ -50,7 +50,8 @@ GeometryInfo::GeometryInfo(uint8_t wktType, const BoundingBox& boundingBox,
                 sizeof(boundingBox_) + sizeof(geometryTypeAndCentroid_) +
                     sizeof(numGeometries_) + sizeof(sourceCrs_) +
                     sizeof(serializationType_) + sizeof(metricLength_) +
-                    sizeof(metricArea_) + sizeof(geometryStoreId_));
+                    sizeof(metricArea_) + sizeof(parsedGeometryOffset_) +
+                    sizeof(geometryStoreId_));
   // The WKT type has only 8 different values, and the bit representation of a
   // `GeoPoint` leaves its upper `GeoPoint::numTypeBits` bits free (they hold
   // the datatype when the point is stored as an `Id`). Therefore we fold the
@@ -171,6 +172,10 @@ GeometryInfo GeometryInfo::fromSerialized(ql::span<const uint8_t> bytes,
   if (version == 5) {
     info.sourceCrs_ = SourceCrsType{0};
     info.serializationType_ = SerializationType::WKT;
+  }
+  // The records before version 7 have no parsed geometry offset.
+  if (version < 7) {
+    info.parsedGeometryOffset_ = -1;
   }
   return info;
 }

@@ -665,6 +665,7 @@ IndexBuilderDataAsExternalVector IndexImpl::passFileForVocabulary(
                                                         std::string_view b) {
       return cmp(a, b, TripleComponentComparator::Level::TOTAL);
     };
+    vocab_.setParsedGeometriesMinLength(parsedGeometriesMinLength_);
     auto writer = vocab_.makeParallelWriterPtr(onDiskBase_ + VOCAB_SUFFIX);
     writer->readableName() = "internal vocabulary";
     return ad_utility::vocabulary_merger::mergeVocabulary(
@@ -1939,8 +1940,9 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
                   << std::endl;
     }
     AD_LOG_INFO << "You specified \"locale = " << lang << "_" << country
-                << "\" " << "and \"ignore-punctuation = " << ignorePunctuation
-                << "\"" << std::endl;
+                << "\" "
+                << "and \"ignore-punctuation = " << ignorePunctuation << "\""
+                << std::endl;
 
     if (lang != LOCALE_DEFAULT_LANG || country != LOCALE_DEFAULT_COUNTRY) {
       AD_LOG_WARN

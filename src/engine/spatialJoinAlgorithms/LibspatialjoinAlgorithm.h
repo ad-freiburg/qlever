@@ -79,6 +79,9 @@ class LibspatialjoinAlgorithm : public SpatialJoinAlgorithmBase {
     // Actual number of threads used (might be lower than result of
     // `getNumThreads` for small inputs)
     size_t numThreadsUsed_;
+    // Number of the parsed geometries that were taken from the index instead
+    // of being parsed (see `ParsedGeometry`)
+    size_t numGeomsFromIndex_;
   };
   ParseMetadata parse(ParseInput input, sj::GeometryStore& store,
                       const sj::PreparedGeomMetaCb& metaCb, size_t numThreads,
