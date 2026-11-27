@@ -974,9 +974,20 @@ class IdTable {
 namespace detail {
 using DefaultAllocator =
     ad_utility::default_init_allocator<Id, ad_utility::AllocatorWithLimit<Id>>;
+// An owning column of `Id`s with the given `Allocator`: a `std::vector<Id>`, or
+// with `USE_SPLIT_LAYOUT` an `IdColumnVector`, which stores the payloads and
+// the datatypes in two separate arrays.
+#ifndef QLEVER_USE_SPLIT_LAYOUT
+template <typename Allocator>
+using IdColumnStorage = std::vector<Id, Allocator>;
+#else
+template <typename Allocator>
+using IdColumnStorage =
+    columnBasedIdTable::splitLayout::IdColumnVector<Allocator>;
+#endif
 // The storage of a column of an `IdTable`. The types of its columns and
 // elements (`IdColumnRef`, `IdRef` etc. below) follow from it.
-using IdVector = std::vector<Id, DefaultAllocator>;
+using IdVector = IdColumnStorage<DefaultAllocator>;
 }  // namespace detail
 
 /// The general IdTable class. Can be modified and owns its data. If COLS > 0,
@@ -1089,10 +1100,12 @@ static_assert(!qlever::isProxy<IdTableView<3>>);
 // Type aliases for the columns of an `IdTable` (a mutable view, a read-only
 // view, and an owning column) and for the references to a single element (a
 // mutable and a const one). They follow from the column storage
-// `detail::IdVector`, so they are `ql::span<Id>`, `ql::span<const Id>`, `Id&`
-// and `const Id&`. `IdColumn` is an owning column with the default allocator
-// that is not part of an `IdTable`, a `std::vector<Id>`.
-using IdColumn = std::vector<Id>;
+// `detail::IdVector`: without `USE_SPLIT_LAYOUT` they are `ql::span<Id>`,
+// `ql::span<const Id>`, `Id&` and `const Id&`. With it, an `IdTable` stores the
+// payload and the datatype of each `Id` in two separate arrays, and they are
+// views of these two arrays and proxies. `IdColumn` is an owning column with
+// the default allocator that is not part of an `IdTable`.
+using IdColumn = detail::IdColumnStorage<std::allocator<Id>>;
 
 namespace detail {
 using IdVectorTraits = columnBasedIdTable::ColumnStorageTraits<IdVector, Id>;

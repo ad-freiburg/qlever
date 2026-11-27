@@ -128,16 +128,9 @@ class SplitLayoutId
     return SplitLayoutId{bits_.incremented()};
   }
 
-  // Enable the serialization of `SplitLayoutId` in the
-  // `ad_utility::serialization` framework by simply copying the 16 raw bytes
-  // (including the zeroed padding). This is much faster than serializing the
-  // datatype and payload separately, especially for large contiguous arrays of
-  // IDs.
-  //
-  // TODO<pas-kes> This also persists the 7 padding bytes, which a custom
-  // serialization function will avoid.
-  template <typename U>
-  friend void allowTrivialSerialization(SplitLayoutId, U);
+  // Serialize the payload and the datatype (9 bytes), but not the 7 bytes of
+  // padding that a `SplitLayoutId` has in memory.
+  AD_SERIALIZE_FRIEND_FUNCTION(SplitLayoutId) { serializer | arg.bits_; }
 
  private:
   // The datatype-major bitwise comparison of the bits. This is only correct if

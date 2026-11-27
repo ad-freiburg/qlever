@@ -21,6 +21,7 @@
 
 #include "backports/three_way_comparison.h"
 #include "util/BitUtils.h"
+#include "util/serializer/Serializer.h"
 
 namespace columnBasedIdTable::splitLayout {
 
@@ -114,11 +115,15 @@ struct SplitLayoutIdBitRepresentation {
     return H::combine(std::move(h), rep.datatype_, rep.payload_);
   }
 
-  // The bit representation can be serialized by simply copying its bytes
-  // (including the zeroed padding).
-  template <typename U>
-  friend std::true_type allowTrivialSerialization(
-      SplitLayoutIdBitRepresentation, U);
+  // Serialize the payload and the datatype (9 bytes), but not the padding. When
+  // reading, the padding is zeroed, like for every other value of this type.
+  AD_SERIALIZE_FRIEND_FUNCTION(SplitLayoutIdBitRepresentation) {
+    serializer | arg.payload_;
+    serializer | arg.datatype_;
+    if constexpr (ad_utility::serialization::ReadSerializer<S>) {
+      arg.padding_ = {};
+    }
+  }
 
   // Support for `absl::StrCat` etc., analogous to the stringification of the
   // legacy single-integer bit representation.

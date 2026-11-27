@@ -134,7 +134,10 @@ static Result::Generator importBinaryGenerator(
 
   while (!serializer.isExhausted()) {
     cancellationHandle->throwIfCancelled();
-    auto firstId = serialization::read<Id::T>(serializer);
+    // The IDs are written as their raw bytes (see `ExportBatch::addRow`), so
+    // they are read in the same way and not via `serialize` of `Id::T`.
+    Id::T firstId;
+    serialization::triviallySerialize(serializer, firstId);
     if (firstId != vocabMarker) {
       readRow(serializer, firstId, remoteColumns, rowBuffer, currentBatch);
       continue;

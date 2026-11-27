@@ -20,6 +20,7 @@
 #include "IdColumnTestHelpers.h"
 #include "engine/idTable/splitLayout/SplitLayoutIdBitRepresentation.h"
 #include "util/HashSet.h"
+#include "util/serializer/ByteBufferSerializer.h"
 
 using namespace columnBasedIdTable::splitLayout;
 using testHelpers::getBitsCompat;
@@ -53,6 +54,32 @@ TEST(SplitLayoutIdBitRepresentationTest, bytesAreDeterministic) {
   EXPECT_TRUE(paddingIsZero([] {
     return Rep{3, std::numeric_limits<uint64_t>::max()}.incremented();
   }));
+}
+
+// Test that the serialization writes only the payload and the datatype (9
+// bytes, no padding), and that reading them back gives the same bit
+// representation with zeroed padding, also if the memory held other bytes
+// before.
+TEST(SplitLayoutIdBitRepresentationTest, serialization) {
+  using Rep = SplitLayoutIdBitRepresentation;
+  for (const Rep original : {Rep{0, 0}, Rep{3, 42},
+                             Rep{std::numeric_limits<uint8_t>::max(),
+                                 std::numeric_limits<uint64_t>::max()}}) {
+    ad_utility::serialization::ByteBufferWriteSerializer writer;
+    writer << original;
+    auto data = std::move(writer).data();
+    EXPECT_EQ(data.size(), Rep::numSemanticallyUsedBytes);
+
+    alignas(Rep) std::array<unsigned char, sizeof(Rep)> memory;
+    memory.fill(0xAB);
+    auto& read = *new (memory.data()) Rep;
+    ad_utility::serialization::ByteBufferReadSerializer reader{std::move(data)};
+    reader >> read;
+    EXPECT_EQ(read, original);
+    auto padding = memory.begin() + offsetof(Rep, padding_);
+    EXPECT_TRUE(std::all_of(padding, padding + sizeof(Rep::padding_),
+                            [](unsigned char byte) { return byte == 0; }));
+  }
 }
 
 // Test that the comparison is datatype-major, although the `payload_` is
