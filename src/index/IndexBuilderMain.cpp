@@ -274,14 +274,13 @@ int main(int argc, char** argv) {
       "Disable the precomputation for `ql:has-predicate`.");
   add("only-pso-and-pos-permutations,o",
       po::bool_switch(&config.onlyPsoAndPos_),
-      "Only build the PSO and POS permutations. This is faster, but then "
-      "queries with predicate variables are very slow");
+      "Deprecated, use `--permutations PSO POS` instead. Only build the PSO "
+      "and POS permutations. This is faster, but then queries with predicate "
+      "variables are very slow");
   add("permutations", po::value(&config.permutations_)->multitoken(),
-      "The permutations to build, e.g. `SPO OSP` (the letters S, P, O, and G "
-      "denote the subject, predicate, object, and graph, a missing G means "
-      "that the graph is the last column). The PSO and POS permutations are "
-      "always built. By default, the six permutations that have the graph as "
-      "their last column are built. Queries for which none of the built "
+      "The permutations to build, e.g. `SPO OSP`. The PSO and POS "
+      "permutations are always built. By default, all six permutations are "
+      "built. Queries for which none of the built "
       "permutations is a good fit are evaluated with a full scan and a filter "
       "and can be very slow.");
   add("add-has-word-triples", po::bool_switch(&config.addHasWordTriples_),

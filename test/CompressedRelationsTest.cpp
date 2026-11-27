@@ -1714,7 +1714,7 @@ TEST(CompressedRelationReader, getResultSizeImpl) {
     EXPECT_THAT(actual_exact, testing::Eq(exact));
   };
   // The Scans request all triples of the one and only block.
-  for (auto perm : Permutation::GRAPH_LAST) {
+  for (auto perm : Permutation::ALL) {
     expectResultSizes(perm, {std::nullopt, std::nullopt, std::nullopt}, 0, 2,
                       2);
   }

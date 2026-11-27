@@ -486,6 +486,19 @@ class CompressedRelationReader {
       const LocatedTriplesPerBlock& locatedTriplesPerBlock,
       const LimitOffsetClause& limitOffset) const;
 
+  // Return the distinct values of column 1 of all the triples of the
+  // `scanSpecAndBlocks` together with the number of triples in which they
+  // occur (sorted by the value). The `scanSpecAndBlocks` must neither fix a
+  // column nor filter by graph. The values are computed as the union of the
+  // distinct column-1 values of each distinct column-0 value (see
+  // `getDistinctColIdsAndCounts`). This avoids the sorting of a full scan and
+  // is efficient if there are only few distinct values in column 0, for example
+  // the predicates of the PSO or POS permutation.
+  IdTable getDistinctCol1IdsAndCountsForAllCol0(
+      const ScanSpecAndBlocks& scanSpecAndBlocks,
+      const CancellationHandle& cancellationHandle,
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
+
   std::optional<CompressedRelationMetadata> getMetadataForSmallRelation(
       const ScanSpecAndBlocks& scanSpecAndBlocks, Id col0Id,
       const LocatedTriplesPerBlock&) const;

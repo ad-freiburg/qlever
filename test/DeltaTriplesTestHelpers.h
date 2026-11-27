@@ -26,7 +26,7 @@ inline auto InAllPermutations =
     [](testing::Matcher<const LocatedTriplesPerBlock&> InnerMatcher)
     -> testing::Matcher<const DeltaTriples&> {
   return testing::AllOfArray(ad_utility::transform(
-      Permutation::GRAPH_LAST, [&InnerMatcher](const Permutation::Enum& perm) {
+      Permutation::ALL, [&InnerMatcher](const Permutation::Enum& perm) {
         return testing::ResultOf(
             absl::StrCat(".getLocatedTriplesPerBlock(",
                          Permutation::toString(perm), ")"),

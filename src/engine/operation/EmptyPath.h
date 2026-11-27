@@ -153,13 +153,15 @@ class EmptyPath : public Operation {
 
   // Return the distinct values of the second column of the `permutation`
   // (together with their graph if `addGraphColumn` is true), restricted to the
-  // `idFilter` if specified, sorted and without duplicates. They are computed
-  // from a full scan, which is only used if no permutation that starts with
-  // the respective column is loaded.
-  IdTable distinctCol1IdsViaFullScan(
-      const Permutation& permutation, const ScanSpecification& scanSpec,
-      bool addGraphColumn,
-      const std::optional<std::vector<Id>>& idFilter) const;
+  // `idFilter` if specified, sorted and without duplicates. Only used if no
+  // permutation that starts with the respective column is loaded. Without a
+  // graph column and graph filter, they are computed per `col0Id` (see
+  // `Permutation::getDistinctCol1IdsAndCountsForAllCol0`), otherwise from a
+  // (slow) full scan.
+  IdTable distinctCol1Ids(const Permutation& permutation,
+                          const ScanSpecification& scanSpec,
+                          bool addGraphColumn,
+                          const std::optional<std::vector<Id>>& idFilter) const;
 
   // Return all distinct entities of the knowledge graph (as tables with
   // `numKgColumns()` columns), sorted and without duplicates. If `idFilter` is

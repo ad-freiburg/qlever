@@ -724,10 +724,10 @@ TEST(IndexRebuilder, materializeToIndex) {
       EXPECT_EQ(newIndex.numDistinctPredicates().normal, 3);
       EXPECT_EQ(newIndex.numDistinctPredicates().internal, usePatterns ? 1 : 0);
       if (newIndex.hasAllPermutations()) {
-        EXPECT_EQ(newIndex.numDistinctSubjects().normal, 4);
-        EXPECT_EQ(newIndex.numDistinctSubjects().internal, 0);
-        EXPECT_EQ(newIndex.numDistinctObjects().normal, 4);
-        EXPECT_EQ(newIndex.numDistinctObjects().internal, 0);
+        EXPECT_EQ(newIndex.numDistinctSubjects().value().normal, 4);
+        EXPECT_EQ(newIndex.numDistinctSubjects().value().internal, 0);
+        EXPECT_EQ(newIndex.numDistinctObjects().value().normal, 4);
+        EXPECT_EQ(newIndex.numDistinctObjects().value().internal, 0);
       }
       // The patterns are copied from the old index, and so are their
       // statistics.
@@ -817,8 +817,8 @@ TEST(IndexRebuilder, materializeToIndexWithSomePermutations) {
         ql::filesystem::exists(absl::StrCat(file.string(), ".twin-tmp")));
   }
   EXPECT_EQ(newIndex.numTriples().normal, 6);
-  EXPECT_EQ(newIndex.numDistinctSubjects().normal, 3);
-  EXPECT_EQ(newIndex.numDistinctObjects().normal, 3);
+  EXPECT_EQ(newIndex.numDistinctSubjects().value().normal, 3);
+  EXPECT_EQ(newIndex.numDistinctObjects().value().normal, 3);
 
   // Compare the contents and the metadata of the relations of each
   // permutation with those of the `reference`. The vocabularies are the same,

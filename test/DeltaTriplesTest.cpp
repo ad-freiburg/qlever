@@ -999,7 +999,7 @@ TEST_F(DeltaTriplesTest, LocatedTriplesSharedState) {
     auto empty = AD_PROPERTY(LocatedTriplesPerBlock, numTriplesForTesting, 0);
     std::vector<testing::Matcher<const LocatedTriplesPerBlock&>> matchers(
         Permutation::ALL.size(), empty);
-    std::fill_n(matchers.begin(), Permutation::GRAPH_LAST.size(), m);
+    std::fill_n(matchers.begin(), Permutation::ALL.size(), m);
     return testing::Pointee(testing::AllOf(
         AD_FIELD(LocatedTriplesState, index_, testing::Eq(index)),
         AD_FIELD(LocatedTriplesState, locatedTriplesPerBlock_,

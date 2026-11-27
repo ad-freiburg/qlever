@@ -184,13 +184,14 @@ IdTable Describe::makeAndExecuteJoinWithFullIndex(
   // Prefer a permutation that is sorted by the subject. Otherwise, the `Join`
   // below sorts the (complete) scan of the PSO permutation, which is always
   // loaded.
-  const auto* scanPermutation = getIndex().getImpl().firstLoadedPermutation(
-      {Permutation::SPO, Permutation::SOP});
+  auto scanPermutation =
+      getIndex()
+          .getImpl()
+          .getFirstLoadedPermutation(
+              {Permutation::SPO, Permutation::SOP, Permutation::PSO})
+          .permutation();
   auto indexScan = ad_utility::makeExecutionTree<IndexScan>(
-      getExecutionContext(),
-      scanPermutation != nullptr ? scanPermutation->permutation()
-                                 : Permutation::PSO,
-      triple,
+      getExecutionContext(), scanPermutation, triple,
       activeGraphs.has_value()
           ? IndexScan::Graphs::Whitelist(std::move(activeGraphs).value())
           : IndexScan::Graphs::All());

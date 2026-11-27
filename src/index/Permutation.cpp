@@ -157,6 +157,16 @@ IdTable Permutation::getDistinctCol0IdsAndCounts(
       limitOffset);
 }
 
+// ____________________________________________________________________________
+IdTable Permutation::getDistinctCol1IdsAndCountsForAllCol0(
+    const CancellationHandle& cancellationHandle,
+    const LocatedTriplesState& locatedTriplesState) const {
+  ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
+  return reader().getDistinctCol1IdsAndCountsForAllCol0(
+      getScanSpecAndBlocks(scanSpec, locatedTriplesState), cancellationHandle,
+      getLocatedTriplesForPermutation(locatedTriplesState));
+}
+
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 // ____________________________________________________________________________
 cppcoro::generator<IdTable, CompressedRelationReader::LazyScanMetadata>
@@ -176,45 +186,22 @@ Permutation::getDistinctCol0Ids(const ScanSpecification& scanSpec,
 
 // _____________________________________________________________________
 auto Permutation::toKeyOrder(Permutation::Enum permutation) -> KeyOrder {
-  // The name of a permutation lists its columns in order, and a missing
-  // fourth letter means that the graph is the last column.
-  std::string_view name = toString(permutation);
-  std::array<KeyOrder::T, KeyOrder::NumKeys> keys{};
-  keys[3] = 3;
-  for (size_t i = 0; i < name.size(); ++i) {
-    switch (name[i]) {
-      case 'S':
-        keys[i] = 0;
-        break;
-      case 'P':
-        keys[i] = 1;
-        break;
-      case 'O':
-        keys[i] = 2;
-        break;
-      case 'G':
-        keys[i] = 3;
-        break;
-      default:
-        AD_FAIL();
-    }
-  }
-  return {keys[0], keys[1], keys[2], keys[3]};
-}
-
-// _____________________________________________________________________
-Permutation::Enum Permutation::fromKeyOrder(const KeyOrder& keyOrder) {
-  for (auto permutation : ALL) {
-    if (toKeyOrder(permutation).keys() == keyOrder.keys()) {
-      return permutation;
-    }
+  using enum Permutation::Enum;
+  switch (permutation) {
+    case POS:
+      return {1, 2, 0, 3};
+    case PSO:
+      return {1, 0, 2, 3};
+    case SOP:
+      return {0, 2, 1, 3};
+    case SPO:
+      return {0, 1, 2, 3};
+    case OPS:
+      return {2, 1, 0, 3};
+    case OSP:
+      return {2, 0, 1, 3};
   }
   AD_FAIL();
-}
-
-// _____________________________________________________________________
-bool Permutation::hasGraphLast(Enum permutation) {
-  return toKeyOrder(permutation).keys()[3] == 3;
 }
 
 // _____________________________________________________________________
@@ -228,20 +215,29 @@ std::vector<ql::filesystem::path> Permutation::fileNames(
 
 // _____________________________________________________________________
 std::string_view Permutation::toString(Permutation::Enum permutation) {
-  static constexpr std::array<std::string_view, 24> names{
-      "PSO",  "POS",  "SPO",  "SOP",  "OPS",  "OSP",  "GSPO", "GSOP",
-      "GPSO", "GPOS", "GOSP", "GOPS", "SGPO", "SGOP", "PGSO", "PGOS",
-      "OGSP", "OGPS", "SPGO", "SOGP", "PSGO", "POGS", "OSGP", "OPGS"};
-  auto index = static_cast<size_t>(permutation);
-  AD_CONTRACT_CHECK(index < names.size());
-  return names[index];
+  using enum Permutation::Enum;
+  switch (permutation) {
+    case POS:
+      return "POS";
+    case PSO:
+      return "PSO";
+    case SOP:
+      return "SOP";
+    case SPO:
+      return "SPO";
+    case OPS:
+      return "OPS";
+    case OSP:
+      return "OSP";
+  }
+  AD_FAIL();
 }
 
 // _____________________________________________________________________
 Permutation::Enum Permutation::fromString(std::string_view name) {
   std::string upper = ad_utility::utf8ToUpper(name);
   // Strip a trailing graph column, which is implicit in the names of the
-  // permutations that have the graph as their last column.
+  // permutations (the graph is always their last column).
   std::string_view withoutTrailingGraph = upper;
   if (withoutTrailingGraph.size() == 4 && withoutTrailingGraph.back() == 'G') {
     withoutTrailingGraph.remove_suffix(1);

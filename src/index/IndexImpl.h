@@ -130,8 +130,8 @@ class IndexImpl {
   mutable ad_utility::File textIndexFile_;
 
   // The permutations that are built (at index build time) or loaded (when an
-  // index is loaded from disk). When an index is built, `nullopt` means the
-  // six permutations that have the graph as their last column. When an index
+  // index is loaded from disk). When an index is built, `nullopt` means all
+  // six permutations. When an index
   // is loaded, `nullopt` means all the permutations that the index has, and
   // otherwise only those of the given permutations that the index has are
   // loaded.
@@ -183,7 +183,7 @@ class IndexImpl {
   CompactVectorOfStrings<Id> patterns_;
   ad_utility::AllocatorWithLimit<Id> allocator_;
 
-  // One `Permutation` object for each of the 24 possible permutations,
+  // One `Permutation` object for each of the six possible permutations,
   // indexed by the value of `Permutation::Enum`. Only those that are loaded
   // (see `Permutation::isLoaded`) can be used for scans. If
   // `doNotLoadPermutations_` is set, all of them are `nullptr`.
@@ -459,11 +459,11 @@ class IndexImpl {
   // IRI in angle brackets.
   void setHasWordRestrictPredicates(const std::vector<std::string>& predicates);
 
-  // __________________________________________________________________________
-  NumNormalAndInternal numDistinctSubjects() const;
-
-  // __________________________________________________________________________
-  NumNormalAndInternal numDistinctObjects() const;
+  // The number of distinct subjects (objects) is only known if a permutation
+  // that starts with the subject (object) is loaded, otherwise return
+  // `std::nullopt`.
+  std::optional<NumNormalAndInternal> numDistinctSubjects() const;
+  std::optional<NumNormalAndInternal> numDistinctObjects() const;
 
   // __________________________________________________________________________
   NumNormalAndInternal numDistinctPredicates() const;
@@ -722,19 +722,36 @@ class IndexImpl {
     return nofNonLiteralsInTextIndex_;
   }
 
-  // Return true iff all six permutations that have the graph as their last
-  // column are loaded.
+  // Return true iff all six permutations are loaded.
   bool hasAllPermutations() const;
 
   // Return true iff the `permutation` is loaded.
   bool hasPermutation(Permutation::Enum permutation) const;
 
   // Return the loaded permutations, in the order of `Permutation::ALL`.
-  std::vector<Permutation::Enum> loadedPermutations() const;
+  std::vector<Permutation::Enum> loadedPermutations() const {
+    return loadedPermutations<false>();
+  }
+
+  // Return those of the `Permutation::all<isInternal>()` that are loaded. The
+  // internal permutations are loaded together with their normal counterparts.
+  template <bool isInternal>
+  std::vector<Permutation::Enum> loadedPermutations() const {
+    std::vector<Permutation::Enum> result;
+    ql::ranges::copy_if(
+        Permutation::all<isInternal>(), std::back_inserter(result),
+        [this](auto permutation) { return hasPermutation(permutation); });
+    return result;
+  }
 
   // Return the first of the `permutations` that is loaded, or `nullptr` if
   // none of them is loaded.
   const Permutation* firstLoadedPermutation(
+      std::initializer_list<Permutation::Enum> permutations) const;
+
+  // Return the first of the `permutations` that is loaded. Throw if none of
+  // them is loaded.
+  const Permutation& getFirstLoadedPermutation(
       std::initializer_list<Permutation::Enum> permutations) const;
 
   // ___________________________________________________________________________
@@ -1045,7 +1062,7 @@ class IndexImpl {
   static const Permutation& getPermutationImpl(
       const PermutationPtr& permutationPtr, std::string_view permutationName);
 
-  // Create one `Permutation` object for each of the 24 permutations.
+  // Create one `Permutation` object for each of the six permutations.
   static std::array<PermutationPtr, Permutation::ALL.size()> makePermutations(
       const ad_utility::AllocatorWithLimit<Id>& allocator);
 

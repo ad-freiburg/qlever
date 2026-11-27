@@ -59,6 +59,7 @@ const std::vector<std::string> queries{
     "SELECT ?o (COUNT(?s) AS ?c) { ?s ?p ?o } GROUP BY ?o ORDER BY ?o",
     "SELECT * { ?s <p>* ?o } ORDER BY ?s ?o",
     "SELECT * { ?s <p>* <a> } ORDER BY ?s",
+    "SELECT * { GRAPH ?g { ?s <p>* ?o } } ORDER BY ?g ?s ?o",
     "SELECT DISTINCT ?g { GRAPH ?g { ?s ?p ?o } } ORDER BY ?g",
     "DESCRIBE <a>",
 };
@@ -158,17 +159,62 @@ TEST(PermutationSubset, sameResultsAsWithAllPermutations) {
     expectResults(engine, expected);
   }
 
-  // Apply the same updates to an index with all permutations and an index
+  // Apply the same updates to an index with all permutations and to indexes
   // with only some permutations, and compare the results again.
-  auto config = buildIndexWithPermutations({"SOP"}, "updates");
-  Qlever engine{config};
-  for (auto* e : {&reference, &engine}) {
+  Qlever engineSop{buildIndexWithPermutations({"SOP"}, "updatesSop")};
+  Qlever engineOnlyPsoPos{
+      buildIndexWithPermutations({"PSO", "POS"}, "updatesPsoPos")};
+  for (auto* e : {&reference, &engineSop, &engineOnlyPsoPos}) {
     ad_utility::testing::applyUpdateToEngine(
         *e, "INSERT DATA { <e> <p> <a> . <e> <e> <e> . <a> <p> <new> }");
     ad_utility::testing::applyUpdateToEngine(
         *e, "DELETE DATA { <a> <p> <b> . <c> <q> <c> }");
   }
-  expectResults(engine, runQueries(reference));
+  auto expectedAfterUpdates = runQueries(reference);
+  expectResults(engineSop, expectedAfterUpdates);
+  expectResults(engineOnlyPsoPos, expectedAfterUpdates);
+}
+
+// Without the permutations that start with the subject or the object, the
+// `GROUP BY` of a full scan and the empty path use the distinct values of the
+// second column of the PSO and POS permutations instead of a full scan.
+TEST(PermutationSubset, distinctValuesOfSecondColumn) {
+  Qlever engine{buildIndexWithPermutations({"PSO", "POS"}, "")};
+  const auto& index = engine.indexAndViewsSnapshot()->index_.getImpl();
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  auto locatedTriplesState = engine.indexAndViewsSnapshot()
+                                 ->index_.deltaTriplesManager()
+                                 .getCurrentLocatedTriplesSharedState();
+  auto toInts = [&index](const IdTable& table) {
+    std::vector<std::pair<std::string, int64_t>> result;
+    for (const auto& row : table) {
+      result.emplace_back(index.indexToString(row[0].getVocabIndex()),
+                          row[1].getInt());
+    }
+    return result;
+  };
+  // The subjects of the `knowledgeGraph` and the number of their triples.
+  using P = std::pair<std::string, int64_t>;
+  EXPECT_THAT(
+      toInts(index.getPermutation(Permutation::PSO)
+                 .getDistinctCol1IdsAndCountsForAllCol0(cancellationHandle,
+                                                        *locatedTriplesState)),
+      ElementsAreArray({P{"<a>", 4}, P{"<b>", 2}, P{"<c>", 2}, P{"<d>", 1}}));
+
+  // The `GROUP BY` is computed without reading the full scan.
+  auto result =
+      engine.query("SELECT ?s (COUNT(?o) AS ?c) { ?s ?p ?o } GROUP BY ?s",
+                   ad_utility::MediaType::qleverJson);
+  EXPECT_THAT(result, HasSubstr("optimized out"));
+
+  // `getFirstLoadedPermutation` throws if none of the permutations is loaded.
+  EXPECT_EQ(
+      &index.getFirstLoadedPermutation({Permutation::SPO, Permutation::PSO}),
+      &index.getPermutation(Permutation::PSO));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      index.getFirstLoadedPermutation({Permutation::SPO, Permutation::OSP}),
+      HasSubstr("None of the permutations SPO, OSP is loaded"));
 }
 
 // Load an index that has all permutations, but only load some of them.
@@ -180,7 +226,7 @@ TEST(PermutationSubset, loadOnlySomePermutations) {
     EXPECT_TRUE(engine.indexAndViewsSnapshot()->index_.hasAllPermutations());
     expected = runQueries(engine);
   }
-  config.permutations_ = {"OSP", "GSPO"};
+  config.permutations_ = {"OSP", "ospg"};
   Qlever engine{config};
   const auto& index = engine.indexAndViewsSnapshot()->index_;
   EXPECT_THAT(
@@ -211,10 +257,6 @@ TEST(PermutationSubset, warningForDegenerateScan) {
 
 // _____________________________________________________________________________
 TEST(PermutationSubset, invalidPermutations) {
-  // A permutation that does not have the graph as its last column cannot be
-  // built yet.
-  AD_EXPECT_THROW_WITH_MESSAGE(buildIndexWithPermutations({"GSPO"}, ""),
-                               HasSubstr("not yet supported"));
   AD_EXPECT_THROW_WITH_MESSAGE(buildIndexWithPermutations({"SPX"}, ""),
                                HasSubstr("is not the name of a permutation"));
   // The patterns require all six permutations.

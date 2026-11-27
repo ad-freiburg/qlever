@@ -51,12 +51,8 @@ VariableToColumnMap DistinctGraphs::computeVariableToColumnMap() const {
 
 // ____________________________________________________________________________
 const Permutation& DistinctGraphs::permutation() const {
-  const auto* result = getIndex().getImpl().firstLoadedPermutation(
+  return getIndex().getImpl().getFirstLoadedPermutation(
       {Permutation::SPO, Permutation::PSO});
-  // If no permutation is loaded, `getPermutation` throws a readable error.
-  return result != nullptr
-             ? *result
-             : getIndex().getImpl().getPermutation(Permutation::PSO);
 }
 
 // ____________________________________________________________________________

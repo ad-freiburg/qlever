@@ -868,9 +868,6 @@ void QueryPlanner::seedWithoutSuitablePermutation(
   };
   std::optional<Permutation::Enum> best;
   for (auto permutation : _qec->getIndex().loadedPermutations()) {
-    if (!Permutation::hasGraphLast(permutation)) {
-      continue;
-    }
     if (!best.has_value() ||
         numFixedPrefixColumns(permutation) > numFixedPrefixColumns(*best)) {
       best = permutation;

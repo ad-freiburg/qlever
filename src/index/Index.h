@@ -231,12 +231,14 @@ class Index {
   size_t getNofEntityPostings() const;
   size_t getNofNonLiteralsInTextIndex() const;
 
-  NumNormalAndInternal numDistinctSubjects() const;
-  NumNormalAndInternal numDistinctObjects() const;
+  // The number of distinct subjects (objects) is only known if a permutation
+  // that starts with the subject (object) is loaded, otherwise return
+  // `std::nullopt`.
+  std::optional<NumNormalAndInternal> numDistinctSubjects() const;
+  std::optional<NumNormalAndInternal> numDistinctObjects() const;
   NumNormalAndInternal numDistinctPredicates() const;
 
-  // Return true iff all six permutations that have the graph as their last
-  // column are loaded.
+  // Return true iff all six permutations are loaded.
   bool hasAllPermutations() const;
 
   // Return true iff the `permutation` is loaded.

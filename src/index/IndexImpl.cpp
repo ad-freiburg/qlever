@@ -444,10 +444,9 @@ void IndexImpl::createFromFiles(
 
 // _____________________________________________________________________________
 void IndexImpl::prepareIndexBuild() {
-  // This also checks that the requested permutations are supported.
   auto permutations = permutationsToBuild();
   if (usePatterns_ &&
-      !ql::ranges::all_of(Permutation::GRAPH_LAST, [&permutations](auto p) {
+      !ql::ranges::all_of(Permutation::ALL, [&permutations](auto p) {
         return ad_utility::contains(permutations, p);
       })) {
     throw std::runtime_error{
@@ -600,7 +599,7 @@ void IndexImpl::createFromFilesAfterPreparation(
   // permutations that were not requested.
   //
   // TODO<joka921> Don't write them in the first place.
-  for (auto permutation : Permutation::GRAPH_LAST) {
+  for (auto permutation : Permutation::ALL) {
     if (!ad_utility::contains(permutations, permutation)) {
       for (const auto& file :
            Permutation::fileNames(permutation, onDiskBase_)) {
@@ -644,7 +643,7 @@ void IndexImpl::setPermutationsInConfiguration(
   configurationJson_["permutations"] = names;
   // Also write the key that older versions of QLever use.
   configurationJson_["has-all-permutations"] =
-      ql::ranges::all_of(Permutation::GRAPH_LAST, [&permutations](auto p) {
+      ql::ranges::all_of(Permutation::ALL, [&permutations](auto p) {
         return ad_utility::contains(permutations, p);
       });
   writeConfiguration();
@@ -1826,8 +1825,8 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
     loadDataMember("has-all-permutations", hasAllPermutations, true);
     permutationsOfLoadedIndex_ =
         hasAllPermutations
-            ? std::vector<Permutation::Enum>(Permutation::GRAPH_LAST.begin(),
-                                             Permutation::GRAPH_LAST.end())
+            ? std::vector<Permutation::Enum>(Permutation::ALL.begin(),
+                                             Permutation::ALL.end())
             : std::vector<Permutation::Enum>(Permutation::INTERNAL.begin(),
                                              Permutation::INTERNAL.end());
   }
@@ -2235,7 +2234,7 @@ bool IndexImpl::hasPermutation(Permutation::Enum permutation) const {
 
 // ____________________________________________________________________________
 bool IndexImpl::hasAllPermutations() const {
-  return ql::ranges::all_of(Permutation::GRAPH_LAST, [this](auto permutation) {
+  return ql::ranges::all_of(Permutation::ALL, [this](auto permutation) {
     return hasPermutation(permutation);
   });
 }
@@ -2252,12 +2251,19 @@ const Permutation* IndexImpl::firstLoadedPermutation(
 }
 
 // ____________________________________________________________________________
-std::vector<Permutation::Enum> IndexImpl::loadedPermutations() const {
-  std::vector<Permutation::Enum> result;
-  ql::ranges::copy_if(
-      Permutation::ALL, std::back_inserter(result),
-      [this](auto permutation) { return hasPermutation(permutation); });
-  return result;
+const Permutation& IndexImpl::getFirstLoadedPermutation(
+    std::initializer_list<Permutation::Enum> permutations) const {
+  const auto* result = firstLoadedPermutation(permutations);
+  if (result == nullptr) {
+    throw std::runtime_error{absl::StrCat(
+        "None of the permutations ",
+        absl::StrJoin(permutations, ", ",
+                      [](std::string* out, Permutation::Enum p) {
+                        out->append(Permutation::toString(p));
+                      }),
+        " is loaded, but one of them is required for this operation")};
+  }
+  return *result;
 }
 
 // ____________________________________________________________________________
@@ -2272,19 +2278,9 @@ std::vector<Permutation::Enum> IndexImpl::permutationsToBuild() const {
         if (ad_utility::contains(Permutation::INTERNAL, permutation)) {
           return true;
         }
-        if (!requested.has_value()) {
-          return Permutation::hasGraphLast(permutation);
-        }
-        return ad_utility::contains(requested.value(), permutation);
+        return !requested.has_value() ||
+               ad_utility::contains(requested.value(), permutation);
       });
-  for (auto permutation : result) {
-    if (!Permutation::hasGraphLast(permutation)) {
-      throw std::runtime_error{absl::StrCat(
-          "The permutation ", Permutation::toString(permutation),
-          " does not have the graph as its last column, such permutations "
-          "are not yet supported")};
-    }
-  }
   return result;
 }
 
@@ -2305,20 +2301,20 @@ std::shared_ptr<const Permutation> IndexImpl::getPermutationPtr(
 }
 
 // __________________________________________________________________________
-Index::NumNormalAndInternal IndexImpl::numDistinctSubjects() const {
-  AD_CONTRACT_CHECK(
-      firstLoadedPermutation({Permutation::SPO, Permutation::SOP}) != nullptr,
-      "Can only get # distinct subjects if the SPO or SOP permutation is "
-      "loaded.");
+std::optional<Index::NumNormalAndInternal> IndexImpl::numDistinctSubjects()
+    const {
+  if (firstLoadedPermutation({Permutation::SPO, Permutation::SOP}) == nullptr) {
+    return std::nullopt;
+  }
   return numSubjects_;
 }
 
 // __________________________________________________________________________
-Index::NumNormalAndInternal IndexImpl::numDistinctObjects() const {
-  AD_CONTRACT_CHECK(
-      firstLoadedPermutation({Permutation::OSP, Permutation::OPS}) != nullptr,
-      "Can only get # distinct objects if the OSP or OPS permutation is "
-      "loaded.");
+std::optional<Index::NumNormalAndInternal> IndexImpl::numDistinctObjects()
+    const {
+  if (firstLoadedPermutation({Permutation::OSP, Permutation::OPS}) == nullptr) {
+    return std::nullopt;
+  }
   return numObjects_;
 }
 
@@ -2333,10 +2329,10 @@ Index::NumNormalAndInternal IndexImpl::numDistinctCol0(
   switch (permutation) {
     case Permutation::SOP:
     case Permutation::SPO:
-      return numDistinctSubjects();
+      return numDistinctSubjects().value();
     case Permutation::OPS:
     case Permutation::OSP:
-      return numDistinctObjects();
+      return numDistinctObjects().value();
     case Permutation::POS:
     case Permutation::PSO:
       return numDistinctPredicates();
@@ -2381,22 +2377,16 @@ std::vector<float> IndexImpl::getMultiplicities(
 std::vector<float> IndexImpl::getMultiplicities(
     const Permutation& permutation) const {
   auto numTriples = static_cast<float>(this->numTriples().normal);
-  // The number of distinct subjects (objects) is only known if a permutation
-  // that starts with the subject (object) is loaded. Otherwise, we
+  // If the number of distinct subjects (objects) is not known, we
   // (optimistically) assume that they are all distinct.
-  auto multiplicity = [this, numTriples](
-                          std::initializer_list<Permutation::Enum> perms,
-                          auto getNumDistinct) {
-    if (firstLoadedPermutation(perms) == nullptr) {
-      return 1.0f;
-    }
-    return numTriples / std::invoke(getNumDistinct, this).normal;
-  };
-  std::array multiplicities{multiplicity({Permutation::SPO, Permutation::SOP},
-                                         &IndexImpl::numDistinctSubjects),
+  auto multiplicity =
+      [numTriples](const std::optional<NumNormalAndInternal>& numDistinct) {
+        return numDistinct.has_value() ? numTriples / numDistinct->normal
+                                       : 1.0f;
+      };
+  std::array multiplicities{multiplicity(numDistinctSubjects()),
                             numTriples / numDistinctPredicates().normal,
-                            multiplicity({Permutation::OSP, Permutation::OPS},
-                                         &IndexImpl::numDistinctObjects)};
+                            multiplicity(numDistinctObjects())};
   auto permuted = permutation.keyOrder().permuteTriple(multiplicities);
   return {permuted.begin(), permuted.end()};
 }

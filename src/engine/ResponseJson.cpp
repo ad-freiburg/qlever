@@ -10,7 +10,10 @@
 
 #include "engine/ResponseJson.h"
 
+#include <range/v3/range/conversion.hpp>
+
 #include "CompilationInfo.h"
+#include "backports/algorithm.h"
 #include "backports/filesystem.h"
 #include "global/Constants.h"
 #include "util/StringUtils.h"
@@ -28,22 +31,17 @@ json composeIndexStats(const Index& index) {
       *qlever::version::projectVersionWithoutLinking.wlock();
   auto permutations = index.loadedPermutations();
   result["num-permutations"] = permutations.size();
-  result["permutations"] = json::array();
-  for (auto permutation : permutations) {
-    result["permutations"].push_back(Permutation::toString(permutation));
-  }
+  result["permutations"] = ::ranges::to<std::vector<std::string>>(
+      permutations | ql::views::transform(&Permutation::toString));
   result["num-predicates-normal"] = index.numDistinctPredicates().normal;
   result["num-predicates-internal"] = index.numDistinctPredicates().internal;
-  auto has = [&permutations](Permutation::Enum p) {
-    return ad_utility::contains(permutations, p);
-  };
-  if (has(Permutation::SPO) || has(Permutation::SOP)) {
-    result["num-subjects-normal"] = index.numDistinctSubjects().normal;
-    result["num-subjects-internal"] = index.numDistinctSubjects().internal;
+  if (auto numSubjects = index.numDistinctSubjects()) {
+    result["num-subjects-normal"] = numSubjects->normal;
+    result["num-subjects-internal"] = numSubjects->internal;
   }
-  if (has(Permutation::OSP) || has(Permutation::OPS)) {
-    result["num-objects-normal"] = index.numDistinctObjects().normal;
-    result["num-objects-internal"] = index.numDistinctObjects().internal;
+  if (auto numObjects = index.numDistinctObjects()) {
+    result["num-objects-normal"] = numObjects->normal;
+    result["num-objects-internal"] = numObjects->internal;
   }
 
   auto numTriples = index.numTriples();

@@ -678,13 +678,6 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
       singlePermutations.push_back(b);
     }
   }
-  for (auto permutation : loadedPermutations) {
-    AD_CORRECTNESS_CHECK(Permutation::hasGraphLast(permutation),
-                         "The rebuilding of permutations that do not have "
-                         "the graph as their last column is not yet "
-                         "supported");
-  }
-
   for (auto permutation : singlePermutations) {
     net::co_spawn(
         threadPool,

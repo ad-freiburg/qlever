@@ -626,6 +626,14 @@ class GroupByImpl : public Operation {
       const QueryExecutionTree& tree, const Variable& variableByWhichToSort,
       const Variable& variableThatMustBeContained) const;
 
+  // Fallback for `getPermutationForThreeVariableTriple` if no permutation that
+  // starts with the `variable` is loaded: if the `tree` is a (possibly sorted)
+  // scan of a normal permutation with three variables, no graph filter, and no
+  // LIMIT or OFFSET, and the `variable` is its subject (object), return the PSO
+  // (POS) permutation, the second column of which is the `variable`.
+  boost::optional<const Permutation&> getCol1PermutationForThreeVariableTriple(
+      const QueryExecutionTree& tree, const Variable& variable) const;
+
   // If this GROUP BY has exactly one alias, and that alias is a non-distinct
   // count of a single variable, return that variable. Else return
   // `std::nullopt`.

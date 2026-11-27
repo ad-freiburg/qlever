@@ -81,6 +81,7 @@ struct CommonConfig {
   // } GROUP BY ?p
   bool noPatterns_ = false;
 
+  // Deprecated, equivalent to `permutations_ = {"PSO", "POS"}`.
   // Option to build (or load) only the PSO and POS permutations of the
   // triples. These two permutations are sufficient to efficiently answer
   // queries, where the predicate is fixed in all triple patterns. Other
@@ -91,7 +92,7 @@ struct CommonConfig {
   // The permutations to build (for an index build) or to load (when an index
   // is loaded), by name (e.g. "SPO" or "PSO", see `Permutation::fromString`).
   // The PSO and POS permutations are always built and loaded. If empty, all
-  // six permutations that have the graph as their last column are built, and
+  // six permutations are built, and
   // all permutations that the index has are loaded. Must not be combined with
   // `onlyPsoAndPos_`.
   std::vector<std::string> permutations_;

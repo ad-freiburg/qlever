@@ -248,12 +248,12 @@ size_t Index::getNofNonLiteralsInTextIndex() const {
 }
 
 // ____________________________________________________________________________
-Index::NumNormalAndInternal Index::numDistinctSubjects() const {
+std::optional<Index::NumNormalAndInternal> Index::numDistinctSubjects() const {
   return pimpl_->numDistinctSubjects();
 }
 
 // ____________________________________________________________________________
-Index::NumNormalAndInternal Index::numDistinctObjects() const {
+std::optional<Index::NumNormalAndInternal> Index::numDistinctObjects() const {
   return pimpl_->numDistinctObjects();
 }
 

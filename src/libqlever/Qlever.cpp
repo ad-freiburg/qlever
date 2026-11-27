@@ -49,6 +49,10 @@ namespace {
 std::optional<std::vector<Permutation::Enum>> getPermutationsFromConfig(
     const CommonConfig& config) {
   if (config.onlyPsoAndPos_) {
+    AD_LOG_WARN << "The option to only use the PSO and POS permutations "
+                   "(`--only-pso-and-pos-permutations`) is deprecated, use "
+                   "`--permutations PSO POS` instead"
+                << std::endl;
     if (!config.permutations_.empty()) {
       throw std::runtime_error{
           "The option to only use the PSO and POS permutations must not be "

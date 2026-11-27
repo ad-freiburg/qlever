@@ -951,7 +951,7 @@ TEST(IndexTest, NumDistinctEntities) {
   // `IndexTestHelpers.cpp` change.
   // TODO<joka921> Also check the number of triples and the number of
   // added things.
-  auto numSubjects = index.numDistinctSubjects();
+  auto numSubjects = index.numDistinctSubjects().value();
   EXPECT_EQ(numSubjects.normal, 3);
   // All literals with language tags are added numSubjects.
   EXPECT_EQ(numSubjects, index.numDistinctCol0(Permutation::SPO));
@@ -966,7 +966,7 @@ TEST(IndexTest, NumDistinctEntities) {
   EXPECT_EQ(numPredicates, index.numDistinctCol0(Permutation::PSO));
   EXPECT_EQ(numPredicates, index.numDistinctCol0(Permutation::POS));
 
-  auto objects = index.numDistinctObjects();
+  auto objects = index.numDistinctObjects().value();
   EXPECT_EQ(objects.normal, 7);
   EXPECT_EQ(objects, index.numDistinctCol0(Permutation::OSP));
   EXPECT_EQ(objects, index.numDistinctCol0(Permutation::OPS));
@@ -995,12 +995,8 @@ TEST(IndexTest, NumDistinctEntities) {
 
 TEST(IndexTest, NumDistinctEntitiesCornerCases) {
   const IndexImpl& index = makeQec("", false, false)->getIndex().getImpl();
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      index.numDistinctSubjects(),
-      ::testing::ContainsRegex("permutation is loaded"));
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      index.numDistinctObjects(),
-      ::testing::ContainsRegex("permutation is loaded"));
+  EXPECT_EQ(index.numDistinctSubjects(), std::nullopt);
+  EXPECT_EQ(index.numDistinctObjects(), std::nullopt);
   AD_EXPECT_THROW_WITH_MESSAGE(
       index.numDistinctCol0(
           static_cast<Permutation::Enum>(qlever::enumSize<Permutation::Enum>)),

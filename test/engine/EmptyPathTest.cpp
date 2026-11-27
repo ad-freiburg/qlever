@@ -606,9 +606,9 @@ TEST(EmptyPath, estimatesAndMultiplicities) {
     // Without a child we have to read both permutations completely, and the
     // size is the (pessimistic) upper bound for the number of distinct
     // entities.
-    EXPECT_EQ(
-        emptyPath.getSizeEstimate(),
-        index.numDistinctSubjects().normal + index.numDistinctObjects().normal);
+    EXPECT_EQ(emptyPath.getSizeEstimate(),
+              index.numDistinctSubjects().value().normal +
+                  index.numDistinctObjects().value().normal);
     EXPECT_EQ(emptyPath.getCostEstimate(), 2 * index.numTriples().normal);
     EXPECT_FLOAT_EQ(emptyPath.getMultiplicity(0), 1.0f);
   }

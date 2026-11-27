@@ -36,48 +36,34 @@ TEST(Permutation, fileNames) {
                                      "index.internal.index.pos.meta"));
 }
 
-// Test the conversions between the 24 permutations and their names and key
-// orders.
+// Test the conversions between the permutations and their names.
 TEST(Permutation, namesAndKeyOrders) {
   using P = Permutation;
-  // All 24 permutations have distinct names and key orders, and the
-  // conversions are inverse to each other.
+  // All permutations have distinct names, and `fromString` is the inverse of
+  // `toString`.
   ad_utility::HashSet<std::string> names;
   for (auto permutation : P::ALL) {
     auto name = std::string{P::toString(permutation)};
     EXPECT_TRUE(names.insert(name).second) << name;
     EXPECT_EQ(P::fromString(name), permutation);
     EXPECT_EQ(P::fromString(ad_utility::utf8ToLower(name)), permutation);
-    EXPECT_EQ(P::fromKeyOrder(P::toKeyOrder(permutation)), permutation);
-    // The name lists the columns in the order of the key order, a missing
-    // fourth letter means that the graph is last.
+    EXPECT_EQ(P::fromString(absl::StrCat(name, "G")), permutation);
+    // The name lists the columns in the order of the key order.
     auto keys = P::toKeyOrder(permutation).keys();
     for (size_t i = 0; i < name.size(); ++i) {
       EXPECT_EQ(name.at(i), "SPOG"[keys.at(i)]);
     }
-    EXPECT_EQ(P::hasGraphLast(permutation), name.size() == 3);
-    EXPECT_EQ(P::hasGraphLast(permutation),
-              ad_utility::contains(P::GRAPH_LAST, permutation));
   }
-  EXPECT_EQ(names.size(), 24);
+  EXPECT_EQ(names.size(), 6);
 
-  EXPECT_EQ(P::toString(P::PSO), "PSO");
-  EXPECT_EQ(P::toString(P::Enum::GSPO), "GSPO");
-  EXPECT_THAT(P::toKeyOrder(P::PSO).keys(), ::testing::ElementsAre(1, 0, 2, 3));
-  EXPECT_THAT(P::toKeyOrder(P::Enum::OPGS).keys(),
-              ::testing::ElementsAre(2, 1, 3, 0));
-  // The explicit four-letter names of the permutations with the graph last.
   EXPECT_EQ(P::fromString("PSOG"), P::PSO);
   EXPECT_EQ(P::fromString("ospg"), P::OSP);
-  for (std::string_view invalid : {"", "SP", "SPOO", "SPOGG", "XPO", "GSP"}) {
+  for (std::string_view invalid :
+       {"", "SP", "SPOO", "SPOGG", "XPO", "GSP", "GSPO"}) {
     AD_EXPECT_THROW_WITH_MESSAGE(
         P::fromString(invalid),
         ::testing::HasSubstr("is not the name of a permutation"));
   }
-  // The file names of the permutations that do not have the graph last.
-  EXPECT_THAT(
-      P::fileNames(P::Enum::GSPO, "base"),
-      ::testing::ElementsAre("base.index.gspo", "base.index.gspo.meta"));
 }
 
 // _____________________________________________________________________________
