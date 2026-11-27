@@ -71,12 +71,13 @@ inline auto makePossiblyUndefinedColumn =
   return {columnIndex, ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined};
 };
 
-// A hash map from variables to the column index of that variable in a table,
-// used in several places (e.g. the `Operation` class, the `SparqlExpression`
-// module, etc.).
-
-// Similar to `VariableToColumnMap` but stores additional information together
-// with the column index.
+// A hash map from variables to the column index and the UNDEF status of that
+// variable in a table, used in several places (e.g. the `Operation` class, the
+// `SparqlExpression` module, etc.).
+//
+// NOTE: The map has no default constructor, because it needs a
+// `qlever::Allocator`. That way, the many maps that the query planner creates
+// count toward the memory limit for queries.
 using VariableToColumnMap =
     qlm::flat_hash_map<Variable, ColumnIndexAndTypeInfo>;
 
