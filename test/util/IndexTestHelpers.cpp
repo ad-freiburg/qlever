@@ -251,18 +251,13 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
     f << c.turtleInput.value();
     f.close();
   }
-  {
-    std::fstream settingsFile(inputFilename + ".settings.json",
-                              std::ios_base::out);
-    nlohmann::json settingsJson;
-    if (!c.createTextIndex) {
-      settingsJson["prefixes-external"] = std::vector<std::string>{""};
-      settingsJson["languages-internal"] = std::vector<std::string>{""};
-    }
-    for (const auto& [key, value] : c.additionalSettings) {
-      settingsJson[key] = nlohmann::json::parse(value);
-    }
-    settingsFile << settingsJson.dump();
+  nlohmann::json settingsJson = nlohmann::json::object();
+  if (!c.createTextIndex) {
+    settingsJson["prefixes-external"] = std::vector<std::string>{""};
+    settingsJson["languages-internal"] = std::vector<std::string>{""};
+  }
+  for (const auto& [key, value] : c.additionalSettings) {
+    settingsJson[key] = nlohmann::json::parse(value);
   }
   {
     Index index = makeIndexWithTestSettings(c.parserBufferSize);
@@ -273,7 +268,7 @@ Index makeTestIndex(const std::string& indexBasename, TestIndexConfig c) {
     index.rowsPerBlock() = c.rowsPerBlock;
     index.setOnDiskBase(indexBasename);
     index.usePatterns() = c.usePatterns;
-    index.setSettingsFile(inputFilename + ".settings.json");
+    index.setSettingsJson(settingsJson);
     index.loadAllPermutations() = c.loadAllPermutations;
     index.addHasWordTriples() = c.addHasWordTriples;
     index.getImpl().setHasWordNormalization(c.hasWordNormalization);

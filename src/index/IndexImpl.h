@@ -110,7 +110,8 @@ class IndexImpl {
   // Private data members.
  protected:
   std::string onDiskBase_;
-  std::string settingsFileName_;
+  // The additional settings of the index build, see `setSettingsJson`.
+  nlohmann::json settingsJson_ = nlohmann::json::object();
   bool onlyAsciiTurtlePrefixes_ = false;
   // Note: `std::nullopt` means `not specified by the user`.
   std::optional<bool> useParallelParser_ = std::nullopt;
@@ -290,7 +291,7 @@ class IndexImpl {
       size_t numThreads);
 
  private:
-  // Check the configuration and read the settings file, before the input files
+  // Check the configuration and read the settings JSON, before the input files
   // of `createFromFiles` are processed.
   void prepareIndexBuild();
 
@@ -657,7 +658,7 @@ class IndexImpl {
   static std::vector<ql::filesystem::path> allIndexFiles(
       std::string_view onDiskBase);
 
-  void setSettingsFile(const std::string& filename);
+  void setSettingsJson(nlohmann::json settingsJson);
 
   void setNumTriplesPerBatch(uint64_t numTriplesPerBatch) {
     numTriplesPerBatch_ = numTriplesPerBatch;
@@ -1004,7 +1005,7 @@ class IndexImpl {
   void readConfiguration();
 
   // initialize the index-build-time settings for the vocabulary
-  void readIndexBuilderSettingsFromFile();
+  void readIndexBuilderSettings();
 
   /**
    * Delete a temporary file unless the keepTempFiles_ flag is set

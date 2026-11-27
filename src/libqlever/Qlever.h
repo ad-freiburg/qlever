@@ -124,7 +124,8 @@ struct IndexBuilderConfig : CommonConfig {
   // compromise that favors large scans; see `DEFAULT_INDEX_ROWS_PER_BLOCK`.
   std::optional<size_t> indexRowsPerBlock_;
 
-  // Filename of a JSON file with additional settings. Examples can be seen in
+  // Additional settings as a JSON object, typically the content of the file
+  // `--settings-file` of `qlever-index`. Examples can be seen in
   // https://github.com/ad-freiburg/qlever-control/tree/main/src/qlever/Qleverfiles
   // If empty, default settings are used.
   //
@@ -137,7 +138,7 @@ struct IndexBuilderConfig : CommonConfig {
   //
   // TODO: The reason for this JSON is historical. We should have an own
   // parameter for each of the possible settings in the JSON file.
-  std::string settingsFile_;
+  nlohmann::json settingsJson_ = nlohmann::json::object();
 
   // Specify how Qlever stores its mapping from IRIs and literals to internal
   // IDs. See `src/index/vocabulary/VocabularyType.h` for the possible options.

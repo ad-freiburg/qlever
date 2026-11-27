@@ -193,8 +193,8 @@ void Index::setOnDiskBase(const std::string& onDiskBase) {
 }
 
 // ____________________________________________________________________________
-void Index::setSettingsFile(const std::string& filename) {
-  return pimpl_->setSettingsFile(filename);
+void Index::setSettingsJson(nlohmann::json settingsJson) {
+  return pimpl_->setSettingsJson(std::move(settingsJson));
 }
 
 // ____________________________________________________________________________

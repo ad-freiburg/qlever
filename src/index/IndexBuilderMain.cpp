@@ -223,6 +223,8 @@ int main(int argc, char** argv) {
   std::vector<string> defaultGraphs;
   std::vector<bool> parseParallel;
   std::string materializedViewsJson;
+  // The file with the content of `config.settingsJson_`.
+  std::string settingsFile;
   // NOTE: Not parsed into `config.indexRowsPerBlock_` directly, because
   // `boost::program_options` cannot parse a `std::optional<size_t>` (see the
   // `validate` functions in `util/ProgramOptionsHelpers.h`). `NonNegative` also
@@ -293,7 +295,7 @@ int main(int argc, char** argv) {
       R"(and "bm25" for bm25. The default is "explicit".)");
 
   // Options for the knowledge graph index.
-  add("settings-file,s", po::value(&config.settingsFile_),
+  add("settings-file,s", po::value(&settingsFile),
       "A JSON file, where various settings can be specified (see the QLever "
       "documentation).");
   add("no-patterns", po::bool_switch(&config.noPatterns_),
@@ -457,6 +459,16 @@ int main(int argc, char** argv) {
                                                defaultGraphs, parseParallel);
     config.writeMaterializedViews_ =
         parseMaterializedViewsJson(materializedViewsJson);
+    if (!settingsFile.empty()) {
+      try {
+        config.settingsJson_ =
+            nlohmann::json::parse(ad_utility::makeIfstream(settingsFile));
+      } catch (const nlohmann::json::exception& e) {
+        throw std::runtime_error{
+            absl::StrCat("The settings file `", settingsFile,
+                         "` is not valid JSON: ", e.what())};
+      }
+    }
     if (indexRowsPerBlock.has_value()) {
       config.indexRowsPerBlock_ = indexRowsPerBlock.value();
     }

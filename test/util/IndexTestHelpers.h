@@ -82,9 +82,8 @@ Index makeIndexWithTestSettings(ad_utility::MemorySize parserBufferSize = 1_kB);
 
 // Delete all files of the test index with the given `indexBasename` in the
 // current directory, by their common prefix `<indexBasename>.` (the input file
-// and the settings file of the index included). Failures are not logged,
-// because this also runs at process exit, when the logging may already be
-// destroyed.
+// of the index included). Failures are not logged, because this also runs at
+// process exit, when the logging may already be destroyed.
 void deleteTestIndexFiles(const std::string& indexBasename);
 
 // A struct, that defines the configuration of an index, and after that,
@@ -146,9 +145,9 @@ struct TestIndexConfig {
   // input file is parsed in parallel for reasons of backward compatibility (see
   // `IndexImpl::updateInputFileSpecificationsAndLog`).
   std::optional<bool> parseInParallel = std::nullopt;
-  // Additional entries for the `.settings.json` file of the index build (see
-  // `IndexImpl::readIndexBuilderSettingsFromFile`) as pairs of a key and a
-  // value in JSON syntax (so a string value has to be quoted).
+  // Additional entries for the settings JSON of the index build (see
+  // `IndexImpl::readIndexBuilderSettings`) as pairs of a key and a value in
+  // JSON syntax (so a string value has to be quoted).
   std::vector<std::pair<std::string, std::string>> additionalSettings;
   // The encoding of the geo points of the index (see
   // `ad_utility::GeoPointEncoding`).
