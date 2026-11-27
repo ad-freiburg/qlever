@@ -50,27 +50,27 @@ namespace detail {
 // projecting it to Web Mercator.
 static constexpr double webMercatorMaxLatitude = 85.05112878;
 
-static constexpr auto wktPointRegex = ctll::fixed_string(
-    "^\\s*[Pp][Oo][Ii][Nn][Tt]\\s*\\(\\s*"
-    "(-?[0-9]+|-?[0-9]+\\.[0-9]+)"
-    "\\s+"
-    "(-?[0-9]+|-?[0-9]+\\.[0-9]+)"
-    "\\s*\\)\\s*$");
-
-// Parse a single WKT point and returns a pair of longitude and latitude. If
-// the given string does not parse as a WKT point, a pair of `invalidCoordinate`
-// is returned.
+// Parse a single WKT point and return a pair of longitude and latitude. This
+// function only accepts point in `defaultCrs` (CRS84). If the given string does
+// not parse as a WKT point, a pair of `invalidCoordinate` is returned.
 std::pair<double, double> parseWktPoint(const std::string_view point) {
   double lng = invalidCoordinate, lat = invalidCoordinate;
-  if (auto match = ctre::search<wktPointRegex>(point)) {
-    std::string_view lng_sv = match.get<1>();
-    std::string_view lat_sv = match.get<2>();
-    absl::from_chars(lng_sv.data(), lng_sv.data() + lng_sv.size(), lng);
-    absl::from_chars(lat_sv.data(), lat_sv.data() + lat_sv.size(), lat);
-    // This should never happen: if the regex matches, then each of the two
-    // coordinate strings should also parse to a double.
-    AD_CORRECTNESS_CHECK(!std::isnan(lng));
-    AD_CORRECTNESS_CHECK(!std::isnan(lat));
+
+  const std::string strPoint{point};
+  auto c = strPoint.c_str();
+  ::util::geo::CRSType sourceCrs = ::util::geo::getCRSType(c, &c);
+  if (sourceCrs == defaultCrs) {
+    ::util::geo::WKTType wktType = ::util::geo::getWKTType(c, &c);
+    if (wktType == ::util::geo::WKTType::POINT) {
+      try {
+        auto utilPoint = ::util::geo::pointFromWKT<double>(c, &c, true);
+        lng = utilPoint.getX();
+        lat = utilPoint.getY();
+      } catch (const ::util::geo::WKTParseException&) {
+        // Strict `util` parsing in `pointFromWKTProj` will cause an exception
+        // for invalid WKTs. In that case return `invalidCoordinate`.
+      }
+    }
   }
   return std::pair(lng, lat);
 }
