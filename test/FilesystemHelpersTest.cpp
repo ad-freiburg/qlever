@@ -693,6 +693,38 @@ TEST(FilesystemHelpers, writeFileAtomicallyKeepsPermissions) {
   EXPECT_EQ(readBinaryFile<std::string>(file), "second");
 }
 
+// Test `detail::copyPermissionsIfPossible`: the permissions are copied, a
+// source that does not exist is ignored, and a failure to set the permissions
+// (provoked by a target that does not exist, as a file system without support
+// for permissions is not available in a test) only logs a warning.
+TEST(FilesystemHelpers, copyPermissionsIfPossible) {
+  using qlever::util::detail::copyPermissionsIfPossible;
+  TempDir dir;
+  auto from = dir.path() / "from";
+  auto to = dir.path() / "to";
+  touch(from);
+  touch(to);
+  const auto ownerOnly = fs::perms::owner_read | fs::perms::owner_write;
+  fs::permissions(from, ownerOnly);
+  copyPermissionsIfPossible(from, to);
+  EXPECT_EQ(fs::status(to).permissions(), ownerOnly);
+
+  // A source that does not exist leaves the target unchanged and logs nothing.
+  auto [cleanup, logStream] = setGlobalLoggingStreamToStringStream();
+  const auto ownerAll = fs::perms::owner_all;
+  fs::permissions(to, ownerAll);
+  copyPermissionsIfPossible(dir.path() / "nonExisting", to);
+  EXPECT_EQ(fs::status(to).permissions(), ownerAll);
+  EXPECT_EQ(logStream.str(), "");
+
+  // A failure to set the permissions does not throw, but logs a warning.
+  auto nonExistingTarget = dir.path() / "nonExistingTarget";
+  copyPermissionsIfPossible(from, nonExistingTarget);
+  EXPECT_THAT(logStream.str(),
+              ::testing::AllOf(HasSubstr("Could not give the file"),
+                               HasSubstr(nonExistingTarget.string())));
+}
+
 // Test that the exception of a failing callback is propagated (and the process
 // is not terminated), also if the temporary directory cannot be removed
 // because the directory of the target is not writable. (The temporary file

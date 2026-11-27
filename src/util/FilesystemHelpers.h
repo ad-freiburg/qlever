@@ -81,6 +81,14 @@ size_t sizeOfRegularFile(const ql::filesystem::path& path);
 // message), or if it holds fewer bytes.
 void readFileIntoBuffer(const ql::filesystem::path& path,
                         ql::span<char> buffer);
+
+// Give the file `to` the permissions of the file `from`. Do nothing if `from`
+// cannot be examined (in particular if it does not exist). If setting the
+// permissions fails (for example because the file system of `to` does not
+// support permissions), only log a warning: the permissions are a nicety, and
+// not being able to keep them must not make the whole operation fail.
+void copyPermissionsIfPossible(const ql::filesystem::path& from,
+                               const ql::filesystem::path& to);
 }  // namespace detail
 
 // Read the whole file `path` into a `Container` of bytes (a contiguous
@@ -123,7 +131,12 @@ Container readBinaryFile(const ql::filesystem::path& path,
 // directory is removed in the end.
 //
 // NOTE 2: The replacement creates a new file. Its permission bits are copied
-// from the replaced file, but its owner and group are those of the writing
+// from the replaced file if the file system supports that; otherwise only a
+// warning is logged, and the new file keeps the default permissions with which
+// it was created (see `detail::copyPermissionsIfPossible`). In that case, a
+// file that was only readable by its owner may become readable by everyone (the
+// private directory from NOTE 1 only protects the contents while they are
+// written). The owner and group of the new file are those of the writing
 // process (only a privileged process could keep the original owner), and other
 // hard links to the replaced file keep referring to the old contents. Creating
 // the new file requires write permission on the directory of the file. The data
@@ -136,14 +149,17 @@ void writeFileAtomically(
         writeTemporaryFile);
 
 // Write `bytes` atomically to `path` (via a temporary file, see the overload
-// above). An existing file `path` is replaced. Throw if the file cannot be
-// opened, written, or closed, with the reason (e.g. a full disk) in the
-// message.
+// above). An existing file `path` is replaced (for which of its properties are
+// kept, see NOTE 2 of the overload above). Throw if the file cannot be opened,
+// written, or closed, with the reason (e.g. a full disk) in the message.
 void writeFileAtomically(const ql::filesystem::path& path,
                          ql::span<const char> bytes);
 
 // Copy the file `from` atomically to `to` (via a temporary file, see
-// `writeFileAtomically`). An existing file `to` is replaced.
+// `writeFileAtomically`). An existing file `to` is replaced and keeps its
+// permissions (if the file system supports that, see NOTE 2 of
+// `writeFileAtomically`); a newly created file `to` gets the permissions of
+// `from`.
 void copyFileAtomically(const ql::filesystem::path& from,
                         const ql::filesystem::path& to);
 }  // namespace qlever::util
