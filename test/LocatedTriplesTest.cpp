@@ -449,6 +449,8 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
   {
     auto IntId = ad_utility::testing::IntId;
     auto UndefId = ad_utility::testing::UndefId;
+    // The two payload columns are the columns 4 and 5 of the permutation.
+    const std::vector<ColumnIndex> payloadColumns{4, 5};
 
     IdTable block = makeIdTableFromVector({{1, 2, 3, IntId(10), IntId(11)},
                                            {1, 3, 5, IntId(12), IntId(11)},
@@ -460,7 +462,8 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
                                {1, 3, 6, UndefId(), UndefId()},
                                {1, 7, 9, IntId(13), IntId(14)}});
 
-    auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 3, false);
+    auto merged =
+        locatedTriplesPerBlock.mergeTriples(1, block, 3, false, payloadColumns);
     EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
 
     // Run the same test with a constant graph column that is part of the
@@ -470,7 +473,8 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
     block.setColumnSubset(std::array<ColumnIndex, 6>{0u, 1u, 2u, 5u, 3u, 4u});
     resultExpected.setColumnSubset(
         std::array<ColumnIndex, 6>{0u, 1u, 2u, 5u, 3u, 4u});
-    merged = locatedTriplesPerBlock.mergeTriples(1, block, 3, true);
+    merged =
+        locatedTriplesPerBlock.mergeTriples(1, block, 3, true, payloadColumns);
     EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
   }
 
@@ -661,6 +665,8 @@ TEST_F(LocatedTriplesTest, mergeTriplesWithGraph) {
   {
     auto IntId = ad_utility::testing::IntId;
     auto UndefId = ad_utility::testing::UndefId;
+    // The two payload columns are the columns 4 and 5 of the permutation.
+    const std::vector<ColumnIndex> payloadColumns{4, 5};
 
     IdTable block = makeIdTableFromVector({{1, 2, 3, 0, IntId(10), IntId(11)},
                                            {1, 2, 3, 2, IntId(12), IntId(11)},
@@ -672,9 +678,57 @@ TEST_F(LocatedTriplesTest, mergeTriplesWithGraph) {
                                {1, 2, 3, 1, UndefId(), UndefId()},
                                {1, 2, 3, 2, IntId(12), IntId(11)}});
 
-    auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 3, true);
+    auto merged =
+        locatedTriplesPerBlock.mergeTriples(1, block, 3, true, payloadColumns);
     EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
   }
+}
+
+// Test that `mergeTriples` writes the payload of the merged located triples to
+// the payload columns of the block.
+TEST_F(LocatedTriplesTest, mergeTriplesWithPayload) {
+  using LT = LocatedTriple;
+  auto I = ad_utility::testing::IntId;
+  auto U = ad_utility::testing::UndefId;
+  auto payload = [](std::vector<Id> ids) {
+    return ad_utility::make_copyable_unique<std::vector<Id>>(std::move(ids));
+  };
+
+  // A block with three index columns, the graph column, and the payload
+  // columns 4, 5 and 6 of the permutation. The located triples insert a triple
+  // with a full payload, one without payload, one with a payload for column 4
+  // only, and one that is already contained in the block.
+  IdTable block = makeIdTableFromVector(
+      {{1, 2, 3, g, I(10), I(11), I(12)}, {1, 7, 9, g, I(13), I(14), I(15)}});
+  auto locatedTriplesPerBlock = makeLocatedTriplesPerBlock(
+      {LT{1, IT(1, 3, 5), true, payload({I(20), I(21), I(22)})},
+       LT{1, IT(1, 4, 5), true}, LT{1, IT(1, 5, 5), true, payload({I(30)})},
+       LT{1, IT(1, 2, 3), true, payload({I(40), I(41), I(42)})}});
+
+  // Each payload column gets the value from the payload, or UNDEF if there is
+  // none. The triple that is already contained keeps the row of the block.
+  IdTable resultExpected =
+      makeIdTableFromVector({{1, 2, 3, g, I(10), I(11), I(12)},
+                             {1, 3, 5, g, I(20), I(21), I(22)},
+                             {1, 4, 5, g, U(), U(), U()},
+                             {1, 5, 5, g, I(30), U(), U()},
+                             {1, 7, 9, g, I(13), I(14), I(15)}});
+  EXPECT_THAT(locatedTriplesPerBlock.mergeTriples(
+                  1, block, 3, true, std::vector<ColumnIndex>{4, 5, 6}),
+              testing::ElementsAreArray(resultExpected));
+
+  // If only the payload column 5 is read, it gets the second value of the
+  // payload.
+  block.setColumnSubset(std::array<ColumnIndex, 5>{0u, 1u, 2u, 3u, 5u});
+  resultExpected.setColumnSubset(
+      std::array<ColumnIndex, 5>{0u, 1u, 2u, 3u, 5u});
+  EXPECT_THAT(locatedTriplesPerBlock.mergeTriples(1, block, 3, true,
+                                                  std::vector<ColumnIndex>{5}),
+              testing::ElementsAreArray(resultExpected));
+
+  // The number of payload columns must match the block.
+  EXPECT_ANY_THROW(locatedTriplesPerBlock.mergeTriples(
+      1, block, 3, true, std::vector<ColumnIndex>{5, 6}));
 }
 
 // Test the locating of triples in a permutation using `locatedTriple`.

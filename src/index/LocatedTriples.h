@@ -20,6 +20,7 @@
 #include "index/KeyOrder.h"
 #include "util/CancellationHandle.h"
 #include "util/CopyOnWritePtr.h"
+#include "util/CopyableUniquePtr.h"
 #include "util/HashMap.h"
 #include "util/HashSet.h"
 #include "util/SortedSequence.h"
@@ -90,6 +91,16 @@ struct LocatedTriple {
   // If `true`, the triple is inserted, otherwise it is deleted.
   bool insertOrDelete_;
 
+  // The values of the payload columns of the permutation (the columns after
+  // the graph column), in the order of the columns, or `nullptr` if there are
+  // none. Like the payload of an `IdTriple`, the payload is not part of the
+  // value representation and therefore not compared.
+  //
+  // NOTE: This is a pointer to keep the located triples small, since most of
+  // them (in particular all located triples of the regular permutations) have
+  // no payload.
+  ad_utility::CopyableUniquePtr<std::vector<Id>> payload_{};
+
   // Locate the given triples in the given permutation.
   static std::vector<LocatedTriple> locateTriplesInPermutation(
       ql::span<const IdTriple<0>> triples,
@@ -104,7 +115,12 @@ struct LocatedTriple {
   // human-readable representation.
   friend std::ostream& operator<<(std::ostream& os, const LocatedTriple& lt) {
     os << "LT(" << lt.blockIndex_ << " " << lt.triple_ << " "
-       << lt.insertOrDelete_ << ")";
+       << lt.insertOrDelete_;
+    if (lt.payload_ != nullptr) {
+      os << " payload: ";
+      ql::ranges::copy(*lt.payload_, std::ostream_iterator<Id>(os, ", "));
+    }
+    os << ")";
     return os;
   }
 };
@@ -142,7 +158,8 @@ class LocatedTriplesPerBlock {
   // Implementation of the `mergeTriples` function (which has `numIndexColumns`
   // as a normal argument, and translates it into a template argument).
   template <size_t numIndexColumns, bool includeGraphColumn>
-  IdTable mergeTriplesImpl(size_t blockIndex, const IdTable& block) const;
+  IdTable mergeTriplesImpl(size_t blockIndex, const IdTable& block,
+                           ql::span<const ColumnIndex> payloadColumns) const;
 
   // Stores the block metadata where the block borders have been adjusted for
   // the updated triples.
@@ -185,18 +202,25 @@ class LocatedTriplesPerBlock {
   // column and payload if any, that is, a number from `{1, 2, 3}`.
   // `includeGraphColumn` specifies whether `block` contains the graph column.
   //
-  // If `block` has payload columns (which currently our located triples never
-  // have), the value of the merged located triples for these columns is set to
-  // UNDEF.
+  // `payloadColumns` are the columns of the permutation that the remaining
+  // columns of `block` (after the index columns and the graph column) contain,
+  // in this order. For these columns, a merged located triple gets the value
+  // from its `payload_`, or UNDEF if it has no value for the column.
+  //
+  // NOTE: An inserted triple that is already contained in `block` keeps the
+  // row of `block` (including its payload).
   //
   // For example, assume that `block` is from the POS permutation, that
   // `numIndexColumns` is 2 (that is, only OS are present in the block), that
   // `includeGraphColumn` is `true` (that is, G is also present in the block),
-  // and that `block` has block has two additional payload columns X and Y.
-  // Then the result has five columns (like the input `block`), and each merged
-  // located triple will have values for OSG and UNDEF for X and Y.
+  // and that `block` has two payload columns X and Y, which are the columns 4
+  // and 5 of the permutation (`payloadColumns` is `{4, 5}`). Then the result
+  // has five columns (like the input `block`), and each merged located triple
+  // has values for OSG, and for X and Y the first two values of its `payload_`
+  // (or UNDEF if it has no payload).
   IdTable mergeTriples(size_t blockIndex, const IdTable& block,
-                       size_t numIndexColumns, bool includeGraphColumn) const;
+                       size_t numIndexColumns, bool includeGraphColumn,
+                       ql::span<const ColumnIndex> payloadColumns = {}) const;
 
   // Return true iff there are located triples in the block with the given
   // index.
