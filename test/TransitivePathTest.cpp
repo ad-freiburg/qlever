@@ -13,12 +13,13 @@
 #include "./util/IndexTestHelpers.h"
 #include "./util/LocalVocabTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
-#include "engine/IndexScan.h"
 #include "engine/QueryExecutionTree.h"
-#include "engine/TransitivePathBase.h"
-#include "engine/TransitivePathBinSearch.h"
-#include "engine/TransitivePathHashMap.h"
 #include "engine/ValuesForTesting.h"
+#include "engine/operation/IndexScan.h"
+#include "engine/operation/NeutralOptional.h"
+#include "engine/operation/TransitivePathBase.h"
+#include "engine/operation/TransitivePathBinSearch.h"
+#include "engine/operation/TransitivePathHashMap.h"
 #include "global/Constants.h"
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
@@ -1860,7 +1861,7 @@ TEST_P(TransitivePathTest, sameVariableResultsInDifferentCacheKey) {
 }
 
 // _____________________________________________________________________________
-TEST_P(TransitivePathTest, columnOriginatesFromGraphOrUndef) {
+TEST_P(TransitivePathTest, columnContainsOnlyKnowledgeGraphNodes) {
   auto sub = makeIdTableFromVector({{0, 2}});
 
   {
@@ -1871,15 +1872,18 @@ TEST_P(TransitivePathTest, columnOriginatesFromGraphOrUndef) {
         sub.clone(), 0, {Variable{"?start"}, Variable{"?other"}}, left, right,
         0, std::numeric_limits<size_t>::max());
 
-    EXPECT_TRUE(T->columnOriginatesFromGraphOrUndef(Variable{"?start"}));
-    EXPECT_TRUE(T->columnOriginatesFromGraphOrUndef(Variable{"?target"}));
-    EXPECT_FALSE(T->columnOriginatesFromGraphOrUndef(Variable{"?other"}));
-    EXPECT_THROW(T->columnOriginatesFromGraphOrUndef(Variable{"?internal1"}),
-                 ad_utility::Exception);
-    EXPECT_THROW(T->columnOriginatesFromGraphOrUndef(Variable{"?internal2"}),
-                 ad_utility::Exception);
-    EXPECT_THROW(T->columnOriginatesFromGraphOrUndef(Variable{"?notExisting"}),
-                 ad_utility::Exception);
+    EXPECT_TRUE(T->columnContainsOnlyKnowledgeGraphNodes(Variable{"?start"}));
+    EXPECT_TRUE(T->columnContainsOnlyKnowledgeGraphNodes(Variable{"?target"}));
+    EXPECT_FALSE(T->columnContainsOnlyKnowledgeGraphNodes(Variable{"?other"}));
+    EXPECT_THROW(
+        T->columnContainsOnlyKnowledgeGraphNodes(Variable{"?internal1"}),
+        ad_utility::Exception);
+    EXPECT_THROW(
+        T->columnContainsOnlyKnowledgeGraphNodes(Variable{"?internal2"}),
+        ad_utility::Exception);
+    EXPECT_THROW(
+        T->columnContainsOnlyKnowledgeGraphNodes(Variable{"?notExisting"}),
+        ad_utility::Exception);
   }
 
   {
@@ -1891,13 +1895,16 @@ TEST_P(TransitivePathTest, columnOriginatesFromGraphOrUndef) {
         sub.clone(), {Variable{"?internal1"}, Variable{"?internal2"}}, left,
         right, 0, std::numeric_limits<size_t>::max());
 
-    EXPECT_FALSE(T->columnOriginatesFromGraphOrUndef(Variable{"?target"}));
-    EXPECT_THROW(T->columnOriginatesFromGraphOrUndef(Variable{"?internal1"}),
-                 ad_utility::Exception);
-    EXPECT_THROW(T->columnOriginatesFromGraphOrUndef(Variable{"?internal2"}),
-                 ad_utility::Exception);
-    EXPECT_THROW(T->columnOriginatesFromGraphOrUndef(Variable{"?notExisting"}),
-                 ad_utility::Exception);
+    EXPECT_FALSE(T->columnContainsOnlyKnowledgeGraphNodes(Variable{"?target"}));
+    EXPECT_THROW(
+        T->columnContainsOnlyKnowledgeGraphNodes(Variable{"?internal1"}),
+        ad_utility::Exception);
+    EXPECT_THROW(
+        T->columnContainsOnlyKnowledgeGraphNodes(Variable{"?internal2"}),
+        ad_utility::Exception);
+    EXPECT_THROW(
+        T->columnContainsOnlyKnowledgeGraphNodes(Variable{"?notExisting"}),
+        ad_utility::Exception);
   }
 
   {
@@ -1908,7 +1915,7 @@ TEST_P(TransitivePathTest, columnOriginatesFromGraphOrUndef) {
         sub.clone(), {Variable{"?internal1"}, Variable{"?internal2"}}, left,
         right, 0, std::numeric_limits<size_t>::max());
 
-    EXPECT_FALSE(T->columnOriginatesFromGraphOrUndef(Variable{"?start"}));
+    EXPECT_FALSE(T->columnContainsOnlyKnowledgeGraphNodes(Variable{"?start"}));
   }
 
   {
@@ -1919,7 +1926,7 @@ TEST_P(TransitivePathTest, columnOriginatesFromGraphOrUndef) {
         sub.clone(), {Variable{"?internal1"}, Variable{"?internal2"}}, left,
         right, 1, std::numeric_limits<size_t>::max());
 
-    EXPECT_TRUE(T->columnOriginatesFromGraphOrUndef(Variable{"?target"}));
+    EXPECT_TRUE(T->columnContainsOnlyKnowledgeGraphNodes(Variable{"?target"}));
   }
 
   {
@@ -1939,16 +1946,17 @@ TEST_P(TransitivePathTest, columnOriginatesFromGraphOrUndef) {
                      indexScan->getVariableColumn(Variable{"?start"}));
 
     EXPECT_TRUE(
-        boundPath->columnOriginatesFromGraphOrUndef(Variable{"?start"}));
+        boundPath->columnContainsOnlyKnowledgeGraphNodes(Variable{"?start"}));
     EXPECT_TRUE(
-        boundPath->columnOriginatesFromGraphOrUndef(Variable{"?target"}));
+        boundPath->columnContainsOnlyKnowledgeGraphNodes(Variable{"?target"}));
     EXPECT_TRUE(
-        boundPath->columnOriginatesFromGraphOrUndef(Variable{"?other"}));
+        boundPath->columnContainsOnlyKnowledgeGraphNodes(Variable{"?other"}));
   }
 }
 
 // _____________________________________________________________________________
-TEST_P(TransitivePathTest, columnOriginatesFromGraphOrUndefWithGraphVariable) {
+TEST_P(TransitivePathTest,
+       columnContainsOnlyKnowledgeGraphNodesWithGraphVariable) {
   auto sub = makeIdTableFromVector({{0, 2, 0}});
   Vars vars{Variable{"?internal1"}, Variable{"?internal2"}, Variable{"?g"}};
 
@@ -1961,9 +1969,9 @@ TEST_P(TransitivePathTest, columnOriginatesFromGraphOrUndefWithGraphVariable) {
                              std::numeric_limits<size_t>::max(), std::nullopt,
                              {Variable{"?g"}});
 
-    EXPECT_TRUE(T->columnOriginatesFromGraphOrUndef(Variable{"?start"}));
-    EXPECT_TRUE(T->columnOriginatesFromGraphOrUndef(Variable{"?target"}));
-    EXPECT_FALSE(T->columnOriginatesFromGraphOrUndef(Variable{"?g"}));
+    EXPECT_TRUE(T->columnContainsOnlyKnowledgeGraphNodes(Variable{"?start"}));
+    EXPECT_TRUE(T->columnContainsOnlyKnowledgeGraphNodes(Variable{"?target"}));
+    EXPECT_FALSE(T->columnContainsOnlyKnowledgeGraphNodes(Variable{"?g"}));
   }
 
   {
@@ -1976,8 +1984,8 @@ TEST_P(TransitivePathTest, columnOriginatesFromGraphOrUndefWithGraphVariable) {
                              std::numeric_limits<size_t>::max(), std::nullopt,
                              {Variable{"?g"}});
 
-    EXPECT_TRUE(T->columnOriginatesFromGraphOrUndef(Variable{"?g"}));
-    EXPECT_TRUE(T->columnOriginatesFromGraphOrUndef(Variable{"?x"}));
+    EXPECT_TRUE(T->columnContainsOnlyKnowledgeGraphNodes(Variable{"?g"}));
+    EXPECT_TRUE(T->columnContainsOnlyKnowledgeGraphNodes(Variable{"?x"}));
   }
 
   {
@@ -1990,8 +1998,49 @@ TEST_P(TransitivePathTest, columnOriginatesFromGraphOrUndefWithGraphVariable) {
                              std::numeric_limits<size_t>::max(), std::nullopt,
                              {Variable{"?g"}});
 
-    EXPECT_FALSE(T->columnOriginatesFromGraphOrUndef(Variable{"?g"}));
+    EXPECT_FALSE(T->columnContainsOnlyKnowledgeGraphNodes(Variable{"?g"}));
   }
+}
+
+// Test that an UNDEF value on the bound side of a `*` path matches every node
+// of the knowledge graph via the empty path, as in
+// `SELECT * { OPTIONAL { ?start <r> ?other } ?start <b>* ?target }`, also the
+// nodes `<c>`, `<x>` and `<y>` without an outgoing `<b>` edge.
+TEST_P(TransitivePathTest, undefFromKnowledgeGraphColumnMatchesEveryNode) {
+  // A knowledge graph with the nodes `<a>`, `<c>`, `<x>` and `<y>`, of which
+  // only `<a>` has an outgoing `<b>` edge.
+  std::string turtle = "<a> <b> <c> . <x> <q> <y> .";
+  ad_utility::testing::TestIndexConfig config;
+  config.turtleInput = turtle;
+  auto getId = ad_utility::testing::makeGetId(
+      ad_utility::testing::getQec(std::move(config))->getIndex());
+  Id a = getId("<a>");
+  Id c = getId("<c>");
+  Id x = getId("<x>");
+  Id y = getId("<y>");
+
+  // The path `?start <b>* ?target`, bound on the left to `?start` of
+  // `OPTIONAL { ?start <r> ?other }`, which is a single UNDEF row because `<r>`
+  // does not occur in the knowledge graph.
+  TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+  auto [T, qec] =
+      makePath(makeIdTableFromVector({{a, c}}),
+               {Variable{"?internal1"}, Variable{"?internal2"}}, left, right, 0,
+               std::numeric_limits<size_t>::max(), std::move(turtle));
+  auto optional = ad_utility::makeExecutionTree<NeutralOptional>(
+      qec, ad_utility::makeExecutionTree<IndexScan>(
+               qec, Permutation::Enum::PSO,
+               SparqlTripleSimple{Variable{"?start"}, iri("<r>"),
+                                  Variable{"?other"}}));
+  auto boundPath = T->bindSides(
+      optional, optional->getVariableColumn(Variable{"?start"}), std::nullopt);
+
+  // Every node matches itself via the empty path, and `<a>` also reaches `<c>`.
+  auto expected = makeIdTableFromVector(
+      {{a, a, U}, {a, c, U}, {c, c, U}, {x, x, U}, {y, y, U}});
+  auto resultTable = boundPath->computeResultOnlyForTesting(requestLaziness());
+  assertResultMatchesIdTable(resultTable, expected);
 }
 
 // _____________________________________________________________________________

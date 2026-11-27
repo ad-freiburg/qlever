@@ -4,8 +4,6 @@
 
 #include "index/GraphFilter.h"
 
-#include "util/graph/Graph.h"
-
 namespace qlever::index {
 
 //______________________________________________________________________________

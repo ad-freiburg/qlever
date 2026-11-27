@@ -1,0 +1,762 @@
+// Copyright 2019, University of Freiburg,
+// Chair of Algorithms and Data Structures.
+// Author: Florian Kramer (florian.kramer@neptun.uni-freiburg.de)
+//         Johannes Herrmann (johannes.r.herrmann(at)gmail.com)
+
+#ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
+
+#include "engine/operation/TransitivePathBase.h"
+
+#include <absl/strings/str_cat.h>
+
+#include <limits>
+#include <memory>
+#include <optional>
+#include <utility>
+
+#include "engine/CallFixedSize.h"
+#include "engine/operation/CartesianProductJoin.h"
+#include "engine/operation/DistinctGraphs.h"
+#include "engine/operation/EmptyPath.h"
+#include "engine/operation/IndexScan.h"
+#include "engine/operation/TransitivePathBinSearch.h"
+#include "engine/operation/TransitivePathHashMap.h"
+#include "engine/operation/Values.h"
+#include "global/Constants.h"
+#include "global/RuntimeParameters.h"
+#include "util/ChunkedForLoop.h"
+#include "util/Exception.h"
+
+namespace {
+auto makeInternalVariable(std::string_view string) {
+  return Variable{absl::StrCat("?internal_property_path_variable_", string)};
+}
+
+// The estimated size of the complete transitive hull divided by the number of
+// edges, which is the average number of reachable nodes per start node divided
+// by the average out-degree. On Wikidata, this is about 57 for `wdt:P279`
+// (subclass of), 17 for `wdt:P171` (parent taxon), and between 1.4 and 8 for
+// shallow hierarchies like `wdt:P131` (located in) or `wdt:P527` (has part).
+// We err on the large side, because underestimating the size of a transitive
+// path is more harmful for the query plan than overestimating it.
+constexpr double kHullSizePerEdge = 50;
+
+// Estimates are used as divisors and factors, so we clamp them to at least 1.
+constexpr double atLeastOne(double estimate) { return std::max(estimate, 1.0); }
+
+// The estimated number of distinct values in the given column of the tree.
+double numDistinctValues(QueryExecutionTree& tree, size_t col) {
+  return atLeastOne(tree.getSizeEstimate()) /
+         atLeastOne(tree.getMultiplicity(col));
+}
+
+// Return `base + base^2 + ... + base^exponent` for `base >= 0` (the sum is
+// zero for an empty graph, where the out-degree is zero).
+double geometricSum(double base, double exponent) {
+  return base == 1 ? exponent
+                   : base * (std::pow(base, exponent) - 1) / (base - 1);
+}
+
+// Convert a (possibly huge) estimate to an integer without overflowing. The
+// limit leaves room for adding up the costs of several operations.
+constexpr uint64_t toSaturatedInt(double value) {
+  constexpr auto max = std::numeric_limits<uint64_t>::max() / 4;
+  return static_cast<uint64_t>(std::min(value, static_cast<double>(max)));
+}
+}  // namespace
+
+// _____________________________________________________________________________
+TransitivePathBase::TransitivePathBase(
+    QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
+    TransitivePathSide leftSide, TransitivePathSide rightSide, size_t minDist,
+    size_t maxDist, Graphs activeGraphs,
+    const std::optional<Variable>& graphVariable)
+    : Operation(qec),
+      subtree_(std::move(child)),
+      lhs_(std::move(leftSide)),
+      rhs_(std::move(rightSide)),
+      minDist_(minDist),
+      maxDist_(maxDist),
+      activeGraphs_{std::move(activeGraphs)},
+      graphVariable_{graphVariable} {
+  AD_CORRECTNESS_CHECK(qec != nullptr);
+  AD_CORRECTNESS_CHECK(subtree_);
+  if (lhs_.isVariable()) {
+    variableColumns_[lhs_.value_.getVariable()] = makeAlwaysDefinedColumn(0);
+  }
+  if (rhs_.isVariable()) {
+    variableColumns_[rhs_.value_.getVariable()] = makeAlwaysDefinedColumn(1);
+  }
+  if (minDist_ == 0) {
+    auto& startingSide = decideDirection().first;
+    // If we have hardcoded differing values left and right, we can increase the
+    // minimum distance to 1. Example: The triple pattern `<x> <p>* <y>` cannot
+    // possibly match with length zero because <x> != <y>. Instead we compute
+    // `<x> <p>+ <y>` which avoids the performance pessimisation of having to
+    // match the iri or literal against the knowledge graph.
+    if (!lhs_.isVariable() && !rhs_.isVariable() &&
+        lhs_.value_ != rhs_.value_) {
+      minDist_ = 1;
+    } else if (lhs_.isUnboundVariable() && rhs_.isUnboundVariable()) {
+      // Both sides are unbound, so the starting point for the empty path is the
+      // set of all entities of the knowledge graph. This can be re-bound to
+      // something cheaper later on (see `bindSides`).
+      boundVariableIsForEmptyPath_ = true;
+      lhs_.treeAndCol_.emplace(
+          ad_utility::makeExecutionTree<EmptyPath>(
+              qec, makeInternalVariable("x"), activeGraphs_, graphVariable_),
+          0);
+    } else if (!startingSide.isVariable()) {
+      // According to the SPARQL standard a hardcoded value is matched once in
+      // every graph, even if it doesn't occur in the dataset at all, so we
+      // simply feed the value itself into the transitive path.
+      auto tree = makeStartingPoint(qec, activeGraphs_, graphVariable_,
+                                    startingSide.value_);
+      auto column = tree->getVariableColumn(makeInternalVariable("x"));
+      startingSide.treeAndCol_.emplace(std::move(tree), column);
+    }
+  }
+
+  lhs_.outputCol_ = 0;
+  rhs_.outputCol_ = 1;
+
+  // Add graph variable to output if present
+  if (graphVariable_.has_value()) {
+    // Don't overwrite entry if the graph variable has the same name as one of
+    // the columns.
+    if (!variableColumns_.contains(graphVariable_.value())) {
+      variableColumns_[graphVariable_.value()] =
+          makeAlwaysDefinedColumn(resultWidth_);
+    }
+    resultWidth_ += 1;
+  }
+}
+
+// _____________________________________________________________________________
+std::shared_ptr<QueryExecutionTree> TransitivePathBase::makeStartingPoint(
+    QueryExecutionContext* qec, const Graphs& activeGraphs,
+    const std::optional<Variable>& graphVariable,
+    const TripleComponent& tripleComponent) {
+  auto tree =
+      makeValuesForSingleValue(qec, makeInternalVariable("x"), tripleComponent);
+  if (graphVariable.has_value()) {
+    // The transitive path implementations require a graph id for every starting
+    // point, so the single value has to be combined with every graph it is
+    // matched in.
+    tree = ad_utility::makeExecutionTree<CartesianProductJoin>(
+        qec,
+        CartesianProductJoin::Children{
+            {std::move(tree), DistinctGraphs::makeAllGraphs(
+                                  qec, graphVariable.value(), activeGraphs)},
+            qec->getAllocator()});
+  }
+  return tree;
+}
+
+// _____________________________________________________________________________
+TransitivePathBase::~TransitivePathBase() = default;
+
+// _____________________________________________________________________________
+std::pair<TransitivePathSide&, TransitivePathSide&>
+TransitivePathBase::decideDirection() {
+  if (lhs_.isBoundVariable()) {
+    AD_LOG_DEBUG << "Computing TransitivePath left to right" << std::endl;
+    return {lhs_, rhs_};
+  } else if (rhs_.isBoundVariable() || !rhs_.isVariable()) {
+    AD_LOG_DEBUG << "Computing TransitivePath right to left" << std::endl;
+    return {rhs_, lhs_};
+  }
+  AD_LOG_DEBUG << "Computing TransitivePath left to right" << std::endl;
+  return {lhs_, rhs_};
+}
+
+// _____________________________________________________________________________
+Result::Generator TransitivePathBase::fillTableWithHull(
+    NodeGenerator hull, size_t startSideCol, size_t targetSideCol,
+    bool yieldOnce, size_t inputWidth) const {
+  return ad_utility::callFixedSizeVi(
+      std::array{inputWidth, getResultWidth()},
+      [&](auto INPUT_WIDTH, auto OUTPUT_WIDTH) {
+        return fillTableWithHullImpl<INPUT_WIDTH, OUTPUT_WIDTH>(
+            std::move(hull), startSideCol, targetSideCol, yieldOnce);
+      });
+}
+
+// _____________________________________________________________________________
+template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
+Result::Generator TransitivePathBase::fillTableWithHullImpl(
+    NodeGenerator hull, size_t startSideCol, size_t targetSideCol,
+    bool yieldOnce) const {
+  ad_utility::Timer timer{ad_utility::Timer::Stopped};
+  size_t outputRow = 0;
+  IdTableStatic<OUTPUT_WIDTH> table{getResultWidth(), allocator()};
+  LocalVocab mergedVocab{allocator()};
+  for (auto& [node, graph, linkedNodes, localVocab, idTable, inputRow] : hull) {
+    timer.cont();
+    // As an optimization nodes without any linked nodes should not get yielded
+    // in the first place.
+    AD_CONTRACT_CHECK(!linkedNodes.empty());
+    if (!yieldOnce) {
+      table.reserve(linkedNodes.size());
+    }
+    std::optional<IdTableView<INPUT_WIDTH>> inputView = std::nullopt;
+    if (idTable.has_value()) {
+      inputView = idTable->template asStaticView<INPUT_WIDTH>();
+    }
+    // Add one row per linked node, with a cancellation check per chunk (a
+    // single node can be linked to millions of nodes).
+    ad_utility::chunkedForEach(
+        linkedNodes,
+        [this, &table, &outputRow, &inputView, startSideCol, targetSideCol,
+         node = node, graph = graph, inputRow = inputRow](Id linkedNode) {
+          table.emplace_back();
+          table(outputRow, startSideCol) = node;
+          table(outputRow, targetSideCol) = linkedNode;
+
+          if (inputView.has_value()) {
+            copyColumns<INPUT_WIDTH, OUTPUT_WIDTH>(inputView.value(), table,
+                                                   inputRow, outputRow);
+          }
+          if (graphVariable_.has_value()) {
+            table(outputRow, table.numColumns() - 1) = graph;
+          }
+
+          outputRow++;
+        },
+        cancellationChecker());
+
+    if (yieldOnce) {
+      mergedVocab.mergeWith(localVocab);
+    } else {
+      timer.stop();
+      runtimeInfo().addDetail("IdTable fill time", timer.msecs());
+      co_yield {std::move(table).toDynamic(), std::move(localVocab)};
+      table = IdTableStatic<OUTPUT_WIDTH>{getResultWidth(), allocator()};
+      outputRow = 0;
+    }
+    timer.stop();
+  }
+  if (yieldOnce) {
+    timer.start();
+    runtimeInfo().addDetail("IdTable fill time", timer.msecs());
+    co_yield {std::move(table).toDynamic(), std::move(mergedVocab)};
+  }
+}
+
+// _____________________________________________________________________________
+qlm::string TransitivePathBase::getCacheKeyImpl() const {
+  qlm::ostringstream os{allocator()};
+  os << "TRANSITIVE PATH ";
+  if (graphVariable_.has_value()) {
+    os << "with graph " << graphVariable_.value().name() << ' ';
+  }
+  if (lhs_.isVariable() && lhs_.value_ == rhs_.value_) {
+    // Use a different cache key if the same variable is used left and right,
+    // because that changes the behaviour of this operation and variable names
+    // are not found in the children's cache keys.
+    os << "symmetric ";
+  }
+  os << "minDist " << minDist_ << " maxDist " << maxDist_ << "\n";
+
+  os << "Left side:\n";
+  os << lhs_.getCacheKey(allocator());
+
+  os << "Right side:\n";
+  os << rhs_.getCacheKey(allocator());
+
+  os << "Subtree:\n" << subtree_->getCacheKey() << '\n';
+
+  return std::move(os).str();
+}
+
+// _____________________________________________________________________________
+std::optional<ColumnIndex> TransitivePathBase::getActualGraphColumnIndex(
+    const std::shared_ptr<QueryExecutionTree>& tree) const {
+  if (graphVariable_.has_value()) {
+    auto helperVar = tree->getVariableColumnOrNullopt(internalGraphHelper_);
+    if (helperVar.has_value()) {
+      return helperVar;
+    }
+    return tree->getVariableColumnOrNullopt(graphVariable_.value());
+  }
+  return std::nullopt;
+}
+
+// _____________________________________________________________________________
+std::string TransitivePathBase::getDescriptor() const {
+  std::ostringstream os;
+  os << "TransitivePath ";
+  // If not full transitive hull, show interval as [min, max].
+  if (minDist_ > 1 || maxDist_ < std::numeric_limits<size_t>::max()) {
+    os << "[" << minDist_ << ", " << maxDist_ << "] ";
+  }
+  // Left variable or entity name.
+  os << lhs_.value_;
+  // The predicate.
+  auto scanOperation =
+      std::dynamic_pointer_cast<IndexScan>(subtree_->getRootOperation());
+  if (scanOperation != nullptr) {
+    os << " " << scanOperation->predicate() << " ";
+  } else {
+    // Escaped the question marks to avoid a warning about ignored trigraphs.
+    os << R"( <???> )";
+  }
+  // Right variable or entity name.
+  os << rhs_.value_;
+  return std::move(os).str();
+}
+
+// _____________________________________________________________________________
+size_t TransitivePathBase::getResultWidth() const { return resultWidth_; }
+
+// _____________________________________________________________________________
+qlm::vector<ColumnIndex> TransitivePathBase::resultSortedOn() const {
+  if (lhs_.isSortedOnInputCol()) {
+    return {{0}, allocator()};
+  }
+  if (rhs_.isSortedOnInputCol()) {
+    return {{1}, allocator()};
+  }
+
+  return qlm::vector<ColumnIndex>{allocator()};
+}
+
+// _____________________________________________________________________________
+VariableToColumnMap TransitivePathBase::computeVariableToColumnMap() const {
+  return variableColumns_;
+}
+
+// _____________________________________________________________________________
+bool TransitivePathBase::knownEmptyResult() {
+  auto sideHasKnownEmptyResult = [this]() {
+    auto tree = decideDirection().first.treeAndCol_;
+    return tree.has_value() && tree.value().first->knownEmptyResult();
+  };
+  return (subtree_->knownEmptyResult() && minDist_ > 0) ||
+         sideHasKnownEmptyResult();
+}
+
+// _____________________________________________________________________________
+TransitivePathBase::Estimates TransitivePathBase::computeEstimates() {
+  auto [startSide, targetSide] = decideDirection();
+  // Statistics of the graph that is traversed. The out-degree is the average
+  // number of edges of a node in the direction of the traversal, so it differs
+  // greatly between the two directions for hierarchy-like predicates like
+  // `wdt:P279` (subclass of): a class has few superclasses, but some classes
+  // have very many subclasses.
+  double numEdges = subtree_->getSizeEstimate();
+  double numStartNodes = numDistinctValues(*subtree_, startSide.subCol_);
+  double numTargetNodes = numDistinctValues(*subtree_, targetSide.subCol_);
+  double outDegree = numEdges / numStartNodes;
+
+  // The average number of nodes that are reachable from a start node. Summed
+  // over all start nodes, this is the size of the complete hull, which we
+  // estimate as a multiple of the number of edges. A node has fewer reachable
+  // nodes in the direction in which there are more distinct nodes, which makes
+  // the estimates direction-aware. A node has `outDegree` successors,
+  // `outDegree^2` successors of successors, and so on, which bounds the reach
+  // for small values of `maxDist_`.
+  double reach = std::min({kHullSizePerEdge * outDegree, numTargetNodes,
+                           geometricSum(outDegree, maxDist_)});
+
+  // The rows of the start side. For an unbound start side, these are all the
+  // start nodes of the graph.
+  double numStartRows = 1;
+  double numDistinctStartValues = 1;
+  if (startSide.treeAndCol_.has_value()) {
+    const auto& [tree, col] = startSide.treeAndCol_.value();
+    numStartRows = atLeastOne(tree->getSizeEstimate());
+    numDistinctStartValues = numDistinctValues(*tree, col);
+  } else if (startSide.isVariable()) {
+    numStartRows = numStartNodes;
+    numDistinctStartValues = numStartNodes;
+  }
+  // Only the start values that are start nodes of the graph have outgoing
+  // edges. Like the size estimate of a join, we assume that as many of them as
+  // possible are.
+  double fractionWithEdges =
+      std::min(numStartNodes / numDistinctStartValues, 1.0);
+  double numStartRowsWithEdges = numStartRows * fractionWithEdges;
+  double numVisitedNodes = numStartRowsWithEdges * reach;
+
+  // For a fixed or bound target, the result consists of the start rows from
+  // which the target is reachable.
+  double size = numVisitedNodes;
+  if (!targetSide.isVariable() || targetSide.isBoundVariable()) {
+    size = numStartRowsWithEdges * std::min(reach / numTargetNodes, 1.0);
+  } else if (minDist_ == 0) {
+    size += numStartRows;
+  }
+  // Binding a variable is equivalent to joining it with the complete hull, so
+  // we apply the same correction as the size estimate of a join. This keeps
+  // the estimates of the two query plans comparable.
+  if (startSide.isBoundVariable() && startSide.isVariable() &&
+      !boundVariableIsForEmptyPath_) {
+    size *= JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR;
+  }
+  size = atLeastOne(size);
+
+  // The values of the target column are the reached nodes, which overlap for
+  // different start values, so the number of distinct values follows the
+  // "balls into bins" model. With the empty path, the start values are also
+  // part of the target column.
+  double numDistinctTargetValues =
+      numTargetNodes *
+      (1 - std::exp(-numDistinctStartValues * fractionWithEdges * reach /
+                    numTargetNodes));
+  if (minDist_ == 0) {
+    numDistinctTargetValues += numDistinctStartValues;
+  }
+  // For a bound target, the values of the target column stem from its input.
+  if (targetSide.isBoundVariable()) {
+    const auto& [tree, col] = targetSide.treeAndCol_.value();
+    numDistinctTargetValues = numDistinctValues(*tree, col);
+  }
+  double targetMultiplicity =
+      targetSide.isVariable()
+          ? size / std::clamp(numDistinctTargetValues, 1.0, size)
+          : size;
+  return {size, numVisitedNodes, size / numStartRows,
+          atLeastOne(size / numDistinctStartValues), targetMultiplicity};
+}
+
+// _____________________________________________________________________________
+float TransitivePathBase::getMultiplicity(size_t col) {
+  auto estimates = computeEstimates();
+  auto [startSide, targetSide] = decideDirection();
+  if (col == startSide.outputCol_) {
+    return estimates.startMultiplicity_;
+  }
+  if (col == targetSide.outputCol_) {
+    return estimates.targetMultiplicity_;
+  }
+  // The remaining columns are copied from the start side, each row is repeated
+  // once for every reached node. The graph column might not stem from the start
+  // side, in which case we know nothing about it.
+  if (!startSide.treeAndCol_.has_value()) {
+    return 1;
+  }
+  const auto& tree = *startSide.treeAndCol_.value().first;
+  auto it = ql::ranges::find_if(variableColumns_, [col](const auto& pair) {
+    return pair.second.columnIndex_ == col;
+  });
+  auto childCol = it == variableColumns_.end()
+                      ? std::nullopt
+                      : tree.getVariableColumnOrNullopt(it->first);
+  if (!childCol.has_value()) {
+    return 1;
+  }
+  return tree.getMultiplicity(childCol.value()) *
+         atLeastOne(estimates.rowsPerStartRow_);
+}
+
+// _____________________________________________________________________________
+uint64_t TransitivePathBase::getSizeEstimateBeforeLimit() {
+  return toSaturatedInt(computeEstimates().size_);
+}
+
+// _____________________________________________________________________________
+size_t TransitivePathBase::getCostEstimate() {
+  // The cost consists of visiting the nodes of the hull and writing the result.
+  // The two differ if the target is fixed.
+  auto estimates = computeEstimates();
+  auto costEstimate =
+      toSaturatedInt(estimates.size_ + estimates.numVisitedNodes_);
+  for (auto* ptr : getChildren()) {
+    if (ptr) {
+      costEstimate += ptr->getCostEstimate();
+    }
+  }
+  return costEstimate;
+}
+
+// _____________________________________________________________________________
+std::shared_ptr<TransitivePathBase> TransitivePathBase::makeTransitivePath(
+    QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
+    TransitivePathSide leftSide, TransitivePathSide rightSide, size_t minDist,
+    size_t maxDist, Graphs activeGraphs,
+    const std::optional<Variable>& graphVariable) {
+  bool useBinSearch =
+      getRuntimeParameter<&RuntimeParameters::useBinsearchTransitivePath_>();
+  return makeTransitivePath(
+      qec, std::move(child), std::move(leftSide), std::move(rightSide), minDist,
+      maxDist, useBinSearch, std::move(activeGraphs), graphVariable);
+}
+
+// _____________________________________________________________________________
+std::shared_ptr<TransitivePathBase> TransitivePathBase::makeTransitivePath(
+    QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
+    TransitivePathSide leftSide, TransitivePathSide rightSide, size_t minDist,
+    size_t maxDist, bool useBinSearch, Graphs activeGraphs,
+    const std::optional<Variable>& graphVariable) {
+  if (useBinSearch) {
+    return qec->makeShared<TransitivePathBinSearch>(
+        qec, std::move(child), std::move(leftSide), std::move(rightSide),
+        minDist, maxDist, std::move(activeGraphs), graphVariable);
+  } else {
+    return qec->makeShared<TransitivePathHashMap>(
+        qec, std::move(child), std::move(leftSide), std::move(rightSide),
+        minDist, maxDist, std::move(activeGraphs), graphVariable);
+  }
+}
+
+// _____________________________________________________________________________
+qlm::vector<QueryExecutionTree*> TransitivePathBase::getChildrenImpl() const {
+  qlm::vector<QueryExecutionTree*> res{allocator()};
+  for (auto& side : {&lhs_, &rhs_}) {
+    if (!side->treeAndCol_.has_value()) {
+      continue;
+    }
+    auto* tree = side->treeAndCol_->first.get();
+    if (!ad_utility::contains(res, tree)) {
+      res.push_back(tree);
+    }
+  }
+  res.push_back(subtree_.get());
+  return res;
+}
+
+// _____________________________________________________________________________
+std::shared_ptr<QueryExecutionTree> TransitivePathBase::matchWithKnowledgeGraph(
+    size_t& inputCol, std::shared_ptr<QueryExecutionTree> leftOrRightOp) const {
+  // If we don't include the empty path, then inputs which don't originate in
+  // the graph will be automatically filtered out because they cannot appear in
+  // the `subtree_`.
+  if (minDist_ > 0) {
+    return leftOrRightOp;
+  }
+
+  // Skip the matching if all graphs are active, there is no graph variable, and
+  // the values of the join column are already guaranteed to be nodes of the
+  // knowledge graph.
+  //
+  // NOTE: This guarantee does not say in which graphs the values occur. So in
+  // a `GRAPH <g> { ... }` or `GRAPH ?g { ... }` clause or with a `FROM` clause,
+  // a value may be a node of the knowledge graph, but not of the active graphs
+  // (or not of the graph in the same row), and still has to be matched.
+  auto originalVar =
+      leftOrRightOp->getVariableAndInfoByColumnIndex(inputCol).first;
+  if (activeGraphs_.areAllGraphsAllowed() && !graphVariable_.has_value() &&
+      leftOrRightOp->getRootOperation()->columnContainsOnlyKnowledgeGraphNodes(
+          originalVar)) {
+    return leftOrRightOp;
+  }
+
+  // If we join on the graph variable itself, we cannot reuse it for the graph
+  // column, so we use an internal helper variable instead (which takes
+  // precedence in `getActualGraphColumnIndex`).
+  std::optional<Variable> graphVariable =
+      originalVar == graphVariable_ ? std::optional{internalGraphHelper_}
+                                    : graphVariable_;
+
+  leftOrRightOp = ad_utility::makeExecutionTree<EmptyPath>(
+      getExecutionContext(), originalVar, activeGraphs_,
+      std::move(graphVariable),
+      EmptyPath::CheckedChild{std::move(leftOrRightOp), inputCol});
+  inputCol = leftOrRightOp->getVariableColumn(originalVar);
+  return leftOrRightOp;
+}
+
+// _____________________________________________________________________________
+std::shared_ptr<TransitivePathBase> TransitivePathBase::bindSides(
+    std::shared_ptr<QueryExecutionTree> op, std::optional<size_t> leftCol,
+    std::optional<size_t> rightCol) const {
+  // Ensure at least one side is given.
+  AD_CORRECTNESS_CHECK(leftCol.has_value() || rightCol.has_value());
+
+  // Create a copy of this.
+  //
+  // NOTE: The RHS used to be `std::make_shared<TransitivePath>()`, which is
+  // wrong because it first calls the copy constructor of the base class
+  // `Operation`, which  would then ignore the changes in `variableColumnMap_`
+  // made below (see `Operation::getInternallyVisibleVariableColumns` and
+  // `Operation::getExternallyVariableColumns`).
+  auto lhs = lhs_;
+  auto rhs = rhs_;
+
+  // Obtain the variable of both columns.
+  auto getVar = [&op](const std::optional<size_t>& col) {
+    return col.has_value()
+               ? std::optional<Variable>(
+                     op->getVariableAndInfoByColumnIndex(col.value()).first)
+               : std::nullopt;
+  };
+  auto leftVar = getVar(leftCol);
+  auto rightVar = getVar(rightCol);
+
+  // Make sure that the values of the start side (the left side if it is bound,
+  // the right side otherwise, see `decideDirection`) exist in the knowledge
+  // graph. For the empty path this may wrap `op` into an `EmptyPath`, which
+  // can change the column indices, so the bound columns are looked up again
+  // by their variable below.
+  size_t matchCol = leftCol.has_value() ? leftCol.value() : rightCol.value();
+  op = matchWithKnowledgeGraph(matchCol, std::move(op));
+
+  // Set `op` and the corresponding binding column to each side's
+  // `treeAndCol_` member.
+  auto bindOneSide = [&op](auto& col, auto& var, auto& side,
+                           bool resetPlaceholder) {
+    if (col.has_value()) {
+      col = op->getVariableColumn(var.value());
+      side.treeAndCol_ = {op, col.value()};
+    } else if (resetPlaceholder || !side.isVariable()) {
+      // Clear its `TreeAndCol` if the side is unbound.
+      side.treeAndCol_ = std::nullopt;
+    }
+  };
+  bindOneSide(leftCol, leftVar, lhs, boundVariableIsForEmptyPath_);
+  bindOneSide(rightCol, rightVar, rhs, false);
+
+  // We use the cheapest tree that can be created using any of the alternative
+  // subtrees. This has the effect that the `TransitivePathBinSearch` will
+  // never re-sort an index scan (which should not happen because we can just
+  // take the appropriate index scan in the first place).
+  bool useBinSearch = dynamic_cast<const TransitivePathBinSearch*>(this);
+  std::vector<std::shared_ptr<TransitivePathBase>> candidates;
+  candidates.push_back(makeTransitivePath(getExecutionContext(), subtree_, lhs,
+                                          rhs, minDist_, maxDist_, useBinSearch,
+                                          activeGraphs_, graphVariable_));
+  for (const auto& alternativeSubtree : alternativeSubtrees()) {
+    candidates.push_back(makeTransitivePath(
+        getExecutionContext(), alternativeSubtree, lhs, rhs, minDist_, maxDist_,
+        useBinSearch, activeGraphs_, graphVariable_));
+  }
+
+  auto& plan = *ql::ranges::min_element(
+      candidates, {}, [](const auto& tree) { return tree->getCostEstimate(); });
+
+  // The result has the two side columns, then the payload columns of `op`, and
+  // the graph column last (the side and graph columns of `op` are already
+  // accounted for in the width).
+  auto payloadCols = computePayloadColumns(op, leftCol, rightCol);
+  setPayloadColumnIndices(op, payloadCols, plan);
+  plan->resultWidth_ += payloadCols.size();
+
+  // Make sure mapping actually points to the last column if it's not one of
+  // the regular variables.
+  if (graphVariable_.has_value()) {
+    auto& graphIndex =
+        plan->variableColumns_[graphVariable_.value()].columnIndex_;
+    if (graphIndex == firstGraphOrPayloadColumnIndex()) {
+      graphIndex = plan->resultWidth_ - 1;
+    }
+  }
+  return std::move(plan);
+}
+
+// _____________________________________________________________________________
+void TransitivePathBase::setPayloadColumnIndices(
+    const std::shared_ptr<QueryExecutionTree>& op,
+    const std::vector<ColumnIndex>& payloadCols,
+    const std::shared_ptr<TransitivePathBase>& plan) {
+  // Note: The `variable` in the following structured binding is `const`, even
+  // if we bind by value. We deliberately make one unnecessary copy of the
+  // `variable` to keep the code simpler.
+  for (auto [variable, columnIndexWithType] : op->getVariableColumns()) {
+    auto& colIndex = columnIndexWithType.columnIndex_;
+    auto position = ql::ranges::find(payloadCols, colIndex);
+    // A column index that is not a payload column is a side or the graph
+    // column.
+    if (position == payloadCols.end()) {
+      continue;
+    }
+
+    // The payload columns follow the two side columns in the order of `op`.
+    colIndex = firstGraphOrPayloadColumnIndex() +
+               ql::ranges::distance(payloadCols.begin(), position);
+    AD_CORRECTNESS_CHECK(!plan->variableColumns_.contains(variable));
+    plan->variableColumns_[variable] = columnIndexWithType;
+  }
+}
+
+// _____________________________________________________________________________
+std::vector<ColumnIndex> TransitivePathBase::computePayloadColumns(
+    const std::shared_ptr<QueryExecutionTree>& op,
+    const std::optional<ColumnIndex>& leftCol,
+    const std::optional<ColumnIndex>& rightCol) const {
+  auto graphCol = getActualGraphColumnIndex(op);
+  auto isNotPayload = [&graphCol, &leftCol, &rightCol](const auto& col) {
+    return graphCol == col || leftCol == col || rightCol == col;
+  };
+  std::vector<ColumnIndex> payloadIndices;
+  for (ColumnIndex col = 0; col < op->getResultWidth(); col++) {
+    if (isNotPayload(col)) {
+      continue;
+    }
+    payloadIndices.emplace_back(col);
+  }
+  return payloadIndices;
+}
+
+// _____________________________________________________________________________
+bool TransitivePathBase::isBoundOrId() const {
+  // Don't make the execution tree for the empty path count as "bound".
+  return !boundVariableIsForEmptyPath_ &&
+         (!lhs_.isUnboundVariable() || !rhs_.isUnboundVariable());
+}
+
+// _____________________________________________________________________________
+template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
+void TransitivePathBase::copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
+                                     IdTableStatic<OUTPUT_WIDTH>& outputTable,
+                                     size_t inputRow, size_t outputRow) const {
+  size_t inCol = 0;
+  // The first two columns are both sides of the transitive path, then they are
+  // followed by the payload columns (if present) and then the (optional) graph
+  // column follows (but it is not written in this function).
+  size_t outCol = 2;
+  AD_CORRECTNESS_CHECK(inputTable.numColumns() +
+                           (graphVariable_.has_value() ? 3 : 2) ==
+                       outputTable.numColumns());
+  while (inCol < inputTable.numColumns()) {
+    AD_CORRECTNESS_CHECK(outCol < outputTable.numColumns());
+    outputTable.at(outputRow, outCol) = inputTable.at(inputRow, inCol);
+    inCol++;
+    outCol++;
+  }
+}
+
+// _____________________________________________________________________________
+bool TransitivePathBase::columnContainsOnlyKnowledgeGraphNodes(
+    const Variable& variable) const {
+  AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
+  if (variable != lhs_.value_ && variable != rhs_.value_) {
+    // The payload columns of the bound side are copied over verbatim, so they
+    // inherit the guarantee of that operation. The graph column ends up here
+    // too (unless it is one of the two sides), but `subtree_` always provides
+    // it and reports `false` for it, because in RDF only subjects and objects
+    // are nodes (see `IndexScan::columnContainsOnlyKnowledgeGraphNodes`), so
+    // the answer stays `false` for graphs as it has to.
+    return Operation::columnContainsOnlyKnowledgeGraphNodes(variable);
+  }
+  // The empty path copies a hardcoded value over to the other side without
+  // checking it against the knowledge graph (see the constructor), so in that
+  // case the remaining variable may be bound to a value that is not part of the
+  // knowledge graph.
+  return minDist_ != 0 || (lhs_.isVariable() && rhs_.isVariable());
+}
+
+// _____________________________________________________________________________
+void TransitivePathBase::setTreeAndChildrenToClone(
+    TransitivePathBase& copy) const {
+  copy.subtree_ = subtree_->clone();
+  copy.lhs_ = lhs_.clone();
+
+  // Don't duplicate trees if both sides are bound at once, instead use the same
+  // for both sides.
+  if (lhs_.isBoundVariable() && rhs_.isBoundVariable()) {
+    // We assume that the tree is always the same for both children.
+    AD_CORRECTNESS_CHECK(lhs_.treeAndCol_->first == rhs_.treeAndCol_->first);
+    copy.rhs_ = rhs_.clone(copy.lhs_.treeAndCol_->first);
+  } else {
+    copy.rhs_ = rhs_.clone();
+  }
+}
+
+// _____________________________________________________________________________
+// Don't check the name because this leads to segfaults during static
+// initialization.
+const Variable TransitivePathBase::internalGraphHelper_{
+    "?_Qlever_internal_transitive_path_graph", false};
+
+#endif

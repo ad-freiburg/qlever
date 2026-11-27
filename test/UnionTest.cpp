@@ -12,12 +12,12 @@
 #include "./util/IdTableHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "./util/LocalVocabTestHelpers.h"
-#include "engine/IndexScan.h"
-#include "engine/NeutralElementOperation.h"
-#include "engine/OptionalJoin.h"
-#include "engine/Sort.h"
 #include "engine/SortedUnionImpl.h"
-#include "engine/Union.h"
+#include "engine/operation/IndexScan.h"
+#include "engine/operation/NeutralElementOperation.h"
+#include "engine/operation/OptionalJoin.h"
+#include "engine/operation/Sort.h"
+#include "engine/operation/Union.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "global/Id.h"
 #include "util/IndexTestHelpers.h"
@@ -924,7 +924,7 @@ TEST(Union, checkChunkSizeSplitsProperly) {
 }
 
 // _____________________________________________________________________________
-TEST(Union, columnOriginatesFromGraphOrUndef) {
+TEST(Union, columnContainsOnlyKnowledgeGraphNodes) {
   using Var = Variable;
   auto* qec = ad_utility::testing::getQec();
 
@@ -939,33 +939,39 @@ TEST(Union, columnOriginatesFromGraphOrUndef) {
       SparqlTripleSimple{Variable{"?a"}, Variable{"?b"}, Variable{"?c"}});
 
   Union union1{qec, values, values};
-  EXPECT_FALSE(union1.columnOriginatesFromGraphOrUndef(Var{"?a"}));
-  EXPECT_FALSE(union1.columnOriginatesFromGraphOrUndef(Var{"?d"}));
-  EXPECT_THROW(union1.columnOriginatesFromGraphOrUndef(Var{"?notExisting"}),
-               ad_utility::Exception);
+  EXPECT_FALSE(union1.columnContainsOnlyKnowledgeGraphNodes(Var{"?a"}));
+  EXPECT_FALSE(union1.columnContainsOnlyKnowledgeGraphNodes(Var{"?d"}));
+  EXPECT_THROW(
+      union1.columnContainsOnlyKnowledgeGraphNodes(Var{"?notExisting"}),
+      ad_utility::Exception);
 
   Union union2{qec, values, index};
-  EXPECT_FALSE(union2.columnOriginatesFromGraphOrUndef(Var{"?a"}));
-  EXPECT_FALSE(union2.columnOriginatesFromGraphOrUndef(Var{"?b"}));
-  EXPECT_TRUE(union2.columnOriginatesFromGraphOrUndef(Var{"?c"}));
-  EXPECT_FALSE(union2.columnOriginatesFromGraphOrUndef(Var{"?d"}));
-  EXPECT_THROW(union2.columnOriginatesFromGraphOrUndef(Var{"?notExisting"}),
-               ad_utility::Exception);
+  EXPECT_FALSE(union2.columnContainsOnlyKnowledgeGraphNodes(Var{"?a"}));
+  EXPECT_FALSE(union2.columnContainsOnlyKnowledgeGraphNodes(Var{"?b"}));
+  // `?c` is UNDEF for the rows of `values`.
+  EXPECT_FALSE(union2.columnContainsOnlyKnowledgeGraphNodes(Var{"?c"}));
+  EXPECT_FALSE(union2.columnContainsOnlyKnowledgeGraphNodes(Var{"?d"}));
+  EXPECT_THROW(
+      union2.columnContainsOnlyKnowledgeGraphNodes(Var{"?notExisting"}),
+      ad_utility::Exception);
 
   Union union3{qec, index, values};
-  EXPECT_FALSE(union3.columnOriginatesFromGraphOrUndef(Var{"?a"}));
-  EXPECT_FALSE(union3.columnOriginatesFromGraphOrUndef(Var{"?b"}));
-  EXPECT_TRUE(union3.columnOriginatesFromGraphOrUndef(Var{"?c"}));
-  EXPECT_FALSE(union3.columnOriginatesFromGraphOrUndef(Var{"?d"}));
-  EXPECT_THROW(union3.columnOriginatesFromGraphOrUndef(Var{"?notExisting"}),
-               ad_utility::Exception);
+  EXPECT_FALSE(union3.columnContainsOnlyKnowledgeGraphNodes(Var{"?a"}));
+  EXPECT_FALSE(union3.columnContainsOnlyKnowledgeGraphNodes(Var{"?b"}));
+  // `?c` is UNDEF for the rows of `values`.
+  EXPECT_FALSE(union3.columnContainsOnlyKnowledgeGraphNodes(Var{"?c"}));
+  EXPECT_FALSE(union3.columnContainsOnlyKnowledgeGraphNodes(Var{"?d"}));
+  EXPECT_THROW(
+      union3.columnContainsOnlyKnowledgeGraphNodes(Var{"?notExisting"}),
+      ad_utility::Exception);
 
   Union union4{qec, index, index};
-  EXPECT_TRUE(union4.columnOriginatesFromGraphOrUndef(Var{"?a"}));
-  EXPECT_FALSE(union4.columnOriginatesFromGraphOrUndef(Var{"?b"}));
-  EXPECT_TRUE(union4.columnOriginatesFromGraphOrUndef(Var{"?c"}));
-  EXPECT_THROW(union4.columnOriginatesFromGraphOrUndef(Var{"?notExisting"}),
-               ad_utility::Exception);
+  EXPECT_TRUE(union4.columnContainsOnlyKnowledgeGraphNodes(Var{"?a"}));
+  EXPECT_FALSE(union4.columnContainsOnlyKnowledgeGraphNodes(Var{"?b"}));
+  EXPECT_TRUE(union4.columnContainsOnlyKnowledgeGraphNodes(Var{"?c"}));
+  EXPECT_THROW(
+      union4.columnContainsOnlyKnowledgeGraphNodes(Var{"?notExisting"}),
+      ad_utility::Exception);
 }
 
 // _____________________________________________________________________________

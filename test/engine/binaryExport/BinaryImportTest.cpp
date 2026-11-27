@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "../../ValueGetterTestHelpers.h"
+#include "../../util/AllocatorTestHelpers.h"
 #include "../../util/GTestHelpers.h"
 #include "../../util/IdTableHelpers.h"
 #include "../../util/IndexTestHelpers.h"
@@ -94,8 +95,11 @@ class BinaryExportRoundTrip : public ::testing::Test {
   static std::string exportBytes(const QueryExecutionTree& qet,
                                  const std::vector<std::string>& varNames,
                                  LimitOffsetClause limitAndOffset = {}) {
-    parsedQuery::SelectClause selectClause;
-    selectClause.setSelected(toVariables(varNames));
+    auto allocator = ad_utility::testing::makeAllocator();
+    parsedQuery::SelectClause selectClause{allocator};
+    auto variables = toVariables(varNames);
+    selectClause.setSelected(
+        qlm::vector<Variable>{variables.begin(), variables.end(), allocator});
     auto generator = exportAsQLeverBinary(
         qet, selectClause, limitAndOffset,
         std::make_shared<ad_utility::CancellationHandle<>>());

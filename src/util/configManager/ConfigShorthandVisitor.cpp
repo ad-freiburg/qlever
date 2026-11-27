@@ -6,10 +6,7 @@
 
 #include <absl/strings/str_cat.h>
 
-#include <exception>
 #include <utility>
-
-#include "util/Exception.h"
 
 // __________________________________________________________________________
 nlohmann::json::object_t ToJsonConfigShorthandVisitor::visitShortHandString(

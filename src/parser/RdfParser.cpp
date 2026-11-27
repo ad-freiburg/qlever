@@ -10,6 +10,7 @@
 
 #include "parser/RdfParser.h"
 
+#include <absl/cleanup/cleanup.h>
 #include <absl/functional/bind_front.h>
 #include <absl/strings/charconv.h>
 
@@ -169,6 +170,7 @@ void TurtleParser<Tokenizer_T>::clear() {
   tok_.reset(nullptr, 0);
   triples_.clear();
   numBlankNodes_ = 0;
+  tripleTermDepth_ = 0;
   isParserExhausted_ = false;
 }
 
@@ -333,14 +335,25 @@ bool TurtleParser<T>::objectList() {
 // ______________________________________________________
 template <class T>
 bool TurtleParser<T>::verb() {
-  return predicate() || predicateSpecialA();
+  if (!verbImpl()) {
+    return false;
+  }
+  activePredicate_ = lastParseResult_;
+  return true;
+}
+
+// ____________________________________________________________________
+template <class T>
+bool TurtleParser<T>::verbImpl() {
+  rejectTripleTermInNonObjectPosition();
+  return iri() || predicateSpecialA();
 }
 
 // ___________________________________________________________________
 template <class T>
 bool TurtleParser<T>::predicateSpecialA() {
   if (parseTerminal<TurtleTokenId::A>()) {
-    activePredicate_ = TripleComponent::Iri::fromIriref(
+    lastParseResult_ = TripleComponent::Iri::fromIriref(
         "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>");
     return true;
   } else {
@@ -350,7 +363,17 @@ bool TurtleParser<T>::predicateSpecialA() {
 
 // ____________________________________________________________________
 template <class T>
+void TurtleParser<T>::rejectTripleTermInNonObjectPosition() {
+  tok_.skipWhitespaceAndComments();
+  if (ql::starts_with(tok_.view(), "<<")) {
+    raise("Triple terms are only allowed as the object of a triple or quad");
+  }
+}
+
+// ____________________________________________________________________
+template <class T>
 bool TurtleParser<T>::subject() {
+  rejectTripleTermInNonObjectPosition();
   if (blankNode() || iri() || collection()) {
     activeSubject_ = lastParseResult_;
     return true;
@@ -362,6 +385,7 @@ bool TurtleParser<T>::subject() {
 // ____________________________________________________________________
 template <class T>
 bool TurtleParser<T>::predicate() {
+  rejectTripleTermInNonObjectPosition();
   if (iri()) {
     activePredicate_ = lastParseResult_;
     return true;
@@ -372,11 +396,73 @@ bool TurtleParser<T>::predicate() {
 
 // ____________________________________________________________________
 template <class T>
+bool TurtleParser<T>::ttSubject(TripleTermSyntax syntax) {
+  rejectTripleTermInNonObjectPosition();
+  return syntax == TripleTermSyntax::NQuads ? (blankNodeLabel() || iriref())
+                                            : (blankNode() || iri());
+}
+
+// ____________________________________________________________________
+template <class T>
+bool TurtleParser<T>::ttObject(TripleTermSyntax syntax) {
+  return tripleTerm(syntax) ||
+         (syntax == TripleTermSyntax::NQuads
+              ? (blankNodeLabel() || rdfLiteralImpl(false) || iriref())
+              : (blankNode() || literal() || iri()));
+}
+
+// ____________________________________________________________________
+template <class T>
+bool TurtleParser<T>::tripleTerm(TripleTermSyntax syntax) {
+  tok_.skipWhitespaceAndComments();
+  if (!ql::starts_with(tok_.view(), "<<")) {
+    return false;
+  }
+  if (!ql::starts_with(tok_.view(), "<<(")) {
+    raise(
+        "Expected <<( for a triple term; reification shorthand "
+        "such as << <s> <p> <o> >> is not supported");
+  }
+  // Bound recursion to avoid exhausting the stack on deeply nested input.
+  if (tripleTermDepth_ >= MAX_TRIPLE_TERM_NESTING_DEPTH) {
+    raise(absl::StrCat("Triple-term nesting exceeds the supported limit of ",
+                       MAX_TRIPLE_TERM_NESTING_DEPTH));
+  }
+  ++tripleTermDepth_;
+  absl::Cleanup restoreDepth = [this] { --tripleTermDepth_; };
+  tok_.remove_prefix(3);
+  if (!ttSubject(syntax)) {
+    raise("Expected an IRI or blank node as triple-term subject");
+  }
+  auto subject = std::move(lastParseResult_);
+  rejectTripleTermInNonObjectPosition();
+  if (!(syntax == TripleTermSyntax::NQuads ? iriref() : verbImpl())) {
+    raise("Expected an IRI as triple-term predicate");
+  }
+  auto predicate = std::move(lastParseResult_);
+  if (!ttObject(syntax)) {
+    raise(
+        "Expected an IRI, blank node, literal, or triple term as triple-term "
+        "object");
+  }
+  auto object = std::move(lastParseResult_);
+  tok_.skipWhitespaceAndComments();
+  if (!ql::starts_with(tok_.view(), ")>>")) {
+    raise("Expected )>> after the three triple-term components");
+  }
+  tok_.remove_prefix(3);
+  lastParseResult_ = TripleComponent::TripleTerm{
+      std::move(subject), std::move(predicate), std::move(object)};
+  return true;
+}
+
+// ____________________________________________________________________
+template <class T>
 bool TurtleParser<T>::object() {
   // these produce a single object that becomes part of a triple
   // check blank Node first because _: also could look like a prefix
-  if (blankNode() || literal() || iri() || collection() ||
-      blankNodePropertyList()) {
+  if (tripleTerm(TripleTermSyntax::Turtle) || blankNode() || literal() ||
+      iri() || collection() || blankNodePropertyList()) {
     emitTriple();
     return true;
   } else {
@@ -584,6 +670,7 @@ bool NQuadParser<T>::nQuadLiteral() {
 // _____________________________________________________________________________
 template <typename T>
 bool NQuadParser<T>::nQuadSubject() {
+  this->rejectTripleTermInNonObjectPosition();
   if (Base::iriref() || Base::blankNodeLabel()) {
     this->activeSubject_ = std::move(this->lastParseResult_);
     return true;
@@ -595,6 +682,7 @@ bool NQuadParser<T>::nQuadSubject() {
 
 template <typename T>
 bool NQuadParser<T>::nQuadPredicate() {
+  this->rejectTripleTermInNonObjectPosition();
   if (Base::iriref()) {
     this->activePredicate_ = std::move(this->lastParseResult_);
     return true;
@@ -604,7 +692,8 @@ bool NQuadParser<T>::nQuadPredicate() {
 
 template <typename T>
 bool NQuadParser<T>::nQuadObject() {
-  if (Base::iriref() || Base::blankNodeLabel() || nQuadLiteral()) {
+  if (Base::tripleTerm(TripleTermSyntax::NQuads) || Base::iriref() ||
+      Base::blankNodeLabel() || nQuadLiteral()) {
     this->activeObject_ = std::move(this->lastParseResult_);
     return true;
   }
@@ -614,6 +703,7 @@ bool NQuadParser<T>::nQuadObject() {
 // _____________________________________________________________________________
 template <typename T>
 bool NQuadParser<T>::nQuadGraphLabel() {
+  this->rejectTripleTermInNonObjectPosition();
   if (Base::iriref() || Base::blankNodeLabel()) {
     activeGraphLabel_ = std::move(this->lastParseResult_);
     return true;
@@ -1007,27 +1097,46 @@ bool TurtleParser<T>::pnameLnRelaxed() {
   tok_.skipWhitespaceAndComments();
   auto view = tok_.view();
   // Characters that can be part of neither the prefix nor the local name of a
-  // prefixed name, assuming that no escape sequences are used (which is
-  // exactly the assumption that makes this parsing "relaxed"). They are used
-  // below to determine where the prefix and the local name end. Note that the
-  // `:` (the last of the `prefixDelimiters`) terminates the prefix, but may
-  // legally occur inside a local name, hence it is not part of the
-  // `localNameDelimiters`.
+  // prefixed name, unless they are escaped. They are used below to determine
+  // where the prefix and the local name end.
+  //
+  // NOTE: The `:` (the last of the `prefixDelimiters`) terminates the prefix,
+  // but may legally occur inside a local name, hence it is not one of the
+  // delimiters of the local name. Instead, those include the `\` that starts
+  // an escape sequence.
   constexpr std::string_view prefixDelimiters = " \t\r\n,;[]():";
-  constexpr std::string_view localNameDelimiters =
-      prefixDelimiters.substr(0, prefixDelimiters.size() - 1);
+  constexpr std::string_view localNameDelimitersAndEscape = " \t\r\n,;[]()\\";
+  static_assert(prefixDelimiters.substr(0, prefixDelimiters.size() - 1) ==
+                localNameDelimitersAndEscape.substr(
+                    0, localNameDelimitersAndEscape.size() - 1));
   static constexpr ad_utility::CharLookupTable prefixDelimiterTable =
       ad_utility::makeCharLookupTable(prefixDelimiters);
-  static constexpr ad_utility::CharLookupTable localNameDelimiterTable =
-      ad_utility::makeCharLookupTable(localNameDelimiters);
+  static constexpr ad_utility::CharLookupTable localNameDelimiterOrEscapeTable =
+      ad_utility::makeCharLookupTable(localNameDelimitersAndEscape);
   // If anything but a `:` comes first, this is not a prefixed name, but for
   // example the `[` of a blank node property list.
   auto pos = ad_utility::findFirstOfWithLookupTable(view, prefixDelimiterTable);
   if (pos == std::string::npos || view[pos] != ':') {
     return false;
   }
-  auto posEnd = ad_utility::findFirstOfWithLookupTable(
-      view, localNameDelimiterTable, pos + 1);
+  // Find the end of the local name, which is the first delimiter that is not
+  // escaped. An escape sequence like `\;` or `\,` (see `PN_LOCAL_ESC` in the
+  // Turtle grammar) is skipped as a whole. It is resolved later, when the
+  // local name is unescaped.
+  //
+  // NOTE: A `\` at the end of the input is a `ParseException`, so that
+  // `RdfStreamParser` retries with more input when its buffer ends there.
+  auto findDelimiterOrEscape = [&view](size_t start) {
+    return ad_utility::findFirstOfWithLookupTable(
+        view, localNameDelimiterOrEscapeTable, start);
+  };
+  auto posEnd = findDelimiterOrEscape(pos + 1);
+  while (posEnd != std::string::npos && view[posEnd] == '\\') {
+    if (posEnd + 1 == view.size()) {
+      raise("Prefixed name ends with an incomplete escape sequence");
+    }
+    posEnd = findDelimiterOrEscape(posEnd + 2);
+  }
   if (posEnd == std::string::npos) {
     // make tests work
     posEnd = view.size();

@@ -7,7 +7,6 @@
 #include <charconv>
 #include <ctre-unicode.hpp>
 
-#include "sparqlParser/generated/SparqlAutomaticLexer.h"
 #include "util/StringUtils.h"
 
 namespace sparqlParserHelpers {
@@ -22,12 +21,14 @@ constexpr ctll::fixed_string unicodeEscapeRegex =
 // _____________________________________________________________________________
 ParserAndVisitor::ParserAndVisitor(
     ad_utility::BlankNodeManager* blankNodeManager,
-    const EncodedIriManager* encodedIriManager, std::string input,
+    const EncodedIriManager* encodedIriManager, qlever::Allocator<Id> allocator,
+    std::string input,
     std::optional<ParsedQuery::DatasetClauses> datasetClauses,
     SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks)
     : Base{unescapeUnicodeSequences(std::move(input)),
            SparqlQleverVisitor{blankNodeManager,
                                encodedIriManager,
+                               std::move(allocator),
                                {},
                                std::move(datasetClauses),
                                disableSomeChecks}} {}
@@ -35,11 +36,12 @@ ParserAndVisitor::ParserAndVisitor(
 // _____________________________________________________________________________
 ParserAndVisitor::ParserAndVisitor(
     ad_utility::BlankNodeManager* blankNodeManager,
-    const EncodedIriManager* encodedIriManager, std::string input,
-    SparqlQleverVisitor::PrefixMap prefixes,
+    const EncodedIriManager* encodedIriManager, qlever::Allocator<Id> allocator,
+    std::string input, SparqlQleverVisitor::PrefixMap prefixes,
     std::optional<ParsedQuery::DatasetClauses> datasetClauses,
     SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks)
-    : ParserAndVisitor{blankNodeManager, encodedIriManager, std::move(input),
+    : ParserAndVisitor{blankNodeManager,          encodedIriManager,
+                       std::move(allocator),      std::move(input),
                        std::move(datasetClauses), disableSomeChecks} {
   visitor_.setPrefixMapManually(std::move(prefixes));
 }
