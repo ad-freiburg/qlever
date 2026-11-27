@@ -32,6 +32,7 @@
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryRewriteUtils.h"
+#include "engine/filterFacts/Canonicalizer.h"
 #include "engine/operation/Bind.h"
 #include "engine/operation/CartesianProductJoin.h"
 #include "engine/operation/CountAvailablePredicates.h"
@@ -290,9 +291,10 @@ std::shared_ptr<QueryExecutionTree> QueryPlanner::createExecutionTree(
 // _____________________________________________________________________________
 SubtreePlanVec QueryPlanner::optimize(ParsedQuery::GraphPattern* rootPattern) {
   // Split each FILTER with a conjunct that is a fact (e.g. a maximum
-  // distance) into its conjuncts, so that the fact can be rewritten on its
-  // own (e.g. to a `SpatialJoin`).
-  splitFiltersWithFacts(rootPattern->_filters);
+  // distance or a comparison of `LANG(?x)`) into its conjuncts, so that the
+  // fact can be rewritten on its own (e.g. to a `SpatialJoin`, or applied to
+  // the triples of the group).
+  rewriteFiltersWithFacts(*rootPattern);
   QueryPlanner::GraphPatternPlanner optimizer{*this, rootPattern};
   for (auto& child : rootPattern->_graphPatterns) {
     child.visit([&optimizer](auto& arg) {

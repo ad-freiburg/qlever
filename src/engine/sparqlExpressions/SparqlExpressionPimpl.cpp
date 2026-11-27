@@ -121,12 +121,6 @@ bool SparqlExpressionPimpl::isVariableContained(
 }
 
 // _____________________________________________________________________________
-std::optional<SparqlExpressionPimpl::LangFilterData>
-SparqlExpressionPimpl::getLanguageFilterExpression() const {
-  return _pimpl->getLanguageFilterExpression();
-}
-
-// _____________________________________________________________________________
 auto SparqlExpressionPimpl::getEstimatesForFilterExpression(
     uint64_t inputSizeEstimate,
     const std::optional<Variable>& primarySortKeyVariable) -> Estimates {

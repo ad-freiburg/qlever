@@ -120,15 +120,6 @@ class SparqlExpressionPimpl {
   // Return true iff the `Variable` is used inside the expression.
   bool isVariableContained(const Variable&) const;
 
-  // Struct to store a variable and a set of allowed language tags for it.
-  struct LangFilterData {
-    Variable variable_;
-    ad_utility::HashSet<std::string> languages_;
-  };
-  // If `this` is an expression of the form `LANG(?variable) = "language"`,
-  // return the variable and the language. Else return `std::nullopt`.
-  std::optional<LangFilterData> getLanguageFilterExpression() const;
-
   // Return the size and cost estimate for this expression if it is used as the
   // expression of a `FILTER` clause given that the input has `inputSize` many
   // elements and the input is sorted by the variable `firstSortedVariable`.

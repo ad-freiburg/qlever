@@ -9,6 +9,7 @@
 
 #include "engine/filterFacts/Canonicalizer.h"
 
+#include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/QueryRewriteExpressionHelpers.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
@@ -201,11 +202,73 @@ std::optional<std::vector<double>> getNumbers(
   return numbers;
 }
 
+// Return the canonical form of `LANG(?x) = c`, `c = LANG(?x)`,
+// `LANG(?x) IN (c1, c2, ...)` and `||` of such comparisons for the same `?x`,
+// and `std::nullopt` for every other expression.
+std::optional<LangEquals> toLangEquals(const SparqlExpression& expression,
+                                       const Definitions& defs) {
+  using namespace sparqlExpression;
+  auto children = expression.children();
+
+  // Merge the constants of the two sides of `||` (`LANG(?x) = "en" ||
+  // LANG(?x) = "de"` is `LANG(?x) IN ("en", "de")`).
+  if (isOrExpression(expression)) {
+    auto left = toLangEquals(*children[0], defs);
+    auto right = toLangEquals(*children[1], defs);
+    if (!left.has_value() || !right.has_value() || left->var_ != right->var_) {
+      return std::nullopt;
+    }
+    ql::ranges::move(right->rhs_, std::back_inserter(left->rhs_));
+    left->exact_ = left->exact_ && right->exact_;
+    return left;
+  }
+
+  // Find `LANG(?x)` and the operands that it is compared with.
+  auto getLangVariable = [&defs](const SparqlExpression& operand) {
+    return getVariableFromLangExpression(&resolve(operand, defs));
+  };
+  bool isEqual = dynamic_cast<const EqualExpression*>(&expression);
+  if (!isEqual && !dynamic_cast<const InExpression*>(&expression)) {
+    return std::nullopt;
+  }
+  auto variable = getLangVariable(*children[0]);
+  auto constants = children.subspan(1);
+  if (isEqual && !variable.has_value()) {
+    variable = getLangVariable(*children[1]);
+    constants = children.first(1);
+  }
+  if (!variable.has_value()) {
+    return std::nullopt;
+  }
+
+  // Collect the values of these operands. The comparison is not exact if an
+  // operand has different values in different rows.
+  LangEquals result{variable.value(), {}};
+  for (const auto& constant : constants) {
+    auto values = getConstants(*constant, defs);
+    if (!values.has_value()) {
+      return std::nullopt;
+    }
+    result.exact_ =
+        result.exact_ &&
+        ql::ranges::all_of(values.value(), [&values](const auto& value) {
+          return value == values->front();
+        });
+    ql::ranges::move(values.value(), std::back_inserter(result.rhs_));
+  }
+  return result;
+}
+
 // Return the canonical form of a single conjunct: `distance < number` and
-// `distance <= number` become a `DistanceComparison`, everything else is
+// `distance <= number` become a `DistanceComparison`, a comparison of
+// `LANG(?x)` with constants becomes a `LangEquals`, everything else is
 // `Opaque`.
-std::variant<DistanceComparison, Opaque> toCanonicalForm(
+std::variant<DistanceComparison, LangEquals, Opaque> toCanonicalForm(
     const SparqlExpression& expression, const Definitions& defs) {
+  if (auto langEquals = toLangEquals(expression, defs)) {
+    return std::move(langEquals).value();
+  }
+
   // Match `distance op number` for a distance in a unit of length, return
   // `Opaque` for every other expression.
   auto op = sparqlExpression::getComparison(expression);

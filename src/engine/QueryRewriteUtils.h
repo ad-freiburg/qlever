@@ -15,6 +15,9 @@
 
 class QueryExecutionContext;
 class SpatialJoin;
+namespace parsedQuery {
+class GraphPattern;
+}
 
 // This module contains utilities for query rewriting, e.g. optimizing cartesian
 // product and filter by replacing it with an appropriate special join.
@@ -28,10 +31,14 @@ std::shared_ptr<SpatialJoin> rewriteFilterToSpatialJoin(
     const SparqlFilter& filter, QueryExecutionContext* qec,
     absl::FunctionRef<Variable()> generateUniqueVarName);
 
-// Split each FILTER in `filters` with a conjunct (of `&&`) that is a fact (see
+// Split each FILTER of `group` with a conjunct (of `&&`) that is a fact (see
 // `engine/filterFacts`) into its conjuncts. Then this conjunct can be rewritten
 // on its own (e.g. to a `SpatialJoin`), and the other conjuncts are applied as
-// regular FILTERs.
-void splitFiltersWithFacts(qlm::vector<SparqlFilter>& filters);
+// regular FILTERs. A conjunct that is a fact only with the definitions of
+// `group` (e.g. `geof:distance(?a, ?b) <= ?max` with `VALUES ?max { 500 }`) is
+// replaced by an equivalent FILTER without them. A `LangIn` fact is applied to
+// the triples of `group` (see `GraphPattern::addLanguageFilter`), which
+// replaces its conjunct if this succeeds and the fact is exact.
+void rewriteFiltersWithFacts(parsedQuery::GraphPattern& group);
 
 #endif  // QLEVER_SRC_ENGINE_QUERYREWRITEUTILS_H
