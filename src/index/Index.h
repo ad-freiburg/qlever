@@ -193,7 +193,9 @@ class Index {
 
   bool& usePatterns();
 
-  bool& loadAllPermutations();
+  // The permutations that are built or loaded, see
+  // `IndexImpl::permutationsToBuildOrLoad_`.
+  std::optional<std::vector<Permutation::Enum>>& permutationsToBuildOrLoad();
 
   bool& addHasWordTriples();
 
@@ -229,11 +231,21 @@ class Index {
   size_t getNofEntityPostings() const;
   size_t getNofNonLiteralsInTextIndex() const;
 
-  NumNormalAndInternal numDistinctSubjects() const;
-  NumNormalAndInternal numDistinctObjects() const;
+  // The number of distinct subjects (objects) is only known if a permutation
+  // that starts with the subject (object) is loaded, otherwise return
+  // `std::nullopt`.
+  std::optional<NumNormalAndInternal> numDistinctSubjects() const;
+  std::optional<NumNormalAndInternal> numDistinctObjects() const;
   NumNormalAndInternal numDistinctPredicates() const;
 
+  // Return true iff all six permutations are loaded.
   bool hasAllPermutations() const;
+
+  // Return true iff the `permutation` is loaded.
+  bool hasPermutation(Permutation::Enum permutation) const;
+
+  // Return the loaded permutations, in the order of `Permutation::ALL`.
+  std::vector<Permutation::Enum> loadedPermutations() const;
 
   // ___________________________________________________________________________
   std::vector<float> getMultiplicities(

@@ -14,7 +14,9 @@
 #include "index/ConstantsIndexBuilding.h"
 #include "index/IndexImpl.h"
 #include "index/Permutation.h"
+#include "util/HashSet.h"
 #include "util/IndexTestHelpers.h"
+#include "util/StringUtils.h"
 
 // Multi-threaded, to exercise the concurrency of the tested code.
 static constexpr auto executor = &ad_utility::testing::multiThreadExecutor;
@@ -32,6 +34,36 @@ TEST(Permutation, fileNames) {
                   POS, absl::StrCat("index", QLEVER_INTERNAL_INDEX_INFIX)),
               ::testing::ElementsAre("index.internal.index.pos",
                                      "index.internal.index.pos.meta"));
+}
+
+// Test the conversions between the permutations and their names.
+TEST(Permutation, namesAndKeyOrders) {
+  using P = Permutation;
+  // All permutations have distinct names, and `fromString` is the inverse of
+  // `toString`.
+  ad_utility::HashSet<std::string> names;
+  for (auto permutation : P::ALL) {
+    auto name = std::string{P::toString(permutation)};
+    EXPECT_TRUE(names.insert(name).second) << name;
+    EXPECT_EQ(P::fromString(name), permutation);
+    EXPECT_EQ(P::fromString(ad_utility::utf8ToLower(name)), permutation);
+    EXPECT_EQ(P::fromString(absl::StrCat(name, "G")), permutation);
+    // The name lists the columns in the order of the key order.
+    auto keys = P::toKeyOrder(permutation).keys();
+    for (size_t i = 0; i < name.size(); ++i) {
+      EXPECT_EQ(name.at(i), "SPOG"[keys.at(i)]);
+    }
+  }
+  EXPECT_EQ(names.size(), 6);
+
+  EXPECT_EQ(P::fromString("PSOG"), P::PSO);
+  EXPECT_EQ(P::fromString("ospg"), P::OSP);
+  for (std::string_view invalid :
+       {"", "SP", "SPOO", "SPOGG", "XPO", "GSP", "GSPO"}) {
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        P::fromString(invalid),
+        ::testing::HasSubstr("is not the name of a permutation"));
+  }
 }
 
 // _____________________________________________________________________________

@@ -443,6 +443,41 @@ boost::asio::awaitable<void> createPermutationWriterTask(
   co_await (asCoroutine(makeFinalizerTasks(metaA, permutationA)) &&
             asCoroutine(makeFinalizerTasks(metaB, permutationB)));
 }
+
+// _____________________________________________________________________________
+boost::asio::awaitable<void> createSinglePermutationWriterTask(
+    IndexImpl& newIndex, const Permutation& permutation,
+    const LocatedTriplesSharedState& locatedTriplesSharedState,
+    const LocalVocabMapping& localVocabMapping,
+    const InsertionPositions& insertionPositions,
+    const BlankNodeBlocks& blankNodeBlocks, uint64_t minBlankNodeIndex,
+    const ad_utility::SharedCancellationHandle& cancellationHandle,
+    qlever::Executor executor, std::function<void(size_t)> progress) {
+  auto task = [&newIndex, &permutation, &locatedTriplesSharedState,
+               &localVocabMapping, &insertionPositions, &blankNodeBlocks,
+               minBlankNodeIndex, &cancellationHandle, executor, progress]() {
+    auto blockMetadataRanges = permutation.getAugmentedMetadataForPermutation(
+        *locatedTriplesSharedState);
+    auto [numColumns, additionalColumns] =
+        getNumberOfColumnsAndAdditionalColumns(blockMetadataRanges);
+    // Wrap the input range so that the number of processed triples is
+    // reported to `progress` per block.
+    auto countingStream = ad_utility::InputRangeTypeErased<IdTableStatic<0>>{
+        ad_utility::CachingTransformInputRange{
+            readIndexAndRemap(permutation, blockMetadataRanges,
+                              locatedTriplesSharedState, localVocabMapping,
+                              insertionPositions, blankNodeBlocks,
+                              minBlankNodeIndex, cancellationHandle,
+                              additionalColumns, executor),
+            [progress](IdTableStatic<0>& table) {
+              progress(table.numRows());
+              return std::move(table);
+            }}};
+    newIndex.createPermutationWithoutTwin(numColumns, std::move(countingStream),
+                                          permutation);
+  };
+  co_await asCoroutine(std::move(task));
+}
 }  // namespace qlever::indexRebuilder
 
 // _____________________________________________________________________________
@@ -523,10 +558,19 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
   // enough for a progress bar.
   // The number of normal (non-internal) permutations; there are always two
   // internal permutations (PSO and POS) in addition.
-  size_t numNormalPermutations = index.hasAllPermutations() ? 6 : 2;
-  // The statistics scan one permutation per normal pair, plus the internal
-  // PSO permutation.
-  size_t numStatsScans = numNormalPermutations / 2;
+  const auto loadedPermutations = index.loadedPermutations();
+  size_t numNormalPermutations = loadedPermutations.size();
+  // The statistics scan the PSO permutation, one permutation that starts with
+  // the subject and one that starts with the object (if loaded), plus the
+  // internal PSO permutation.
+  auto isLoaded = [&loadedPermutations](Permutation::Enum p) {
+    return ad_utility::contains(loadedPermutations, p);
+  };
+  size_t numStatsScans = 1 +
+                         static_cast<size_t>(isLoaded(Permutation::SPO) ||
+                                             isLoaded(Permutation::SOP)) +
+                         static_cast<size_t>(isLoaded(Permutation::OSP) ||
+                                             isLoaded(Permutation::OPS));
   REBUILD_LOG_INFO << "Recomputing statistics (from " << numStatsScans + 1
                    << " permutations, " << numStatsScans
                    << " normal and 1 internal) ..." << std::endl;
@@ -539,6 +583,16 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
                                             progressCallbackFor(statsProgress));
   REBUILD_LOG_INFO << statsProgress.getFinalProgressString() << std::flush;
   newStats[DATE_OF_INDEX_BUILD_KEY] = dateOfIndexBuild;
+  // The new index has exactly the permutations that are loaded (which may be
+  // fewer than the old index has, see `IndexImpl::permutationsToBuildOrLoad`).
+  {
+    std::vector<std::string> names;
+    for (auto permutation : loadedPermutations) {
+      names.emplace_back(Permutation::toString(permutation));
+    }
+    newStats["permutations"] = names;
+    newStats["has-all-permutations"] = index.hasAllPermutations();
+  }
 
   // Set newer lower bound for dynamic blank node indices.
   auto minBlankNodeIndex = index.getBlankNodeManager()->minIndex_;
@@ -612,9 +666,27 @@ indexRebuilder::IndexRebuildMapping materializeToIndex(
   std::vector<std::pair<std::pair<Permutation::Enum, Permutation::Enum>, bool>>
       permutationSettings{{{PSO, POS}, false}, {{PSO, POS}, true}};
 
-  if (index.hasAllPermutations()) {
-    permutationSettings.push_back({{SPO, SOP}, false});
-    permutationSettings.push_back({{OPS, OSP}, false});
+  // The pairs of which both permutations are loaded are written together, the
+  // others one by one (see `createSinglePermutationWriterTask`).
+  std::vector<Permutation::Enum> singlePermutations;
+  for (auto [a, b] : {std::pair{SPO, SOP}, std::pair{OPS, OSP}}) {
+    if (isLoaded(a) && isLoaded(b)) {
+      permutationSettings.push_back({{a, b}, false});
+    } else if (isLoaded(a)) {
+      singlePermutations.push_back(a);
+    } else if (isLoaded(b)) {
+      singlePermutations.push_back(b);
+    }
+  }
+  for (auto permutation : singlePermutations) {
+    net::co_spawn(
+        threadPool,
+        createSinglePermutationWriterTask(
+            newIndex, index.getPermutation(permutation),
+            locatedTriplesSharedState, localVocabMapping, insertionPositions,
+            blankNodeBlocks, minBlankNodeIndex, cancellationHandle, executor,
+            permutationsProgressCallback),
+        std::ref(exceptionCollector));
   }
 
   for (const auto& [permutationEnums, isInternal] : permutationSettings) {

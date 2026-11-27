@@ -69,10 +69,6 @@ using ExternalSorter =
     ad_utility::CompressedExternalIdTableSorter<Comparator, I>;
 
 // The Order in which the permutations are created during the index building.
-using FirstPermutation = SortBySPO;
-using FirstPermutationSorter = ExternalSorter<FirstPermutation>;
-using SecondPermutation = SortByOSP;
-using ThirdPermutation = SortByPSO;
 
 // Data produced after parsing: vocabulary metadata and the number of partial
 // vocabularies. The ID triples and partial vocabularies themselves are written
@@ -133,8 +129,15 @@ class IndexImpl {
   std::vector<WordIndex> blockBoundaries_;
   mutable ad_utility::File textIndexFile_;
 
-  // If false, only PSO and POS permutations are loaded and expected.
-  bool loadAllPermutations_ = true;
+  // The permutations that are built (at index build time) or loaded (when an
+  // index is loaded from disk). When an index is built, `nullopt` means all
+  // six permutations. When an index
+  // is loaded, `nullopt` means all the permutations that the index has, and
+  // otherwise only those of the given permutations that the index has are
+  // loaded.
+  std::optional<std::vector<Permutation::Enum>> permutationsToBuildOrLoad_;
+  // The permutations that the loaded index has (read from its configuration).
+  std::vector<Permutation::Enum> permutationsOfLoadedIndex_;
 
   // Pattern trick data
   bool usePatterns_ = false;
@@ -180,22 +183,13 @@ class IndexImpl {
   CompactVectorOfStrings<Id> patterns_;
   ad_utility::AllocatorWithLimit<Id> allocator_;
 
-  // TODO: make those private and allow only const access
-  // instantiations for the six permutations used in QLever.
-  // They simplify the creation of permutations in the index class.
+  // One `Permutation` object for each of the six possible permutations,
+  // indexed by the value of `Permutation::Enum`. Only those that are loaded
+  // (see `Permutation::isLoaded`) can be used for scans. If
+  // `doNotLoadPermutations_` is set, all of them are `nullptr`.
   using PermutationPtr = std::shared_ptr<Permutation>;
-  PermutationPtr pos_{
-      std::make_shared<Permutation>(Permutation::Enum::POS, allocator_)};
-  PermutationPtr pso_{
-      std::make_shared<Permutation>(Permutation::Enum::PSO, allocator_)};
-  PermutationPtr sop_{
-      std::make_shared<Permutation>(Permutation::Enum::SOP, allocator_)};
-  PermutationPtr spo_{
-      std::make_shared<Permutation>(Permutation::Enum::SPO, allocator_)};
-  PermutationPtr ops_{
-      std::make_shared<Permutation>(Permutation::Enum::OPS, allocator_)};
-  PermutationPtr osp_{
-      std::make_shared<Permutation>(Permutation::Enum::OSP, allocator_)};
+  std::array<PermutationPtr, Permutation::ALL.size()> permutations_ =
+      makePermutations(allocator_);
 
   // During the index building, store the IDs of the `ql:has-pattern` predicate
   // and of `ql:default-graph` as they are required to add additional triples
@@ -259,18 +253,19 @@ class IndexImpl {
   IndexImpl& operator=(IndexImpl&&) = delete;
   IndexImpl(IndexImpl&&) = delete;
 
-  const auto& POS() const { return getPermutationImpl(pos_, "POS"); }
-  const auto& PSO() const { return getPermutationImpl(pso_, "PSO"); }
-  const auto& SPO() const { return getPermutationImpl(spo_, "SPO"); }
-  const auto& SOP() const { return getPermutationImpl(sop_, "SOP"); }
-  const auto& OPS() const { return getPermutationImpl(ops_, "OPS"); }
-  const auto& OSP() const { return getPermutationImpl(osp_, "OSP"); }
+  const auto& POS() const { return getPermutation(Permutation::POS); }
+  const auto& PSO() const { return getPermutation(Permutation::PSO); }
+  const auto& SPO() const { return getPermutation(Permutation::SPO); }
+  const auto& SOP() const { return getPermutation(Permutation::SOP); }
+  const auto& OPS() const { return getPermutation(Permutation::OPS); }
+  const auto& OSP() const { return getPermutation(Permutation::OSP); }
 
   // Function only exposed for testing.
   auto& SPOForTesting() { return const_cast<Permutation&>(SPO()); }
 
   // For a given `Permutation::Enum` (e.g. `PSO`) return the corresponding
-  // `Permutation` object by reference or shared pointer (`pso_`).
+  // `Permutation` object by reference or shared pointer. Note that the
+  // returned permutation is not necessarily loaded (see `hasPermutation`).
   Permutation& getPermutation(Permutation::Enum p);
   const Permutation& getPermutation(Permutation::Enum p) const;
   PermutationPtr getPermutationPtr(Permutation::Enum p);
@@ -464,11 +459,11 @@ class IndexImpl {
   // IRI in angle brackets.
   void setHasWordRestrictPredicates(const std::vector<std::string>& predicates);
 
-  // __________________________________________________________________________
-  NumNormalAndInternal numDistinctSubjects() const;
-
-  // __________________________________________________________________________
-  NumNormalAndInternal numDistinctObjects() const;
+  // The number of distinct subjects (objects) is only known if a permutation
+  // that starts with the subject (object) is loaded, otherwise return
+  // `std::nullopt`.
+  std::optional<NumNormalAndInternal> numDistinctSubjects() const;
+  std::optional<NumNormalAndInternal> numDistinctObjects() const;
 
   // __________________________________________________________________________
   NumNormalAndInternal numDistinctPredicates() const;
@@ -611,7 +606,32 @@ class IndexImpl {
 
   bool usePatterns() const;
 
-  bool& loadAllPermutations();
+  // See `permutationsToBuildOrLoad_`.
+  std::optional<std::vector<Permutation::Enum>>& permutationsToBuildOrLoad() {
+    return permutationsToBuildOrLoad_;
+  }
+  const std::optional<std::vector<Permutation::Enum>>&
+  permutationsToBuildOrLoad() const {
+    return permutationsToBuildOrLoad_;
+  }
+
+  // Return the permutations that are built when an index is built with the
+  // current settings (see `permutationsToBuildOrLoad_`).
+  std::vector<Permutation::Enum> permutationsToBuild() const;
+
+  // Return true iff the `permutations` contain SPO or SOP, so that the pair of
+  // these two permutations is built.
+  static bool buildsSubjectPair(
+      const std::vector<Permutation::Enum>& permutations);
+  // Return true iff the `permutations` contain OSP or OPS, so that the pair of
+  // these two permutations is built.
+  static bool buildsObjectPair(
+      const std::vector<Permutation::Enum>& permutations);
+
+  // Store the `permutations` that were built in the configuration and write
+  // it.
+  void setPermutationsInConfiguration(
+      const std::vector<Permutation::Enum>& permutations);
 
   bool& addHasWordTriples();
 
@@ -702,7 +722,37 @@ class IndexImpl {
     return nofNonLiteralsInTextIndex_;
   }
 
-  bool hasAllPermutations() const { return SPO().isLoaded(); }
+  // Return true iff all six permutations are loaded.
+  bool hasAllPermutations() const;
+
+  // Return true iff the `permutation` is loaded.
+  bool hasPermutation(Permutation::Enum permutation) const;
+
+  // Return the loaded permutations, in the order of `Permutation::ALL`.
+  std::vector<Permutation::Enum> loadedPermutations() const {
+    return loadedPermutations<false>();
+  }
+
+  // Return those of the `Permutation::all<isInternal>()` that are loaded. The
+  // internal permutations are loaded together with their normal counterparts.
+  template <bool isInternal>
+  std::vector<Permutation::Enum> loadedPermutations() const {
+    std::vector<Permutation::Enum> result;
+    ql::ranges::copy_if(
+        Permutation::all<isInternal>(), std::back_inserter(result),
+        [this](auto permutation) { return hasPermutation(permutation); });
+    return result;
+  }
+
+  // Return the first of the `permutations` that is loaded, or `nullptr` if
+  // none of them is loaded.
+  const Permutation* firstLoadedPermutation(
+      std::initializer_list<Permutation::Enum> permutations) const;
+
+  // Return the first of the `permutations` that is loaded. Throw if none of
+  // them is loaded.
+  const Permutation& getFirstLoadedPermutation(
+      std::initializer_list<Permutation::Enum> permutations) const;
 
   // ___________________________________________________________________________
   std::vector<float> getMultiplicities(
@@ -878,6 +928,18 @@ class IndexImpl {
       ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
       const Permutation& permutation, bool internal, qlever::Executor executor);
 
+  // Write the (non-internal) `permutation` completely (including its
+  // metadata) from the `sortedTriples`, which have to be sorted by it and
+  // already be in its column order (like the result of a full scan). The
+  // multiplicities of its last column can only be computed from its twin (the
+  // permutation with the same first column and the other two columns
+  // swapped), so the twin is written to a temporary file as well, which is
+  // deleted afterwards.
+  void createPermutationWithoutTwin(
+      size_t numColumns,
+      ad_utility::InputRangeTypeErased<IdTableStatic<0>> sortedTriples,
+      const Permutation& permutation);
+
   // Finalize the writing of a permutation by appending the metadata to
   // the corresponding file on disk.
   void finalizePermutation(IndexMetaData& meta, const Permutation& permutation,
@@ -1000,6 +1062,10 @@ class IndexImpl {
   static const Permutation& getPermutationImpl(
       const PermutationPtr& permutationPtr, std::string_view permutationName);
 
+  // Create one `Permutation` object for each of the six permutations.
+  static std::array<PermutationPtr, Permutation::ALL.size()> makePermutations(
+      const ad_utility::AllocatorWithLimit<Id>& allocator);
+
   void writeConfiguration() const;
   void readConfiguration();
 
@@ -1107,40 +1173,6 @@ class IndexImpl {
   // The common implementation of the above two functions.
   template <typename Comparator, size_t N, bool returnPtr>
   auto makeSorterImpl(std::string_view permutationName) const;
-
-  // Aliases for the three functions above that should be consistently used.
-  // They assert that the order of the permutations as communicated by the
-  // function names are consistent with the aliases for the sorters, i.e. that
-  // `createFirstPermutationPair` corresponds to the `FirstPermutation`.
-
-  // The `createFirstPermutationPair` has a special implementation for the case
-  // of only two permutations (where we have to build the Pxx permutations). In
-  // all other cases the Sxx permutations are built first because we need the
-  // patterns.
-  template <typename... Args>
-  std::optional<PatternCreator::TripleSorter> createFirstPermutationPair(
-      Args&&... args) {
-    static_assert(std::is_same_v<FirstPermutation, SortBySPO>);
-    static_assert(std::is_same_v<SecondPermutation, SortByOSP>);
-    if (loadAllPermutations()) {
-      return createSPOAndSOP(AD_FWD(args)...);
-    } else {
-      createPSOAndPOS(AD_FWD(args)...);
-      return std::nullopt;
-    }
-  }
-
-  template <typename... Args>
-  void createSecondPermutationPair(Args&&... args) {
-    static_assert(std::is_same_v<SecondPermutation, SortByOSP>);
-    return createOSPAndOPS(AD_FWD(args)...);
-  }
-
-  template <typename... Args>
-  void createThirdPermutationPair(Args&&... args) {
-    static_assert(std::is_same_v<ThirdPermutation, SortByPSO>);
-    return createPSOAndPOS(AD_FWD(args)...);
-  }
 
   // Build the OSP and OPS permutations from the output of the `PatternCreator`.
   // The permutations will have two additional columns: The subject pattern of

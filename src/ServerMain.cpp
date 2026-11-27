@@ -148,8 +148,14 @@ int main(int argc, char** argv) {
       "(field `name-text-index`).");
   add("only-pso-and-pos-permutations,o",
       po::bool_switch(&config.onlyPsoAndPos_),
-      "Only load the PSO and POS permutations. This disables queries with "
-      "predicate variables.");
+      "Deprecated, use `--permutations PSO POS` instead. Only load the PSO "
+      "and POS permutations. This makes queries with predicate variables "
+      "very slow.");
+  add("permutations", po::value(&config.permutations_)->multitoken(),
+      "Only load those of the given permutations that the index has, e.g. "
+      "`SPO OSP` (see `IndexBuilderMain` for the syntax). The PSO and POS "
+      "permutations are always loaded. By default, all permutations of the "
+      "index are loaded.");
   add("default-query-timeout,s",
       optionFactory
           .getProgramOption<&RuntimeParameters::defaultQueryTimeout_>(),

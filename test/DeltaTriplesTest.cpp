@@ -992,12 +992,18 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
 TEST_F(DeltaTriplesTest, LocatedTriplesSharedState) {
   auto Snapshot = [](size_t index, size_t numTriples)
       -> testing::Matcher<const LocatedTriplesSharedState> {
+    // The six loaded permutations (which come first) contain the triples, the
+    // other permutations are not loaded and hence empty.
     auto m =
         AD_PROPERTY(LocatedTriplesPerBlock, numTriplesForTesting, numTriples);
+    auto empty = AD_PROPERTY(LocatedTriplesPerBlock, numTriplesForTesting, 0);
+    std::vector<testing::Matcher<const LocatedTriplesPerBlock&>> matchers(
+        Permutation::ALL.size(), empty);
+    std::fill_n(matchers.begin(), Permutation::ALL.size(), m);
     return testing::Pointee(testing::AllOf(
         AD_FIELD(LocatedTriplesState, index_, testing::Eq(index)),
         AD_FIELD(LocatedTriplesState, locatedTriplesPerBlock_,
-                 testing::ElementsAre(m, m, m, m, m, m))));
+                 testing::ElementsAreArray(matchers))));
   };
   DeltaTriples deltaTriples(testQec->getIndex());
   auto& index = testQec->getIndex();

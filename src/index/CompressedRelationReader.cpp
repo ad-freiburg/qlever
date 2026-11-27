@@ -797,6 +797,49 @@ IdTable CompressedRelationReader::getDistinctColIdsAndCounts(
   processColId(std::nullopt, 0);
   return std::move(table).toDynamic();
 }
+
+// _____________________________________________________________________________
+IdTable CompressedRelationReader::getDistinctCol1IdsAndCountsForAllCol0(
+    const ScanSpecAndBlocks& scanSpecAndBlocks,
+    const CancellationHandle& cancellationHandle,
+    const LocatedTriplesPerBlock& locatedTriplesPerBlock) const {
+  const auto& scanSpec = scanSpecAndBlocks.scanSpec_;
+  AD_CONTRACT_CHECK(!scanSpec.col0Id().has_value() &&
+                    !scanSpec.col1Id().has_value() &&
+                    !scanSpec.col2Id().has_value() &&
+                    scanSpec.graphFilter().areAllGraphsAllowed());
+  IdTable col0Ids =
+      getDistinctColIdsAndCounts(0, scanSpecAndBlocks, cancellationHandle,
+                                 locatedTriplesPerBlock, LimitOffsetClause{});
+  // Concatenate the distinct column-1 values (and their counts) of all the
+  // column-0 values, then sort them and add up the counts of equal values.
+  IdTableStatic<2> result{allocator_};
+  for (Id col0Id : col0Ids.getColumn(0)) {
+    cancellationHandle->throwIfCancelled();
+    IdTable col1Ids = getDistinctColIdsAndCounts(
+        1,
+        ScanSpecAndBlocks{ScanSpecification{col0Id, std::nullopt, std::nullopt},
+                          scanSpecAndBlocks.blockMetadata_},
+        cancellationHandle, locatedTriplesPerBlock, LimitOffsetClause{});
+    result.insertAtEnd(col1Ids);
+  }
+  ql::ranges::sort(result,
+                   [](const auto& a, const auto& b) { return a[0] < b[0]; });
+  // Add up the counts of equal values in place.
+  size_t numDistinct = 0;
+  for (size_t i = 0; i < result.numRows(); ++i) {
+    if (numDistinct > 0 && result(numDistinct - 1, 0) == result(i, 0)) {
+      result(numDistinct - 1, 1) = Id::makeFromInt(
+          result(numDistinct - 1, 1).getInt() + result(i, 1).getInt());
+    } else {
+      result(numDistinct, 0) = result(i, 0);
+      result(numDistinct, 1) = result(i, 1);
+      ++numDistinct;
+    }
+  }
+  result.resize(numDistinct);
+  return std::move(result).toDynamic();
+}
 // _____________________________________________________________________________
 CompressedBlock CompressedRelationReader::readCompressedBlockFromFile(
     const CompressedBlockMetadata& blockMetaData,

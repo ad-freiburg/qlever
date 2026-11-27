@@ -951,7 +951,7 @@ TEST(IndexTest, NumDistinctEntities) {
   // `IndexTestHelpers.cpp` change.
   // TODO<joka921> Also check the number of triples and the number of
   // added things.
-  auto numSubjects = index.numDistinctSubjects();
+  auto numSubjects = index.numDistinctSubjects().value();
   EXPECT_EQ(numSubjects.normal, 3);
   // All literals with language tags are added numSubjects.
   EXPECT_EQ(numSubjects, index.numDistinctCol0(Permutation::SPO));
@@ -966,7 +966,7 @@ TEST(IndexTest, NumDistinctEntities) {
   EXPECT_EQ(numPredicates, index.numDistinctCol0(Permutation::PSO));
   EXPECT_EQ(numPredicates, index.numDistinctCol0(Permutation::POS));
 
-  auto objects = index.numDistinctObjects();
+  auto objects = index.numDistinctObjects().value();
   EXPECT_EQ(objects.normal, 7);
   EXPECT_EQ(objects, index.numDistinctCol0(Permutation::OSP));
   EXPECT_EQ(objects, index.numDistinctCol0(Permutation::OPS));
@@ -995,10 +995,8 @@ TEST(IndexTest, NumDistinctEntities) {
 
 TEST(IndexTest, NumDistinctEntitiesCornerCases) {
   const IndexImpl& index = makeQec("", false, false)->getIndex().getImpl();
-  AD_EXPECT_THROW_WITH_MESSAGE(index.numDistinctSubjects(),
-                               ::testing::ContainsRegex("if all 6"));
-  AD_EXPECT_THROW_WITH_MESSAGE(index.numDistinctObjects(),
-                               ::testing::ContainsRegex("if all 6"));
+  EXPECT_EQ(index.numDistinctSubjects(), std::nullopt);
+  EXPECT_EQ(index.numDistinctObjects(), std::nullopt);
   AD_EXPECT_THROW_WITH_MESSAGE(
       index.numDistinctCol0(
           static_cast<Permutation::Enum>(qlever::enumSize<Permutation::Enum>)),
@@ -1281,9 +1279,13 @@ TEST(IndexImpl, recomputeStatistics) {
 
     // Simulate scenario where not all permutations are loaded.
     if (!loadAllPermutations) {
-      // Overwrite with unloaded permutation.
-      indexImpl.SPOForTesting() = Permutation{
-          Permutation::SPO, ad_utility::makeUnlimitedAllocator<Id>()};
+      // Overwrite the permutations that start with the subject or the object
+      // with unloaded permutations.
+      for (auto permutation : {Permutation::SPO, Permutation::SOP,
+                               Permutation::OSP, Permutation::OPS}) {
+        indexImpl.getPermutation(permutation) =
+            Permutation{permutation, ad_utility::makeUnlimitedAllocator<Id>()};
+      }
       // Zero out original values.
       indexImpl.configurationJson_["num-subjects"] = NNAI(0, 0);
       indexImpl.configurationJson_["num-objects"] = NNAI(0, 0);

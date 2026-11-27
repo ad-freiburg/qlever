@@ -53,9 +53,11 @@ class Permutation {
   static constexpr auto SOP = Enum::SOP;
   static constexpr auto OPS = Enum::OPS;
   static constexpr auto OSP = Enum::OSP;
-  static constexpr auto ALL = {Enum::PSO, Enum::POS, Enum::SPO,
-                               Enum::SOP, Enum::OPS, Enum::OSP};
-  static constexpr auto INTERNAL = {Enum::PSO, Enum::POS};
+  static constexpr std::array<Enum, 6> ALL{Enum::PSO, Enum::POS, Enum::SPO,
+                                           Enum::SOP, Enum::OPS, Enum::OSP};
+  // The permutations that may have an internal permutation (see
+  // `internalPermutation`).
+  static constexpr std::array<Enum, 2> INTERNAL{Enum::PSO, Enum::POS};
 
   template <bool isInternal>
   static constexpr const auto& all() {
@@ -80,6 +82,11 @@ class Permutation {
   // Convert a permutation to the corresponding string, etc. `PSO` is converted
   // to "PSO".
   static std::string_view toString(Enum permutation);
+
+  // Inverse of `toString`. Additionally accept the explicit four-letter names
+  // with the graph as the last column (e.g. "PSOG" for `PSO`). The parsing is
+  // case-insensitive. Throw if the `name` does not denote a permutation.
+  static Enum fromString(std::string_view name);
 
   // Return the paths of the files that store `permutation` for the index with
   // the given `onDiskBase` (the permutation file and its `.meta` file). For the
@@ -138,6 +145,13 @@ class Permutation {
       const CancellationHandle& cancellationHandle,
       const LocatedTriplesState& locatedTriplesState,
       const LimitOffsetClause& limitOffset) const;
+
+  // Return the distinct `col1Id`s of all the triples of this permutation and
+  // their counts, see
+  // `CompressedRelationReader::getDistinctCol1IdsAndCountsForAllCol0`.
+  IdTable getDistinctCol1IdsAndCountsForAllCol0(
+      const CancellationHandle& cancellationHandle,
+      const LocatedTriplesState& locatedTriplesState) const;
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   // Lazily compute the distinct `col0Id`s of a full scan of this permutation.

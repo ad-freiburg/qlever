@@ -42,6 +42,38 @@
 
 namespace qlever {
 
+namespace {
+// Return the permutations to build or load that are specified by the
+// `config` (see `CommonConfig::permutations_` and
+// `CommonConfig::onlyPsoAndPos_`).
+std::optional<std::vector<Permutation::Enum>> getPermutationsFromConfig(
+    const CommonConfig& config) {
+  if (config.onlyPsoAndPos_) {
+    AD_LOG_WARN << "The option to only use the PSO and POS permutations "
+                   "(`--only-pso-and-pos-permutations`) is deprecated, use "
+                   "`--permutations PSO POS` instead"
+                << std::endl;
+    if (!config.permutations_.empty()) {
+      throw std::runtime_error{
+          "The option to only use the PSO and POS permutations must not be "
+          "combined with an explicit list of permutations"};
+    }
+    return std::vector<Permutation::Enum>{Permutation::PSO, Permutation::POS};
+  }
+  if (config.permutations_.empty()) {
+    return std::nullopt;
+  }
+  std::vector<Permutation::Enum> result;
+  for (const auto& name : config.permutations_) {
+    auto permutation = Permutation::fromString(name);
+    if (!ad_utility::contains(result, permutation)) {
+      result.push_back(permutation);
+    }
+  }
+  return result;
+}
+}  // namespace
+
 // _____________________________________________________________________________
 Qlever::Qlever(const EngineConfig& config, bool skipLoading)
     : Qlever(config, skipLoading, ad_utility::globalExecutor(),
@@ -164,7 +196,7 @@ Qlever::Qlever(const EngineConfig& config, bool skipLoading,
     loadedFromBlob_ = true;
   } else {
     index.usePatterns() = enablePatternTrick_;
-    index.loadAllPermutations() = !config.onlyPsoAndPos_;
+    index.permutationsToBuildOrLoad() = getPermutationsFromConfig(config);
     index.doNotLoadPermutations() = config.doNotLoadPermutations_;
     index.createFromOnDiskIndex(config.baseName_, config.persistUpdates_);
     if (config.loadTextIndex_) {
@@ -253,7 +285,7 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
   index.setOnDiskBase(config.baseName_);
   index.setKeepTempFiles(config.keepTemporaryFiles_);
   index.setSettingsFile(config.settingsFile_);
-  index.loadAllPermutations() = !config.onlyPsoAndPos_;
+  index.permutationsToBuildOrLoad() = getPermutationsFromConfig(config);
   index.addHasWordTriples() = config.addHasWordTriples_;
   index.getImpl().setHasWordNormalization(config.hasWordNormalization_);
   index.getImpl().setHasWordRestrictPredicates(
@@ -792,7 +824,7 @@ Qlever::RebuildResult Qlever::rebuildIndexToDisk(
       allocator(), Index{allocator()}, MaterializedViewsManager{allocator()});
   auto& [newIndex, newManager] = *indexAndViews;
   newIndex.usePatterns() = index.usePatterns();
-  newIndex.loadAllPermutations() = index.loadAllPermutations();
+  newIndex.permutationsToBuildOrLoad() = index.loadedPermutations();
   newIndex.createFromOnDiskIndex(indexBaseName,
                                  index.deltaTriplesManager().persists());
   // The rebuilt index has to encode exactly the same IRIs directly in an `Id`,

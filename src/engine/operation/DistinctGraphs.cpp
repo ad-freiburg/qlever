@@ -51,22 +51,22 @@ VariableToColumnMap DistinctGraphs::computeVariableToColumnMap() const {
 }
 
 // ____________________________________________________________________________
-size_t DistinctGraphs::getCostEstimate() {
-  return getIndex()
-      .getImpl()
-      .getPermutation(Permutation::Enum::SPO)
-      .metaData()
-      .blockData()
-      .size();
+const Permutation& DistinctGraphs::permutation() const {
+  return getIndex().getImpl().getFirstLoadedPermutation(
+      {Permutation::SPO, Permutation::PSO});
 }
 
-// Compute the distinct graph IDs of all blocks of the SPO permutation (see
+// ____________________________________________________________________________
+size_t DistinctGraphs::getCostEstimate() {
+  return permutation().metaData().blockData().size();
+}
+
+// Compute the distinct graph IDs of all blocks of the `permutation()` (see
 // `CompressedRelationReader::computeUniqueGraphIds` for the details of the
 // block metadata shortcut) and remove the default graph if requested.
 // ____________________________________________________________________________
 Result DistinctGraphs::computeResult([[maybe_unused]] bool requestLaziness) {
-  const auto& permutation =
-      getIndex().getImpl().getPermutation(Permutation::Enum::SPO);
+  const auto& permutation = this->permutation();
   const LocatedTriplesPerBlock& ltpb =
       permutation.getLocatedTriplesForPermutation(locatedTriplesState());
   auto scanSpecAndBlocks = permutation.getScanSpecAndBlocks(

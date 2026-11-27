@@ -1043,8 +1043,12 @@ std::optional<IdTable> GroupByImpl::computeGroupByForFullIndexScan() const {
   // the grouped variable.
   auto permutation = getPermutationForThreeVariableTriple(
       *_subtree, groupByVariable, groupByVariable);
+  auto col1Permutation = permutation.has_value()
+                             ? boost::optional<const Permutation&>{}
+                             : getCol1PermutationForThreeVariableTriple(
+                                   *_subtree, groupByVariable);
 
-  if (!permutation.has_value()) {
+  if (!permutation.has_value() && !col1Permutation.has_value()) {
     return std::nullopt;
   }
 
@@ -1084,9 +1088,13 @@ std::optional<IdTable> GroupByImpl::computeGroupByForFullIndexScan() const {
   //
   // NOTE: Use the `LocatedTriplesState` of the `IndexScan` (see
   // `computeGroupByForSingleIndexScan` for details).
-  auto table = permutation.value().getDistinctCol0IdsAndCounts(
-      cancellationHandle(), operation->locatedTriplesState(),
-      operation->getLimitOffset());
+  auto table =
+      permutation.has_value()
+          ? permutation.value().getDistinctCol0IdsAndCounts(
+                cancellationHandle(), operation->locatedTriplesState(),
+                operation->getLimitOffset())
+          : col1Permutation.value().getDistinctCol1IdsAndCountsForAllCol0(
+                cancellationHandle(), operation->locatedTriplesState());
   if (numCounts == 0) {
     table.setColumnSubset(std::array{ColumnIndex{0}});
   } else if (!variableIsBoundInSubtree) {
@@ -1126,12 +1134,23 @@ GroupByImpl::getPermutationForThreeVariableTriple(
   // correctly or we can't use it.
 
   if (indexScan->permutation().permutationType() == Permutation::Type::NORMAL) {
+    // Return the first of the `permutations` that is loaded, if any.
+    auto firstLoaded =
+        [this](std::initializer_list<Permutation::Enum> permutations)
+        -> boost::optional<const Permutation&> {
+      const auto* permutation =
+          getIndex().getImpl().firstLoadedPermutation(permutations);
+      if (permutation == nullptr) {
+        return boost::none;
+      }
+      return *permutation;
+    };
     if (variableByWhichToSort == indexScan->subject()) {
-      return getIndex().getImpl().getPermutation(Permutation::SPO);
+      return firstLoaded({Permutation::SPO, Permutation::SOP});
     } else if (variableByWhichToSort == indexScan->predicate()) {
-      return getIndex().getImpl().getPermutation(Permutation::POS);
+      return firstLoaded({Permutation::POS, Permutation::PSO});
     } else if (variableByWhichToSort == indexScan->object()) {
-      return getIndex().getImpl().getPermutation(Permutation::OSP);
+      return firstLoaded({Permutation::OSP, Permutation::OPS});
     }
   } else if (indexScan->permutation().permutationType() ==
                  Permutation::Type::MATERIALIZED_VIEW &&
@@ -1139,6 +1158,34 @@ GroupByImpl::getPermutationForThreeVariableTriple(
     return indexScan->permutation();
   }
   return {};
+}
+
+// ____________________________________________________________________________
+boost::optional<const Permutation&>
+GroupByImpl::getCol1PermutationForThreeVariableTriple(
+    const QueryExecutionTree& tree, const Variable& variable) const {
+  // As no permutation is sorted by the `variable`, the scan is sorted
+  // explicitly, but the `Sort` is not needed for the shortcut.
+  const QueryExecutionTree* scanTree = &tree;
+  if (auto sort =
+          std::dynamic_pointer_cast<const Sort>(tree.getRootOperation())) {
+    scanTree = sort->getChildren().at(0);
+  }
+  auto indexScan =
+      std::dynamic_pointer_cast<const IndexScan>(scanTree->getRootOperation());
+  if (!indexScan || !indexScan->graphsToFilter().areAllGraphsAllowed() ||
+      indexScan->numVariables() != 3 ||
+      indexScan->permutation().permutationType() != Permutation::Type::NORMAL ||
+      !indexScan->getLimitOffset().isUnconstrained()) {
+    return boost::none;
+  }
+  const auto& index = getIndex().getImpl();
+  if (variable == indexScan->subject()) {
+    return index.getPermutation(Permutation::PSO);
+  } else if (variable == indexScan->object()) {
+    return index.getPermutation(Permutation::POS);
+  }
+  return boost::none;
 }
 
 // ____________________________________________________________________________

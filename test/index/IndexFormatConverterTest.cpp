@@ -132,7 +132,6 @@ class IndexFormatConverterTest : public ::testing::Test {
   std::pair<Index, LocatedTriplesSharedState> loadConvertedIndex() {
     Index index{ad_utility::makeUnlimitedAllocator<Id>()};
     index.usePatterns() = true;
-    index.loadAllPermutations() = true;
     index.createFromOnDiskIndex(newBasename_, false);
     index.addTextFromOnDiskIndex();
     auto locatedTriples =
@@ -651,8 +650,8 @@ class MultiBlockIndexFormatConverterTest : public ::testing::Test {
   Index loadConvertedIndex(bool allPermutations = true) const {
     Index index{ad_utility::makeUnlimitedAllocator<Id>()};
     index.usePatterns() = allPermutations;
-    index.loadAllPermutations() = allPermutations;
     index.createFromOnDiskIndex(newBasename_, false);
+    EXPECT_EQ(index.hasAllPermutations(), allPermutations);
     return index;
   }
 
@@ -661,7 +660,8 @@ class MultiBlockIndexFormatConverterTest : public ::testing::Test {
   static std::vector<Permutation::Enum> permutationsOfIndex(
       bool allPermutations) {
     if (allPermutations) {
-      return std::vector<Permutation::Enum>(Permutation::ALL);
+      return std::vector<Permutation::Enum>(Permutation::ALL.begin(),
+                                            Permutation::ALL.end());
     }
     return {Permutation::PSO, Permutation::POS};
   }
@@ -671,8 +671,9 @@ class MultiBlockIndexFormatConverterTest : public ::testing::Test {
   // index has many blocks), pretend that it is in the previous format, and
   // convert it. Check that the converted index has exactly the same content as
   // the index that it was converted from, and return the number of blocks that
-  // each permutation of the latter had (in the order of `Permutation::ALL`), so
-  // that a test can check which case it actually covers.
+  // each permutation of the latter had (in the order of
+  // `Permutation::ALL`), so that a test can check which case it actually
+  // covers.
   std::vector<size_t> convertAndExpectTheSameContent(
       std::string turtleInput, bool allPermutations = true) {
     auto permutations = permutationsOfIndex(allPermutations);

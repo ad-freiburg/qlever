@@ -326,9 +326,9 @@ IndexImpl::buildOspWithPatterns(
                         [&queue]() noexcept { queue.finish(); }}};
   // Actually create the permutations.
   auto thirdSorter =
-      makeSorterPtr<ThirdPermutation, NumColumnsIndexBuilding + 2>("third");
-  createSecondPermutationPair(NumColumnsIndexBuilding + 2,
-                              std::move(blockGenerator), *thirdSorter);
+      makeSorterPtr<SortByPSO, NumColumnsIndexBuilding + 2>("third");
+  createOSPAndOPS(NumColumnsIndexBuilding + 2, std::move(blockGenerator),
+                  *thirdSorter);
   joinWithPatternThread.join();
   secondSorter->clear();
   // Add the `ql:has-pattern` predicate to the sorter such that it will become
@@ -444,7 +444,11 @@ void IndexImpl::createFromFiles(
 
 // _____________________________________________________________________________
 void IndexImpl::prepareIndexBuild() {
-  if (!loadAllPermutations_ && usePatterns_) {
+  auto permutations = permutationsToBuild();
+  if (usePatterns_ &&
+      !ql::ranges::all_of(Permutation::ALL, [&permutations](auto p) {
+        return ad_utility::contains(permutations, p);
+      })) {
     throw std::runtime_error{
         "The patterns can only be built when all 6 permutations are created"};
   }
@@ -513,67 +517,99 @@ void IndexImpl::createFromFilesAfterPreparation(
         createInternalPSOandPOS(*indexBuilderData.sorter_.internalTriplesPso_);
   };
 
-  // The `firstSorter` is type-erased, because it sorts by PSO if only two
-  // permutations are built, and by SPO otherwise (see
-  // `IndexBuilderDataAsFirstPermutationSorter`). The chunkwise writer needs
-  // the concrete sorter, so it is cast back here.
-  if (!loadAllPermutations_) {
-    createInternalPsoAndPosAndSetMetadata();
-    // Only two permutations, no patterns, in this case the `firstSorter` is a
-    // PSO sorter, and `createPSOAndPOS` creates PSO/POS permutations.
-    auto& firstSorterPso =
-        dynamic_cast<ExternalSorter<SortByPSO>&>(firstSorter);
-    // The first sorter may yield duplicate triples, which are removed by the
-    // writer of the first pair of permutations (also below).
-    createPSOAndPOS(NumColumnsIndexBuilding,
-                    ChunkwiseInput{firstSorterPso, RemoveDuplicates::True});
-    configurationJson_["has-all-permutations"] = false;
-  } else if (!usePatterns_) {
-    createInternalPsoAndPosAndSetMetadata();
-    // Without patterns, we explicitly have to pass in the next sorters to all
-    // permutation creating functions. All the pairs are written directly from
-    // the chunks of the merge of the respective sorter.
-    auto& firstSorterSpo =
-        dynamic_cast<ExternalSorter<FirstPermutation>&>(firstSorter);
-    auto secondSorter = makeSorter<SecondPermutation>("second");
-    createFirstPermutationPair(
-        NumColumnsIndexBuilding,
-        ChunkwiseInput{firstSorterSpo, RemoveDuplicates::True}, secondSorter);
-    firstSorter.clearUnderlying();
-
-    auto thirdSorter = makeSorter<ThirdPermutation>("third");
-    createSecondPermutationPair(
-        NumColumnsIndexBuilding,
-        ChunkwiseInput{secondSorter, RemoveDuplicates::False}, thirdSorter);
-    secondSorter.clear();
-    createThirdPermutationPair(
-        NumColumnsIndexBuilding,
-        ChunkwiseInput{thirdSorter, RemoveDuplicates::False});
-    configurationJson_["has-all-permutations"] = true;
-  } else {
+  // The permutations are built in pairs that share their first column (SPO and
+  // SOP, OSP and OPS, PSO and POS), in this order. The PSO and POS
+  // permutations are always built (see `permutationsToBuild`), the other pairs
+  // only if at least one of their permutations was requested. Each pair pushes
+  // its triples to the sorter of the next pair.
+  //
+  // The `firstSorter` is type-erased, because its sort order depends on the
+  // first pair that is built (see `makeFirstPermutationSorter`). The chunkwise
+  // writer needs the concrete sorter, so it is cast back here.
+  const auto permutations = permutationsToBuild();
+  const bool buildSubjectPair = buildsSubjectPair(permutations);
+  const bool buildObjectPair = buildsObjectPair(permutations);
+  if (usePatterns_) {
     // Load all permutations and also load the patterns. In this case the
-    // `createFirstPermutationPair` function returns the next sorter, already
-    // enriched with the patterns of the subjects in the triple.
+    // `createSPOAndSOP` function returns the next sorter, already enriched
+    // with the patterns of the subjects in the triple.
     //
     // NOTE: The pattern creation needs the triples in order, so the first
     // pair of permutations is written from the sequential (deduplicated)
     // output of the sorter, and the second pair from the output of the join
     // with the patterns (see `buildOspWithPatterns`). Only the last pair is
     // written directly from the chunks of the merge of its sorter.
+    AD_CORRECTNESS_CHECK(buildSubjectPair && buildObjectPair);
     BlocksOfTriples firstSorterWithUnique =
         ad_utility::uniqueBlockView(firstSorter.getSortedOutput());
-    auto patternOutput = createFirstPermutationPair(
-        NumColumnsIndexBuilding, std::move(firstSorterWithUnique));
+    auto patternOutput = createSPOAndSOP(NumColumnsIndexBuilding,
+                                         std::move(firstSorterWithUnique));
     firstSorter.clearUnderlying();
     auto thirdSorterPtr =
         buildOspWithPatterns(std::move(patternOutput.value()),
                              *indexBuilderData.sorter_.internalTriplesPso_);
     createInternalPsoAndPosAndSetMetadata();
-    createThirdPermutationPair(
-        NumColumnsIndexBuilding + 2,
-        ChunkwiseInput{*thirdSorterPtr, RemoveDuplicates::False});
-    configurationJson_["has-all-permutations"] = true;
+    createPSOAndPOS(NumColumnsIndexBuilding + 2,
+                    ChunkwiseInput{*thirdSorterPtr, RemoveDuplicates::False});
+  } else {
+    createInternalPsoAndPosAndSetMetadata();
+    // Without patterns, all the pairs are written directly from the chunks of
+    // the merge of the respective sorter. The first sorter may yield duplicate
+    // triples, which are removed by the writer of the first pair.
+    auto psoSorter = makeSorter<SortByPSO>("third");
+    auto buildObjectPairFrom = [this, &psoSorter](auto& ospSorter,
+                                                  RemoveDuplicates unique) {
+      createOSPAndOPS(NumColumnsIndexBuilding,
+                      ChunkwiseInput{ospSorter, unique}, psoSorter);
+    };
+    if (buildSubjectPair) {
+      auto& spoSorter = dynamic_cast<ExternalSorter<SortBySPO>&>(firstSorter);
+      if (buildObjectPair) {
+        auto ospSorter = makeSorter<SortByOSP>("second");
+        createSPOAndSOP(NumColumnsIndexBuilding,
+                        ChunkwiseInput{spoSorter, RemoveDuplicates::True},
+                        ospSorter);
+        firstSorter.clearUnderlying();
+        buildObjectPairFrom(ospSorter, RemoveDuplicates::False);
+        ospSorter.clear();
+      } else {
+        createSPOAndSOP(NumColumnsIndexBuilding,
+                        ChunkwiseInput{spoSorter, RemoveDuplicates::True},
+                        psoSorter);
+        firstSorter.clearUnderlying();
+      }
+    } else if (buildObjectPair) {
+      buildObjectPairFrom(dynamic_cast<ExternalSorter<SortByOSP>&>(firstSorter),
+                          RemoveDuplicates::True);
+      firstSorter.clearUnderlying();
+    }
+    if (buildSubjectPair || buildObjectPair) {
+      createPSOAndPOS(NumColumnsIndexBuilding,
+                      ChunkwiseInput{psoSorter, RemoveDuplicates::False});
+    } else {
+      // Only the PSO and POS permutations are built, so the `firstSorter` is a
+      // PSO sorter.
+      createPSOAndPOS(
+          NumColumnsIndexBuilding,
+          ChunkwiseInput{dynamic_cast<ExternalSorter<SortByPSO>&>(firstSorter),
+                         RemoveDuplicates::True});
+    }
   }
+  // A pair of permutations is always built completely, so delete those
+  // permutations that were not requested.
+  //
+  // TODO<joka921> Don't write them in the first place.
+  for (auto permutation : Permutation::ALL) {
+    if (!ad_utility::contains(permutations, permutation)) {
+      for (const auto& file :
+           Permutation::fileNames(permutation, onDiskBase_)) {
+        if (ql::filesystem::exists(file)) {
+          ad_utility::deleteFile(file);
+        }
+      }
+    }
+  }
+  setPermutationsInConfiguration(permutations);
 
   configurationJson_[BLANK_NODE_ALLOCATION_START] =
       indexBuilderData.vocabularyMetaData_.getNextBlankNodeIndex();
@@ -581,6 +617,36 @@ void IndexImpl::createFromFilesAfterPreparation(
   addInternalStatisticsToConfiguration(numTriplesInternal,
                                        numPredicatesInternal);
   AD_LOG_INFO << "Index build completed" << std::endl;
+}
+
+// _____________________________________________________________________________
+bool IndexImpl::buildsSubjectPair(
+    const std::vector<Permutation::Enum>& permutations) {
+  return ad_utility::contains(permutations, Permutation::SPO) ||
+         ad_utility::contains(permutations, Permutation::SOP);
+}
+
+// _____________________________________________________________________________
+bool IndexImpl::buildsObjectPair(
+    const std::vector<Permutation::Enum>& permutations) {
+  return ad_utility::contains(permutations, Permutation::OSP) ||
+         ad_utility::contains(permutations, Permutation::OPS);
+}
+
+// _____________________________________________________________________________
+void IndexImpl::setPermutationsInConfiguration(
+    const std::vector<Permutation::Enum>& permutations) {
+  std::vector<std::string> names;
+  for (auto permutation : permutations) {
+    names.emplace_back(Permutation::toString(permutation));
+  }
+  configurationJson_["permutations"] = names;
+  // Also write the key that older versions of QLever use.
+  configurationJson_["has-all-permutations"] =
+      ql::ranges::all_of(Permutation::ALL, [&permutations](auto p) {
+        return ad_utility::contains(permutations, p);
+      });
+  writeConfiguration();
 }
 
 // _____________________________________________________________________________
@@ -728,12 +794,17 @@ class ConversionOutput {
                                        "Triples converted: "};
 
   // The sorter for the first permutation. Its type is erased, because its
-  // comparator depends on `loadAllPermutations()` and hence is only known at
+  // comparator depends on the permutations that are built (see
+  // `IndexImpl::createFromFilesAfterPreparation`) and hence is only known at
   // runtime.
   static Sorters::SorterPtr makeFirstPermutationSorter(
       IndexImpl& index, std::string_view permutationName) {
-    if (index.loadAllPermutations()) {
-      return index.makeSorterPtr<FirstPermutation>(permutationName);
+    auto permutations = index.permutationsToBuild();
+    if (IndexImpl::buildsSubjectPair(permutations)) {
+      return index.makeSorterPtr<SortBySPO>(permutationName);
+    }
+    if (IndexImpl::buildsObjectPair(permutations)) {
+      return index.makeSorterPtr<SortByOSP>(permutationName);
     }
     return index.makeSorterPtr<SortByPSO>(permutationName);
   }
@@ -1078,6 +1149,25 @@ std::tuple<size_t, IndexMetaData, IndexMetaData> IndexImpl::createPermutations(
 }
 
 // _____________________________________________________________________________
+void IndexImpl::createPermutationWithoutTwin(size_t numColumns,
+                                             BlocksOfTriples sortedTriples,
+                                             const Permutation& permutation) {
+  AD_LOG_INFO << "Creating permutation " << permutation.readableName() << " ..."
+              << std::endl;
+  auto fileName = getFilenameForPermutation(permutation, false);
+  auto twinFileName = absl::StrCat(fileName, ".twin-tmp");
+  absl::Cleanup deleteTwin = [&twinFileName]() {
+    ad_utility::deleteFile(twinFileName, false);
+  };
+  // The `sortedTriples` are already in the column order of the `permutation`.
+  auto [numDistinctCol0, metaData, twinMetaData] = createPermutationPairImpl(
+      numColumns, fileName, twinFileName, std::move(sortedTriples),
+      qlever::KeyOrder{0, 1, 2, 3});
+  metaData.calculateStatistics(numDistinctCol0);
+  writeMetaData(metaData, fileName);
+}
+
+// _____________________________________________________________________________
 void IndexImpl::writeMetaData(IndexMetaData& metaData,
                               const std::string& filename) const {
   metaData.setName(getKbName());
@@ -1161,30 +1251,42 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
 
   if (doNotLoadPermutations_) {
     // Set all permutations to nullptr to indicate they are not loaded.
-    pso_ = nullptr;
-    pos_ = nullptr;
-    ops_ = nullptr;
-    osp_ = nullptr;
-    spo_ = nullptr;
-    sop_ = nullptr;
+    ql::ranges::fill(permutations_, nullptr);
     AD_LOG_INFO
         << "No permutations were loaded due to `doNotLoadPermutations` "
            "being set to true. Only queries that don't contain any triples "
            "can be executed."
         << std::endl;
   } else {
-    load(pso_, true);
-    load(pos_, true);
-    if (loadAllPermutations_) {
-      load(ops_);
-      load(osp_);
-      load(spo_);
-      load(sop_);
-    } else {
-      AD_LOG_INFO
-          << "Only the PSO and POS permutation were loaded, SPARQL queries "
-             "with predicate variables will therefore not work"
-          << std::endl;
+    // The PSO and POS permutations are always loaded, together with their
+    // internal permutations. Of the others, those are loaded that the index
+    // has and that were requested (see `permutationsToBuildOrLoad_`).
+    std::vector<Permutation::Enum> toLoad = permutationsOfLoadedIndex_;
+    if (permutationsToBuildOrLoad_.has_value()) {
+      toLoad.erase(std::remove_if(toLoad.begin(), toLoad.end(),
+                                  [this](Permutation::Enum p) {
+                                    return !ad_utility::contains(
+                                        permutationsToBuildOrLoad_.value(), p);
+                                  }),
+                   toLoad.end());
+    }
+    for (auto permutation : Permutation::INTERNAL) {
+      load(getPermutationPtr(permutation), true);
+    }
+    for (auto permutation : toLoad) {
+      if (!ad_utility::contains(Permutation::INTERNAL, permutation)) {
+        load(getPermutationPtr(permutation));
+      }
+    }
+    if (!hasAllPermutations()) {
+      AD_LOG_INFO << "Loaded permutations: "
+                  << absl::StrJoin(loadedPermutations(), ", ",
+                                   [](std::string* out, Permutation::Enum p) {
+                                     out->append(Permutation::toString(p));
+                                   })
+                  << "; queries for which none of these permutations is a "
+                     "good fit will be slow"
+                  << std::endl;
     }
   }
 
@@ -1231,7 +1333,7 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
 bool IndexImpl::mayContainGeoPoints() const {
   // Return true if the `OSP` permutation is not loaded (without it, there is
   // no cheap way to tell).
-  if (doNotLoadPermutations_ || !loadAllPermutations_) {
+  if (doNotLoadPermutations_ || !hasPermutation(Permutation::OSP)) {
     return true;
   }
 
@@ -1241,7 +1343,8 @@ bool IndexImpl::mayContainGeoPoints() const {
   auto locatedTriplesState =
       deltaTriplesManager().getCurrentLocatedTriplesSharedState();
   BlockMetadataSpan blocks =
-      osp_->getLocatedTriplesForPermutation(*locatedTriplesState)
+      OSP()
+          .getLocatedTriplesForPermutation(*locatedTriplesState)
           .getAugmentedMetadata();
 
   // Find the first block whose last object is not of a datatype before
@@ -1266,7 +1369,7 @@ bool IndexImpl::mayContainGeoPoints() const {
   CompressedRelationReader::ScanSpecAndBlocks blockOnly{
       {std::nullopt, std::nullopt, std::nullopt},
       {BlockMetadataRange{block, block + 1}}};
-  auto objects = osp_->scan(
+  auto objects = OSP().scan(
       blockOnly, {}, std::make_shared<ad_utility::CancellationHandle<>>(),
       *locatedTriplesState, ad_utility::globalExecutor());
   return ql::ranges::any_of(objects.getColumn(0), [](Id id) {
@@ -1337,12 +1440,11 @@ bool IndexImpl::isLiteral(std::string_view object) const {
 
 // _____________________________________________________________________________
 void IndexImpl::setKbName(const std::string& name) {
-  if (pos_) pos_->setKbName(name);
-  if (pso_) pso_->setKbName(name);
-  if (sop_) sop_->setKbName(name);
-  if (spo_) spo_->setKbName(name);
-  if (ops_) ops_->setKbName(name);
-  if (osp_) osp_->setKbName(name);
+  for (const auto& permutation : permutations_) {
+    if (permutation) {
+      permutation->setKbName(name);
+    }
+  }
 }
 
 // ____________________________________________________________________________
@@ -1409,8 +1511,6 @@ bool& IndexImpl::usePatterns() { return usePatterns_; }
 bool IndexImpl::usePatterns() const { return usePatterns_; }
 
 // _____________________________________________________________________________
-bool& IndexImpl::loadAllPermutations() { return loadAllPermutations_; }
-
 // _____________________________________________________________________________
 bool& IndexImpl::addHasWordTriples() { return addHasWordTriples_; }
 
@@ -1712,7 +1812,24 @@ void IndexImpl::applyConfiguration(const nlohmann::json& configuration) {
   };
 
   loadDataMember("git-hash", gitShortHash_);
-  loadDataMember("has-all-permutations", loadAllPermutations_, true);
+  // Older indexes only store whether they have all six permutations or only
+  // PSO and POS.
+  if (auto it = configurationJson_.find("permutations");
+      it != configurationJson_.end()) {
+    permutationsOfLoadedIndex_.clear();
+    for (const auto& name : it->get<std::vector<std::string>>()) {
+      permutationsOfLoadedIndex_.push_back(Permutation::fromString(name));
+    }
+  } else {
+    bool hasAllPermutations = true;
+    loadDataMember("has-all-permutations", hasAllPermutations, true);
+    permutationsOfLoadedIndex_ =
+        hasAllPermutations
+            ? std::vector<Permutation::Enum>(Permutation::ALL.begin(),
+                                             Permutation::ALL.end())
+            : std::vector<Permutation::Enum>(Permutation::INTERNAL.begin(),
+                                             Permutation::INTERNAL.end());
+  }
   loadDataMember("num-predicates", numPredicates_);
   // These might be missing if there are only two permutations.
   loadDataMember("num-subjects", numSubjects_, NumNormalAndInternal{});
@@ -2091,30 +2208,85 @@ IndexImpl::NumNormalAndInternal IndexImpl::numTriples() const {
 
 // ____________________________________________________________________________
 IndexImpl::PermutationPtr IndexImpl::getPermutationPtr(Permutation::Enum p) {
-  using enum Permutation::Enum;
-  switch (p) {
-    case PSO:
-      return pso_;
-    case POS:
-      return pos_;
-    case SPO:
-      return spo_;
-    case SOP:
-      return sop_;
-    case OSP:
-      return osp_;
-    case OPS:
-      return ops_;
+  const auto& result = permutations_.at(static_cast<size_t>(p));
+  // Throw a readable error if the permutations were not loaded at all.
+  getPermutationImpl(result, Permutation::toString(p));
+  return result;
+}
+
+// ____________________________________________________________________________
+auto IndexImpl::makePermutations(
+    const ad_utility::AllocatorWithLimit<Id>& allocator)
+    -> std::array<PermutationPtr, Permutation::ALL.size()> {
+  std::array<PermutationPtr, Permutation::ALL.size()> result;
+  for (auto permutation : Permutation::ALL) {
+    result.at(static_cast<size_t>(permutation)) =
+        std::make_shared<Permutation>(permutation, allocator);
   }
-  AD_FAIL();
+  return result;
+}
+
+// ____________________________________________________________________________
+bool IndexImpl::hasPermutation(Permutation::Enum permutation) const {
+  const auto& ptr = permutations_.at(static_cast<size_t>(permutation));
+  return ptr != nullptr && ptr->isLoaded();
+}
+
+// ____________________________________________________________________________
+bool IndexImpl::hasAllPermutations() const {
+  return ql::ranges::all_of(Permutation::ALL, [this](auto permutation) {
+    return hasPermutation(permutation);
+  });
+}
+
+// ____________________________________________________________________________
+const Permutation* IndexImpl::firstLoadedPermutation(
+    std::initializer_list<Permutation::Enum> permutations) const {
+  for (auto permutation : permutations) {
+    if (hasPermutation(permutation)) {
+      return &getPermutation(permutation);
+    }
+  }
+  return nullptr;
+}
+
+// ____________________________________________________________________________
+const Permutation& IndexImpl::getFirstLoadedPermutation(
+    std::initializer_list<Permutation::Enum> permutations) const {
+  const auto* result = firstLoadedPermutation(permutations);
+  if (result == nullptr) {
+    throw std::runtime_error{absl::StrCat(
+        "None of the permutations ",
+        absl::StrJoin(permutations, ", ",
+                      [](std::string* out, Permutation::Enum p) {
+                        out->append(Permutation::toString(p));
+                      }),
+        " is loaded, but one of them is required for this operation")};
+  }
+  return *result;
+}
+
+// ____________________________________________________________________________
+std::vector<Permutation::Enum> IndexImpl::permutationsToBuild() const {
+  std::vector<Permutation::Enum> result;
+  const auto& requested = permutationsToBuildOrLoad_;
+  // The PSO and POS permutations are always built, see
+  // `permutationsToBuildOrLoad_`.
+  ql::ranges::copy_if(
+      Permutation::ALL, std::back_inserter(result),
+      [&requested](auto permutation) {
+        if (ad_utility::contains(Permutation::INTERNAL, permutation)) {
+          return true;
+        }
+        return !requested.has_value() ||
+               ad_utility::contains(requested.value(), permutation);
+      });
+  return result;
 }
 
 // ____________________________________________________________________________
 Permutation& IndexImpl::getPermutation(Permutation::Enum p) {
-  // Note: the `const_cast` is fine here, we only access objects, that are
-  // actually mutable.
-  return const_cast<Permutation&>(
-      getPermutationImpl(getPermutationPtr(p), Permutation::toString(p)));
+  return *getPermutationPtr(p);
 }
 
 // ____________________________________________________________________________
@@ -2129,22 +2301,20 @@ std::shared_ptr<const Permutation> IndexImpl::getPermutationPtr(
 }
 
 // __________________________________________________________________________
-Index::NumNormalAndInternal IndexImpl::numDistinctSubjects() const {
-  AD_CONTRACT_CHECK(
-      hasAllPermutations(),
-      "Can only get # distinct subjects if all 6 permutations "
-      "have been registered on sever start (and index build time) "
-      "with the -a option.");
+std::optional<Index::NumNormalAndInternal> IndexImpl::numDistinctSubjects()
+    const {
+  if (firstLoadedPermutation({Permutation::SPO, Permutation::SOP}) == nullptr) {
+    return std::nullopt;
+  }
   return numSubjects_;
 }
 
 // __________________________________________________________________________
-Index::NumNormalAndInternal IndexImpl::numDistinctObjects() const {
-  AD_CONTRACT_CHECK(
-      hasAllPermutations(),
-      "Can only get # distinct objects if all 6 permutations "
-      "have been registered on sever start (and index build time) "
-      "with the -a option.");
+std::optional<Index::NumNormalAndInternal> IndexImpl::numDistinctObjects()
+    const {
+  if (firstLoadedPermutation({Permutation::OSP, Permutation::OPS}) == nullptr) {
+    return std::nullopt;
+  }
   return numObjects_;
 }
 
@@ -2159,10 +2329,10 @@ Index::NumNormalAndInternal IndexImpl::numDistinctCol0(
   switch (permutation) {
     case Permutation::SOP:
     case Permutation::SPO:
-      return numDistinctSubjects();
+      return numDistinctSubjects().value();
     case Permutation::OPS:
     case Permutation::OSP:
-      return numDistinctObjects();
+      return numDistinctObjects().value();
     case Permutation::POS:
     case Permutation::PSO:
       return numDistinctPredicates();
@@ -2207,9 +2377,16 @@ std::vector<float> IndexImpl::getMultiplicities(
 std::vector<float> IndexImpl::getMultiplicities(
     const Permutation& permutation) const {
   auto numTriples = static_cast<float>(this->numTriples().normal);
-  std::array multiplicities{numTriples / numDistinctSubjects().normal,
+  // If the number of distinct subjects (objects) is not known, we
+  // (optimistically) assume that they are all distinct.
+  auto multiplicity =
+      [numTriples](const std::optional<NumNormalAndInternal>& numDistinct) {
+        return numDistinct.has_value() ? numTriples / numDistinct->normal
+                                       : 1.0f;
+      };
+  std::array multiplicities{multiplicity(numDistinctSubjects()),
                             numTriples / numDistinctPredicates().normal,
-                            numTriples / numDistinctObjects().normal};
+                            multiplicity(numDistinctObjects())};
   auto permuted = permutation.keyOrder().permuteTriple(multiplicities);
   return {permuted.begin(), permuted.end()};
 }
@@ -2262,7 +2439,7 @@ void IndexImpl::createPSOAndPOSImpl(size_t numColumns, Input sortedTriples,
                   EncodedIriManager::decodeDecimalFrom64Bit(payload) + 1);
       };
   size_t numPredicates =
-      createPermutationPair(numColumns, std::move(sortedTriples), *pso_, *pos_,
+      createPermutationPair(numColumns, std::move(sortedTriples), PSO(), POS(),
                             pushToNextSorter(nextSorter)..., countTriples,
                             liftCallback(determineNextAvailableInternalGraph));
   configurationJson_["num-predicates"] =
@@ -2317,8 +2494,8 @@ std::optional<PatternCreator::TripleSorter> IndexImpl::createSPOAndSOP(
           }
         };
     size_t numSubjects =
-        createPermutationPair(numColumns, std::move(sortedTriples), *spo_,
-                              *sop_, pushTriplesToPatterns);
+        createPermutationPair(numColumns, std::move(sortedTriples), SPO(),
+                              SOP(), pushTriplesToPatterns);
     patternCreator.finish();
     configurationJson_["num-subjects"] =
         NumNormalAndInternal::fromNormal(numSubjects);
@@ -2327,8 +2504,8 @@ std::optional<PatternCreator::TripleSorter> IndexImpl::createSPOAndSOP(
   } else {
     AD_CORRECTNESS_CHECK(sizeof...(nextSorter) == 1);
     size_t numSubjects =
-        createPermutationPair(numColumns, std::move(sortedTriples), *spo_,
-                              *sop_, pushToNextSorter(nextSorter)...);
+        createPermutationPair(numColumns, std::move(sortedTriples), SPO(),
+                              SOP(), pushToNextSorter(nextSorter)...);
     configurationJson_["num-subjects"] =
         NumNormalAndInternal::fromNormal(numSubjects);
     writeConfiguration();
@@ -2344,11 +2521,10 @@ void IndexImpl::createOSPAndOPS(size_t numColumns, Input sortedTriples,
   // For the last pair of permutations we don't need a next sorter, so we
   // have no fourth argument.
   size_t numObjects =
-      createPermutationPair(numColumns, std::move(sortedTriples), *osp_, *ops_,
+      createPermutationPair(numColumns, std::move(sortedTriples), OSP(), OPS(),
                             pushToNextSorter(nextSorter)...);
   configurationJson_["num-objects"] =
       NumNormalAndInternal::fromNormal(numObjects);
-  configurationJson_["has-all-permutations"] = true;
   writeConfiguration();
 }
 
@@ -2545,18 +2721,28 @@ nlohmann::json IndexImpl::recomputeStatistics(
   };
 
   tasks.push_back(getCounterTask(
-      numPredicates, *pso_,
+      numPredicates, PSO(),
       [&numTriples](const IdTable& table) { numTriples += table.numRows(); }));
 
   tasks.push_back(getCounterTask(numPredicatesInternal,
-                                 pso_->internalPermutation(),
+                                 PSO().internalPermutation(),
                                  [&numTriplesInternal](const IdTable& table) {
                                    numTriplesInternal += table.numRows();
                                  }));
 
-  if (hasAllPermutations()) {
-    tasks.push_back(getCounterTask(numSubjects, *spo_, ad_utility::noop));
-    tasks.push_back(getCounterTask(numObjects, *osp_, ad_utility::noop));
+  // The distinct subjects (objects) can be counted on any loaded permutation
+  // that starts with the subject (object).
+  const Permutation* subjectPermutation =
+      firstLoadedPermutation({Permutation::SPO, Permutation::SOP});
+  const Permutation* objectPermutation =
+      firstLoadedPermutation({Permutation::OSP, Permutation::OPS});
+  if (subjectPermutation) {
+    tasks.push_back(
+        getCounterTask(numSubjects, *subjectPermutation, ad_utility::noop));
+  }
+  if (objectPermutation) {
+    tasks.push_back(
+        getCounterTask(numObjects, *objectPermutation, ad_utility::noop));
   }
   ad_utility::runTasksInParallel(std::move(tasks));
   auto configuration = configurationJson_;
@@ -2564,11 +2750,13 @@ nlohmann::json IndexImpl::recomputeStatistics(
       NumNormalAndInternal{numTriples, numTriplesInternal};
   configuration["num-predicates"] =
       NumNormalAndInternal{numPredicates, numPredicatesInternal};
-  if (hasAllPermutations()) {
-    // These are unused.
-    AD_CORRECTNESS_CHECK(numSubjects_.internal == 0);
-    AD_CORRECTNESS_CHECK(numObjects_.internal == 0);
+  // These are unused.
+  AD_CORRECTNESS_CHECK(numSubjects_.internal == 0);
+  AD_CORRECTNESS_CHECK(numObjects_.internal == 0);
+  if (subjectPermutation) {
     configuration["num-subjects"] = NumNormalAndInternal{numSubjects, 0};
+  }
+  if (objectPermutation) {
     configuration["num-objects"] = NumNormalAndInternal{numObjects, 0};
   }
   // Note: We don't update the key represented by `BLANK_NODE_ALLOCATION_START`,

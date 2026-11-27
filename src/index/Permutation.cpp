@@ -157,6 +157,16 @@ IdTable Permutation::getDistinctCol0IdsAndCounts(
       limitOffset);
 }
 
+// ____________________________________________________________________________
+IdTable Permutation::getDistinctCol1IdsAndCountsForAllCol0(
+    const CancellationHandle& cancellationHandle,
+    const LocatedTriplesState& locatedTriplesState) const {
+  ScanSpecification scanSpec{std::nullopt, std::nullopt, std::nullopt};
+  return reader().getDistinctCol1IdsAndCountsForAllCol0(
+      getScanSpecAndBlocks(scanSpec, locatedTriplesState), cancellationHandle,
+      getLocatedTriplesForPermutation(locatedTriplesState));
+}
+
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
 // ____________________________________________________________________________
 cppcoro::generator<IdTable, CompressedRelationReader::LazyScanMetadata>
@@ -221,6 +231,29 @@ std::string_view Permutation::toString(Permutation::Enum permutation) {
       return "OSP";
   }
   AD_FAIL();
+}
+
+// _____________________________________________________________________
+Permutation::Enum Permutation::fromString(std::string_view name) {
+  std::string upper = ad_utility::utf8ToUpper(name);
+  // Strip a trailing graph column, which is implicit in the names of the
+  // permutations (the graph is always their last column).
+  std::string_view withoutTrailingGraph = upper;
+  if (withoutTrailingGraph.size() == 4 && withoutTrailingGraph.back() == 'G') {
+    withoutTrailingGraph.remove_suffix(1);
+  }
+  for (auto permutation : ALL) {
+    if (toString(permutation) == upper ||
+        toString(permutation) == withoutTrailingGraph) {
+      return permutation;
+    }
+  }
+  throw std::runtime_error{absl::StrCat(
+      "\"", name,
+      "\" is not the name of a permutation. Valid names consist of the "
+      "letters S, P, O, and optionally G (e.g. \"SPO\", \"PSOG\", or "
+      "\"GSPO\"), each of which must occur exactly once; a missing G means "
+      "that the graph is the last column")};
 }
 
 // _____________________________________________________________________
