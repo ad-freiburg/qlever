@@ -119,6 +119,36 @@ TEST(ParseableDuration, testParsingConversion) {
   EXPECT_EQ(60min, fromString<minutes>("1h"));
 }
 
+// Test that an amount that does not fit into the unit of the string or into
+// the duration type throws instead of silently overflowing.
+TEST(ParseableDuration, testParsingOutOfRange) {
+  // The largest and the smallest number of seconds that fit into `int64_t`
+  // milliseconds.
+  EXPECT_EQ(9223372036854775000ms,
+            fromString<milliseconds>("9223372036854775s"));
+  EXPECT_EQ(-9223372036854775000ms,
+            fromString<milliseconds>("-9223372036854775s"));
+
+  // One second more overflows in the conversion to milliseconds.
+  auto outOfRange = HasSubstr("out of range");
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      fromString<milliseconds>("9223372036854776s"), outOfRange,
+      std::runtime_error);
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      fromString<milliseconds>("-9223372036854776s"), outOfRange,
+      std::runtime_error);
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(fromString<nanoseconds>("3000000000h"),
+                                        outOfRange, std::runtime_error);
+
+  // The amount does not fit into `int64_t` at all.
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      fromString<hours>("99999999999999999999ns"), outOfRange,
+      std::runtime_error);
+
+  // A conversion to a coarser unit never overflows.
+  EXPECT_EQ(2562047h, fromString<hours>("9223372036854775807ns"));
+}
+
 // _____________________________________________________________________________
 TEST(ParseableDuration, testComparisonOperators) {
   EXPECT_EQ(ParseableDuration{1ms}, ParseableDuration{1ms});
