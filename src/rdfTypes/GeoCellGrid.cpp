@@ -11,6 +11,7 @@
 
 #include <absl/numeric/bits.h>
 
+#include <algorithm>
 #include <cmath>
 
 #include "backports/algorithm.h"
