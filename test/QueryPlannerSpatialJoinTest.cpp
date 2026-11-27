@@ -18,6 +18,7 @@
 #include "parser/PayloadVariables.h"
 #include "parser/SpatialQuery.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
+#include "util/RuntimeParametersTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
 
 namespace h = queryPlannerTestHelpers;
@@ -2064,6 +2065,13 @@ TEST(QueryPlanner, ForcedSubstituteAfterSelectiveJoin) {
         ")\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n");
   }
   auto* qec = ad_utility::testing::getQec(kb);
+
+  // Disable the prefilter of the index scans. With it, the scan of the
+  // geometries is pruned by the constant point at planning time, which makes
+  // the `SpatialJoin` cheap also when it is applied to the scan directly.
+  auto resetPrefilter = setRuntimeParameterForTest<
+      &RuntimeParameters::enablePrefilterOnIndexScans_>(false);
+
   Var internalVar{
       absl::StrCat(QLEVER_INTERNAL_VARIABLE_QUERY_PLANNER_PREFIX, 0)};
   auto valuesPoint = h::ValuesClause(

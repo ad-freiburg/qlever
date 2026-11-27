@@ -278,41 +278,66 @@ static BlockMetadataRanges getNegationAwareUnionOfBlockRanges(
 }  // namespace detail
 
 // This function retrieves the `BlockRange`s for `CompressedBlockMetadata`
-// values that contain bounding `ValueId`s with different underlying datatypes.
+// values that contain bounding `ValueId`s with different underlying datatypes,
+// and of those that contain words of a secondary vocabulary. All of these are
+// kept by every prefilter.
 static BlockMetadataRanges getRangesMixedDatatypeBlocks(
     const ValueIdSubrange& idRange, BlockMetadataSpan blockRange) {
   using enum Datatype;
   if (idRange.empty()) {
     return {};
   }
-  std::vector<ValueIdItPair> mixedDatatypeRanges;
-  // Ensure that `idRange` holds access to even number of ValueIds.
   AD_CORRECTNESS_CHECK(idRange.size() % 2 == 0);
-  const auto checkDifferentDtype = [](const auto& idPair) {
-    auto firstId = idPair.begin();
-    auto dType1 = (*firstId).getDatatype();
-    auto dType2 = (*std::next(firstId)).getDatatype();
-    // ValueIds representing LocalVocab and Vocab entries are contained in mixed
-    // and sorted order over the CompressedBlockMetadata values. Thus, we don't
-    // discard them if they contain a mix of LocalVocab and Vocab ValueIds.
-    if ((dType1 == VocabIndex && dType2 == LocalVocabIndex) ||
-        (dType1 == LocalVocabIndex && dType2 == VocabIndex)) {
-      return false;
-    }
-    return dType1 != dType2;
+
+  // `VocabIndex`, `LocalVocabIndex`, and `SecondaryVocabIndex` count as one
+  // datatype here: `LocalVocabIndex` IDs are interleaved with the IDs of both
+  // vocabularies, so only the three together form a contiguous run.
+  auto group = [](Datatype datatype) {
+    return datatype == LocalVocabIndex || datatype == SecondaryVocabIndex
+               ? VocabIndex
+               : datatype;
   };
-  ql::ranges::for_each(idRange | ranges::views::chunk(2) |
-                           ranges::views::filter(checkDifferentDtype),
-                       [&mixedDatatypeRanges](const auto& idPair) {
-                         auto firstId = idPair.begin();
-                         mixedDatatypeRanges.emplace_back(firstId,
-                                                          std::next(firstId));
-                       });
+
+  // The IDs in `idRange` (first and last ID of each block) are sorted, and the
+  // datatype is the most significant part of an ID, so the datatypes form
+  // sorted runs. Find the end of each run by binary search, which costs
+  // O(#datatypes * log #blocks) instead of a pass over all blocks. A block has
+  // mixed datatypes iff a run ends between its first ID (even position) and
+  // its last ID (odd position).
+  std::vector<ValueIdItPair> mixedDatatypeRanges;
+  auto begin = idRange.begin();
+  auto end = idRange.end();
+  auto runBegin = begin;
+  while (runBegin != end) {
+    auto currentGroup = group((*runBegin).getDatatype());
+    auto runEnd = ql::ranges::partition_point(
+        runBegin, end, [&group, currentGroup](const ValueId& id) {
+          return group(id.getDatatype()) == currentGroup;
+        });
+    if (currentGroup == VocabIndex) {
+      // The IDs of the secondary vocabulary (and the local vocab entries stored
+      // in it) are sorted after all words of the main vocabulary, but by their
+      // insertion order, not by their string value (see
+      // `index/vocabulary/SecondaryVocabulary.h`). No prefilter can judge
+      // them, so keep all blocks from the first of them to the end of the run.
+      static constexpr auto firstSecondaryVocabId =
+          ValueId::makeFromSecondaryVocabIndex(SecondaryVocabIndex::make(0));
+      auto secondaryBegin = ql::ranges::partition_point(
+          runBegin, runEnd,
+          [](const ValueId& id) { return id < firstSecondaryVocabId; });
+      if (secondaryBegin != runEnd) {
+        mixedDatatypeRanges.emplace_back(secondaryBegin, runEnd);
+      }
+    }
+    if (runEnd != end && (runEnd - begin) % 2 == 1) {
+      mixedDatatypeRanges.emplace_back(std::prev(runEnd), runEnd);
+    }
+    runBegin = runEnd;
+  }
   return detail::mapping::mapValueIdItRangesToBlockItRanges(
       mixedDatatypeRanges, idRange, blockRange);
 }
 
-// Return `CompOp`s as string.
 static std::string getRelationalOpStr(const CompOp relOp) {
   using enum CompOp;
   switch (relOp) {
@@ -707,17 +732,11 @@ BlockMetadataRanges IsDatatypeExpression<IsDatatype::IRI>::evaluateImpl(
   // `VocabIndex`/`LocalVocabIndex`) and encoded IRIs (datatype `EncodedVal`).
   // We therefore have to keep the blocks for *both* representations.
   //
-  // TODO<joka921> There is a third range: the IRIs of a secondary vocabulary
-  // (datatype `SecondaryVocabIndex`, see
-  // `index/vocabulary/SecondaryVocabulary.h`). Those sort after all of the
-  // ranges below, so neither the `> <>` prefilter nor the datatype range of
-  // the encoded IRIs covers them, which means that blocks consisting entirely
-  // of such IRIs are incorrectly pruned. This is a known limitation for now,
-  // because apart from unit tests, a secondary vocabulary is only created when
-  // a blob of `NamedCachedQueryBlobManager` that contains new words is loaded,
-  // but it has to be fixed before it is used more widely, together with the
-  // semantic comparison of those `Id`s (see the detailed note at
-  // `valueIdComparators::detail::compareIdsImpl`).
+  // The IRIs of a secondary vocabulary (datatype `SecondaryVocabIndex`, see
+  // `index/vocabulary/SecondaryVocabulary.h`) form a third range, which is
+  // covered by neither of the two below. This is fine, because all blocks
+  // that contain words of a secondary vocabulary are kept by every prefilter
+  // (see `getRangesMixedDatatypeBlocks`).
   //
   // (1) Vocabulary IRIs: Ids containing LITERAL values precede IRI related Ids
   // in order. The smallest possible IRI is represented by "<>", we use its
@@ -763,6 +782,124 @@ BlockMetadataRanges IsDatatypeExpression<IsDatatype::LITERAL>::evaluateImpl(
 }
 
 // SECTION IS-IN-EXPRESSION (and NOT-IS-IN-EXPRESSION)
+//______________________________________________________________________________
+std::unique_ptr<PrefilterExpression> GeoRectangleExpression::logicalComplement()
+    const {
+  // The complement ("all geometries outside the rectangle, plus all
+  // non-geometries") cannot be expressed as ID ranges; return the
+  // conservative prefilter that keeps all blocks.
+  return make<IsInExpression>(std::vector<IdOrLocalVocabEntry>{},
+                              /*isNegated=*/true);
+}
+
+//______________________________________________________________________________
+bool GeoRectangleExpression::operator==(
+    const PrefilterExpression& other) const {
+  const auto* otherGeo = dynamic_cast<const GeoRectangleExpression*>(&other);
+  if (!otherGeo) {
+    return false;
+  }
+  return rectangle_ == otherGeo->rectangle_;
+}
+
+//______________________________________________________________________________
+std::unique_ptr<PrefilterExpression> GeoRectangleExpression::clone() const {
+  return make<GeoRectangleExpression>(*this);
+}
+
+//______________________________________________________________________________
+std::string GeoRectangleExpression::asString(
+    [[maybe_unused]] size_t depth) const {
+  return absl::StrCat("Prefilter GeoRectangleExpression on rectangle: [lng ",
+                      rectangle_.minLng_, " to ", rectangle_.maxLng_, ", lat ",
+                      rectangle_.minLat_, " to ", rectangle_.maxLat_, "]\n.");
+}
+
+//______________________________________________________________________________
+BlockMetadataRanges GeoRectangleExpression::evaluateImpl(
+    const IndexImpl& index, const ValueIdSubrange& idRange,
+    BlockMetadataSpan blockRange, bool getTotalComplement) const {
+  // A negation is evaluated via `logicalComplement`, which keeps all blocks.
+  AD_CORRECTNESS_CHECK(!getTotalComplement);
+
+  // Compute the closed intervals `[lowerId, upperId]` of `ValueId`s that may
+  // belong to geometries whose bounding box intersects the rectangle. The
+  // intervals are constructed in ascending order: the `VocabIndex` datatype
+  // first (`Datatype::VocabIndex` < `Datatype::GeoPoint`), then the latitude
+  // band of the `GeoPoint`s. With a geo cell grid, the WKT literals are
+  // restricted to the ID ranges of the cells that the rectangle covers;
+  // without one, the coordinates of a WKT literal cannot be seen from its ID,
+  // so the whole `VocabIndex` region is kept.
+  std::vector<std::pair<ValueId, ValueId>> keepIntervals;
+  const auto& grid = index.getVocab().getGeoCellGrid();
+  if (grid.has_value()) {
+    for (auto [firstCell, lastCell] : grid.value().coveringCellRanges(
+             rectangle_.minLng_, rectangle_.minLat_, rectangle_.maxLng_,
+             rectangle_.maxLat_)) {
+      auto [lower, upper] =
+          grid.value().vocabIndexRangeForCells(firstCell, lastCell);
+      // `upper` is exclusive and can exceed the largest valid index payload
+      // (for the sentinel cell), so convert to a closed interval.
+      keepIntervals.emplace_back(
+          Id::makeFromVocabIndex(VocabIndex::make(lower)),
+          Id::makeFromVocabIndex(VocabIndex::make(upper - 1)));
+    }
+  } else {
+    keepIntervals.emplace_back(
+        Id::makeFromVocabIndex(VocabIndex::make(0)),
+        Id::makeFromVocabIndex(VocabIndex::make(ValueId::maxIndex)));
+  }
+
+  // The `GeoPoint` region: the intervals of the bit representations that
+  // contain all points of the rectangle, which depend on the encoding of the
+  // points (one latitude band for `LatMajor`, the quadtree cells that cover
+  // the rectangle for `ZOrder`, see `GeoPoint::intervalsForRectangle`). The
+  // round trip through `fromBitRepresentation` is exact and turns the bits
+  // into IDs.
+  for (auto [lower, upper] : GeoPoint::intervalsForRectangle(
+           GeoPoint{rectangle_.minLat_, rectangle_.minLng_},
+           GeoPoint{rectangle_.maxLat_, rectangle_.maxLng_},
+           GeoPoint::encoding())) {
+    keepIntervals.emplace_back(
+        Id::makeFromGeoPoint(GeoPoint::fromBitRepresentation(lower)),
+        Id::makeFromGeoPoint(GeoPoint::fromBitRepresentation(upper)));
+  }
+
+  // For each interval, find the corresponding range of block-boundary
+  // `ValueId`s. Search in the order of the `ValueId`s, which is the order of
+  // the block boundaries (for the `VocabIndex` and `GeoPoint` IDs of the
+  // intervals, it is the order of their bits, but an ID of type
+  // `LocalVocabIndex` is ordered by its position in the vocabulary). Empty
+  // ranges are deliberately kept: they indicate a block whose first and last
+  // ID enclose the whole interval, which must survive (same reasoning as for
+  // the `EQ` case of `RelationalExpression`).
+  std::vector<ValueIdItPair> relevantRanges;
+  relevantRanges.reserve(keepIntervals.size());
+  for (const auto& [lower, upper] : keepIntervals) {
+    relevantRanges.emplace_back(ql::ranges::lower_bound(idRange, lower),
+                                ql::ranges::upper_bound(idRange, upper));
+  }
+  auto keptByIntervals = detail::mapping::mapValueIdItRangesToBlockItRanges(
+      relevantRanges, idRange, blockRange);
+
+  // Also keep every block whose first or last ID is of type `LocalVocabIndex`
+  // (a WKT literal inserted by an update). Such an ID has no cell, and its
+  // position in the vocabulary lies between the existing words, which can be
+  // outside the ID range of its cell (when the cell has no words, or the
+  // literal comes after all words of its cell), so the intervals above cannot
+  // decide it.
+  std::vector<ValueIdItPair> localVocabBoundaries;
+  for (auto it = idRange.begin(); it != idRange.end(); it += 2) {
+    if ((*it).getDatatype() == Datatype::LocalVocabIndex ||
+        (*std::next(it)).getDatatype() == Datatype::LocalVocabIndex) {
+      localVocabBoundaries.emplace_back(it, std::next(it));
+    }
+  }
+  return detail::logicalOps::mergeRelevantBlockItRanges<true>(
+      keptByIntervals, detail::mapping::mapValueIdItRangesToBlockItRanges(
+                           localVocabBoundaries, idRange, blockRange));
+}
+
 //______________________________________________________________________________
 std::unique_ptr<PrefilterExpression> IsInExpression::logicalComplement() const {
   return make<IsInExpression>(referenceValues_, true);

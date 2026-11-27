@@ -36,6 +36,7 @@
 #include "engine/operation/IndexScan.h"
 #include "engine/operation/Join.h"
 #include "engine/operation/SpatialJoin.h"
+#include "engine/operation/Values.h"
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "index/ExportIds.h"
@@ -1107,6 +1108,32 @@ TEST(SpatialJoin, clone) {
 
 }  // namespace stringRepresentation
 
+// Children whose size estimate is zero (here, empty `VALUES`) must not make
+// the size estimate of the spatial join zero, nor its multiplicities
+// infinite: both propagate to the operations above, where a join then
+// estimates 2^63 rows and the planner avoids the small side at all costs.
+TEST(SpatialJoin, sizeEstimateAndMultiplicityWithEmptyChildren) {
+  auto* qec = buildTestQEC();
+  auto emptyValues = [qec](const Variable& var) {
+    parsedQuery::SparqlValues values;
+    values._variables = {var};
+    return ad_utility::makeExecutionTree<Values>(qec, std::move(values));
+  };
+  auto left = emptyValues(Variable{"?point1"});
+  auto right = emptyValues(Variable{"?point2"});
+  ASSERT_EQ(left->getSizeEstimate(), 0u);
+  auto spatialJoin = ad_utility::makeExecutionTree<SpatialJoin>(
+      qec,
+      SpatialJoinConfiguration{MaxDistanceConfig{1000}, Variable{"?point1"},
+                               Variable{"?point2"}},
+      left, right);
+  EXPECT_GE(spatialJoin->getSizeEstimate(), 1u);
+  for (size_t i = 0; i < spatialJoin->getResultWidth(); ++i) {
+    EXPECT_TRUE(std::isfinite(spatialJoin->getMultiplicity(i))) << i;
+    EXPECT_GE(spatialJoin->getMultiplicity(i), 1) << i;
+  }
+}
+
 namespace getMultiplicityAndSizeEstimate {
 
 // Represents addLeftChildFirst, MultiplicityOrSizeEst
@@ -1434,9 +1461,13 @@ TEST(SpatialJoin, InvalidGeometriesAreExcludedFromNonEmptyCheck) {
   // event lists; none of the values of `?b` (two invalid literals and one point
   // that is not contained in `?a`) contribute a valid geometry.
   auto details = spatialJoin->runtimeInfo().details_;
-  EXPECT_THAT(details, AllOf(HasKeyMatching("num-valid-geoms-parsed", Eq(1)),
-                             HasKeyMatching("num-geoms-parsed", Eq(3)),
-                             HasKeyMatching("num-geoms-invalid", Eq(2))));
+  // Of the three values of `?b` (the larger side), the point outside `?a`'s
+  // box is dropped by the prefilter; the two invalid literals survive it (they
+  // are never prefiltered) but fail to parse.
+  EXPECT_THAT(details,
+              AllOf(HasKeyMatching("num-valid-geoms-parsed", Eq(1)),
+                    HasKeyMatching("num-geoms-after-bbox-prefilter", Eq(2)),
+                    HasKeyMatching("num-geoms-invalid", Eq(2))));
   EXPECT_THAT(spatialJoin->collectWarnings(),
               Contains(HasSubstr(
                   "Spatial Join of ?a and ?b using contains: skipped rows with "
@@ -1474,13 +1505,13 @@ TEST(SpatialJoin, NoValidGeometryOnSmallerSideSkipsLargerSide) {
   auto spatialJoin = std::dynamic_pointer_cast<SpatialJoin>(
       spatialJoinOperation->getRootOperation());
 
-  // The result is empty, and all three literals are parsed, but none of them
-  // is added to the event lists.
+  // The result is empty, and none of the three literals is added to the event
+  // lists (the larger side `?b` has two of them).
   auto result = spatialJoin->computeResult(false);
   EXPECT_EQ(result.idTableView().numRows(), 0);
   EXPECT_THAT(spatialJoin->runtimeInfo().details_,
               AllOf(HasKeyMatching("num-valid-geoms-parsed", Eq(0)),
-                    HasKeyMatching("num-geoms-parsed", Eq(3))));
+                    HasKeyMatching("num-geoms-after-block-prefilter", Eq(2))));
 }
 
 // Test that the warning for skipped rows lists the left side before the

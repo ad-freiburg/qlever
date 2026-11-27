@@ -22,6 +22,7 @@
 #include "engine/SpatialJoinParser.h"
 #include "global/RuntimeParameters.h"
 #include "rdfTypes/GeometryInfoHelpersImpl.h"
+#include "rdfTypes/ParsedGeometry.h"
 #include "util/ChunkedForLoop.h"
 #include "util/ContainersWithAllocator.h"
 #include "util/Exception.h"
@@ -63,25 +64,39 @@ LibspatialjoinAlgorithm::getBoundingBoxFromIdTable(
 bool LibspatialjoinAlgorithm::prefilterGeoByBoundingBox(
     const std::optional<::util::geo::DBox>& prefilterLatLngBox,
     const Index& index, VocabIndex vocabIndex,
-    const std::optional<ad_utility::BoundingBox>& precomputedBoundingBox) {
+    const std::optional<ad_utility::BoundingBox>& precomputedBoundingBox,
+    bool requireContainment) {
   if (prefilterLatLngBox.has_value()) {
-    auto hasNoIntersection =
-        [&prefilterLatLngBox](const ad_utility::BoundingBox& geomBoundingBox) {
-          return !::util::geo::intersects(
-              prefilterLatLngBox.value(),
-              ad_utility::detail::boundingBoxToUtilBox(geomBoundingBox));
-        };
+    auto canBeSkipped = [&prefilterLatLngBox, requireContainment](
+                            const ad_utility::BoundingBox& geomBoundingBox) {
+      auto geomBox = ad_utility::detail::boundingBoxToUtilBox(geomBoundingBox);
+      if (!requireContainment) {
+        return !::util::geo::intersects(prefilterLatLngBox.value(), geomBox);
+      }
+      // The prefilter box went through the integer web mercator projection of
+      // `libspatialjoin` and back, so pad it slightly before the containment
+      // test. Otherwise a geometry that touches the border of the prefilter
+      // box (in particular one equal to the geometry of the other side) could
+      // be wrongly discarded.
+      static constexpr double padding = 1e-6;
+      const auto& box = prefilterLatLngBox.value();
+      ::util::geo::DBox paddedBox{{box.getLowerLeft().getX() - padding,
+                                   box.getLowerLeft().getY() - padding},
+                                  {box.getUpperRight().getX() + padding,
+                                   box.getUpperRight().getY() + padding}};
+      return !::util::geo::contains(geomBox, paddedBox);
+    };
 
     // Use the `precomputedBoundingBox` for filtering if available.
     if (precomputedBoundingBox.has_value()) {
-      return hasNoIntersection(precomputedBoundingBox.value());
+      return canBeSkipped(precomputedBoundingBox.value());
     }
 
     // Otherwise, use the `GeoVocabulary` for filtering.
     auto geoInfo = index.getVocab().getGeoInfo(vocabIndex);
     if (geoInfo.has_value()) {
-      // We have a bounding box: Check intersection with prefilter box.
-      return hasNoIntersection(geoInfo.value().getBoundingBox());
+      // We have a bounding box: Check it against the prefilter box.
+      return canBeSkipped(geoInfo.value().getBoundingBox());
     } else {
       // Since we know that this function is only called if we have a
       // `GeoVocabulary`, we know that a geometry without precomputed bounding
@@ -146,7 +161,10 @@ sj::SpatialJoinCfg LibspatialjoinAlgorithm::sweeperConfig(
   };
   AD_CORRECTNESS_CHECK(threads > 0);
 
-  sj::SpatialJoinCfg cfg;
+  // The geometry options come from `ParsedGeometry::spatialJoinConfig`,
+  // because the parsed geometries stored in the index were computed with them
+  // and can only be used by a spatial join with the same options.
+  sj::SpatialJoinCfg cfg = ad_utility::ParsedGeometry::spatialJoinConfig();
   cfg.numThreads = threads;
   cfg.numCacheBuckets = threads;
   // The geometry cache gets half of `totalAllowedMemory` (the other half is
@@ -165,21 +183,6 @@ sj::SpatialJoinCfg LibspatialjoinAlgorithm::sweeperConfig(
   cfg.sepEquals = sep(EQUALS);
   cfg.sepOverlaps = sep(OVERLAPS);
   cfg.sepCrosses = sep(CROSSES);
-  cfg.useBoxIds = true;
-  cfg.useDiagBox = true;
-  cfg.noGeometryChecks = false;
-  cfg.euclideanDist = false;
-  cfg.haversineApprox = false;
-  cfg.computeDE9IM = false;
-  cfg.de9imFilter = ::util::geo::FANY;
-  // This has to be set to a value < 0 to disable the `WITHIN_DIST`
-  // calculation in `libspatialjoin`.
-  cfg.withinDist = -1;
-  cfg.writeRelCb = {};
-  cfg.logCb = {};
-  cfg.statsCb = {};
-  cfg.sweepProgressCb = {};
-  cfg.sweepCancellationCb = {};
   return cfg;
 }
 
@@ -198,7 +201,8 @@ void LibspatialjoinAlgorithm::prepareSweep(
 LibspatialjoinAlgorithm::ParseMetadata LibspatialjoinAlgorithm::parse(
     ParseInput input, sj::GeometryStore& store,
     const sj::PreparedGeomMetaCb& metaCb, size_t numThreads,
-    std::optional<util::geo::I32Box> prefilterBox) const {
+    std::optional<util::geo::I32Box> prefilterBox,
+    bool requireContainment) const {
   const auto [idTable, column, boundingBoxes] = input;
 
   // Convert prefilter box to lat lng coordinates for comparing against geometry
@@ -221,6 +225,10 @@ LibspatialjoinAlgorithm::ParseMetadata LibspatialjoinAlgorithm::parse(
     spatialJoin_.value()->runtimeInfo().addDetail(
         "prefilter-disabled-by-bounding-box-area", true);
   }
+  if (usePrefiltering && requireContainment) {
+    spatialJoin_.value()->runtimeInfo().addDetail(
+        "prefilter-requires-containment", true);
+  }
 
   // If the input is smaller than one batch for every thread, reduce the number
   // of threads accordingly to avoid spawning threads that will never be used.
@@ -233,7 +241,7 @@ LibspatialjoinAlgorithm::ParseMetadata LibspatialjoinAlgorithm::parse(
   // Initialize the parser.
   ad_utility::detail::parallel_wkt_parser::WKTParser parser(
       &store, metaCb, numThreads, usePrefiltering, prefilterLatLngBox,
-      qec_->getIndex());
+      requireContainment, qec_->getIndex());
 
   // Iterate over all rows in `idTable` and add the geometries from `column`
   // to the parallel WKT parser. Stop early if the query is cancelled or a
@@ -257,15 +265,18 @@ LibspatialjoinAlgorithm::ParseMetadata LibspatialjoinAlgorithm::parse(
 
   auto numGeomsDropped = parser.getPrefilterCounter();
   auto numGeomsParsed = idTable->size() - numGeomsDropped;
-  return {parser.getBoundingBox(), numGeomsParsed, numGeomsDropped,
-          parser.getNumInvalid(), numThreads};
+  return {
+      parser.getBoundingBox(),          numGeomsParsed,         numGeomsDropped,
+      parser.getCellPrefilterCounter(), parser.getNumInvalid(), numThreads,
+      parser.getFromIndexCounter()};
 }
 
 // ____________________________________________________________________________
 Result LibspatialjoinAlgorithm::run() {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
-              rightJoinCol, leftSelectedCols, rightSelectedCols, numColumns] =
-      params_;
+              rightJoinCol, leftSelectedCols, rightSelectedCols, numColumns,
+              numRowsBeforeBlockPrefilterLeft, numRowsBeforeBlockPrefilterRight,
+              timeBlockPrefilter] = params_;
   // Setup.
   IdTable result{numColumns, qec_->getAllocator()};
   size_t NUM_THREADS = getNumThreads();
@@ -280,15 +291,28 @@ Result LibspatialjoinAlgorithm::run() {
   std::vector<std::vector<double>> resultDists(NUM_THREADS);
   AD_CORRECTNESS_CHECK(config_.getJoinType().has_value());
   auto joinTypeVal = config_.getJoinType().value();
-  // Within should be replaced by contains on swapped tables.
+  // Within should be replaced by contains on swapped tables. NOTE: The tables
+  // in `params_` are already swapped for `WITHIN` (see
+  // `SpatialJoin::getSwappedJoinSides`), only the result rows have to be
+  // swapped back below.
   auto swapBack = joinTypeVal == SpatialJoinType::WITHIN;
   if (swapBack) {
     joinTypeVal = SpatialJoinType::CONTAINS;
   }
 
-  // Add number of threads to runtime information.
-  spatialJoin_.value()->runtimeInfo().addDetail("num-sweeper-threads",
-                                                NUM_THREADS);
+  // For these join types, a geometry of the given side (`true` for the right
+  // side, as in `parse`) can only be part of a result if it lies inside a
+  // geometry of the other side, so its bounding box has to lie inside the
+  // bounding box of the other side. The prefilter for that side may then
+  // require containment instead of mere intersection, see
+  // `prefilterGeoByBoundingBox`.
+  auto sideMustBeContained = [joinTypeVal](bool isRightSide) {
+    using enum SpatialJoinType::Enum;
+    if (joinTypeVal == CONTAINS || joinTypeVal == COVERS) {
+      return isRightSide;
+    }
+    return joinTypeVal == EQUALS;
+  };
 
   // Configure `libspatialjoin`. Half of the memory that is left is used for
   // the geometry cache (see `sweeperConfig`). The other half is split evenly
@@ -308,8 +332,6 @@ Result LibspatialjoinAlgorithm::run() {
   if (joinTypeVal == SpatialJoinType::WITHIN_DIST) {
     AD_CORRECTNESS_CHECK(maxDist_.has_value());
     sweeperCfg.withinDist = maxDist_.value();
-    spatialJoin_.value()->runtimeInfo().addDetail("within-dist",
-                                                  sweeperCfg.withinDist);
   }
   // For the `DE9IM` join type, let `libspatialjoin` compute the full DE-9IM
   // matrix for every candidate pair and only report those matching the
@@ -368,17 +390,34 @@ Result LibspatialjoinAlgorithm::run() {
   // inflated for `WITHIN_DIST` joins) to skip geometries of the larger table
   // that cannot have a result, where possible (see `parse` and the filter box
   // below).
+  size_t numParserThreadsSmaller = 0;
+  size_t numParserThreadsLarger = 0;
   auto runParser = [&](ParseInput smaller, ParseInput larger,
                        bool smallerIsRight) {
+    // Report the geometry funnel of the larger side in the chronological
+    // order of the pruning stages: how many geometries survive each stage.
+    // The "before block prefilter" value is only exactly known when the
+    // larger side is a (possibly view-backed) index scan whose blocks were
+    // pruned; otherwise it equals the delivered row count.
+    uint64_t numGeomsAfterBlockPrefilter = larger.idTable_->size();
+    // The larger side is the left one iff the smaller side is the right one.
+    uint64_t numGeomsBeforeBlockPrefilter =
+        (smallerIsRight ? numRowsBeforeBlockPrefilterLeft
+                        : numRowsBeforeBlockPrefilterRight)
+            .value_or(numGeomsAfterBlockPrefilter);
+    spatialJoin_.value()->runtimeInfo().addDetail(
+        "num-geoms-before-block-prefilter", numGeomsBeforeBlockPrefilter);
+    spatialJoin_.value()->runtimeInfo().addDetail(
+        "num-geoms-after-block-prefilter", numGeomsAfterBlockPrefilter);
+
     // Parse and add all geometries of the smaller side
     auto& eventsSmall = events[smallerIsRight];
     auto& eventsLarge = events[!smallerIsRight];
-    auto [boxSmall, countSmall, droppedSmall, invalidSmall, threadsSmall] =
+    auto [boxSmall, countSmall, droppedSmall, droppedSmallByCell, invalidSmall,
+          threadsSmall, fromIndexSmall] =
         parse(smaller, store, eventsSmall.addCb(storeId), NUM_THREADS,
               std::nullopt);
     AD_CORRECTNESS_CHECK(droppedSmall == 0);
-    spatialJoin_.value()->runtimeInfo().addDetail(
-        "num-parser-threads-smaller-side", threadsSmall);
     auto numValidGeomsSmall = eventsSmall.numObjects();
 
     // Filtering by bounding box *after* parsing is only necessary if
@@ -390,22 +429,30 @@ Result LibspatialjoinAlgorithm::run() {
       store.setFilterBox(boxSmall);
     }
 
-    // Parse and add the geometries from the larger side (except for those
-    // skipped by bounding box, see above).
-    auto [boxLarge, countLarge, droppedLarge, invalidLarge, threadsLarge] =
+    // Parse and add the geometries from the larger side, except for those
+    // skipped by bounding box (see above): those whose bounding box does not
+    // intersect the bounding box of the smaller side, or does not lie inside
+    // it if the join type requires that (see `sideMustBeContained`).
+    auto [boxLarge, countLarge, droppedLarge, droppedLargeByCell, invalidLarge,
+          threadsLarge, fromIndexLarge] =
         parse(larger, store, eventsLarge.addCb(storeId), NUM_THREADS,
-              store.getPaddedBoundingBox(boxSmall));
+              store.getPaddedBoundingBox(boxSmall),
+              sideMustBeContained(!smallerIsRight));
     auto numValidGeomsLarge = eventsLarge.numObjects();
     auto numValidGeomsTotal = numValidGeomsSmall + numValidGeomsLarge;
 
     spatialJoin_.value()->runtimeInfo().addDetail(
-        "num-parser-threads-larger-side", threadsLarge);
-    spatialJoin_.value()->runtimeInfo().addDetail("num-geoms-parsed",
-                                                  countSmall + countLarge);
+        "num-geoms-after-cell-prefilter",
+        numGeomsAfterBlockPrefilter - droppedLargeByCell);
+    spatialJoin_.value()->runtimeInfo().addDetail(
+        "num-geoms-after-bbox-prefilter",
+        numGeomsAfterBlockPrefilter - droppedLarge);
+    spatialJoin_.value()->runtimeInfo().addDetail(
+        "num-geoms-from-index", fromIndexSmall + fromIndexLarge);
     spatialJoin_.value()->runtimeInfo().addDetail("num-valid-geoms-parsed",
                                                   numValidGeomsTotal);
-    spatialJoin_.value()->runtimeInfo().addDetail(
-        "num-geoms-dropped-by-prefilter", droppedLarge);
+    numParserThreadsSmaller = threadsSmall;
+    numParserThreadsLarger = threadsLarge;
     spatialJoin_.value()->runtimeInfo().addDetail("num-geoms-invalid",
                                                   invalidSmall + invalidLarge);
     addSkippedRowsWarning(smallerIsRight ? invalidLarge : invalidSmall,
@@ -423,6 +470,11 @@ Result LibspatialjoinAlgorithm::run() {
       idTableLeft->size() < idTableRight->size()
           ? runParser(leftTableAndCol, rightTableAndCol, false)
           : runParser(rightTableAndCol, leftTableAndCol, true);
+
+  // The four time details come after the geometry funnel, in the
+  // chronological order of the steps they time.
+  spatialJoin_.value()->runtimeInfo().addDetail("time-for-prefiltering-blocks",
+                                                timeBlockPrefilter.count());
 
   // Prepare the store and the event lists for the sweep (unless it is skipped,
   // see below). Add the time for parsing and processing the geometries to the
@@ -466,6 +518,18 @@ Result LibspatialjoinAlgorithm::run() {
   }
   spatialJoin_.value()->runtimeInfo().addDetail(
       "time-for-collecting-results-from-threads", tCollect.msecs().count());
+
+  // The configuration details (thread counts, distance) come last.
+  spatialJoin_.value()->runtimeInfo().addDetail("num-sweeper-threads",
+                                                NUM_THREADS);
+  if (joinTypeVal == SpatialJoinType::WITHIN_DIST) {
+    spatialJoin_.value()->runtimeInfo().addDetail("within-dist",
+                                                  sweeperCfg.withinDist);
+  }
+  spatialJoin_.value()->runtimeInfo().addDetail(
+      "num-parser-threads-smaller-side", numParserThreadsSmaller);
+  spatialJoin_.value()->runtimeInfo().addDetail(
+      "num-parser-threads-larger-side", numParserThreadsLarger);
 
   // Return the result.
   return Result(std::move(result),

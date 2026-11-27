@@ -13,6 +13,7 @@
 #include "engine/operation/JoinImpl.h"
 
 #include <algorithm>
+#include <cmath>
 #include <sstream>
 #include <vector>
 
@@ -103,6 +104,30 @@ qlm::string JoinImpl::getCacheKeyImpl() const {
 
 // _____________________________________________________________________________
 string JoinImpl::getDescriptor() const { return "Join on " + joinVar_.name(); }
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+JoinImpl::getUpdatedQueryExecutionTreeWithPrefilterApplied(
+    const std::vector<PrefilterVariablePair>& prefilters) const {
+  // Try to apply the prefilters on both children (each child only applies
+  // the pairs whose variable it binds).
+  auto updatedLeft = left_->getUpdatedQueryExecutionTreeWithPrefilterApplied(
+      clonePrefilters(prefilters));
+  auto updatedRight = right_->getUpdatedQueryExecutionTreeWithPrefilterApplied(
+      clonePrefilters(prefilters));
+  if (!updatedLeft.has_value() && !updatedRight.has_value()) {
+    return std::nullopt;
+  }
+  // Keep the order of the children (the constructor would otherwise order
+  // them by cache key, and the prefiltered child has a new one): the column
+  // layout of the result is the layout of the left child followed by the
+  // remaining columns of the right child, and the operations above this join
+  // refer to the columns of the result by index.
+  return ad_utility::makeExecutionTree<Join>(
+      getExecutionContext(), updatedLeft.value_or(left_),
+      updatedRight.value_or(right_), leftJoinCol_, rightJoinCol_,
+      keepJoinColumn_, false);
+}
 
 // _____________________________________________________________________________
 Result JoinImpl::computeResult(bool requestLaziness) {
@@ -328,9 +353,16 @@ void JoinImpl::computeSizeEstimateAndMultiplicities() {
 
   double jcMultiplicityInResult = left_->getMultiplicity(leftJoinCol_) *
                                   right_->getMultiplicity(rightJoinCol_);
-  sizeEstimate_ = std::max(
-      size_t(1), static_cast<size_t>(corrFactor * jcMultiplicityInResult *
-                                     nofDistinctInResult));
+  double sizeEstimate =
+      corrFactor * jcMultiplicityInResult * nofDistinctInResult;
+  // A multiplicity of a child that is infinite or NaN (from a size estimate
+  // of zero below) must not turn into a huge estimate here (the cast of such
+  // a value is undefined); the sizes of the children are the fallback then.
+  if (!std::isfinite(sizeEstimate)) {
+    sizeEstimate = static_cast<double>(
+        std::max(left_->getSizeEstimate(), right_->getSizeEstimate()));
+  }
+  sizeEstimate_ = std::max(size_t(1), static_cast<size_t>(sizeEstimate));
 
   AD_LOG_TRACE << "Estimated size as: " << sizeEstimate_ << " := " << corrFactor
                << " * " << jcMultiplicityInResult << " * "

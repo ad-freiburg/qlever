@@ -1,17 +1,26 @@
-// Copyright 2015, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// Copyright 2015 The QLever Authors, in particular:
+//
+// 2015 Björn Buchhold <buchhold@informatik.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "engine/operation/IndexScan.h"
 
 #include <absl/container/inlined_vector.h>
+#include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
 
 #include <algorithm>
+#include <memory>
 #include <sstream>
 #include <string>
 #include <utility>
 
+#include "backports/memory.h"
+#include "engine/GeoRectangleRowFilter.h"
 #include "engine/MaterializedViews.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/VariableToColumnMap.h"
@@ -323,24 +332,45 @@ IndexScan::getUpdatedQueryExecutionTreeWithPrefilterApplied(
 
   // Return a new `IndexScan` with updated `scanSpecAndBlocks_`, by
   // intersecting its block ranges with the block ranges from the applicable
-  // prefilters.
+  // prefilter.
   const auto& [sortedVar, colIndex] = sortedVarAndColIndex.value();
   auto it =
       ql::ranges::find(prefilterVariablePairs, sortedVar, ad_utility::second);
-  if (it != prefilterVariablePairs.end()) {
-    const auto& blockMetadataRanges =
-        prefilterExpressions::detail::logicalOps::getIntersectionOfBlockRanges(
-            it->first->evaluate(getIndex(),
-                                getScanSpecAndBlocks().getBlockMetadataSpan(),
-                                colIndex),
-            scanSpecAndBlocks_.blockMetadata_);
-
-    return makeCopyWithPrefilteredScanSpecAndBlocks(
-        {scanSpecAndBlocks_.scanSpec_, blockMetadataRanges});
+  if (it == prefilterVariablePairs.end()) {
+    // No prefilter applies.
+    return std::nullopt;
   }
 
-  // If no prefilter applies, return `std::nullopt`.
-  return std::nullopt;
+  // A prefilter that was already applied to this scan would not remove any
+  // further blocks, so skip the (block metadata walk of the) evaluation.
+  auto key = absl::StrCat(it->first->asString(0), " on ", sortedVar.name());
+  if (ad_utility::contains(appliedPrefilters_, key)) {
+    return std::nullopt;
+  }
+
+  const auto& blockMetadataRanges =
+      prefilterExpressions::detail::logicalOps::getIntersectionOfBlockRanges(
+          it->first->evaluate(getIndex(),
+                              getScanSpecAndBlocks().getBlockMetadataSpan(),
+                              colIndex),
+          scanSpecAndBlocks_.blockMetadata_);
+  auto copy = makeCopyWithPrefilteredScanSpecAndBlocks(
+      {scanSpecAndBlocks_.scanSpec_, blockMetadataRanges});
+  auto& copiedScan = dynamic_cast<IndexScan&>(*copy->getRootOperation());
+  copiedScan.appliedPrefilters_ = appliedPrefilters_;
+  copiedScan.appliedPrefilters_.push_back(std::move(key));
+  // A geo rectangle can only prune whole blocks here (and for `GeoPoint`s
+  // only by latitude), so also drop the remaining rows outside the
+  // rectangle one by one, before any operation above the scan sees them.
+  if (const auto* geoRectangle =
+          dynamic_cast<const prefilterExpressions::GeoRectangleExpression*>(
+              it->first.get())) {
+    auto geometryColumn = copy->getVariableColumn(sortedVar);
+    return ad_utility::makeExecutionTree<GeoRectangleRowFilter>(
+        getExecutionContext(), std::move(copy), geometryColumn,
+        geoRectangle->rectangle());
+  }
+  return copy;
 }
 
 // _____________________________________________________________________________
@@ -456,6 +486,16 @@ IndexScan::makeCopyWithPrefilteredScanSpecAndBlocks(
   AD_CORRECTNESS_CHECK(indexScan != nullptr);
   std::tie(indexScan->sizeEstimateIsExact_, indexScan->sizeEstimate_) =
       indexScan->computeSizeEstimate();
+  // Remember the row total of the unprefiltered blocks for runtime
+  // statistics (e.g. the geo prefilter funnel of the spatial join). If this
+  // scan is itself already a prefiltered copy (e.g. a plan-time prefiltered
+  // scan that is prefiltered again at runtime), keep the row total of the
+  // original, completely unprefiltered scan. The size estimate of the
+  // unprefiltered scan is that total (up to the rows of neighboring relations
+  // in its first and last block), and unlike a loop over all blocks it is
+  // O(1) for a relation with its own metadata entry.
+  indexScan->numBlockRowsBeforePrefilter_ =
+      numBlockRowsBeforePrefilter_.value_or(sizeEstimate_);
   return copy;
 }
 
@@ -524,25 +564,33 @@ std::pair<bool, size_t> IndexScan::computeSizeEstimate() const {
   // triples, the estimate is the same, but marked as inexact. This is also
   // what the general case below computes, because it counts the located
   // triples of a block as inserted and as deleted at the same time (see
-  // `LocatedTriplesPerBlock::numTriples`). Prefiltered scans and small
+  // `LocatedTriplesPerBlock::numTriples`). A prefiltered scan subtracts the
+  // rows of the dropped blocks, see `sizeEstimateFromDroppedBlocks`. Small
   // relations that share a block with other relations (and hence have no
   // metadata entry) use the general case.
-  if (numVariables() == 2 && !scanSpecAndBlocksIsPrefiltered_) {
+  if (numVariables() == 2) {
     const auto& col0Id = scanSpecAndBlocks_.scanSpec_.col0Id();
     AD_CORRECTNESS_CHECK(col0Id.has_value());
     auto metadata = permutation().metaData().getMetaDataIfPresent(*col0Id);
     if (metadata.has_value()) {
-      const auto& blocks = scanSpecAndBlocks_.getBlockMetadataView();
-      AD_CORRECTNESS_CHECK(ql::ranges::begin(blocks) !=
-                           ql::ranges::end(blocks));
-      size_t firstBlockIndex = ql::ranges::begin(blocks)->blockIndex_;
-      size_t lastBlockIndex = std::prev(ql::ranges::end(blocks))->blockIndex_;
-      bool hasLocatedTriples =
-          permutation()
-              .getLocatedTriplesForPermutation(locatedTriplesState())
-              .containsLocatedTriplesInBlockRange(firstBlockIndex,
-                                                  lastBlockIndex);
-      return {!hasLocatedTriples, metadata->numRows_};
+      if (scanSpecAndBlocksIsPrefiltered_) {
+        if (auto estimate = sizeEstimateFromDroppedBlocks(*metadata);
+            estimate.has_value()) {
+          return estimate.value();
+        }
+      } else {
+        const auto& blocks = scanSpecAndBlocks_.getBlockMetadataView();
+        AD_CORRECTNESS_CHECK(ql::ranges::begin(blocks) !=
+                             ql::ranges::end(blocks));
+        size_t firstBlockIndex = ql::ranges::begin(blocks)->blockIndex_;
+        size_t lastBlockIndex = std::prev(ql::ranges::end(blocks))->blockIndex_;
+        bool hasLocatedTriples =
+            permutation()
+                .getLocatedTriplesForPermutation(locatedTriplesState())
+                .containsLocatedTriplesInBlockRange(firstBlockIndex,
+                                                    lastBlockIndex);
+        return {!hasLocatedTriples, metadata->numRows_};
+      }
     }
   }
 
@@ -553,6 +601,51 @@ std::pair<bool, size_t> IndexScan::computeSizeEstimate() const {
   auto [lower, upper] = permutation().getSizeEstimateForScan(
       scanSpecAndBlocks_, locatedTriplesState());
   return {lower == upper, lower + (upper - lower) / 2};
+}
+
+// _____________________________________________________________________________
+std::optional<std::pair<bool, size_t>> IndexScan::sizeEstimateFromDroppedBlocks(
+    const CompressedRelationMetadata& metadata) const {
+  // All blocks of the relation, and the ranges of them that were kept.
+  auto allBlocks = getScanSpecAndBlocks().getBlockMetadataSpan();
+  const auto& keptRanges = scanSpecAndBlocks_.blockMetadata_;
+  size_t numKept = scanSpecAndBlocks_.sizeBlockMetadata_;
+  if (allBlocks.empty() || numKept == 0 ||
+      allBlocks.size() - numKept >= numKept) {
+    return std::nullopt;
+  }
+  if (permutation()
+          .getLocatedTriplesForPermutation(locatedTriplesState())
+          .containsLocatedTriplesInBlockRange(allBlocks.front().blockIndex_,
+                                              allBlocks.back().blockIndex_)) {
+    return std::nullopt;
+  }
+  // Subtract the rows of the dropped blocks (the gaps before, between, and
+  // after the kept ranges). A dropped block that also holds rows of a
+  // neighboring relation (possible for the first and last block of the
+  // relation) makes the estimate inexact.
+  size_t rows = metadata.numRows_;
+  bool exact = true;
+  auto dropBlocksBefore = [&rows, &exact, &metadata](
+                              const CompressedBlockMetadata* it,
+                              const CompressedBlockMetadata* until) {
+    for (; it != until; ++it) {
+      rows -= std::min(rows, it->numRows_);
+      exact = exact && it->firstTriple_.col0Id_ == metadata.col0Id_ &&
+              it->lastTriple_.col0Id_ == metadata.col0Id_;
+    }
+  };
+  const CompressedBlockMetadata* next = allBlocks.data();
+  for (const auto& range : keptRanges) {
+    // `ql::to_address` may dereference its argument, so it must not be applied
+    // to an end iterator. `getRelevantBlocks` stores no empty ranges.
+    AD_CORRECTNESS_CHECK(!range.empty());
+    const CompressedBlockMetadata* rangeBegin = ql::to_address(range.begin());
+    dropBlocksBefore(next, rangeBegin);
+    next = rangeBegin + range.size();
+  }
+  dropBlocksBefore(next, allBlocks.data() + allBlocks.size());
+  return std::pair{exact, rows};
 }
 
 // _____________________________________________________________________________

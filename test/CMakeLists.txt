@@ -130,7 +130,6 @@ function(addLinkAndDiscoverTestNoLibs basename)
     addLinkAndDiscoverTestImpl(linkAndDiscoverTest ${basename} ${ARGN})
 endfunction()
 
-
 # Add a GTest/GMock test case that is called `basename` and compiled from a file called
 # `basename.cpp`. All tests are linked against a `main` function (see `linkTest`) and the threading library.
 # In contrast to `addLinkAndDiscoverTest` this doesn't let ctest run all subtests individually,
@@ -265,6 +264,8 @@ addLinkAndDiscoverTest(TextLimitOperationTest engine)
 addLinkAndDiscoverTest(QueryPlannerTest engine)
 
 addLinkAndDiscoverTest(QueryPlannerSpatialJoinTest engine)
+
+addLinkAndDiscoverTest(GeoRectanglePrefilterTest engine)
 
 addLinkAndDiscoverTestNoLibs(HashMapTest)
 
@@ -651,6 +652,8 @@ addLinkAndDiscoverTestNoLibs(RangeThatReleasesOnEndTest)
 addLinkAndDiscoverTest(TripleSerializerTest)
 
 addLinkAndDiscoverTest(GeometryInfoTest qlever_util)
+
+addLinkAndDiscoverTest(ParsedGeometryTest rdfTypes)
 
 addLinkAndDiscoverTest(GeoCellGridTest vocabulary)
 

@@ -1,6 +1,11 @@
-// Copyright 2015, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// Copyright 2015 The QLever Authors, in particular:
+//
+// 2015 Björn Buchhold <buchhold@informatik.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #ifndef QLEVER_SRC_ENGINE_OPERATION_INDEXSCAN_H
 #define QLEVER_SRC_ENGINE_OPERATION_INDEXSCAN_H
@@ -38,6 +43,11 @@ class IndexScan final : public Operation {
   Graphs graphsToFilter_;
   ScanSpecAndBlocks scanSpecAndBlocks_;
   bool scanSpecAndBlocksIsPrefiltered_;
+  // If this scan is a prefiltered copy (see
+  // `makeCopyWithPrefilteredScanSpecAndBlocks`), the total number of rows of
+  // the blocks of the original, unprefiltered scan. Used for runtime
+  // statistics (e.g. the geo prefilter funnel of the spatial join).
+  std::optional<uint64_t> numBlockRowsBeforePrefilter_ = std::nullopt;
   size_t numVariables_;
   size_t sizeEstimate_;
   bool sizeEstimateIsExact_;
@@ -65,6 +75,16 @@ class IndexScan final : public Operation {
   // of the query.
   using VarsToKeep = std::optional<ad_utility::HashSet<Variable>>;
   VarsToKeep varsToKeep_;
+
+  // The prefilters already applied to this scan (see
+  // `getUpdatedQueryExecutionTreeWithPrefilterApplied`), each as the string of
+  // its `PrefilterExpression` plus its variable. Applying one of them again
+  // is a no-op. The query planner prefilters the seed scans of a group graph
+  // pattern once (see `QueryPlanner::applyPrefiltersToIndexScans`); without
+  // this memo, the `Filter` on top of every candidate plan would evaluate the
+  // same prefilter on the same scan again, which costs a walk over the block
+  // metadata each time.
+  std::vector<std::string> appliedPrefilters_;
 
  public:
   IndexScan(QueryExecutionContext* qec, PermutationPtr permutation,
@@ -331,6 +351,16 @@ class IndexScan final : public Operation {
   // is not a lot of redundant triples in different graphs in the data set.
   std::pair<bool, size_t> computeSizeEstimate() const;
 
+  // For a prefiltered scan with a fixed first column that keeps most of the
+  // blocks of its relation (e.g. after a `!=` prefilter), the number of rows of
+  // the relation (from its `metadata`) minus the rows of the dropped blocks.
+  // This is cheap when few blocks were dropped, whereas summing the rows of the
+  // kept blocks walks almost the whole relation. `std::nullopt` if the
+  // relation has updates or lost at least as many blocks as it kept; the
+  // caller then sums the kept blocks.
+  std::optional<std::pair<bool, size_t>> sizeEstimateFromDroppedBlocks(
+      const CompressedRelationMetadata& metadata) const;
+
   qlm::string getCacheKeyImpl() const override;
 
   // If `ScanSpecAndBlocks` contains prefiltered `BlockMetadataRanges`, the
@@ -338,6 +368,13 @@ class IndexScan final : public Operation {
   // its cache key (which is that of the unfiltered scan). Thus, this method
   // returns `false` if prefiltered `BlockMetadataRanges` are contained.
   bool resultDoesMatchCacheKey() const override;
+
+ public:
+  // See `numBlockRowsBeforePrefilter_` above; `nullopt` if this scan was not
+  // prefiltered.
+  const std::optional<uint64_t>& numBlockRowsBeforePrefilter() const {
+    return numBlockRowsBeforePrefilter_;
+  }
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
@@ -425,7 +462,6 @@ class IndexScan final : public Operation {
     };
   }
 
- public:
   std::optional<std::shared_ptr<QueryExecutionTree>>
   makeTreeWithStrippedColumns(
       const std::set<Variable>& variables) const override;

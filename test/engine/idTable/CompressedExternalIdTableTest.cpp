@@ -617,6 +617,75 @@ TEST(CompressedExternalIdTable, asyncPushBlockBuffersAreRecycled) {
   EXPECT_NE(buffers->at(0), buffers->at(1));
 }
 
+// Test that the `BlockSorter` keeps the buffers of its sorts for the next block
+// and frees them in `releaseBuffers`, and that a sorter releases them when its
+// input phase ends (with several blocks, and with a single block that is
+// sorted in the calling thread) and when it is cleared.
+TEST(CompressedExternalIdTable, sortBuffersAreReleasedAfterTheInputPhase) {
+  std::string filename = gtestCurrentTestName();
+  auto alloc = ad_utility::testing::makeAllocator();
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
+  constexpr size_t blockSize = 1000;
+  using Sorter =
+      ad_utility::CompressedExternalIdTableSorter<SortByOSP, NUM_COLS>;
+  // The memory for a sorter with blocks of `n` rows, see `BlockSorter`.
+  auto memoryForRows = [](size_t n) {
+    return memoryForBlocksize(
+        n, NUM_COLS,
+        ad_utility::BlockSorter<SortByOSP>::sortBytesPerRow(NUM_COLS));
+  };
+  auto block = createRandomlyFilledIdTable(blockSize, NUM_COLS);
+  auto sortedSize = [](Sorter& sorter) {
+    size_t numRows = 0;
+    for (const auto& b : sorter.template getSortedBlocks<NUM_COLS>()) {
+      numRows += b.numRows();
+    }
+    return numRows;
+  };
+
+  // The `BlockSorter` keeps at least the key rows of a block after a sort.
+  {
+    ad_utility::BlockSorter<SortByOSP> blockSorter{
+        {}, std::make_shared<ad_utility::CancellationHandle<>>()};
+    IdTableStatic<NUM_COLS> copy = block.clone().toStatic<NUM_COLS>();
+    blockSorter(copy);
+    EXPECT_GE(
+        blockSorter.bufferBytes(),
+        blockSize * SortByOSP::bitwiseKeyColumns.size() * sizeof(uint64_t));
+    blockSorter.releaseBuffers();
+    EXPECT_EQ(blockSorter.bufferBytes(), 0u);
+  }
+
+  // Several blocks, sorted on the background thread.
+  {
+    Sorter sorter{filename, memoryForRows(blockSize), alloc};
+    for ([[maybe_unused]] size_t i : ql::views::iota(size_t{0}, size_t{5})) {
+      sorter.pushBlock(block);
+    }
+    EXPECT_EQ(sortedSize(sorter), 5 * blockSize);
+    EXPECT_EQ(sorter.sortBufferBytes(), 0u);
+  }
+
+  // A single block that is smaller than the block size, sorted in the calling
+  // thread when the input phase ends.
+  {
+    Sorter sorter{filename, memoryForRows(2 * blockSize), alloc};
+    sorter.pushBlock(block);
+    EXPECT_EQ(sortedSize(sorter), blockSize);
+    EXPECT_EQ(sorter.sortBufferBytes(), 0u);
+  }
+
+  // A sorter that is cleared during its input phase.
+  {
+    Sorter sorter{filename, memoryForRows(blockSize), alloc};
+    for ([[maybe_unused]] size_t i : ql::views::iota(size_t{0}, size_t{3})) {
+      sorter.pushBlock(block);
+    }
+    sorter.clear();
+    EXPECT_EQ(sorter.sortBufferBytes(), 0u);
+  }
+}
+
 // `memoryForBlocksize` and `blocksizeForMemory` are inverses of each other, so
 // the tests below can specify the number of rows per block instead of a memory
 // limit.
@@ -624,10 +693,31 @@ TEST(CompressedExternalIdTable, asyncPushBlockBuffersAreRecycled) {
 TEST(CompressedExternalIdTable, blocksizeAndMemoryAreInverses) {
   for (size_t numColumns : {1u, 2u, 3u, 7u}) {
     for (size_t blocksize : {1u, 2u, 6u, 1000u}) {
-      auto memory = memoryForBlocksize(blocksize, numColumns);
-      EXPECT_EQ(blocksizeForMemory(memory, numColumns), blocksize);
+      for (size_t sortBytesPerRow : {0u, 65u}) {
+        auto memory =
+            memoryForBlocksize(blocksize, numColumns, sortBytesPerRow);
+        EXPECT_EQ(blocksizeForMemory(memory, numColumns, sortBytesPerRow),
+                  blocksize);
+      }
     }
   }
+}
+
+// Test that the memory per row of a sorter accounts for the sorts of its
+// blocks: for the bitwise key sort of the triples with their graph (two key
+// rows of 32 bytes and one byte for the bucket index per row), and not at all
+// for the other sorts.
+TEST(CompressedExternalIdTable, sortBytesPerRow) {
+  static_assert(NUM_COLS == 4);
+  EXPECT_EQ(ad_utility::BlockSorter<SortByOSP>::sortBytesPerRow(NUM_COLS), 65u);
+
+  // With a payload column, the key rows also carry the index of the row, and
+  // the payload is permuted through a buffer of one column.
+  EXPECT_EQ(ad_utility::BlockSorter<SortByOSP>::sortBytesPerRow(5), 89u);
+
+  // A comparator without bitwise key columns.
+  EXPECT_EQ(ad_utility::BlockSorter<std::less<>>::sortBytesPerRow(NUM_COLS),
+            0u);
 }
 
 namespace {
@@ -1249,6 +1339,52 @@ TEST(CompressedExternalIdTable, sorterManyRunsParallel) {
   ASSERT_EQ(result.table_.numRows(), input.numRows());
   EXPECT_TRUE(ql::ranges::is_sorted(result.table_, SortByOSP{}));
   EXPECT_THAT(result.table_, ::testing::ElementsAreArray(expected));
+}
+
+// _____________________________________________________________________________
+// The blocks of a sorter whose comparator compares the bits of some columns
+// (see `ad_utility::hasBitwiseKeyColumns`) are sorted via
+// `ad_utility::sortByBitwiseKeys` in parallel on the merge executor. Check the
+// result for blocks that are large enough for the parallel sort, also when the
+// merge executor is changed while a block is being sorted in the background.
+TEST(CompressedExternalIdTable, sorterWithParallelBlockSorts) {
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
+  std::string filename = gtestCurrentTestName() + ".dat";
+  absl::Cleanup cleanup = [&filename] {
+    ad_utility::deleteFile(filename, false);
+  };
+  static_assert(ad_utility::hasBitwiseKeyColumns<SortByPSO>);
+  constexpr size_t blocksize = 50'000;
+  IdTable input = createRandomlyFilledIdTable(6 * blocksize + 123, NUM_COLS);
+  CopyableIdTable<0> expected{NUM_COLS, ad_utility::testing::makeAllocator()};
+  for (const auto& row : input) {
+    expected.push_back(row);
+  }
+  ql::ranges::sort(expected, SortByPSO{});
+
+  net::thread_pool pool{8};
+  net::thread_pool otherPool{4};
+  {
+    ad_utility::CompressedExternalIdTableSorter<SortByPSO, 0> sorter{
+        filename, NUM_COLS, memoryForBlocksize(blocksize, NUM_COLS),
+        ad_utility::testing::makeAllocator(), 5_kB};
+    sorter.setMergeExecutor(pool.get_executor(), 8);
+    size_t numPushed = 0;
+    for (const auto& row : input) {
+      sorter.push(row);
+      // Directly after the first block has been handed to the background
+      // thread, switch to another executor.
+      if (++numPushed == blocksize + 1) {
+        sorter.setMergeExecutor(otherPool.get_executor(), 4);
+      }
+    }
+    auto blocks = sorter.getSortedBlocks<0>(BLOCKSIZE_OUTPUT_PARALLEL_MERGE);
+    auto result = idTableFromBlockGenerator(blocks);
+    ASSERT_EQ(result.numRows(), input.numRows());
+    EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
+  }
+  pool.join();
+  otherPool.join();
 }
 
 // The spill files of a merge phase that are currently on disk: their number and
@@ -1876,7 +2012,11 @@ TEST(CompressedExternalIdTable, pushBlockCreatesSameBlocksAsRowWisePush) {
     auto trace = generateLocationTrace(l);
     SCOPED_TRACE(
         absl::StrCat("blocksize = ", blocksize, ", numRows = ", numRows));
-    auto memory = memoryForBlocksize(blocksize, NUM_COLS);
+    // The memory of the sorter includes the memory of the sort of a block,
+    // see `BlockSorter::sortBytesPerRow`.
+    auto memory = memoryForBlocksize(
+        blocksize, NUM_COLS,
+        ad_utility::BlockSorter<SortByOSP>::sortBytesPerRow(NUM_COLS));
     // Each time `blocksize` rows have accumulated, a block is written to disk.
     // A possible remainder becomes one additional block.
     size_t expectedNumBlocks = (numRows + blocksize - 1) / blocksize;
@@ -2101,7 +2241,9 @@ TEST(CompressedExternalIdTable, finishAndGetRunsInput) {
   auto makeSorter = [&filename](size_t numRows) {
     return OspSorter<>{
         filename, NUM_COLS,
-        memoryForBlocksize(numRows == 5'000 ? 100 : 10'000, NUM_COLS),
+        memoryForBlocksize(
+            numRows == 5'000 ? 100 : 10'000, NUM_COLS,
+            ad_utility::BlockSorter<SortByOSP>::sortBytesPerRow(NUM_COLS)),
         ad_utility::testing::makeAllocator(), 5_kB};
   };
   for (size_t numRows : {5'000u, 100u, 0u}) {
