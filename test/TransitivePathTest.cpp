@@ -9,14 +9,17 @@
 #include <limits>
 #include <memory>
 
+#include "./util/ColumnStrippingTestHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "./util/IndexTestHelpers.h"
 #include "./util/LocalVocabTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/ValuesForTesting.h"
+#include "engine/operation/EmptyPath.h"
 #include "engine/operation/IndexScan.h"
 #include "engine/operation/NeutralOptional.h"
+#include "engine/operation/StripColumns.h"
 #include "engine/operation/TransitivePathBase.h"
 #include "engine/operation/TransitivePathBinSearch.h"
 #include "engine/operation/TransitivePathHashMap.h"
@@ -2809,6 +2812,292 @@ TEST_P(TransitivePathTest, cloneActuallyClonesChildrenBothSidesBound) {
     EXPECT_FALSE(ranges::contains(children, clonedChild));
   }
   EXPECT_EQ(T->getCacheKey(), cloned->getCacheKey());
+}
+
+// _____________________________________________________________________________
+TEST_P(TransitivePathTest, makeTreeWithStrippedColumns) {
+  using ::column_stripping_test_helpers::countOperations;
+  using ::column_stripping_test_helpers::hasRootOperation;
+  using ::column_stripping_test_helpers::hasVariables;
+  using ::column_stripping_test_helpers::isStrippedColumns;
+  using V = Variable;
+  auto strip = [](const TransitivePathBase& path,
+                  std::set<V> requestedVariables) {
+    auto tree = path.makeTreeWithStrippedColumns(requestedVariables);
+    AD_CONTRACT_CHECK(tree.has_value() && tree.value() != nullptr);
+    return std::move(tree).value();
+  };
+  // The rows of the result are compared in any order, because the order
+  // differs between `TransitivePathBinSearch` and `TransitivePathHashMap`. The
+  // columns of the expected tables are in the order of the columns of the
+  // tree: For a `TransitivePathBase` the two side columns come first, followed
+  // by the payload columns of the side tree; a `StripColumns` sorts its columns
+  // by variable.
+  auto rows = [](std::vector<std::vector<IntOrId>> table) {
+    return UnorderedElementsAreArray(makeIdTableFromVector(std::move(table)));
+  };
+
+  // The edges `1->2`, `2->3`, `2->4` and `3->4`, the start of an edge is in
+  // the column `?i1`, the target in the column `?i2`. The first column `?i3` is
+  // not needed by the transitive path and is therefore always stripped. This
+  // shifts the columns of the edges, so the `subCol_` of both sides has to be
+  // updated.
+  auto sub =
+      makeIdTableFromVector({{7, 2, 1}, {7, 3, 2}, {7, 4, 2}, {7, 4, 3}});
+  Vars subVars{V{"?i3"}, V{"?i2"}, V{"?i1"}};
+  TransitivePathSide left(std::nullopt, 2, V{"?start"}, 0);
+  TransitivePathSide right(std::nullopt, 1, V{"?target"}, 1);
+  auto inf = std::numeric_limits<size_t>::max();
+
+  auto leftOpTable = makeIdTableFromVector({{10, 1, 20}, {11, 3, 21}});
+  Vars leftOpVars{V{"?x"}, V{"?start"}, V{"?y"}};
+  auto makeLeftBound = [&](size_t minDist) {
+    return makePathBound(true, sub.clone(), subVars, leftOpTable.clone(), 1,
+                         leftOpVars, left, right, minDist, inf);
+  };
+
+  // `?start`, `?target` and `?x` requested: the payload column `?y` is
+  // stripped from the side tree, no `StripColumns` is needed on top.
+  {
+    auto T = makeLeftBound(1);
+    auto tree = strip(*T, {V{"?start"}, V{"?target"}, V{"?x"}});
+    EXPECT_THAT(tree.get(),
+                isStrippedColumns<TransitivePathBase>(
+                    {V{"?start"}, V{"?target"}, V{"?x"}},
+                    rows({{1, 2, 10}, {1, 3, 10}, {1, 4, 10}, {3, 4, 11}})));
+
+    // The side tree comes first, the `subtree_` last.
+    auto children = tree->getRootOperation()->getChildren();
+    ASSERT_EQ(children.size(), 2u);
+    EXPECT_THAT(children.at(0), hasVariables({V{"?x"}, V{"?start"}}));
+    EXPECT_THAT(children.at(1), hasVariables({V{"?i1"}, V{"?i2"}}));
+  }
+
+  // Both sides unbound, only `?start` requested: the `subtree_` is stripped to
+  // the edge columns, a `StripColumns` on top removes `?target`.
+  {
+    auto T = makePathUnbound(sub.clone(), subVars, left, right, 1, inf);
+    auto tree = strip(*T, {V{"?start"}});
+    EXPECT_THAT(tree.get(),
+                isStrippedColumns<StripColumns>(
+                    {V{"?start"}}, rows({{1}, {1}, {1}, {2}, {2}, {3}})));
+
+    const auto* path = tree->getRootOperation()->getChildren().at(0);
+    EXPECT_THAT(path, AllOf(hasRootOperation<TransitivePathBase>(),
+                            hasVariables({V{"?start"}, V{"?target"}})));
+    EXPECT_THAT(path->getRootOperation()->getChildren().back(),
+                hasVariables({V{"?i1"}, V{"?i2"}}));
+  }
+
+  // Only `?target` and `?x` requested: the join variable `?start` is still
+  // needed by the transitive path and removed by a `StripColumns` on top.
+  {
+    auto T = makeLeftBound(1);
+    auto tree = strip(*T, {V{"?target"}, V{"?x"}});
+    EXPECT_THAT(tree.get(), isStrippedColumns<StripColumns>(
+                                {V{"?target"}, V{"?x"}},
+                                rows({{2, 10}, {3, 10}, {4, 10}, {4, 11}})));
+    EXPECT_THAT(tree->getRootOperation()->getChildren().at(0),
+                isStrippedColumns<TransitivePathBase>(
+                    {V{"?start"}, V{"?target"}, V{"?x"}},
+                    rows({{1, 2, 10}, {1, 3, 10}, {1, 4, 10}, {3, 4, 11}})));
+  }
+
+  // `minDist == 0`: the side tree is already wrapped into an `EmptyPath` by
+  // `bindSides`. The original side tree below this `EmptyPath` is stripped
+  // (`?y` is removed), and binding it again adds exactly one new `EmptyPath`.
+  {
+    auto T = makeLeftBound(0);
+    auto tree = strip(*T, {V{"?target"}, V{"?x"}});
+    EXPECT_EQ(countOperations<EmptyPath>(*T), 1u);
+    EXPECT_EQ(countOperations<EmptyPath>(*tree), 1u);
+    EXPECT_THAT(
+        tree.get(),
+        isStrippedColumns<StripColumns>(
+            {V{"?target"}, V{"?x"}},
+            rows({{1, 10}, {2, 10}, {3, 10}, {4, 10}, {3, 11}, {4, 11}})));
+
+    const auto* path = tree->getRootOperation()->getChildren().at(0);
+    const auto* emptyPath = path->getRootOperation()->getChildren().at(0);
+    EXPECT_THAT(emptyPath, hasRootOperation<EmptyPath>());
+    EXPECT_THAT(emptyPath->getRootOperation()->getChildren().at(0),
+                hasVariables({V{"?x"}, V{"?start"}}));
+  }
+
+  // `minDist == 0` without a graph variable, but only the default graph is
+  // active (as with a `FROM` clause): in this case `bindSides` always wraps the
+  // side tree into an `EmptyPath`, also when the side tree already is one. The
+  // original side tree below this `EmptyPath` is stripped (`?y` is removed),
+  // and binding it again adds exactly one new `EmptyPath`.
+  {
+    auto [unboundPath, qec] = makePath(
+        sub.clone(), subVars, left, right, 0, inf, std::nullopt, std::nullopt,
+        Graphs::Whitelist({TripleComponent{iri(DEFAULT_GRAPH_IRI)}}));
+    std::variant<IdTable, std::vector<IdTable>> sideTable = leftOpTable.clone();
+    auto T = unboundPath->bindSides(
+        getOperation(qec, sideTable, leftOpVars, 1, std::nullopt, false), 1);
+    auto tree = strip(*T, {V{"?target"}, V{"?x"}});
+    EXPECT_EQ(countOperations<EmptyPath>(*T), 1u);
+    EXPECT_EQ(countOperations<EmptyPath>(*tree), 1u);
+    EXPECT_THAT(
+        tree.get(),
+        isStrippedColumns<StripColumns>(
+            {V{"?target"}, V{"?x"}},
+            rows({{1, 10}, {2, 10}, {3, 10}, {4, 10}, {3, 11}, {4, 11}})));
+
+    const auto* path = tree->getRootOperation()->getChildren().at(0);
+    const auto* emptyPath = path->getRootOperation()->getChildren().at(0);
+    EXPECT_THAT(emptyPath, hasRootOperation<EmptyPath>());
+    EXPECT_THAT(emptyPath->getRootOperation()->getChildren().at(0),
+                hasVariables({V{"?x"}, V{"?start"}}));
+  }
+
+  // Right side bound to a table with the payload column `?z`, only `?start`
+  // and `?z` requested.
+  {
+    auto rightOpTable = makeIdTableFromVector({{3, 30}, {4, 40}});
+    auto T = makePathBound(false, sub.clone(), subVars, rightOpTable.clone(), 0,
+                           {V{"?target"}, V{"?z"}}, left, right, 1, inf);
+    auto tree = strip(*T, {V{"?start"}, V{"?z"}});
+    EXPECT_THAT(tree.get(),
+                isStrippedColumns<StripColumns>(
+                    {V{"?start"}, V{"?z"}},
+                    rows({{1, 30}, {2, 30}, {1, 40}, {2, 40}, {3, 40}})));
+  }
+
+  // Both sides bound to the same table, only `?start` and `?side1` requested:
+  // `?side2` is stripped and both sides are bound to the same stripped tree.
+  {
+    auto opTable = makeIdTableFromVector(
+        {{10, 0, 2, 20}, {11, 1, 3, 21}, {12, 2, 3, 23}, {13, 4, 4, 24}});
+    auto T = makePathBoundOnBothSides(
+        makeIdTableFromVector(
+            {{7, 5, 0}, {7, 2, 1}, {7, 4, 1}, {7, 3, 4}, {7, 4, 4}}),
+        subVars, opTable.clone(), 1, 2,
+        {V{"?side1"}, V{"?start"}, V{"?target"}, V{"?side2"}}, left, right, 1,
+        inf);
+    auto tree = strip(*T, {V{"?start"}, V{"?side1"}});
+    EXPECT_THAT(tree.get(),
+                isStrippedColumns<StripColumns>({V{"?start"}, V{"?side1"}},
+                                                rows({{11, 1}, {13, 4}})));
+
+    // One (shared) side tree and the `subtree_`.
+    auto children = tree->getRootOperation()
+                        ->getChildren()
+                        .at(0)
+                        ->getRootOperation()
+                        ->getChildren();
+    ASSERT_EQ(children.size(), 2u);
+    EXPECT_THAT(children.at(0),
+                hasVariables({V{"?side1"}, V{"?start"}, V{"?target"}}));
+  }
+
+  // Graph variable `?g` available, both sides unbound, only `?start` requested:
+  // the `subtree_` keeps the graph column `?g` in addition to the edge columns,
+  // a `StripColumns` on top removes `?target` and `?g`.
+  {
+    auto T = makePathUnbound(
+        makeIdTableFromVector(
+            {{7, 2, 1, 100}, {7, 3, 2, 100}, {7, 4, 2, 101}, {7, 4, 3, 101}}),
+        {V{"?i3"}, V{"?i2"}, V{"?i1"}, V{"?g"}}, left, right, 1, inf,
+        std::nullopt, V{"?g"});
+    auto tree = strip(*T, {V{"?start"}});
+    // The edges `1->2` and `2->3` are in the graph `100`, the edges `2->4` and
+    // `3->4` in the graph `101`, so there is no path `1->4`.
+    EXPECT_THAT(tree.get(),
+                isStrippedColumns<StripColumns>(
+                    {V{"?start"}}, rows({{1}, {1}, {2}, {2}, {3}})));
+
+    const auto* path = tree->getRootOperation()->getChildren().at(0);
+    EXPECT_THAT(path,
+                AllOf(hasRootOperation<TransitivePathBase>(),
+                      hasVariables({V{"?start"}, V{"?target"}, V{"?g"}})));
+    EXPECT_THAT(path->getRootOperation()->getChildren().back(),
+                hasVariables({V{"?i1"}, V{"?i2"}, V{"?g"}}));
+  }
+
+  // Graph variable `?g` available, left side bound to a table that provides the
+  // graph, only `?target` and `?x` requested: the side tree keeps the join
+  // variable `?start` and the graph variable `?g`, only `?y` is stripped.
+  {
+    auto T = makePathBound(
+        true,
+        makeIdTableFromVector(
+            {{7, 2, 1, 100}, {7, 3, 2, 100}, {7, 4, 2, 101}, {7, 4, 3, 101}}),
+        {V{"?i3"}, V{"?i2"}, V{"?i1"}, V{"?g"}},
+        makeIdTableFromVector({{10, 1, 20, 100}, {11, 2, 21, 101}}), 1,
+        {V{"?x"}, V{"?start"}, V{"?y"}, V{"?g"}}, left, right, 1, inf, false,
+        V{"?g"});
+    auto tree = strip(*T, {V{"?target"}, V{"?x"}});
+    // From `1` only the edges of the graph `100` are followed, from `2` only
+    // the edges of the graph `101`.
+    EXPECT_THAT(tree.get(), isStrippedColumns<StripColumns>(
+                                {V{"?target"}, V{"?x"}},
+                                rows({{2, 10}, {3, 10}, {4, 11}})));
+
+    const auto* path = tree->getRootOperation()->getChildren().at(0);
+    EXPECT_THAT(
+        path,
+        AllOf(hasRootOperation<TransitivePathBase>(),
+              hasVariables({V{"?start"}, V{"?target"}, V{"?x"}, V{"?g"}})));
+    auto children = path->getRootOperation()->getChildren();
+    ASSERT_EQ(children.size(), 2u);
+    EXPECT_THAT(children.at(0), hasVariables({V{"?x"}, V{"?start"}, V{"?g"}}));
+    EXPECT_THAT(children.at(1), hasVariables({V{"?i1"}, V{"?i2"}, V{"?g"}}));
+  }
+
+  // Graph variable `?g` that is also the join variable of the left side and
+  // `minDist == 0`: the `EmptyPath` that `bindSides` adds writes the graph to
+  // an internal helper variable. The original side tree below this `EmptyPath`
+  // is stripped to the join variable `?g` (`?other` is removed), and binding it
+  // again adds exactly one new `EmptyPath`, which creates the helper variable
+  // again.
+  {
+    TransitivePathSide graphLeft(std::nullopt, 0, V{"?g"}, 0);
+    auto T =
+        makePathBound(true,
+                      makeIdTableFromVector({{0, 1, 0},
+                                             {2, 3, 0},
+                                             {0, 1, 1},
+                                             {1, 0, 1},
+                                             {2, 3, 1},
+                                             {3, 2, 1},
+                                             {1, 0, 2},
+                                             {3, 2, 2}}),
+                      {V{"?i1"}, V{"?i2"}, V{"?g"}},
+                      makeIdTableFromVector({{0, 10}, {0, 10}, {2, 20}}), 0,
+                      {V{"?g"}, V{"?other"}}, graphLeft, right, 0, inf, false,
+                      V{"?g"}, "<a> <b> <c> <a> . <a> <b> <d> <b> .");
+    auto tree = strip(*T, {V{"?target"}});
+    EXPECT_EQ(countOperations<EmptyPath>(*tree), 1u);
+    EXPECT_THAT(tree.get(), isStrippedColumns<StripColumns>(
+                                {V{"?target"}}, rows({{0}, {0}, {1}, {1}})));
+
+    const auto* path = tree->getRootOperation()->getChildren().at(0);
+    auto children = path->getRootOperation()->getChildren();
+    ASSERT_EQ(children.size(), 2u);
+    const auto* emptyPath = children.at(0);
+    EXPECT_THAT(emptyPath, hasRootOperation<EmptyPath>());
+    EXPECT_THAT(emptyPath->getRootOperation()->getChildren().at(0),
+                hasVariables({V{"?g"}}));
+    // The `EmptyPath` provides `?g` and the internal helper variable.
+    const auto& sideVars = emptyPath->getVariableColumns();
+    EXPECT_EQ(sideVars.size(), 2u);
+    EXPECT_TRUE(sideVars.contains(V{"?g"}));
+  }
+
+  // All variables requested: nothing is stripped from the side tree and the
+  // result is the same as for the original path.
+  {
+    auto T = makeLeftBound(1);
+    auto tree = strip(*T, {V{"?start"}, V{"?target"}, V{"?x"}, V{"?y"}});
+    EXPECT_THAT(tree.get(), isStrippedColumns<TransitivePathBase>(
+                                {V{"?start"}, V{"?target"}, V{"?x"}, V{"?y"}},
+                                rows({{1, 2, 10, 20},
+                                      {1, 3, 10, 20},
+                                      {1, 4, 10, 20},
+                                      {3, 4, 11, 21}})));
+  }
 }
 
 // _____________________________________________________________________________

@@ -119,6 +119,9 @@ class EmptyPath : public Operation {
   const std::optional<Variable>& graphVariable() const {
     return graphVariable_;
   }
+  const std::optional<CheckedChild>& checkedChild() const {
+    return checkedChild_;
+  }
 
   std::string getDescriptor() const override;
   size_t getResultWidth() const override;

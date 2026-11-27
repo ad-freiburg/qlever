@@ -14,6 +14,7 @@
 #include <optional>
 #include <utility>
 
+#include "ColumnStrippingHelpers.h"
 #include "engine/CallFixedSize.h"
 #include "engine/operation/CartesianProductJoin.h"
 #include "engine/operation/DistinctGraphs.h"
@@ -760,3 +761,86 @@ const Variable TransitivePathBase::internalGraphHelper_{
     "?_Qlever_internal_transitive_path_graph", false};
 
 #endif
+
+// _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+TransitivePathBase::makeTreeWithStrippedColumns(
+    const std::set<Variable>& requestedVariables) const {
+  // Strip the `subtree_`. The stripped subtree has to provide the start and
+  // target column of each edge of the path relation, plus the graph column (if
+  // available).
+  auto subVar = [this](ColumnIndex c) {
+    return subtree_->getVariableAndInfoByColumnIndex(c).first;
+  };
+  std::set<Variable> subtreeVars{subVar(lhs_.subCol_), subVar(rhs_.subCol_)};
+  if (graphVariable_) subtreeVars.insert(*graphVariable_);
+  auto subtree =
+      QueryExecutionTree::makeTreeWithStrippedColumns(subtree_, subtreeVars);
+
+  // Create a new `TransitivePath` operation with the stripped subtree and
+  // unbound sideTrees. The `subCol_` gets updated after stripping the
+  // `subtree_`.
+  auto unbind = [&](const TransitivePathSide& side) {
+    auto copy = side;
+    copy.treeAndCol_.reset();
+    copy.subCol_ = subtree->getVariableColumn(subVar(side.subCol_));
+    return copy;
+  };
+  bool useBinSearch = dynamic_cast<const TransitivePathBinSearch*>(this);
+  auto* qec = getExecutionContext();
+  std::shared_ptr<TransitivePathBase> path =
+      makeTransitivePath(qec, subtree, unbind(lhs_), unbind(rhs_), minDist_,
+                         maxDist_, useBinSearch, activeGraphs_, graphVariable_);
+
+  // The stripped sideTree has to provide the `requestedVariables`, the join
+  // variables and the graph variable.
+  auto isRealBinding = [this](const TransitivePathSide& s) {
+    return s.isVariable() && s.isBoundVariable() &&
+           !boundVariableIsForEmptyPath_;
+  };
+  bool lb = isRealBinding(lhs_), rb = isRealBinding(rhs_);
+  if (lb || rb) {
+    columnStrippingHelpers::VarsRequiredFromSubtree varsRequiredFromSubtree{
+        &requestedVariables};
+    auto joinVar = [](const TransitivePathSide& s) {
+      return s.treeAndCol_->first
+          ->getVariableAndInfoByColumnIndex(s.treeAndCol_->second)
+          .first;
+    };
+    if (lb) varsRequiredFromSubtree.add(joinVar(lhs_));
+    if (rb) varsRequiredFromSubtree.add(joinVar(rhs_));
+    if (graphVariable_) varsRequiredFromSubtree.add(*graphVariable_);
+    // Strip the sideTree. For `minDist_ == 0`, strip the original sideTree
+    // (instead of the `EmptyPath` wrapper).
+    const auto& startSide = lb ? lhs_ : rhs_;
+    std::shared_ptr<QueryExecutionTree> sideTree = startSide.treeAndCol_->first;
+    if (minDist_ == 0) {
+      auto emptyPath =
+          std::dynamic_pointer_cast<EmptyPath>(sideTree->getRootOperation());
+      if (emptyPath && emptyPath->checkedChild().has_value() &&
+          emptyPath->variable() == joinVar(startSide)) {
+        sideTree = emptyPath->checkedChild()->child_;
+      }
+    }
+    auto strippedSideTree = varsRequiredFromSubtree.stripSubtree(sideTree);
+
+    // Update the column of the join variable after stripping the sideTree
+    // and bind the `strippedSideTree` to the new `TransitivePath` operation.
+    auto updateJoinVarCol = [&](bool bound, const TransitivePathSide& s) {
+      return bound ? std::optional{strippedSideTree->getVariableColumn(
+                         joinVar(s))}
+                   : std::nullopt;
+    };
+    path = path->bindSides(strippedSideTree, updateJoinVarCol(lb, lhs_),
+                           updateJoinVarCol(rb, rhs_));
+  }
+
+  // The new `TransitivePath` also exports variables that the parent did
+  // not request, therefore a `StripColumns` operation is added for them.
+  auto tree = std::make_shared<QueryExecutionTree>(qec, std::move(path));
+  if (columnStrippingHelpers::allVariablesAreRequired(*tree,
+                                                      requestedVariables))
+    return tree;
+  return ad_utility::makeExecutionTree<StripColumns>(qec, std::move(tree),
+                                                     requestedVariables);
+}
