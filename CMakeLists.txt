@@ -1073,7 +1073,11 @@ if (NOT EMSCRIPTEN)
     add_executable(qlever-upgrade-index src/IndexUpgraderMain.cpp)
     qlever_target_link_libraries(qlever-upgrade-index index ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo global)
 
+    add_executable(qlever-query src/QueryMain.cpp)
+    qlever_target_link_libraries(qlever-query sparqlParser engine qlever_util index qlever)
+
     qlever_enable_lto(qlever-index)
+    qlever_enable_lto(qlever-query)
     qlever_enable_lto(qlever-server)
     qlever_enable_lto(qlever-upgrade-index)
 endif()
@@ -1096,6 +1100,7 @@ endif()
 if (NOT EMSCRIPTEN)
     install(TARGETS
         qlever-index
+        qlever-query
         qlever-server
         qlever-upgrade-index
         RUNTIME DESTINATION bin
