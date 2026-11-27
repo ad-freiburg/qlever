@@ -451,19 +451,26 @@ TEST(GeoVocabularyTest, ReadOldServingFile) {
     }
   }
   const std::string geoInfoFilename = AnyGeoVocab::getGeoInfoFilename(filename);
-  static_assert(sizeof(GeometryInfo) == 56);
+  constexpr size_t oldRecordSize = 56;
+  static_assert(geometryInfoSize(7) == oldRecordSize);
   {
-    std::fstream file{geoInfoFilename,
-                      std::ios::binary | std::ios::in | std::ios::out};
-    const uint64_t version6 = 6;
-    file.write(reinterpret_cast<const char*>(&version6), sizeof(version6));
-    for (size_t i = 0; i < literals.size(); ++i) {
-      if (!expected[i].has_value()) {
-        continue;
-      }
-      file.seekp(sizeof(uint64_t) + i * sizeof(GeometryInfo) + 28);
-      file.write("\x97\x70\x00\x00", 4);
+    std::string current;
+    {
+      std::ifstream in{geoInfoFilename, std::ios::binary};
+      current.assign(std::istreambuf_iterator<char>{in}, {});
     }
+    const uint64_t version6 = 6;
+    std::string old(reinterpret_cast<const char*>(&version6), sizeof(version6));
+    for (size_t i = 0; i < literals.size(); ++i) {
+      std::string record = current.substr(
+          sizeof(uint64_t) + i * sizeof(GeometryInfo), oldRecordSize);
+      if (expected[i].has_value()) {
+        record.replace(28, 4, "\x97\x70\x00\x00", 4);
+      }
+      old += record;
+    }
+    std::ofstream out{geoInfoFilename, std::ios::binary | std::ios::trunc};
+    out.write(old.data(), old.size());
   }
 
   // Read the file: the bytes `[28, 32)` are zero, everything else (including
