@@ -399,6 +399,12 @@ class Operation : public std::enable_shared_from_this<Operation> {
   }
 
  private:
+  // Concatenate the chunks of the lazy `lazyResult` (the result of this
+  // operation) into a single fully materialized `Result`. This is only a
+  // fallback required for correctness (see `getResult`), as the extra copy
+  // makes it slower than computing the result fully materialized directly.
+  std::shared_ptr<const Result> materializeLazyResult(const Result& lazyResult);
+
   // This function is called each time `applyLimitOffset` is called. It can be
   // overridden by subclasses to e.g. implement the LIMIT in a more efficient
   // way. An implementation that pushes the `LIMIT`/`OFFSET` into a child should
