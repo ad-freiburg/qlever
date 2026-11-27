@@ -12,9 +12,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include <fstream>
 #include <future>
-#include <sstream>
 #include <string>
 #include <vector>
 
@@ -26,7 +24,7 @@
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "rdfTypes/GeoCellGrid.h"
-#include "util/File.h"
+#include "util/FilesystemHelpers.h"
 
 using ad_utility::GeoCellGrid;
 using ad_utility::VocabularyType;
@@ -50,16 +48,6 @@ std::vector<std::pair<std::string, bool>> makeWords(size_t numWords) {
     words.emplace_back(std::move(word), i % 7 != 0);
   }
   return words;
-}
-
-// Read a whole file.
-std::string readFile(const std::string& filename) {
-  auto file = ad_utility::makeIfstream(filename, std::ios::binary);
-  // Copy the whole buffer at once (reading char by char via
-  // `std::istreambuf_iterator` is very slow in Debug builds).
-  std::ostringstream contents;
-  contents << file.rdbuf();
-  return std::move(contents).str();
 }
 
 // Write the `words` with the word-by-word writer of a vocabulary of the given
@@ -191,8 +179,8 @@ TEST(BlockWriter, sameFilesAsWordWriter) {
     auto indicesB = writeInBlocks(vocabType, filenameB, words);
     EXPECT_EQ(indicesA, indicesB) << vocabType.toString();
     for (const auto& suffix : PolymorphicVocabulary::fileSuffixes(vocabType)) {
-      EXPECT_EQ(readFile(absl::StrCat(filenameA, suffix)),
-                readFile(absl::StrCat(filenameB, suffix)))
+      EXPECT_EQ(qlever::util::readBinaryFile(absl::StrCat(filenameA, suffix)),
+                qlever::util::readBinaryFile(absl::StrCat(filenameB, suffix)))
           << vocabType.toString() << suffix;
     }
   }
@@ -343,8 +331,8 @@ TEST(GeoBlockWriter, sameFilesAndIndicesWithGrid) {
   }
   EXPECT_EQ(indicesA, indicesB);
   for (const auto& suffix : GV::fileSuffixes()) {
-    EXPECT_EQ(readFile(absl::StrCat(filenameA, suffix)),
-              readFile(absl::StrCat(filenameB, suffix)))
+    EXPECT_EQ(qlever::util::readBinaryFile(absl::StrCat(filenameA, suffix)),
+              qlever::util::readBinaryFile(absl::StrCat(filenameB, suffix)))
         << suffix;
   }
 

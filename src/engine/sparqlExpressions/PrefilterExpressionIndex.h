@@ -18,7 +18,7 @@
 #include <vector>
 
 #include "global/Id.h"
-#include "global/ValueIdComparators.h"
+#include "global/ValueIdComparison.h"
 #include "index/CompressedRelationMetadata.h"
 #include "index/LocalVocab.h"
 #include "index/TripleComponentConversions.h"

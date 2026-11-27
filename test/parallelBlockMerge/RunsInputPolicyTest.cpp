@@ -23,9 +23,9 @@ using namespace ad_utility::parallelBlockMerge;
 using namespace parallelBlockMergeTestHelpers;
 
 namespace {
-// A minimal type that fulfills the `InputConcept`. It is only used to check
-// that the concept is satisfiable, the actual data are irrelevant.
-struct DummyInput {
+// A type that has everything that the `InputConcept` requires except
+// `reserveBlock`. The actual data are irrelevant.
+struct InputWithoutReserveBlock {
   using Element = int;
   using Block = std::vector<int>;
 
@@ -57,6 +57,14 @@ struct DummyInput {
   Element element_ = 0;
 };
 
+// A minimal type that fulfills the `InputConcept`. It is only used to check
+// that the concept is satisfiable.
+struct DummyInput : public InputWithoutReserveBlock {
+  void reserveBlock(Block& block, size_t numElements) const {
+    block.reserve(numElements);
+  }
+};
+
 // The same, but `getBlock` returns a reference instead of a value, which the
 // concept explicitly allows.
 struct DummyInputWithReferenceToBlock : public DummyInput {
@@ -81,6 +89,7 @@ struct AlmostAnInput {
 static_assert(InputConcept<DummyInput>);
 static_assert(InputConcept<DummyInputWithReferenceToBlock>);
 static_assert(InputConcept<VectorInput<int>>);
+static_assert(!InputConcept<InputWithoutReserveBlock>);
 static_assert(!InputConcept<NotAnInput>);
 static_assert(!InputConcept<AlmostAnInput>);
 }  // namespace

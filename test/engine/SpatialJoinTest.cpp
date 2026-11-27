@@ -24,17 +24,18 @@
 #include "../util/IndexTestHelpers.h"
 #include "../util/LocalVocabTestHelpers.h"
 #include "../util/RuntimeParametersTestHelpers.h"
+#include "../util/VariableToColumnMapTestHelpers.h"
 #include "./SpatialJoinTestHelpers.h"
 #include "./ValuesForTesting.h"
 #include "engine/ExportQueryExecutionTrees.h"
-#include "engine/IndexScan.h"
-#include "engine/Join.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryPlanner.h"
-#include "engine/SpatialJoin.h"
 #include "engine/SpatialJoinConfig.h"
 #include "engine/VariableToColumnMap.h"
+#include "engine/operation/IndexScan.h"
+#include "engine/operation/Join.h"
+#include "engine/operation/SpatialJoin.h"
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "index/ExportIds.h"
@@ -243,12 +244,12 @@ std::shared_ptr<SpatialJoin> makeSpatialJoinFromValues(
       std::make_shared<ad_utility::CancellationHandle<>>();
   // also include some garbage input geometries
   auto pqLeft = SparqlParser::parseQuery(
-      &encodedIriManager,
+      &encodedIriManager, makeAllocator(),
       "PREFIX geo: <http://www.opengis.net/ont/geosparql#>\nSELECT ?a {VALUES "
       "(?a) {(\"POLYGON((8.529 47.375, 8.549 47.375, 8.549 47.395, 8.529 "
       "47.395, 8.529 47.375))\"^^geo:wktLiteral) (\"garbage\") (5) (<>)}}");
   auto pqRight = SparqlParser::parseQuery(
-      &encodedIriManager,
+      &encodedIriManager, makeAllocator(),
       "PREFIX geo: <http://www.opengis.net/ont/geosparql#>\nSELECT ?b {VALUES "
       "(?b) {(\"POINT(8.542 47.385)\"^^geo:wktLiteral)}}");
   QueryPlanner qp{qec, sharedHandle};
@@ -553,7 +554,7 @@ class SpatialJoinVarColParamTest
                             bool addDist, bool withObj, bool withName,
                             bool withGeo) -> VariableToColumnMap {
       size_t currentColumn = 0;
-      VariableToColumnMap expected;
+      auto expected = makeVariableToColumnMap();
 
       auto addV = [&](std::vector<V> vec, bool right = false) {
         for (auto v : vec) {
@@ -750,11 +751,11 @@ TEST(SpatialJoinVarColTest, ChildResultWidth) {
   // The `SpatialJoin`'s `VariableToColumnMap` is expected to include all named
   // columns from the left child and from the right child only the requested
   // ones.
-  VariableToColumnMap expectedVarToCol{
+  auto expectedVarToCol = makeVariableToColumnMap({
       {V{"?a"}, makeAlwaysDefinedColumn(0)},
       {V{"?b"}, makeAlwaysDefinedColumn(1)},
       {V{"?c"}, makeAlwaysDefinedColumn(2)},
-  };
+  });
   EXPECT_THAT(spatialJoin->getVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVarToCol));
 }
@@ -802,11 +803,11 @@ TEST(SpatialJoinVarColTest, InvisibleColumnsAndWithinSwap) {
 
   // We expect the three visible columns (two join cols and the payload column)
   // to be in the result, but not the invisible column.
-  VariableToColumnMap expectedVarToCol{
+  auto expectedVarToCol = makeVariableToColumnMap({
       {Variable{"?a"}, makeAlwaysDefinedColumn(0)},
       {Variable{"?b"}, makeAlwaysDefinedColumn(1)},
       {Variable{"?c"}, makeAlwaysDefinedColumn(2)},
-  };
+  });
   EXPECT_THAT(spatialJoin->getVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVarToCol));
 

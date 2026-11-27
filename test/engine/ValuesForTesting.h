@@ -8,9 +8,9 @@
 
 #include "../util/AllocatorTestHelpers.h"
 #include "../util/LocalVocabTestHelpers.h"
-#include "engine/Operation.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/Result.h"
+#include "engine/operation/Operation.h"
 #include "util/Algorithm.h"
 #include "util/ContainersWithAllocator.h"
 #include "util/Random.h"
@@ -248,7 +248,7 @@ class ValuesForTesting : public Operation {
 
  private:
   VariableToColumnMap computeVariableToColumnMap() const override {
-    VariableToColumnMap m;
+    VariableToColumnMap m{allocator()};
     for (auto i = ColumnIndex{0}; i < variables_.size(); ++i) {
       if (!variables_.at(i).has_value()) {
         continue;
