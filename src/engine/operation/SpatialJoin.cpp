@@ -25,11 +25,11 @@
 
 #include "backports/type_traits.h"
 #include "engine/ExportQueryExecutionTrees.h"
-#include "engine/operation/IndexScan.h"
 #include "engine/NamedResultCache.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoinConfig.h"
 #include "engine/VariableToColumnMap.h"
+#include "engine/operation/IndexScan.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/PrefilterExpressionIndex.h"

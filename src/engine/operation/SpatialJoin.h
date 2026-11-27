@@ -17,8 +17,8 @@
 #include <variant>
 
 #include "engine/SpatialJoinConfig.h"
-#include "engine/operation/Operation.h"
 #include "engine/idTable/IdTable.h"
+#include "engine/operation/Operation.h"
 #include "global/Id.h"
 #include "index/Index.h"
 #include "rdfTypes/GeoRectangle.h"
