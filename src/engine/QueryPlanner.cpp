@@ -38,6 +38,7 @@
 #include "engine/operation/Describe.h"
 #include "engine/operation/Distinct.h"
 #include "engine/operation/DistinctGraphs.h"
+#include "engine/operation/ExistsJoin.h"
 #include "engine/operation/ExternalValues.h"
 #include "engine/operation/Filter.h"
 #include "engine/operation/GroupBy.h"
@@ -55,6 +56,7 @@
 #include "engine/operation/RowNumber.h"
 #include "engine/operation/Service.h"
 #include "engine/operation/SpatialJoin.h"
+#include "engine/operation/StripColumns.h"
 #include "engine/operation/TextIndexScanForEntity.h"
 #include "engine/operation/TextIndexScanForWord.h"
 #include "engine/operation/TextLimit.h"
@@ -1524,12 +1526,20 @@ void QueryPlanner::applyFiltersIfPossible(
       // the bound value, so it may only be applied after that join. This
       // happens at the latest at the end of the group graph pattern, in the
       // `ApplyAllFiltersAndReplaceUnfiltered` mode.
-      if (applyAll ||
+      bool isAlwaysDefined =
           plan._qet->getRootOperation()->areVariablesAlwaysDefined(
-              filterAndSubst.filter_.expression_.containedVariables())) {
-        // Apply this filter regularly.
-        SubtreePlan newPlan = makeSubtreePlan<Filter>(
-            _qec, plan._qet, filterAndSubst.filter_.expression_);
+              filterAndSubst.filter_.expression_.containedVariables());
+      if (applyAll || isAlwaysDefined) {
+        // Apply this filter via its substitute if it cannot be evaluated
+        // regularly (see `createSemiJoinWithSubstitute`), otherwise regularly.
+        auto semiJoin = isAlwaysDefined
+                            ? createSemiJoinWithSubstitute(plan, filterAndSubst)
+                            : std::nullopt;
+        SubtreePlan newPlan =
+            semiJoin.has_value()
+                ? std::move(semiJoin.value())
+                : makeSubtreePlan<Filter>(_qec, plan._qet,
+                                          filterAndSubst.filter_.expression_);
         mergeSubtreePlanIds(newPlan, newPlan, plan);
         newPlan._idsOfIncludedFilters |= (size_t(1) << i);
         newPlan.type = plan.type;
@@ -1847,11 +1857,20 @@ QueryPlanner::FiltersAndOptionalSubstitutes QueryPlanner::seedFilterSubstitutes(
       // Substitution of a `SpatialJoin` plan may be forced only if attaching
       // one more child completes it.
       bool forceSubstitution = sj->getChildren().size() == 1;
+      // A substitute that is not enforced can also be applied to a single plan
+      // as a semi-join (see `createSemiJoinWithSubstitute`), except for a
+      // `geof:distance` filter, which can be evaluated regularly.
+      std::optional<Variable> semiJoinVariable;
+      if (!forceSubstitution &&
+          sj->getJoinType() != SpatialJoinType::WITHIN_DIST) {
+        semiJoinVariable = generateUniqueVarName();
+      }
       auto plan = makeSubtreePlan(std::move(sj));
       // Mark that this subtree plan handles (that is, substitutes) the filter.
       plan._idsOfIncludedFilters |= 1ULL << i;
       plan.containsFilterSubstitute_ = true;
-      plans.push_back({filterExpression, std::move(plan), forceSubstitution});
+      plans.push_back({filterExpression, std::move(plan), forceSubstitution,
+                       std::move(semiJoinVariable)});
     }
   }
   return plans;
@@ -2532,6 +2551,58 @@ SubtreePlanVec QueryPlanner::createJoinsWithSubstitutes(
   return candidates;
 }
 
+// _____________________________________________________________________________
+std::optional<SubtreePlan> QueryPlanner::createSemiJoinWithSubstitute(
+    const SubtreePlan& plan,
+    const FilterAndOptionalSubstitute& filterAndSubst) const {
+  // Return `std::nullopt` if `plan` is not deterministic, because its clones
+  // below could then have other rows than `plan` itself.
+  if (!filterAndSubst.semiJoinVariable_.has_value() ||
+      !plan._qet->getRootOperation()->isDeterministic()) {
+    return std::nullopt;
+  }
+
+  // Attach the distinct values of each variable of the filter in `plan` as a
+  // child to the substitute. For example, for `geof:sfContains(?x, ?y)`, this
+  // gives a `SpatialJoin` of the distinct values of `?x` and `?y` in `plan`,
+  // with one row per pair of values in the relation.
+  //
+  // NOTE 1: Without the `Distinct`, a value that occurs in `k` rows of `plan`
+  // would occur `k` times in a column, and the `SpatialJoin` would return each
+  // pair of values as often as the product of their numbers of occurrences.
+  //
+  // NOTE 2: Each column is a `StripColumns` of a clone of `plan`, so that each
+  // operation occurs only once in the tree (for example, with its own runtime
+  // information). The clone has the same cache key, so `plan` is usually
+  // computed only once (not if its result is too large for the cache).
+  // `makeTreeWithStrippedColumns` would rebuild `plan` instead, which is more
+  // expensive during the planning.
+  SubtreePlan substitute = filterAndSubst.substitute_.value();
+  for (const auto* variable :
+       filterAndSubst.filter_.expression_.containedVariables()) {
+    SubtreePlan column{QueryExecutionTree::createDistinctTree(
+        makeExecutionTree<StripColumns>(_qec, plan._qet->clone(),
+                                        std::set<Variable>{*variable}),
+        std::array<ColumnIndex, 1>{0})};
+    auto candidates = createJoinCandidates(substitute, column,
+                                           getJoinColumns(substitute, column));
+    AD_CORRECTNESS_CHECK(!candidates.empty());
+    substitute = std::move(candidates.front());
+  }
+
+  // Keep the rows of `plan` that are also in the result of the substitute, via
+  // an `ExistsJoin` and a `Filter` on its added column (like for `FILTER
+  // EXISTS`). The `Filter` gets the descriptor of the original filter.
+  const auto& exists = filterAndSubst.semiJoinVariable_.value();
+  auto existsJoin =
+      makeExecutionTree<ExistsJoin>(_qec, plan._qet, substitute._qet, exists);
+  return makeSubtreePlan<Filter>(
+      _qec, std::move(existsJoin),
+      sparqlExpression::SparqlExpressionPimpl{
+          std::make_unique<sparqlExpression::VariableExpression>(exists),
+          filterAndSubst.filter_.expression_.getDescriptor()});
+}
+
 // _____________________________________________________________________________________________________________________
 
 namespace {
@@ -2975,7 +3046,7 @@ void QueryPlanner::QueryGraph::setupGraph(
         // Add additional edges to the graph representing the connections
         // between variables given by joins substituting cartesian product +
         // filter.
-        for (auto& [filter, substitute, forceSubstitution] :
+        for (auto& [filter, substitute, forceSubstitution, semiJoinVariable] :
              filtersAndOptionalSubstitutes) {
           if (!substitute.has_value()) {
             // This filter cannot be substituted: add no edges.
