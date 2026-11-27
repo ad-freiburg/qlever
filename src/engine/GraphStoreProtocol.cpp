@@ -44,9 +44,7 @@ std::vector<TurtleTriple> GraphStoreProtocol::parseTriples(
       // of the underlying index more consistently to all parsing and update
       // functions.
       EncodedIriManager encodedIriManager;
-      auto parser = Re2Parser(&encodedIriManager);
-      parser.setInputStream(body);
-      return parser.parseAndReturnAllTriples();
+      return Re2Parser::parseTriplesFromString(body, &encodedIriManager);
     }
     default: {
       throwUnsupportedMediatype(toString(contentType));

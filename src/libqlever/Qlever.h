@@ -7,6 +7,7 @@
 #ifndef QLEVER_SRC_LIBQLEVER_QLEVER_H
 #define QLEVER_SRC_LIBQLEVER_QLEVER_H
 
+#include <absl/functional/function_ref.h>
 #include <gtest/gtest_prod.h>
 
 #include <algorithm>
@@ -53,6 +54,11 @@
 #include "util/memorySize/MemorySize.h"
 
 namespace qlever {
+
+namespace blobDiff {
+// Forward declaration, see `libqlever/blobDiff/TurtleDelta.h`.
+struct TripleDelta;
+}  // namespace blobDiff
 
 // The common configuration shared by the index building and query execution.
 struct CommonConfig {
@@ -398,6 +404,17 @@ class Qlever : public ad_utility::NoCopyNoMove {
   // `operation` is not supported for such an instance.
   void throwIfLoadedFromBlob(std::string_view operation) const;
 
+  // The common part of `applyUpdate` and `applyTripleDelta`: throw if
+  // `isLoadedFromBlob()` (with the `operation` in the message), apply the
+  // `modification` to the `deltaTriples`, add the counts before and after to
+  // the `UpdateMetadata` it returns, and clear the query and named-result
+  // caches, because all their entries have been invalidated by the
+  // modification.
+  UpdateMetadata applyToDeltaTriplesImpl(
+      std::string_view operation, DeltaTriples& deltaTriples,
+      absl::FunctionRef<UpdateMetadata(DeltaTriples&)> modification,
+      ad_utility::timer::TimeTracer& tracer);
+
  public:
   // Build an index, using an `IndexBuilderConfig` as explained above.
   static void buildIndex(IndexBuilderConfig config);
@@ -602,6 +619,14 @@ class Qlever : public ad_utility::NoCopyNoMove {
       ad_utility::timer::TimeTracer& tracer =
           ad_utility::timer::DEFAULT_TIME_TRACER);
 
+  // Apply the `delta` (see `blobDiff::computeTripleDelta`) to the delta triples
+  // of the current index in a single modification, and return metadata about
+  // the update (the counts before and after). Like `applyUpdate`, also clear
+  // the query and named-result caches, and throw if the index was loaded from a
+  // blob. The `delta` must have been computed for the current index, that is
+  // `indexSnapshot()`, which is checked.
+  UpdateMetadata applyTripleDelta(blobDiff::TripleDelta delta);
+
   // Plan, parse, and execute the given `query` and pin the result to the cache
   // with the given options (name and possibly request for building a geometry
   // index). This result can then be reused in a query as follows: `SERVICE
@@ -733,6 +758,12 @@ class Qlever : public ad_utility::NoCopyNoMove {
   // between two reads.
   std::shared_ptr<IndexAndViews> indexAndViewsSnapshot() const {
     return *indexAndViews_.rlock();
+  }
+
+  // Return the `Index` of `indexAndViewsSnapshot()`. The returned pointer keeps
+  // the complete snapshot alive (via the aliasing constructor of `shared_ptr`).
+  std::shared_ptr<const Index> indexSnapshot() const {
+    return getPointerPair(indexAndViewsSnapshot()).first;
   }
 
   // Atomically swap in a freshly built `IndexAndViews`. The old instance stays

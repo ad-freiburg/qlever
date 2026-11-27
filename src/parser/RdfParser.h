@@ -587,6 +587,33 @@ class RdfStringParser : public Parser {
     return std::move(this->triples_);
   }
 
+  // Parse all triples of `content` (see `parseAndReturnAllTriples`) with a
+  // fresh parser that uses the `encodedIriManager` and the `settings`, and
+  // return them. If an `inputName` is given, it appears in the messages of
+  // parse errors (see `RdfParserBase::setInputName`).
+  static std::vector<TurtleTriple> parseTriplesFromString(
+      std::string_view content, const EncodedIriManager* encodedIriManager,
+      RdfParserSettings settings = {},
+      std::optional<std::string> inputName = std::nullopt) {
+    return parseTriplesFromString(
+        qlever::parser::ByteBlock(content.begin(), content.end()),
+        encodedIriManager, settings, std::move(inputName));
+  }
+
+  // Same as above, but take ownership of the `content` instead of copying it.
+  static std::vector<TurtleTriple> parseTriplesFromString(
+      qlever::parser::ByteBlock&& content,
+      const EncodedIriManager* encodedIriManager,
+      RdfParserSettings settings = {},
+      std::optional<std::string> inputName = std::nullopt) {
+    RdfStringParser parser{encodedIriManager, settings};
+    if (inputName.has_value()) {
+      parser.setInputName(std::move(inputName.value()));
+    }
+    parser.setInputStream(std::move(content));
+    return parser.parseAndReturnAllTriples();
+  }
+
   // Parse only a single object.
   static TripleComponent parseTripleObject(std::string_view objectString) {
     // TODO<joka921> Make it possible to use an optional here.

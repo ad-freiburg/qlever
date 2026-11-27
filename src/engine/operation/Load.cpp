@@ -144,13 +144,12 @@ Result Load::computeResultImpl([[maybe_unused]] bool requestLaziness) {
         "\". Supported `Content-Type`s are ", supportedMediatypes));
   }
   using Re2Parser = RdfStringParser<TurtleParser<Tokenizer>>;
-  const auto& encodedIriManager = getIndex().encodedIriManager();
-  auto parser = Re2Parser(&encodedIriManager);
   std::string body;
   for (const auto& bytes : response.body_) {
     body.append(reinterpret_cast<const char*>(bytes.data()), bytes.size());
   }
-  parser.setInputStream(body);
+  auto triples =
+      Re2Parser::parseTriplesFromString(body, &getIndex().encodedIriManager());
   // The RDF parsers represent blank nodes as plain strings, which the
   // conversions in `TripleComponentConversions.h` cannot handle. The
   // `BlankNodeAdder` maps them to blank node `Id`s, consistently within this
@@ -165,7 +164,7 @@ Result Load::computeResultImpl([[maybe_unused]] bool requestLaziness) {
     return toValueId(std::move(component), getIndex(),
                      blankNodeAdder.localVocab_);
   };
-  for (auto& triple : parser.parseAndReturnAllTriples()) {
+  for (auto& triple : triples) {
     result.push_back(
         std::array{toId(std::move(triple.subject_)),
                    toId(TripleComponent(std::move(triple.predicate_))),

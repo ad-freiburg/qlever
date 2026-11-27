@@ -30,6 +30,7 @@
 #include "index/IndexRebuilder.h"
 #include "index/TextIndexBuilder.h"
 #include "libqlever/QleverTypes.h"
+#include "libqlever/blobDiff/TurtleDelta.h"
 #include "parser/SparqlParser.h"
 #include "util/Exception.h"
 #include "util/FairShareExecutor.h"
@@ -338,20 +339,13 @@ std::string Qlever::query(const PlannedQuery& plannedQuery,
 }
 
 // _____________________________________________________________________________
-UpdateMetadata Qlever::applyUpdate(
-    const PlannedQuery& plannedUpdate,
-    ad_utility::SharedCancellationHandle cancellationHandle,
-    DeltaTriples& deltaTriples, ad_utility::timer::TimeTracer& tracer) {
-  throwIfLoadedFromBlob("An update");
-  const auto& qet = plannedUpdate.queryExecutionTree();
-  AD_CORRECTNESS_CHECK(plannedUpdate.parsedQuery().hasUpdateClause());
-  AD_CORRECTNESS_CHECK(&plannedUpdate.getIndex().getImpl() ==
-                       &deltaTriples.getIndex());
-
+UpdateMetadata Qlever::applyToDeltaTriplesImpl(
+    std::string_view operation, DeltaTriples& deltaTriples,
+    absl::FunctionRef<UpdateMetadata(DeltaTriples&)> modification,
+    ad_utility::timer::TimeTracer& tracer) {
+  throwIfLoadedFromBlob(operation);
   DeltaTriplesCount countBefore = deltaTriples.getCounts();
-  UpdateMetadata updateMetadata = ExecuteUpdate::executeUpdate(
-      plannedUpdate.getIndex(), plannedUpdate.parsedQuery(), qet, deltaTriples,
-      cancellationHandle, tracer);
+  UpdateMetadata updateMetadata = modification(deltaTriples);
   updateMetadata.countBefore_ = countBefore;
   updateMetadata.countAfter_ = deltaTriples.getCounts();
 
@@ -364,6 +358,59 @@ UpdateMetadata Qlever::applyUpdate(
   tracer.endTrace("clearCache");
 
   return updateMetadata;
+}
+
+// _____________________________________________________________________________
+UpdateMetadata Qlever::applyUpdate(
+    const PlannedQuery& plannedUpdate,
+    ad_utility::SharedCancellationHandle cancellationHandle,
+    DeltaTriples& deltaTriples, ad_utility::timer::TimeTracer& tracer) {
+  AD_CORRECTNESS_CHECK(plannedUpdate.parsedQuery().hasUpdateClause());
+  AD_CORRECTNESS_CHECK(&plannedUpdate.getIndex().getImpl() ==
+                       &deltaTriples.getIndex());
+  return applyToDeltaTriplesImpl(
+      "An update", deltaTriples,
+      [&plannedUpdate, &cancellationHandle, &tracer](DeltaTriples& triples) {
+        return ExecuteUpdate::executeUpdate(
+            plannedUpdate.getIndex(), plannedUpdate.parsedQuery(),
+            plannedUpdate.queryExecutionTree(), triples, cancellationHandle,
+            tracer);
+      },
+      tracer);
+}
+
+// _____________________________________________________________________________
+UpdateMetadata Qlever::applyTripleDelta(blobDiff::TripleDelta delta) {
+  auto snapshot = indexAndViewsSnapshot();
+  // Both the index of the `snapshot` and the locked index of the `delta` are
+  // alive, so equal addresses mean the same index.
+  auto deltaIndex = delta.index_.lock();
+  if (deltaIndex.get() != &snapshot->index_) {
+    throw std::runtime_error(
+        "The triple delta was not computed for the current index of this "
+        "`Qlever` instance (or that index no longer exists)");
+  }
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+  // The deletions come first, as in `ExecuteUpdate::executeUpdate`. The sets
+  // are disjoint by construction.
+  auto deleteAndInsert = [&handle, &delta](DeltaTriples& deltaTriples) {
+    if (!delta.toDelete_.empty()) {
+      deltaTriples.deleteTriples<DeltaTriples::Consolidate::No>(
+          handle, std::move(delta.toDelete_));
+    }
+    if (!delta.toInsert_.empty()) {
+      deltaTriples.insertTriples<DeltaTriples::Consolidate::No>(
+          handle, std::move(delta.toInsert_));
+    }
+    deltaTriples.consolidateAll();
+    return UpdateMetadata{};
+  };
+  return snapshot->index_.deltaTriplesManager().modify<UpdateMetadata>(
+      [this, &deleteAndInsert](DeltaTriples& deltaTriples) {
+        return applyToDeltaTriplesImpl("Applying a triple delta", deltaTriples,
+                                       deleteAndInsert,
+                                       ad_utility::timer::DEFAULT_TIME_TRACER);
+      });
 }
 
 // _____________________________________________________________________________
