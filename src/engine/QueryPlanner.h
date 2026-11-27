@@ -328,6 +328,23 @@ class QueryPlanner {
                               const AddedIndexScanFunction& addIndexScan,
                               const AddFilterFunction& addFilter);
 
+  // Add an index scan for the `triple` (plus filters) for the case that none
+  // of the permutations that `seedFromOrdinaryTriple` would use is loaded.
+  // The scan is on the loaded permutation for which the longest prefix of its
+  // columns is fixed in the `triple`, the remaining fixed columns and repeated
+  // variables are checked by filters. This can be very slow, so a warning is
+  // added.
+  template <typename AddedIndexScanFunction, typename AddFilterFunction>
+  void seedWithoutSuitablePermutation(
+      const SparqlTripleSimple& triple,
+      const AddedIndexScanFunction& addIndexScan,
+      const AddFilterFunction& addFilter);
+
+  // Create a `SparqlFilter` that corresponds to the expression
+  // `variable = constant`.
+  SparqlFilter createEqualFilterWithConstant(
+      const Variable& variable, const TripleComponent& constant) const;
+
   // Helper function used by the seedFromOrdinaryTriple function
   template <typename AddedIndexScanFunction>
   void indexScanSingleVarCase(const SparqlTripleSimple& triple,

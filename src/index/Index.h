@@ -235,6 +235,12 @@ class Index {
 
   bool hasAllPermutations() const;
 
+  // Return true iff the `permutation` is loaded.
+  bool hasPermutation(Permutation::Enum permutation) const;
+
+  // Return the loaded permutations, in the order of `Permutation::ALL`.
+  std::vector<Permutation::Enum> loadedPermutations() const;
+
   // ___________________________________________________________________________
   std::vector<float> getMultiplicities(
       const TripleComponent& key, const Permutation& permutation,

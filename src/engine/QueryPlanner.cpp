@@ -67,6 +67,7 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "global/Id.h"
 #include "global/RuntimeParameters.h"
+#include "index/TripleComponentConversions.h"
 #include "parser/Alias.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/MagicServiceIriConstants.h"
@@ -744,9 +745,6 @@ void QueryPlanner::indexScanThreeVarsCase(
     const SparqlTripleSimple& triple,
     const AddedIndexScanFunction& addIndexScan, const AddedFilter& addFilter) {
   using enum Permutation::Enum;
-  AD_CONTRACT_CHECK(!_qec || _qec->getIndex().hasAllPermutations(),
-                    "With only 2 permutations registered (no -a option), "
-                    "triples should have at most two variables.");
   auto generate = [this]() { return generateUniqueVarName(); };
 
   // Replace the position of the `triple` that is specified by the
@@ -798,17 +796,149 @@ void QueryPlanner::seedFromOrdinaryTriple(
   const size_t numVars = static_cast<size_t>(triple.s_.isVariable()) +
                          static_cast<size_t>(triple.p_.isVariable()) +
                          static_cast<size_t>(triple.o_.isVariable());
+  // First only record the scans (and the filters that they require) that would
+  // be used if all permutations were loaded.
+  std::vector<std::pair<Permutation::Enum, std::optional<SparqlTripleSimple>>>
+      scans;
+  std::vector<SparqlFilter> filters;
+  auto recordScan = [&scans](Permutation::Enum permutation,
+                             std::optional<SparqlTripleSimple> scanTriple =
+                                 std::nullopt) {
+    scans.emplace_back(permutation, std::move(scanTriple));
+  };
+  auto recordFilter = [&filters](SparqlFilter filter) {
+    filters.push_back(std::move(filter));
+  };
   if (numVars == 0) {
     // We could read this from any of the permutations.
-    addIndexScan(Permutation::Enum::PSO);
+    recordScan(Permutation::Enum::PSO);
   } else if (numVars == 1) {
-    indexScanSingleVarCase(triple, addIndexScan);
+    indexScanSingleVarCase(triple, recordScan);
   } else if (numVars == 2) {
-    indexScanTwoVarsCase(triple, addIndexScan, addFilter);
+    indexScanTwoVarsCase(triple, recordScan, recordFilter);
   } else {
     AD_CORRECTNESS_CHECK(numVars == 3);
-    indexScanThreeVarsCase(triple, addIndexScan, addFilter);
+    indexScanThreeVarsCase(triple, recordScan, recordFilter);
   }
+
+  // Use those of the recorded scans whose permutation is loaded. The recorded
+  // filters only depend on the triple, not on the permutation. If no
+  // permutation is loaded at all (for example, for an index that was loaded
+  // from a blob), the recorded scans are used, and their execution reports
+  // the missing permutation.
+  bool noPermutationIsLoaded =
+      _qec != nullptr && _qec->getIndex().loadedPermutations().empty();
+  auto isLoaded = [this, noPermutationIsLoaded](Permutation::Enum permutation) {
+    return _qec == nullptr || noPermutationIsLoaded ||
+           _qec->getIndex().hasPermutation(permutation);
+  };
+  if (ql::ranges::any_of(scans | ql::views::keys, isLoaded)) {
+    for (auto& filter : filters) {
+      addFilter(std::move(filter));
+    }
+    for (auto& [permutation, scanTriple] : scans) {
+      if (isLoaded(permutation)) {
+        addIndexScan(permutation, std::move(scanTriple));
+      }
+    }
+    return;
+  }
+  seedWithoutSuitablePermutation(triple, addIndexScan, addFilter);
+}
+
+// _____________________________________________________________________________
+template <typename AddedIndexScanFunction, typename AddFilter>
+void QueryPlanner::seedWithoutSuitablePermutation(
+    const SparqlTripleSimple& triple,
+    const AddedIndexScanFunction& addIndexScan, const AddFilter& addFilter) {
+  AD_CORRECTNESS_CHECK(_qec != nullptr);
+  auto scanTriple = triple;
+  std::array<TripleComponent*, 3> components{&scanTriple.s_, &scanTriple.p_,
+                                             &scanTriple.o_};
+
+  // Choose the loaded permutation for which the longest prefix of its columns
+  // is fixed in the `triple` (in case of a tie the first one in the order of
+  // `Permutation::ALL`).
+  auto numFixedPrefixColumns = [&components](Permutation::Enum permutation) {
+    const auto& keys = Permutation::toKeyOrder(permutation).keys();
+    size_t result = 0;
+    while (result < 3 && !components.at(keys.at(result))->isVariable()) {
+      ++result;
+    }
+    return result;
+  };
+  std::optional<Permutation::Enum> best;
+  for (auto permutation : _qec->getIndex().loadedPermutations()) {
+    if (!best.has_value() ||
+        numFixedPrefixColumns(permutation) > numFixedPrefixColumns(*best)) {
+      best = permutation;
+    }
+  }
+  AD_CORRECTNESS_CHECK(best.has_value());
+  const auto& keys = Permutation::toKeyOrder(best.value()).keys();
+
+  // Replace each fixed column after the prefix and each repeated occurrence of
+  // a variable by a new variable, and add a filter that checks for the
+  // equality with the original value.
+  size_t prefixLength = numFixedPrefixColumns(best.value());
+  ad_utility::HashSet<Variable> seenVariables;
+  for (size_t i = 0; i < 3; ++i) {
+    TripleComponent& component = *components.at(keys.at(i));
+    if (i < prefixLength) {
+      continue;
+    }
+    if (component.isVariable()) {
+      if (seenVariables.insert(component.getVariable()).second) {
+        continue;
+      }
+      Variable newVariable = generateUniqueVarName();
+      addFilter(
+          createEqualFilter(newVariable, component.getVariable(), allocator()));
+      component = newVariable;
+    } else {
+      Variable newVariable = generateUniqueVarName();
+      addFilter(createEqualFilterWithConstant(newVariable, component));
+      component = newVariable;
+    }
+  }
+  warnings_.push_back(absl::StrCat(
+      "None of the loaded permutations is suitable for the triple pattern ",
+      triple.s_.toString(), " ", triple.p_.toString(), " ",
+      triple.o_.toString(), ", it is therefore evaluated by a scan of the ",
+      Permutation::toString(best.value()),
+      " permutation followed by a FILTER, which can be very slow. To make "
+      "this efficient, build and load an index with a permutation that starts "
+      "with the fixed positions of this triple pattern"));
+  addIndexScan(best.value(), std::move(scanTriple));
+}
+
+// _____________________________________________________________________________
+SparqlFilter QueryPlanner::createEqualFilterWithConstant(
+    const Variable& variable, const TripleComponent& constant) const {
+  using namespace sparqlExpression;
+  SparqlExpression::Ptr constantExpression;
+  if (constant.isIri()) {
+    constantExpression = std::make_unique<IriExpression>(constant.getIri());
+  } else if (constant.isLiteral()) {
+    constantExpression =
+        std::make_unique<StringLiteralExpression>(constant.getLiteral());
+  } else {
+    // All other constants (numbers, dates, ...) are directly encoded in an
+    // `Id`.
+    auto id =
+        toValueIdIfNotString(constant, &_qec->getIndex().encodedIriManager());
+    AD_CORRECTNESS_CHECK(id.has_value());
+    constantExpression = std::make_unique<IdExpression>(id.value());
+  }
+  // NOTE: The `=` of SPARQL compares the values of terms, so for example the
+  // integer `1` is equal to the decimal `1.0`, while a triple pattern only
+  // matches the exact term. As this is only a fallback for very unusual
+  // configurations, we accept this difference.
+  return SparqlFilter{SparqlExpressionPimpl{
+      _qec->makeShared<EqualExpression>(std::array<SparqlExpression::Ptr, 2>{
+          std::make_unique<VariableExpression>(variable),
+          std::move(constantExpression)}),
+      absl::StrCat(variable.name(), " = ", constant.toString())}};
 }
 
 // _____________________________________________________________________________
@@ -869,15 +999,6 @@ auto QueryPlanner::seedWithScansAndText(
     if (node.isTextNode()) {
       seeds.push_back(getTextLeafPlan(node, textLimits));
       continue;
-    }
-
-    if (_qec && !_qec->getIndex().hasAllPermutations() &&
-        node.triple_.getPredicateVariable().has_value()) {
-      AD_THROW(
-          "The query contains a predicate variable, but only the PSO "
-          "and POS permutations were loaded. Rerun the server without "
-          "the option --only-pso-and-pos-permutations and if "
-          "necessary also rebuild the index");
     }
 
     // Backward compatibility with spatial search predicates.

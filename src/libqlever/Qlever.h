@@ -82,11 +82,10 @@ struct CommonConfig {
   bool noPatterns_ = false;
 
   // Option to build only the PSO and POS permutations of the triples. These
-  // two permutations are sufficient to answer queries, where the predicate is
-  // fixed in all triple patterns.
-  //
-  // TODO: We have not tested this mode in a while. In particular, it is
-  // unlikely to work when updates are involved.
+  // two permutations are sufficient to efficiently answer queries, where the
+  // predicate is fixed in all triple patterns. Other triple patterns are
+  // answered with a scan and a filter (see
+  // `QueryPlanner::seedWithoutSuitablePermutation`).
   bool onlyPsoAndPos_ = false;
 
   // Option to add `ql:has-word` triples for each word in each literal. For

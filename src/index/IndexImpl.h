@@ -704,6 +704,35 @@ class IndexImpl {
 
   bool hasAllPermutations() const { return SPO().isLoaded(); }
 
+  // Return true iff the `permutation` is loaded.
+  bool hasPermutation(Permutation::Enum permutation) const;
+
+  // Return the loaded permutations, in the order of `Permutation::ALL`.
+  std::vector<Permutation::Enum> loadedPermutations() const {
+    return loadedPermutations<false>();
+  }
+
+  // Return those of the `Permutation::all<isInternal>()` that are loaded. The
+  // internal permutations are loaded together with their normal counterparts.
+  template <bool isInternal>
+  std::vector<Permutation::Enum> loadedPermutations() const {
+    std::vector<Permutation::Enum> result;
+    ql::ranges::copy_if(
+        Permutation::all<isInternal>(), std::back_inserter(result),
+        [this](auto permutation) { return hasPermutation(permutation); });
+    return result;
+  }
+
+  // Return the first of the `permutations` that is loaded, or `nullptr` if
+  // none of them is loaded.
+  const Permutation* firstLoadedPermutation(
+      std::initializer_list<Permutation::Enum> permutations) const;
+
+  // Return the first of the `permutations` that is loaded. Throw if none of
+  // them is loaded.
+  const Permutation& getFirstLoadedPermutation(
+      std::initializer_list<Permutation::Enum> permutations) const;
+
   // ___________________________________________________________________________
   std::vector<float> getMultiplicities(
       const TripleComponent& key, const Permutation& permutation,

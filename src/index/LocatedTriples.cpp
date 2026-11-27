@@ -507,6 +507,11 @@ void updateGraphMetadata(CompressedBlockMetadata& blockMetadata,
 void LocatedTriplesPerBlock::updateAugmentedMetadata() {
   // TODO<C++23> use view::enumerate
   size_t blockIndex = 0;
+  // A permutation that is not loaded has neither original metadata nor
+  // located triples.
+  if (!originalMetadata_.has_value() && map_.empty()) {
+    return;
+  }
   // Copy to preserve originalMetadata_.
   if (!originalMetadata_.has_value()) {
     AD_LOG_WARN << "The original metadata has not been set, but updates are "
