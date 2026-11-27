@@ -527,28 +527,28 @@ std::shared_ptr<QueryExecutionTree> TransitivePathBase::matchWithKnowledgeGraph(
     return leftOrRightOp;
   }
 
+  // Skip the matching if all graphs are active, there is no graph variable, and
+  // the values of the join column are already guaranteed to be nodes of the
+  // knowledge graph.
+  //
+  // NOTE: This guarantee does not say in which graphs the values occur. So in
+  // a `GRAPH <g> { ... }` or `GRAPH ?g { ... }` clause or with a `FROM` clause,
+  // a value may be a node of the knowledge graph, but not of the active graphs
+  // (or not of the graph in the same row), and still has to be matched.
   auto originalVar =
       leftOrRightOp->getVariableAndInfoByColumnIndex(inputCol).first;
-  // If we join on the graph variable itself, we cannot reuse it for the graph
-  // column, so we use an internal helper variable instead (which takes
-  // precedence in `getActualGraphColumnIndex`). Note that the values of the
-  // join column are not necessarily valid graph names, so this case always
-  // requires matching against the knowledge graph.
-  bool graphIsJoinColumn = originalVar == graphVariable_;
-  std::optional<Variable> graphVariable =
-      graphIsJoinColumn ? std::optional{internalGraphHelper_} : graphVariable_;
-
-  // If the graph column is missing we have to add it, even if the values of the
-  // join column are already guaranteed to be part of the knowledge graph.
-  bool graphColumnIsMissing =
-      graphVariable.has_value() &&
-      !leftOrRightOp->getVariableColumnOrNullopt(graphVariable.value())
-           .has_value();
-  if (!graphColumnIsMissing &&
-      leftOrRightOp->getRootOperation()->columnOriginatesFromGraphOrUndef(
+  if (activeGraphs_.areAllGraphsAllowed() && !graphVariable_.has_value() &&
+      leftOrRightOp->getRootOperation()->columnContainsOnlyKnowledgeGraphNodes(
           originalVar)) {
     return leftOrRightOp;
   }
+
+  // If we join on the graph variable itself, we cannot reuse it for the graph
+  // column, so we use an internal helper variable instead (which takes
+  // precedence in `getActualGraphColumnIndex`).
+  std::optional<Variable> graphVariable =
+      originalVar == graphVariable_ ? std::optional{internalGraphHelper_}
+                                    : graphVariable_;
 
   leftOrRightOp = ad_utility::makeExecutionTree<EmptyPath>(
       getExecutionContext(), originalVar, activeGraphs_,
@@ -718,7 +718,7 @@ void TransitivePathBase::copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
 }
 
 // _____________________________________________________________________________
-bool TransitivePathBase::columnOriginatesFromGraphOrUndef(
+bool TransitivePathBase::columnContainsOnlyKnowledgeGraphNodes(
     const Variable& variable) const {
   AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
   if (variable != lhs_.value_ && variable != rhs_.value_) {
@@ -726,9 +726,9 @@ bool TransitivePathBase::columnOriginatesFromGraphOrUndef(
     // inherit the guarantee of that operation. The graph column ends up here
     // too (unless it is one of the two sides), but `subtree_` always provides
     // it and reports `false` for it, because in RDF only subjects and objects
-    // are nodes (see `IndexScan::columnOriginatesFromGraphOrUndef`), so the
-    // answer stays `false` for graphs as it has to.
-    return Operation::columnOriginatesFromGraphOrUndef(variable);
+    // are nodes (see `IndexScan::columnContainsOnlyKnowledgeGraphNodes`), so
+    // the answer stays `false` for graphs as it has to.
+    return Operation::columnContainsOnlyKnowledgeGraphNodes(variable);
   }
   // The empty path copies a hardcoded value over to the other side without
   // checking it against the knowledge graph (see the constructor), so in that
@@ -813,9 +813,21 @@ TransitivePathBase::makeTreeWithStrippedColumns(
       varsRequiredFromSubtree.add(*graphVariable_);
       varsRequiredFromSubtree.add(internalGraphHelper_);
     }
-    // Strip the sideTree.
-    const auto& sideTree =
-        lb ? (*lhs_.treeAndCol_).first : (*rhs_.treeAndCol_).first;
+    // Strip the sideTree. For `minDist_ == 0`, `bindSides` has wrapped the
+    // original sideTree into an `EmptyPath` (see `matchWithKnowledgeGraph`).
+    // In this case the original sideTree is stripped instead, because
+    // `bindSides` below wraps it again, and otherwise the result would contain
+    // two `EmptyPath`s.
+    const auto& startSide = lb ? lhs_ : rhs_;
+    std::shared_ptr<QueryExecutionTree> sideTree = startSide.treeAndCol_->first;
+    if (minDist_ == 0) {
+      auto emptyPath =
+          std::dynamic_pointer_cast<EmptyPath>(sideTree->getRootOperation());
+      if (emptyPath && emptyPath->checkedChild().has_value() &&
+          emptyPath->variable() == joinVar(startSide)) {
+        sideTree = emptyPath->checkedChild()->child_;
+      }
+    }
     auto strippedSideTree = varsRequiredFromSubtree.stripSubtree(sideTree);
 
     // Update the column of the join variable after stripping the sideTree

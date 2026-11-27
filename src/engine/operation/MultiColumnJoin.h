@@ -47,6 +47,10 @@ class MultiColumnJoin : public Operation {
 
   float getMultiplicity(size_t col) override;
 
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithStrippedColumns(
+      const std::set<Variable>& requestedVariables) const override;
+
  private:
   uint64_t getSizeEstimateBeforeLimit() override;
 
@@ -59,7 +63,7 @@ class MultiColumnJoin : public Operation {
   }
 
  public:
-  bool columnOriginatesFromGraphOrUndef(
+  bool columnContainsOnlyKnowledgeGraphNodes(
       const Variable& variable) const override;
 
   /**

@@ -804,6 +804,34 @@ TEST(ServerTest, handleHttpRequest) {
       responseBodyToString(std::move(response.body())),
       testing::HasSubstr("User submitted timeout was higher than what is "
                          "currently allowed by this instance (30s)"));
+
+  // A `timeout` that is not strictly positive is rejected before the query
+  // runs, with and without a valid access token: `HttpError` -> bad_request.
+  for (std::string_view timeout : {"0s", "-1s", "-9000000000000000ms"}) {
+    for (std::string_view token : {"", "&access-token=accessToken"}) {
+      response = server.handleHttpRequest(
+          makePostRequest(absl::StrCat("/?timeout=", timeout, token),
+                          "application/sparql-query", "ASK { ?s ?p ?o }"));
+      EXPECT_THAT(response, StatusIs(http::status::bad_request));
+      EXPECT_THAT(
+          responseBodyToString(std::move(response.body())),
+          testing::HasSubstr(absl::StrCat("User submitted timeout '", timeout,
+                                          "' must be strictly positive")));
+    }
+  }
+
+  // A `timeout` that cannot be parsed or that overflows the time limit in
+  // milliseconds is rejected likewise: `HttpError` -> bad_request.
+  for (std::string_view timeout :
+       {"abc", "9300000000000000s", "-9300000000000000s"}) {
+    response = server.handleHttpRequest(
+        makePostRequest(absl::StrCat("/?timeout=", timeout),
+                        "application/sparql-query", "ASK { ?s ?p ?o }"));
+    EXPECT_THAT(response, StatusIs(http::status::bad_request));
+    EXPECT_THAT(responseBodyToString(std::move(response.body())),
+                testing::HasSubstr(absl::StrCat("Failed to convert string '",
+                                                timeout, "' to duration")));
+  }
 }
 
 // _____________________________________________________________________________

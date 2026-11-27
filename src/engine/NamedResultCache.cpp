@@ -9,9 +9,7 @@
 #include <algorithm>
 
 #include "backports/algorithm.h"
-#include "engine/NamedResultCacheSerializer.h"
 #include "util/TransparentFunctors.h"
-#include "util/serializer/FileSerializer.h"
 
 // _____________________________________________________________________________
 std::shared_ptr<ExplicitIdTableOperation> NamedResultCache::getOperation(

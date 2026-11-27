@@ -20,6 +20,7 @@
 #include "util/IndexTestHelpers.h"
 #include "util/LocalVocabEntryTestHelpers.h"
 #include "util/OperationTestHelpers.h"
+#include "util/joinAlgorithms/JoinAlgorithms.h"
 
 using ad_utility::testing::makeLocalVocab;
 
@@ -444,7 +445,7 @@ TEST(Minus, clone) {
 }
 
 // _____________________________________________________________________________
-TEST(Minus, columnOriginatesFromGraphOrUndef) {
+TEST(Minus, columnContainsOnlyKnowledgeGraphNodes) {
   using ad_utility::triple_component::Iri;
   auto* qec = ad_utility::testing::getQec();
   auto values1 = ad_utility::makeExecutionTree<ValuesForTesting>(
@@ -459,34 +460,34 @@ TEST(Minus, columnOriginatesFromGraphOrUndef) {
                          Iri::fromIriref("<c>")});
 
   Minus minus1{qec, values1, values1};
-  EXPECT_FALSE(minus1.columnOriginatesFromGraphOrUndef(Variable{"?a"}));
-  EXPECT_FALSE(minus1.columnOriginatesFromGraphOrUndef(Variable{"?b"}));
+  EXPECT_FALSE(minus1.columnContainsOnlyKnowledgeGraphNodes(Variable{"?a"}));
+  EXPECT_FALSE(minus1.columnContainsOnlyKnowledgeGraphNodes(Variable{"?b"}));
   EXPECT_THROW(
-      minus1.columnOriginatesFromGraphOrUndef(Variable{"?notExisting"}),
+      minus1.columnContainsOnlyKnowledgeGraphNodes(Variable{"?notExisting"}),
       ad_utility::Exception);
 
   Minus minus2{qec, values1, values2};
-  EXPECT_FALSE(minus2.columnOriginatesFromGraphOrUndef(Variable{"?a"}));
-  EXPECT_FALSE(minus2.columnOriginatesFromGraphOrUndef(Variable{"?b"}));
-  EXPECT_THROW(minus2.columnOriginatesFromGraphOrUndef(Variable{"?c"}),
+  EXPECT_FALSE(minus2.columnContainsOnlyKnowledgeGraphNodes(Variable{"?a"}));
+  EXPECT_FALSE(minus2.columnContainsOnlyKnowledgeGraphNodes(Variable{"?b"}));
+  EXPECT_THROW(minus2.columnContainsOnlyKnowledgeGraphNodes(Variable{"?c"}),
                ad_utility::Exception);
   EXPECT_THROW(
-      minus2.columnOriginatesFromGraphOrUndef(Variable{"?notExisting"}),
+      minus2.columnContainsOnlyKnowledgeGraphNodes(Variable{"?notExisting"}),
       ad_utility::Exception);
 
   Minus minus3{qec, index, values1};
-  EXPECT_TRUE(minus3.columnOriginatesFromGraphOrUndef(Variable{"?a"}));
-  EXPECT_THROW(minus3.columnOriginatesFromGraphOrUndef(Variable{"?b"}),
+  EXPECT_TRUE(minus3.columnContainsOnlyKnowledgeGraphNodes(Variable{"?a"}));
+  EXPECT_THROW(minus3.columnContainsOnlyKnowledgeGraphNodes(Variable{"?b"}),
                ad_utility::Exception);
   EXPECT_THROW(
-      minus3.columnOriginatesFromGraphOrUndef(Variable{"?notExisting"}),
+      minus3.columnContainsOnlyKnowledgeGraphNodes(Variable{"?notExisting"}),
       ad_utility::Exception);
 
   Minus minus4{qec, values1, index};
-  EXPECT_FALSE(minus4.columnOriginatesFromGraphOrUndef(Variable{"?a"}));
-  EXPECT_FALSE(minus4.columnOriginatesFromGraphOrUndef(Variable{"?b"}));
+  EXPECT_FALSE(minus4.columnContainsOnlyKnowledgeGraphNodes(Variable{"?a"}));
+  EXPECT_FALSE(minus4.columnContainsOnlyKnowledgeGraphNodes(Variable{"?b"}));
   EXPECT_THROW(
-      minus4.columnOriginatesFromGraphOrUndef(Variable{"?notExisting"}),
+      minus4.columnContainsOnlyKnowledgeGraphNodes(Variable{"?notExisting"}),
       ad_utility::Exception);
 }
 
@@ -531,6 +532,8 @@ TEST(Minus, repeatingMatchesDontProduceDuplicates) {
 // `FETCH_BLOCKS` (3) right blocks fetched at once and the right input continues
 // beyond that block.
 TEST(Minus, matchesEndInThirdFetchedBlockOfTheRightInput) {
+  // The number of fetched blocks is based on this constant in the code.
+  static_assert(ad_utility::detail::FETCH_BLOCKS == 3);
   // One left row and the right blocks [1] [1] [1] [1, 2] [3], the same blocks
   // as in `OptionalJoin.lazyOptionalJoinMatchesEndInThirdFetchedBlock`.
   std::vector<IdTable> leftTables;

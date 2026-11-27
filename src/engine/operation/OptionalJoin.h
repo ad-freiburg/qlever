@@ -81,7 +81,7 @@ class OptionalJoin : public Operation {
   }
 
  public:
-  bool columnOriginatesFromGraphOrUndef(
+  bool columnContainsOnlyKnowledgeGraphNodes(
       const Variable& variable) const override;
 
   // Joins two result tables on any number of columns, inserting the special

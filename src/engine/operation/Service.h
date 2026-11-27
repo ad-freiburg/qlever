@@ -116,6 +116,10 @@ class Service : public Operation {
                                       std::shared_ptr<Operation> right,
                                       bool rightOnly, bool requestLaziness);
 
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  makeTreeWithStrippedColumns(
+      const std::set<Variable>& requestedVariables) const override;
+
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
@@ -138,6 +142,10 @@ class Service : public Operation {
   // Return the optimized graph pattern derived from `parsedServiceClause_` and
   // an optional derived sibling.
   std::string getGraphPattern() const;
+
+  // Return the variables of the `SELECT` clause of the query sent to the
+  // remote endpoint (`*` if the SERVICE clause has no visible variables).
+  std::string getSelectClauseVariables() const;
 
   // Compute the result using `getResultFunction_` and `siblingInfo_`.
   Result computeResult(bool requestLaziness) override;

@@ -382,7 +382,7 @@ class TransitivePathBase : public Operation {
  public:
   VariableToColumnMap computeVariableToColumnMap() const override;
 
-  bool columnOriginatesFromGraphOrUndef(
+  bool columnContainsOnlyKnowledgeGraphNodes(
       const Variable& variable) const override;
 
   // Return a set of subtrees that can be used alternatively when the left or

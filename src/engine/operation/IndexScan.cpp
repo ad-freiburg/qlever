@@ -17,7 +17,6 @@
 #include "engine/VariableToColumnMap.h"
 #include "index/IndexImpl.h"
 #include "index/TripleComponentConversions.h"
-#include "parser/ParsedQuery.h"
 #include "util/Exception.h"
 #include "util/InputRangeUtils.h"
 #include "util/Iterators.h"
@@ -477,7 +476,7 @@ IdTable IndexScan::materializedIndexScan() const {
       getSubsetOfPermutationColumns());
   AD_LOG_DEBUG << "IndexScan result computation done.\n";
   checkCancellation();
-  idTable = makeAppendConstantColumns()(std::move(idTable));
+  makeAppendConstantColumns()(idTable);
   AD_CORRECTNESS_CHECK(idTable.numColumns() == getResultWidth());
   return idTable;
 }
@@ -739,7 +738,12 @@ CompressedRelationReader::IdTableGeneratorInputRange IndexScan::getLazyScan(
 
   return CompressedRelationReader::IdTableGeneratorInputRange{
       ad_utility::CachingTransformInputRange{
-          std::move(lazyScanOfPermutation), makeAppendConstantColumns(),
+          std::move(lazyScanOfPermutation),
+          [appendConstantColumns =
+               makeAppendConstantColumns()](IdTable& block) {
+            appendConstantColumns(block);
+            return std::move(block);
+          },
           ql::type_identity<LazyScanMetadata>{}}};
 }
 
@@ -1197,7 +1201,7 @@ std::unique_ptr<Operation> IndexScan::cloneImpl() const {
 }
 
 // _____________________________________________________________________________
-bool IndexScan::columnOriginatesFromGraphOrUndef(
+bool IndexScan::columnContainsOnlyKnowledgeGraphNodes(
     const Variable& variable) const {
   AD_CONTRACT_CHECK(getExternallyVisibleVariableColumns().contains(variable));
   return permutation().permutationType() == Permutation::Type::NORMAL &&
