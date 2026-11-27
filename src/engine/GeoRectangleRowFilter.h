@@ -10,7 +10,7 @@
 #ifndef QLEVER_SRC_ENGINE_GEORECTANGLEROWFILTER_H
 #define QLEVER_SRC_ENGINE_GEORECTANGLEROWFILTER_H
 
-#include "engine/Operation.h"
+#include "engine/operation/Operation.h"
 #include "rdfTypes/GeoRectangle.h"
 
 // An operation that returns the rows of its only child whose geometry in a
