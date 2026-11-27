@@ -38,8 +38,10 @@ std::vector<TurtleTriple> parseTurtleFile(const ql::filesystem::path& path,
   // The RDF parsers represent blank nodes (both labeled and anonymous ones) as
   // plain strings, see `BlankNodeAdder::resolveParsedComponent`.
   for (const auto& [i, triple] : ::ranges::views::enumerate(triples)) {
-    if (triple.subject_.isString() || triple.predicate_.isString() ||
-        triple.object_.isString()) {
+    AD_CORRECTNESS_CHECK(!triple.predicate_.isString(),
+                         "A blank node as a predicate is not valid Turtle and "
+                         "should have been rejected by the parser");
+    if (triple.subject_.isString() || triple.object_.isString()) {
       throw std::runtime_error(absl::StrCat(
           "The triple number ", i + 1, " of \"", path.string(),
           "\" contains a blank node, which is not supported when computing "

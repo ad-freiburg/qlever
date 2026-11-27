@@ -176,6 +176,9 @@ TEST(TurtleDelta, computeAndApplyTripleDelta) {
   EXPECT_TRUE(unchanged.toInsert_.empty());
   EXPECT_TRUE(unchanged.toDelete_.empty());
 
+  // A null index is rejected.
+  EXPECT_ANY_THROW(computeTripleDelta(oldFile, newFile, nullptr, {}));
+
   auto delta = computeTripleDelta(oldFile, newFile, index, {});
   EXPECT_EQ(delta.toInsert_.size(), 2u);
   EXPECT_EQ(delta.toDelete_.size(), 1u);
@@ -206,6 +209,14 @@ TEST(TurtleDelta, computeAndApplyTripleDelta) {
   std::string query = "SELECT ?p ?o { <a> ?p ?o } ORDER BY ?p";
   EXPECT_EQ(qlever.query(query, ad_utility::MediaType::tsv),
             "?p\t?o\n<p>\t1\n<q>\t\"x\"\n<r>\t<b>\n");
+
+  // Applying an empty delta changes nothing.
+  auto emptyMetadata = qlever.applyTripleDelta(std::move(unchanged));
+  EXPECT_EQ(emptyMetadata.countBefore_, (DeltaTriplesCount{0, 0}));
+  EXPECT_EQ(emptyMetadata.countAfter_, (DeltaTriplesCount{0, 0}));
+  EXPECT_EQ(qlever.query(query, ad_utility::MediaType::tsv),
+            "?p\t?o\n<p>\t1\n<q>\t\"x\"\n<r>\t<b>\n");
+
   qlever.queryAndPinResultWithName("pinned", query);
   EXPECT_EQ(qlever.namedResultCache().numEntries(), 1u);
   auto metadata = qlever.applyTripleDelta(std::move(delta));
