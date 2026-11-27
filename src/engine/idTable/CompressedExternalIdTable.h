@@ -86,6 +86,8 @@ class CompressedExternalIdTableWriter {
 
   // The filename and actual file to which the `IdTable` is written .
   std::string filename_;
+  // The ZSTD compression level of the blocks, see `setCompressionLevel`.
+  int compressionLevel_ = compressedExternalIdTable::DEFAULT_RUN_COMPRESSION;
   // The offset at which the next block is written. The blocks are written
   // with the positioned `File::write`, so a thread only has to reserve its
   // range here, see `compressAndWriteBlockOfColumn`.
@@ -154,6 +156,16 @@ class CompressedExternalIdTableWriter {
   const MemorySize& blockSizeUncompressed() const {
     return blockSizeUncompressed_;
   }
+
+  // Set the ZSTD compression level of the blocks that are written from now
+  // on. The default is `DEFAULT_RUN_COMPRESSION`. Must not be called while a
+  // block is being written.
+  //
+  // NOTE: The blocks are typically read back exactly once, so a fast level is
+  // appropriate. A negative level (see `MERGE_PHASE_SPILL_COMPRESSION`) is
+  // even faster at the price of larger files. The decompression does not
+  // depend on the level.
+  void setCompressionLevel(int level) { compressionLevel_ = level; }
 
   // Store an `idTable`. The blocks of all its columns are compressed and
   // written in parallel, see `compressAndWriteBlockOfColumn`.
@@ -247,7 +259,7 @@ class CompressedExternalIdTableWriter {
     auto uncompressedSize = (upper - lower) * BYTES_PER_ID_COLUMN_ENTRY;
     auto compressed = idColumnByteIO::encode(
         column.subspan(lower, upper - lower), [this](const auto& chunks) {
-          return zstdContext_.compressChunks(chunks);
+          return zstdContext_.compressChunks(chunks, compressionLevel_);
         });
     auto offset = nextOffset_.fetch_add(static_cast<off_t>(compressed.size()));
     // NOTE: This throws if not all the bytes could be written.
@@ -560,6 +572,11 @@ class CompressedIdTableRunsInput : public ad_utility::NoCopy {
   }
 
   // ________________________________________________________________________
+  void reserveBlock(Block& block, size_t numElements) const {
+    block.reserve(numElements);
+  }
+
+  // ________________________________________________________________________
   template <typename R>
   void appendToBlock(Block& block, const R& row) const {
     block.push_back(row);
@@ -596,8 +613,7 @@ static_assert(parallelBlockMerge::InputConcept<CompressedIdTableRunsInput<3>>);
 // A callback that pushes complete blocks (instead of single rows) into a
 // `CompressedExternalIdTableBase` (see `makePushBlockCallback` below). This is
 // a named type and not a lambda, such that callers that accept both per-row
-// and per-block callbacks can tell the two apart (see e.g. `liftCallback` in
-// `IndexImpl.cpp`).
+// and per-block callbacks can tell the two apart.
 template <typename Table>
 struct PushBlockCallback {
   Table* table_;
@@ -851,6 +867,10 @@ class CompressedExternalIdTableBase {
     return {this};
   }
 
+  // Set the compression level of the blocks that are written to disk, see
+  // `CompressedExternalIdTableWriter::setCompressionLevel`.
+  void setRunCompressionLevel(int level) { writer_.setCompressionLevel(level); }
+
   // Delete the underlying file and reset the sorter. May only be called if no
   // active `getBlocks()` generator that has not been fully iterated over is
   // currently active, else an exception is thrown by the underlying
@@ -891,16 +911,22 @@ class CompressedExternalIdTableBase {
                          currentBlock_.getAllocator(),
                          [this](IdTableStatic<NumStaticCols> block) {
                            numElementsPushed_ += block.numRows();
-                           transformAndWriteBlock(std::move(block));
+                           // The block of the previous task is handed back
+                           // to the pusher, which reuses its memory.
+                           return transformAndWriteBlock(std::move(block));
                          });
   }
 
-  // Clear the current block. If `reserve` is `true`, we subsequently also
-  // reserve the `blocksize_`.
+  // Clear the current block. If `reserve` is `true`, reserve the `blocksize_`
+  // for it. Otherwise release its memory (this is the end of the input phase,
+  // and a sorter whose runs are all on disk should not keep the memory of a
+  // block).
   void resetCurrentBlock(bool reserve) {
     currentBlock_.clear();
     if (reserve) {
       currentBlock_.reserve(blocksize_);
+    } else {
+      currentBlock_.shrinkToFit();
     }
   }
 
@@ -1364,6 +1390,31 @@ class CompressedExternalIdTableSorter
                       CompletionToken&& completionToken) {
     return this->asyncPusher_->asyncPushBlock(std::move(table),
                                               AD_FWD(completionToken));
+  }
+
+  // Return a callback that takes a `std::shared_ptr` to a complete block (an
+  // `IdTable`) and a `done` callback, pushes the rows of the block via
+  // `asyncPushBlock`, and then invokes `done` (as an rvalue) with the
+  // `std::exception_ptr` of the push (or `nullptr`). The block is kept alive
+  // until the push has completed. As for `asyncPushBlock`, the callback may be
+  // invoked concurrently for several blocks (it is for example used as a
+  // `chunkwisePermutationWriter::ConcurrentBlockCallback`).
+  auto makeAsyncPushBlockCallback() {
+    // NOTE: `self = this` instead of `this` circumvents a false-positive
+    // `-Wunused-lambda-capture` warning of Clang for generic lambdas.
+    return [self = this](auto block, auto done) {
+      // The view (and the rows that it refers to) has to stay alive until the
+      // push has completed, which the aliasing `shared_ptr` guarantees.
+      using Holder = std::pair<decltype(block), IdTableView<0>>;
+      auto holder =
+          std::make_shared<Holder>(block, block->template asStaticView<0>());
+      auto* viewPtr = &holder->second;
+      std::shared_ptr<const IdTableView<0>> view{std::move(holder), viewPtr};
+      self->asyncPushBlock(std::move(view), [done = std::move(done)](
+                                                std::exception_ptr e) mutable {
+        std::move(done)(std::move(e));
+      });
+    };
   }
 
   // Set how the merge phase stores the output blocks that it spills (see

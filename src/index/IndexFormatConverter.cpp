@@ -73,8 +73,8 @@ std::string versionAsString(const IndexFormatVersion& version) {
 // whose datatype bits are `i` in the source format is an `Id` of datatype
 // `datatypesOfSourceFormat[i]` in the target format. The only difference
 // between the two formats is that `Datatype::SecondaryVocabIndex` was inserted
-// (see the note there), which is why this array is exactly the current enum
-// without that datatype.
+// (see the note there). This array excludes `SecondaryVocabIndex` and the later
+// `TripleTermIndex`, which cannot occur in the historical source format.
 constexpr std::array<Datatype, 12> datatypesOfSourceFormat{
     Datatype::Undefined,
     Datatype::Bool,
@@ -108,9 +108,16 @@ QL_CONSTEVAL bool isStrictlyAscending(
 // converter is not applicable to it.
 static_assert(isStrictlyAscending(datatypesOfSourceFormat));
 
-// Exactly one datatype was added, so no datatype of the source format was
-// removed or duplicated above.
-static_assert(datatypesOfSourceFormat.size() + 1 == qlever::enumSize<Datatype>);
+// The historical conversion adds `SecondaryVocabIndex`. `TripleTermIndex` is
+// appended without changing existing tags and cannot occur in the source
+// format.
+// TODO<Prashanth0703> Before persisting triple-term references, define index
+// metadata and version handling that preserve compatibility for indexes without
+// them.
+static_assert(datatypesOfSourceFormat.size() + 1 ==
+              static_cast<size_t>(Datatype::TripleTermIndex));
+static_assert(static_cast<size_t>(Datatype::TripleTermIndex) + 1 ==
+              qlever::enumSize<Datatype>);
 
 // The version of the on-disk format of the materialized views (see
 // `MATERIALIZED_VIEWS_VERSION`) that the views of an index in the source format
@@ -244,7 +251,8 @@ std::shared_ptr<LocatedTriplesState> makeEmptyLocatedTriplesState(
   // `Permutation::Type::NORMAL`, including the internal ones, so a scan always
   // looks up its located triples in the array above.
   LocatedTriplesPerBlockAllPermutations<true> emptyInternalLocatedTriples;
-  LocalVocab emptyVocab;
+  // The converter doesn't run as part of a query, so there is no memory limit.
+  LocalVocab emptyVocab{ad_utility::makeUnlimitedAllocator<Id>()};
   return std::make_shared<LocatedTriplesState>(
       LocatedTriplesState{emptyLocatedTriples, emptyInternalLocatedTriples,
                           emptyVocab.getLifetimeExtender(), 0});
@@ -683,8 +691,9 @@ void convertMaterializedView(const std::string& oldBasename,
         ". Please delete the view and create it again after the conversion.")};
   }
   viewInfo["version"] = MATERIALIZED_VIEWS_VERSION;
-  ad_utility::makeOfstream(absl::StrCat(newViewBasename, VIEW_INFO_SUFFIX))
-      << viewInfo.dump() << std::endl;
+  std::string serializedViewInfo = absl::StrCat(viewInfo.dump(), "\n");
+  qlever::util::writeFileAtomically(
+      absl::StrCat(newViewBasename, VIEW_INFO_SUFFIX), serializedViewInfo);
 }
 
 // Convert all materialized views of the index with the base name `oldBasename`
@@ -741,7 +750,8 @@ void copyFilesThatNeedNoConversion(const std::string& oldBasename,
     AD_CORRECTNESS_CHECK(ql::starts_with(filename, oldBasename));
     filename.remove_prefix(oldBasename.size());
     handledFiles.emplace_back(oldFile);
-    fs::copy_file(oldFile, absl::StrCat(newBasename, filename));
+    qlever::util::copyFileAtomically(oldFile,
+                                     absl::StrCat(newBasename, filename));
   };
   AD_LOG_INFO << "Copying the files that need no conversion ..." << std::endl;
   for (auto suffix :
@@ -884,10 +894,13 @@ void convertIndexToCurrentFormat(const std::string& oldBasename,
   // Write the configuration last, with the version of the target format. An
   // index without its configuration file cannot be loaded at all, so if the
   // conversion is interrupted, the incomplete index is not mistaken for a
-  // complete one.
+  // complete one. The file is written atomically, so that also an interruption
+  // while it is written leaves no (incomplete) configuration file behind.
   configuration[indexFormatVersionKey] = targetVersion;
-  ad_utility::makeOfstream(absl::StrCat(newBasename, CONFIGURATION_FILE))
-      << configuration.dump(4) << std::endl;
+  std::string serializedConfiguration =
+      absl::StrCat(configuration.dump(4), "\n");
+  qlever::util::writeFileAtomically(
+      absl::StrCat(newBasename, CONFIGURATION_FILE), serializedConfiguration);
 
   AD_LOG_INFO << "Conversion of the index completed, the converted index is \""
               << newBasename << "\"" << std::endl;

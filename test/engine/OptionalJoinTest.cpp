@@ -16,20 +16,23 @@
 #include "../util/IdTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/LocalVocabEntryTestHelpers.h"
+#include "../util/LocalVocabTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
 #include "./LazyJoinTestHelpers.h"
 #include "./ValuesForTesting.h"
-#include "engine/Bind.h"
 #include "engine/CallFixedSize.h"
-#include "engine/IndexScan.h"
 #include "engine/JoinHelpers.h"
-#include "engine/NeutralOptional.h"
-#include "engine/OptionalJoin.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/idTable/IdTable.h"
+#include "engine/operation/Bind.h"
+#include "engine/operation/IndexScan.h"
+#include "engine/operation/NeutralOptional.h"
+#include "engine/operation/OptionalJoin.h"
 #include "index/TripleComponentConversions.h"
 #include "util/joinAlgorithms/IndexNestedLoopJoin.h"
+
+using ad_utility::testing::makeLocalVocab;
 
 using ad_utility::testing::makeAllocator;
 using namespace ad_utility::testing;
@@ -419,9 +422,9 @@ TEST(OptionalJoin, computeOptionalJoinIndexNestedLoopJoinOptimization) {
   LocalVocabEntry entryB = localVocabEntryFromStringRepresentation(
       "\"b\"", qec->getLocalVocabContext());
 
-  LocalVocab leftVocab;
+  LocalVocab leftVocab = makeLocalVocab();
   leftVocab.getIndexAndAddIfNotContained(entryA);
-  LocalVocab rightVocab;
+  LocalVocab rightVocab = makeLocalVocab();
   rightVocab.getIndexAndAddIfNotContained(entryB);
 
   // From this table columns 1 and 2 will be used for the join.
@@ -481,9 +484,9 @@ TEST(OptionalJoin, computeLazyOptionalJoinIndexNestedLoopJoinOptimization) {
   LocalVocabEntry entryB = localVocabEntryFromStringRepresentation(
       "\"b\"", qec->getLocalVocabContext());
 
-  LocalVocab leftVocab;
+  LocalVocab leftVocab = makeLocalVocab();
   leftVocab.getIndexAndAddIfNotContained(entryA);
-  LocalVocab rightVocab;
+  LocalVocab rightVocab = makeLocalVocab();
   rightVocab.getIndexAndAddIfNotContained(entryB);
 
   // From this table columns 1 and 2 will be used for the join.
@@ -635,6 +638,35 @@ TEST(OptionalJoin, lazyOptionalJoin) {
                        std::move(expected));
 }
 
+// Test that a left row is not added a second time with UNDEF when its matches
+// end inside the last of the `FETCH_BLOCKS` (3) right blocks fetched at once
+// and the right input continues beyond that block.
+TEST(OptionalJoin, lazyOptionalJoinMatchesEndInThirdFetchedBlock) {
+  // The number of fetched blocks is based on this constant in the code.
+  static_assert(ad_utility::detail::FETCH_BLOCKS == 3);
+  // One left row and the right blocks [1] [1] [1] [1, 2] [3]. The join reads
+  // the first right block and then fetches three more, so the rows with 1 end
+  // in the last fetched block without the join knowing it, and the next fetch
+  // finds no more rows with 1. Without the block [3], all blocks are read at
+  // once.
+  std::vector<IdTable> leftTables;
+  leftTables.push_back(makeIdTableFromVector({{1, 11}}));
+  std::vector<IdTable> rightTables;
+  rightTables.push_back(makeIdTableFromVector({{1, 21}}));
+  rightTables.push_back(makeIdTableFromVector({{1, 22}}));
+  rightTables.push_back(makeIdTableFromVector({{1, 23}}));
+  rightTables.push_back(makeIdTableFromVector({{1, 24}, {2, 25}}));
+  rightTables.push_back(makeIdTableFromVector({{3, 26}}));
+
+  // The left row is joined with its four matches and nothing else.
+  std::vector<IdTable> expected;
+  expected.push_back(makeIdTableFromVector(
+      {{1, 11, 21}, {1, 11, 22}, {1, 11, 23}, {1, 11, 24}}));
+
+  testLazyOptionalJoin(std::move(leftTables), std::move(rightTables),
+                       std::move(expected));
+}
+
 // _____________________________________________________________________________
 TEST(OptionalJoin, lazyOptionalJoinWithUndefRight) {
   std::vector<IdTable> expected;
@@ -711,7 +743,8 @@ TEST(OptionalJoin, lazyOptionalJoinWithOneMaterializedTable) {
         qec,
         makeIdTableFromVector({{U, V(10)}, {V(1), V(11)}, {2, 12}, {3, 13}}),
         std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}},
-        false, std::vector<ColumnIndex>{0}, LocalVocab{}, std::nullopt, true);
+        false, std::vector<ColumnIndex>{0}, makeLocalVocab(), std::nullopt,
+        true);
     auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, std::move(rightTables),
         std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?z"}},
@@ -745,7 +778,8 @@ TEST(OptionalJoin, lazyOptionalJoinWithOneMaterializedTable) {
     auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, makeIdTableFromVector({{U, V(20)}, {V(2), V(22)}}),
         std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?z"}},
-        false, std::vector<ColumnIndex>{0}, LocalVocab{}, std::nullopt, true);
+        false, std::vector<ColumnIndex>{0}, makeLocalVocab(), std::nullopt,
+        true);
     OptionalJoin opt{qec, left, right};
 
     qec->getQueryTreeCache().clearAll();
@@ -786,7 +820,7 @@ TEST(OptionalJoin, lazyOptionalJoinExceedingChunkSize) {
 }
 
 // _____________________________________________________________________________
-TEST(OptionalJoin, columnOriginatesFromGraphOrUndef) {
+TEST(OptionalJoin, columnContainsOnlyKnowledgeGraphNodes) {
   using ad_utility::triple_component::Iri;
   auto* qec = getQec();
   auto values1 = ad_utility::makeExecutionTree<ValuesForTesting>(
@@ -816,27 +850,31 @@ TEST(OptionalJoin, columnOriginatesFromGraphOrUndef) {
         auto trace = generateLocationTrace(location);
 
         OptionalJoin optional{qec, std::move(left), std::move(right)};
-        EXPECT_EQ(optional.columnOriginatesFromGraphOrUndef(Variable{"?a"}), a);
-        EXPECT_EQ(optional.columnOriginatesFromGraphOrUndef(Variable{"?b"}), b);
-        EXPECT_EQ(optional.columnOriginatesFromGraphOrUndef(Variable{"?c"}), c);
-        EXPECT_THROW(
-            optional.columnOriginatesFromGraphOrUndef(Variable{"?notExisting"}),
-            ad_utility::Exception);
+        EXPECT_EQ(
+            optional.columnContainsOnlyKnowledgeGraphNodes(Variable{"?a"}), a);
+        EXPECT_EQ(
+            optional.columnContainsOnlyKnowledgeGraphNodes(Variable{"?b"}), b);
+        EXPECT_EQ(
+            optional.columnContainsOnlyKnowledgeGraphNodes(Variable{"?c"}), c);
+        EXPECT_THROW(optional.columnContainsOnlyKnowledgeGraphNodes(
+                         Variable{"?notExisting"}),
+                     ad_utility::Exception);
       };
 
   OptionalJoin optional{qec, values1, values1};
-  EXPECT_FALSE(optional.columnOriginatesFromGraphOrUndef(Variable{"?a"}));
-  EXPECT_FALSE(optional.columnOriginatesFromGraphOrUndef(Variable{"?b"}));
+  EXPECT_FALSE(optional.columnContainsOnlyKnowledgeGraphNodes(Variable{"?a"}));
+  EXPECT_FALSE(optional.columnContainsOnlyKnowledgeGraphNodes(Variable{"?b"}));
   EXPECT_THROW(
-      optional.columnOriginatesFromGraphOrUndef(Variable{"?notExisting"}),
+      optional.columnContainsOnlyKnowledgeGraphNodes(Variable{"?notExisting"}),
       ad_utility::Exception);
 
   testWithTrees(values1, values2, false, false, false);
   testWithTrees(index1, values1, true, false, true);
-  testWithTrees(values1, index1, false, false, true);
-  testWithTrees(index1, index2, true, true, true);
-  testWithTrees(index3, index2, true, true, true);
-  testWithTrees(index3, values1, false, false, true);
+  // Variables that only occur on the right side might be UNDEF.
+  testWithTrees(values1, index1, false, false, false);
+  testWithTrees(index1, index2, true, false, true);
+  testWithTrees(index3, index2, false, false, false);
+  testWithTrees(index3, values1, false, false, false);
 }
 
 // _____________________________________________________________________________
@@ -1196,15 +1234,15 @@ TEST_P(OptionalJoinWithIndexScan, twoColumnsLocalVocabPropagation) {
     return localVocabEntry(iri(absl::StrCat("<local-payload-", i, ">")),
                            qec2->getLocalVocabContext());
   };
-  LocalVocab v;
+  LocalVocab v = makeLocalVocab();
   auto l1 = Id::makeFromLocalVocabIndex(v.getIndexAndAddIfNotContained(i(1)));
   tAndV.emplace_back(makeIdTableFromVector({{s1, U, l1}}), std::move(v));
 
-  LocalVocab v2;
+  LocalVocab v2 = makeLocalVocab();
   auto l2 = Id::makeFromLocalVocabIndex(v2.getIndexAndAddIfNotContained(i(2)));
   tAndV.emplace_back(makeIdTableFromVector({{s1, U, l2}}), std::move(v2));
 
-  LocalVocab v3;
+  LocalVocab v3 = makeLocalVocab();
   auto l3 = Id::makeFromLocalVocabIndex(v3.getIndexAndAddIfNotContained(i(3)));
   tAndV.emplace_back(makeIdTableFromVector({{s1, o2, l3}}), std::move(v3));
 
@@ -1322,7 +1360,7 @@ TEST(OptionalJoin, rightIsScanWithoutVariables) {
       auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
           qec, leftTable.clone(),
           std::vector<std::optional<Variable>>{Variable{"?g"}}, false,
-          std::vector<ColumnIndex>{0}, LocalVocab{}, std::nullopt,
+          std::vector<ColumnIndex>{0}, makeLocalVocab(), std::nullopt,
           materializeLeft);
       // `GRAPH ?g { <a> <b> <c> }`
       auto right = ad_utility::makeExecutionTree<IndexScan>(
@@ -1515,7 +1553,7 @@ TEST(OptionalJoin, indexNestedLoopJoinRequiresCancellationHandle) {
         makeIdTableFromVector({{1}}),
         qlm::vector<ColumnIndex>(
             {0}, ad_utility::makeUnlimitedAllocator<ColumnIndex>()),
-        LocalVocab{});
+        makeLocalVocab());
   };
   auto makeJoin = [&makeResult](ad_utility::SharedCancellationHandle handle) {
     joinAlgorithms::indexNestedLoop::IndexNestedLoopJoin join(
@@ -1538,7 +1576,7 @@ TEST(OptionalJoin, indexNestedLoopJoinProbeLoopChecksCancellation) {
         makeIdTableFromVector({{1}, {2}}),
         qlm::vector<ColumnIndex>(
             {0}, ad_utility::makeUnlimitedAllocator<ColumnIndex>()),
-        LocalVocab{});
+        makeLocalVocab());
   };
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
   handle->cancel(ad_utility::CancellationState::MANUAL);

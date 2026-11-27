@@ -8,13 +8,16 @@
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/LocalVocabEntryTestHelpers.h"
+#include "../util/LocalVocabTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
-#include "engine/ExistsJoin.h"
-#include "engine/IndexScan.h"
 #include "engine/JoinHelpers.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/operation/ExistsJoin.h"
+#include "engine/operation/IndexScan.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
+
+using ad_utility::testing::makeLocalVocab;
 
 using namespace ad_utility::testing;
 
@@ -202,9 +205,9 @@ TEST(ExistsJoin, computeExistsJoinLeftIndexNestedLoopJoinOptimization) {
   LocalVocabEntry entryB = localVocabEntryFromStringRepresentation(
       "\"b\"", qec->getLocalVocabContext());
 
-  LocalVocab leftVocab;
+  LocalVocab leftVocab = makeLocalVocab();
   leftVocab.getIndexAndAddIfNotContained(entryA);
-  LocalVocab rightVocab;
+  LocalVocab rightVocab = makeLocalVocab();
   rightVocab.getIndexAndAddIfNotContained(entryB);
 
   // From this table columns 1 and 2 will be used for the join.
@@ -259,9 +262,9 @@ TEST(ExistsJoin, computeExistsJoinRightIndexNestedLoopJoinOptimization) {
   LocalVocabEntry entryB = localVocabEntryFromStringRepresentation(
       "\"b\"", qec->getLocalVocabContext());
 
-  LocalVocab leftVocab;
+  LocalVocab leftVocab = makeLocalVocab();
   leftVocab.getIndexAndAddIfNotContained(entryA);
-  LocalVocab rightVocab;
+  LocalVocab rightVocab = makeLocalVocab();
   rightVocab.getIndexAndAddIfNotContained(entryB);
 
   // From this table columns 2 and 1 will be used for the join.
@@ -609,7 +612,8 @@ TEST(ExistsJoin, lazyExistsJoinWithOneMaterializedTable) {
     auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, makeIdTableFromVector({{U, V(10)}, {1, 11}, {2, 12}, {3, 13}}),
         std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}},
-        false, std::vector<ColumnIndex>{0}, LocalVocab{}, std::nullopt, true);
+        false, std::vector<ColumnIndex>{0}, makeLocalVocab(), std::nullopt,
+        true);
     auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, std::move(rightTables),
         std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?z"}},
@@ -645,7 +649,8 @@ TEST(ExistsJoin, lazyExistsJoinWithOneMaterializedTable) {
     auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, makeIdTableFromVector({{V(2), V(22)}}),
         std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?z"}},
-        false, std::vector<ColumnIndex>{0}, LocalVocab{}, std::nullopt, true);
+        false, std::vector<ColumnIndex>{0}, makeLocalVocab(), std::nullopt,
+        true);
     ExistsJoin existsJoin{qec, left, right, Variable{"?exists"}};
 
     qec->getQueryTreeCache().clearAll();
@@ -780,7 +785,7 @@ TEST(ExistsJoin, repeatingMatchesDontProduceDuplicates) {
 }
 
 // _____________________________________________________________________________
-TEST(ExistsJoin, columnOriginatesFromGraphOrUndef) {
+TEST(ExistsJoin, columnContainsOnlyKnowledgeGraphNodes) {
   using ad_utility::triple_component::Iri;
   auto* qec = getQec();
   auto values1 = ad_utility::makeExecutionTree<ValuesForTesting>(
@@ -795,39 +800,49 @@ TEST(ExistsJoin, columnOriginatesFromGraphOrUndef) {
                          Iri::fromIriref("<c>")});
 
   ExistsJoin existJoin1{qec, values1, values1, Variable{"?z"}};
-  EXPECT_FALSE(existJoin1.columnOriginatesFromGraphOrUndef(Variable{"?a"}));
-  EXPECT_FALSE(existJoin1.columnOriginatesFromGraphOrUndef(Variable{"?b"}));
-  EXPECT_FALSE(existJoin1.columnOriginatesFromGraphOrUndef(Variable{"?z"}));
-  EXPECT_THROW(
-      existJoin1.columnOriginatesFromGraphOrUndef(Variable{"?notExisting"}),
-      ad_utility::Exception);
+  EXPECT_FALSE(
+      existJoin1.columnContainsOnlyKnowledgeGraphNodes(Variable{"?a"}));
+  EXPECT_FALSE(
+      existJoin1.columnContainsOnlyKnowledgeGraphNodes(Variable{"?b"}));
+  EXPECT_FALSE(
+      existJoin1.columnContainsOnlyKnowledgeGraphNodes(Variable{"?z"}));
+  EXPECT_THROW(existJoin1.columnContainsOnlyKnowledgeGraphNodes(
+                   Variable{"?notExisting"}),
+               ad_utility::Exception);
 
   ExistsJoin existJoin2{qec, values1, values2, Variable{"?z"}};
-  EXPECT_FALSE(existJoin2.columnOriginatesFromGraphOrUndef(Variable{"?a"}));
-  EXPECT_FALSE(existJoin2.columnOriginatesFromGraphOrUndef(Variable{"?b"}));
-  EXPECT_FALSE(existJoin2.columnOriginatesFromGraphOrUndef(Variable{"?z"}));
-  EXPECT_THROW(existJoin2.columnOriginatesFromGraphOrUndef(Variable{"?c"}),
+  EXPECT_FALSE(
+      existJoin2.columnContainsOnlyKnowledgeGraphNodes(Variable{"?a"}));
+  EXPECT_FALSE(
+      existJoin2.columnContainsOnlyKnowledgeGraphNodes(Variable{"?b"}));
+  EXPECT_FALSE(
+      existJoin2.columnContainsOnlyKnowledgeGraphNodes(Variable{"?z"}));
+  EXPECT_THROW(existJoin2.columnContainsOnlyKnowledgeGraphNodes(Variable{"?c"}),
                ad_utility::Exception);
-  EXPECT_THROW(
-      existJoin2.columnOriginatesFromGraphOrUndef(Variable{"?notExisting"}),
-      ad_utility::Exception);
+  EXPECT_THROW(existJoin2.columnContainsOnlyKnowledgeGraphNodes(
+                   Variable{"?notExisting"}),
+               ad_utility::Exception);
 
   ExistsJoin existJoin3{qec, index, values1, Variable{"?z"}};
-  EXPECT_TRUE(existJoin3.columnOriginatesFromGraphOrUndef(Variable{"?a"}));
-  EXPECT_THROW(existJoin3.columnOriginatesFromGraphOrUndef(Variable{"?b"}),
+  EXPECT_TRUE(existJoin3.columnContainsOnlyKnowledgeGraphNodes(Variable{"?a"}));
+  EXPECT_THROW(existJoin3.columnContainsOnlyKnowledgeGraphNodes(Variable{"?b"}),
                ad_utility::Exception);
-  EXPECT_FALSE(existJoin3.columnOriginatesFromGraphOrUndef(Variable{"?z"}));
-  EXPECT_THROW(
-      existJoin3.columnOriginatesFromGraphOrUndef(Variable{"?notExisting"}),
-      ad_utility::Exception);
+  EXPECT_FALSE(
+      existJoin3.columnContainsOnlyKnowledgeGraphNodes(Variable{"?z"}));
+  EXPECT_THROW(existJoin3.columnContainsOnlyKnowledgeGraphNodes(
+                   Variable{"?notExisting"}),
+               ad_utility::Exception);
 
   ExistsJoin existJoin4{qec, values1, index, Variable{"?z"}};
-  EXPECT_FALSE(existJoin4.columnOriginatesFromGraphOrUndef(Variable{"?a"}));
-  EXPECT_FALSE(existJoin4.columnOriginatesFromGraphOrUndef(Variable{"?b"}));
-  EXPECT_FALSE(existJoin4.columnOriginatesFromGraphOrUndef(Variable{"?z"}));
-  EXPECT_THROW(
-      existJoin4.columnOriginatesFromGraphOrUndef(Variable{"?notExisting"}),
-      ad_utility::Exception);
+  EXPECT_FALSE(
+      existJoin4.columnContainsOnlyKnowledgeGraphNodes(Variable{"?a"}));
+  EXPECT_FALSE(
+      existJoin4.columnContainsOnlyKnowledgeGraphNodes(Variable{"?b"}));
+  EXPECT_FALSE(
+      existJoin4.columnContainsOnlyKnowledgeGraphNodes(Variable{"?z"}));
+  EXPECT_THROW(existJoin4.columnContainsOnlyKnowledgeGraphNodes(
+                   Variable{"?notExisting"}),
+               ad_utility::Exception);
 }
 
 // _____________________________________________________________________________
@@ -838,11 +853,12 @@ TEST(ExistsJoin, addExistsJoinsToSubtreeDoesntCollideForHiddenVariables) {
       qec, makeIdTableFromVector({{0, 1}}),
       std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?b"}});
 
-  ParsedQuery query;
+  ParsedQuery query{qec->getAllocator()};
   query._rootGraphPattern._graphPatterns.push_back(
       parsedQuery::BasicGraphPattern{
-          {SparqlTriple{TripleComponent{Variable{"?a"}}, iri("<something>"),
-                        TripleComponent{Variable{"?b"}}}}});
+          {{SparqlTriple{TripleComponent{Variable{"?a"}}, iri("<something>"),
+                         TripleComponent{Variable{"?b"}}}},
+           qec->getAllocator()}});
   // Only add ?a (and select it via `*`, exactly as the parser does) to see if
   // ?b remains hidden.
   query.selectClause().setAsterisk();
@@ -872,11 +888,12 @@ TEST(ExistsJoin, addExistsJoinsToSubtreeSkipsAlreadyHandledExists) {
       qec, makeIdTableFromVector({{0, 1}}),
       std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?b"}});
 
-  ParsedQuery query;
+  ParsedQuery query{qec->getAllocator()};
   query._rootGraphPattern._graphPatterns.push_back(
       parsedQuery::BasicGraphPattern{
-          {SparqlTriple{TripleComponent{Variable{"?a"}}, iri("<something>"),
-                        TripleComponent{Variable{"?b"}}}}});
+          {{SparqlTriple{TripleComponent{Variable{"?a"}}, iri("<something>"),
+                         TripleComponent{Variable{"?b"}}}},
+           qec->getAllocator()}});
   // Select the visible variables via `*`, exactly as the parser does.
   query.selectClause().setAsterisk();
   query.selectClause().addVisibleVariable(Variable{"?a"});
@@ -907,11 +924,12 @@ TEST(ExistsJoin, cacheKeyDiffersForDifferentJoinColumns) {
       qec, makeIdTableFromVector({{0, 1}}),
       std::vector<std::optional<Variable>>{Variable{"?a"}, Variable{"?b"}});
 
-  ParsedQuery query;
+  ParsedQuery query{qec->getAllocator()};
   query._rootGraphPattern._graphPatterns.push_back(
       parsedQuery::BasicGraphPattern{
-          {SparqlTriple{TripleComponent{Variable{"?a"}}, iri("<something>"),
-                        TripleComponent{Variable{"?b"}}}}});
+          {{SparqlTriple{TripleComponent{Variable{"?a"}}, iri("<something>"),
+                         TripleComponent{Variable{"?b"}}}},
+           qec->getAllocator()}});
 
   // Select the visible variables via `*`, exactly as the parser does.
   query.selectClause().setAsterisk();

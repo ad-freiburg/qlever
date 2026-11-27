@@ -17,15 +17,19 @@
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/LocalVocabEntryTestHelpers.h"
+#include "../util/LocalVocabTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
+#include "../util/VariableToColumnMapTestHelpers.h"
 #include "./LazyJoinTestHelpers.h"
-#include "engine/IndexScan.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
+#include "engine/operation/IndexScan.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "index/IndexImpl.h"
 #include "index/TripleComponentConversions.h"
 #include "parser/ParsedQuery.h"
+
+using ad_utility::testing::makeLocalVocab;
 
 static constexpr auto executor = &ad_utility::testing::singleThreadExecutor;
 
@@ -162,7 +166,7 @@ void testLazyScanForJoinWithColumn(
   auto t = generateLocationTrace(l);
   auto qec = getQec(kg);
   IndexScan scan{qec, Permutation::PSO, scanTriple};
-  std::vector<Id> column;
+  IdColumn column;
   for (const auto& entry : columnEntries) {
     column.push_back(toValueId(entry, qec->getIndex()).value());
   }
@@ -180,7 +184,7 @@ void testLazyScanWithColumnThrows(
   auto t = generateLocationTrace(l);
   auto qec = getQec(kg);
   IndexScan s1{qec, Permutation::PSO, scanTriple};
-  std::vector<Id> column;
+  IdColumn column;
   for (const auto& entry : columnEntries) {
     column.push_back(toValueId(entry, qec->getIndex()).value());
   }
@@ -444,10 +448,10 @@ TEST(IndexScan, additionalColumn) {
   auto scan = IndexScan{qec, Permutation::PSO, triple};
   ASSERT_EQ(scan.getResultWidth(), 4);
   auto col = makeAlwaysDefinedColumn;
-  VariableToColumnMap expected = {{V{"?x"}, col(0)},
-                                  {V{"?z"}, col(1)},
-                                  {V("?xpattern"), col(2)},
-                                  {V("?ypattern"), col(3)}};
+  auto expected = makeVariableToColumnMap({{V{"?x"}, col(0)},
+                                           {V{"?z"}, col(1)},
+                                           {V("?xpattern"), col(2)},
+                                           {V("?ypattern"), col(3)}});
   ASSERT_THAT(scan.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expected));
   ASSERT_THAT(scan.getCacheKey(),
@@ -490,8 +494,8 @@ TEST(IndexScan, makeTreeWithBindColumnOfConstant) {
   ASSERT_TRUE(tree.has_value());
   auto col = makeAlwaysDefinedColumn;
   EXPECT_THAT(tree.value()->getVariableColumns(),
-              ::testing::UnorderedElementsAreArray(VariableToColumnMap{
-                  {V{"?s"}, col(0)}, {V{"?o"}, col(1)}, {V{"?c"}, col(2)}}));
+              ::testing::UnorderedElementsAreArray(makeVariableToColumnMap(
+                  {{V{"?s"}, col(0)}, {V{"?o"}, col(1)}, {V{"?c"}, col(2)}})));
   EXPECT_THAT(
       tree.value()->getCacheKey(),
       ::testing::HasSubstr(absl::StrCat("Constant Columns: ", p.getBits())));
@@ -1323,14 +1327,15 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesFilterCorrectly) {
 
   auto makeJoinSide = [this]() {
     using P = Result::IdTableVocabPair;
-    LocalVocab vocab;
+    LocalVocab vocab = makeLocalVocab();
     vocab.getIndexAndAddIfNotContained(LocalVocabEntry{
         ad_utility::triple_component::Literal::literalWithoutQuotes("Test"),
         qec_->getLocalVocabContext()});
-    return std::array{P{makeIdTable({iri("<a>"), iri("<c>")}), LocalVocab{}},
-                      P{makeIdTable({iri("<c>")}), LocalVocab{}},
-                      P{makeIdTable({iri("<c>"), iri("<q>"), iri("<xb>")}),
-                        std::move(vocab)}};
+    return std::array{
+        P{makeIdTable({iri("<a>"), iri("<c>")}), makeLocalVocab()},
+        P{makeIdTable({iri("<c>")}), makeLocalVocab()},
+        P{makeIdTable({iri("<c>"), iri("<q>"), iri("<xb>")}),
+          std::move(vocab)}};
   };
 
   auto [joinSideResults, scanResults] = consumeRanges(
@@ -1400,9 +1405,9 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesWithLimitYieldsEachRowOnce) {
 
   auto makeJoinSide = [this]() {
     using P = Result::IdTableVocabPair;
-    return std::array{P{makeIdTable({iri("<a>")}), LocalVocab{}},
-                      P{makeIdTable({iri("<c>")}), LocalVocab{}},
-                      P{makeIdTable({iri("<xb>")}), LocalVocab{}}};
+    return std::array{P{makeIdTable({iri("<a>")}), makeLocalVocab()},
+                      P{makeIdTable({iri("<c>")}), makeLocalVocab()},
+                      P{makeIdTable({iri("<xb>")}), makeLocalVocab()}};
   };
 
   auto [joinSideResults, scanResults] =
@@ -1435,8 +1440,8 @@ TEST_P(IndexScanWithLazyJoin,
 
   auto makeJoinSide = [this]() {
     using P = Result::IdTableVocabPair;
-    return std::array{P{makeIdTable({iri("<a>")}), LocalVocab{}},
-                      P{makeIdTable({iri("<b>")}), LocalVocab{}}};
+    return std::array{P{makeIdTable({iri("<a>")}), makeLocalVocab()},
+                      P{makeIdTable({iri("<b>")}), makeLocalVocab()}};
   };
 
   auto [joinSideResults, scanResults] =
@@ -1465,9 +1470,9 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesSkipNonMatchingTables) {
 
   using P = Result::IdTableVocabPair;
   std::array joinSide{
-      P{makeIdTableFromVector({{Id::makeFromBool(true)}}), LocalVocab{}},
-      P{makeIdTable({iri("<a>")}), LocalVocab{}},
-      P{makeIdTable({iri("<b>")}), LocalVocab{}}};
+      P{makeIdTableFromVector({{Id::makeFromBool(true)}}), makeLocalVocab()},
+      P{makeIdTable({iri("<a>")}), makeLocalVocab()},
+      P{makeIdTable({iri("<b>")}), makeLocalVocab()}};
 
   auto [joinSideResults, scanResults] =
       consumeRanges(scan.prefilterTables(LazyResult{std::move(joinSide)}, 0));
@@ -1497,8 +1502,8 @@ TEST_P(IndexScanWithLazyJoin,
   auto makeJoinSide = []() {
     using P = Result::IdTableVocabPair;
     return std::array{
-        P{makeIdTableFromVector({{Id::makeFromBool(true)}}), LocalVocab{}},
-        P{makeIdTableFromVector({{Id::makeFromBool(true)}}), LocalVocab{}}};
+        P{makeIdTableFromVector({{Id::makeFromBool(true)}}), makeLocalVocab()},
+        P{makeIdTableFromVector({{Id::makeFromBool(true)}}), makeLocalVocab()}};
   };
 
   auto [joinSideResults, scanResults] =
@@ -1529,9 +1534,9 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesNotSkipOnRepeatingBlock) {
   // This is a regression test for an issue introduced in
   // https://github.com/ad-freiburg/qlever/pull/2252
   using P = Result::IdTableVocabPair;
-  std::array pairs{P{makeIdTable({iri("<a>")}), LocalVocab{}},
-                   P{makeIdTable({iri("<b>")}), LocalVocab{}},
-                   P{makeIdTable({iri("<c>")}), LocalVocab{}}};
+  std::array pairs{P{makeIdTable({iri("<a>")}), makeLocalVocab()},
+                   P{makeIdTable({iri("<b>")}), makeLocalVocab()},
+                   P{makeIdTable({iri("<c>")}), makeLocalVocab()}};
 
   auto [joinSideResults, scanResults] =
       consumeRanges(scan.prefilterTables(LazyResult{std::move(pairs)}, 0));
@@ -1550,7 +1555,7 @@ TEST_P(IndexScanWithLazyJoin,
   config.rowsPerBlock = 2;
   qec_ = getQec(std::move(config));
   IndexScan scan = makeScan();
-  LocalVocab extraVocab;
+  LocalVocab extraVocab = makeLocalVocab();
   const auto& localVocabContext = qec_->getLocalVocabContext();
   auto indexE = extraVocab.getIndexAndAddIfNotContained(
       localVocabEntry(iri("<e>"), localVocabContext));
@@ -1559,8 +1564,8 @@ TEST_P(IndexScanWithLazyJoin,
 
   using P = Result::IdTableVocabPair;
   std::array pairs{
-      P{makeIdTable({iri("<a>")}), LocalVocab{}},
-      P{makeIdTable({iri("<c>")}), LocalVocab{}},
+      P{makeIdTable({iri("<a>")}), makeLocalVocab()},
+      P{makeIdTable({iri("<c>")}), makeLocalVocab()},
       P{makeIdTable({Id::makeFromLocalVocabIndex(indexE)}), extraVocab.clone()},
       P{makeIdTable({Id::makeFromLocalVocabIndex(indexG)}),
         extraVocab.clone()}};
@@ -1592,20 +1597,20 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesNotFilterOnUndefined) {
 
   auto makeJoinSide = [](auto* self) -> Result::Generator {
     using P = Result::IdTableVocabPair;
-    P p1{IdTable{1, makeAllocator()}, LocalVocab{}};
+    P p1{IdTable{1, makeAllocator()}, makeLocalVocab()};
     co_yield p1;
-    P p2{makeIdTableFromVector({{Id::makeUndefined()}}), LocalVocab{}};
+    P p2{makeIdTableFromVector({{Id::makeUndefined()}}), makeLocalVocab()};
     co_yield p2;
-    P p3{makeIdTableFromVector({{Id::makeUndefined()}}), LocalVocab{}};
+    P p3{makeIdTableFromVector({{Id::makeUndefined()}}), makeLocalVocab()};
     co_yield p3;
-    P p4{IdTable{1, makeAllocator()}, LocalVocab{}};
+    P p4{IdTable{1, makeAllocator()}, makeLocalVocab()};
     co_yield p4;
-    P p5{self->makeIdTable({iri("<a>"), iri("<c>")}), LocalVocab{}};
+    P p5{self->makeIdTable({iri("<a>"), iri("<c>")}), makeLocalVocab()};
     co_yield p5;
     P p6{self->makeIdTable({iri("<c>"), iri("<q>"), iri("<xb>")}),
-         LocalVocab{}};
+         makeLocalVocab()};
     co_yield p6;
-    P p7{IdTable{1, makeAllocator()}, LocalVocab{}};
+    P p7{IdTable{1, makeAllocator()}, makeLocalVocab()};
     co_yield p7;
   };
 
@@ -1644,7 +1649,7 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesNotFilterWithSingleUndefined) {
 
   auto makeJoinSide = []() -> Result::Generator {
     using P = Result::IdTableVocabPair;
-    P p1{makeIdTableFromVector({{Id::makeUndefined()}}), LocalVocab{}};
+    P p1{makeIdTableFromVector({{Id::makeUndefined()}}), makeLocalVocab()};
     co_yield p1;
   };
 
@@ -1675,7 +1680,7 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesWorksWithSingleEmptyTable) {
 
   auto makeJoinSide = []() -> Result::Generator {
     using P = Result::IdTableVocabPair;
-    P p{IdTable{1, makeAllocator()}, LocalVocab{}};
+    P p{IdTable{1, makeAllocator()}, makeLocalVocab()};
     co_yield p;
   };
 
@@ -1777,33 +1782,33 @@ TEST(IndexScan, clone) {
 }
 
 // _____________________________________________________________________________
-TEST(IndexScan, columnOriginatesFromGraphOrUndef) {
+TEST(IndexScan, columnContainsOnlyKnowledgeGraphNodes) {
   auto* qec = getQec();
   IndexScan scan1{qec, Permutation::PSO,
                   SparqlTripleSimple{Var{"?x"}, Var{"?y"}, Var{"?z"}}};
-  EXPECT_TRUE(scan1.columnOriginatesFromGraphOrUndef(Var{"?x"}));
-  EXPECT_FALSE(scan1.columnOriginatesFromGraphOrUndef(Var{"?y"}));
-  EXPECT_TRUE(scan1.columnOriginatesFromGraphOrUndef(Var{"?z"}));
-  EXPECT_THROW(scan1.columnOriginatesFromGraphOrUndef(Var{"?notExisting"}),
+  EXPECT_TRUE(scan1.columnContainsOnlyKnowledgeGraphNodes(Var{"?x"}));
+  EXPECT_FALSE(scan1.columnContainsOnlyKnowledgeGraphNodes(Var{"?y"}));
+  EXPECT_TRUE(scan1.columnContainsOnlyKnowledgeGraphNodes(Var{"?z"}));
+  EXPECT_THROW(scan1.columnContainsOnlyKnowledgeGraphNodes(Var{"?notExisting"}),
                ad_utility::Exception);
 
   IndexScan scan2{
       qec, Permutation::PSO,
       SparqlTripleSimple{
           Var{"?x"}, Var{"?y"}, Var{"?z"}, {std::pair{3, Var{"?g"}}}}};
-  EXPECT_TRUE(scan2.columnOriginatesFromGraphOrUndef(Var{"?x"}));
-  EXPECT_FALSE(scan2.columnOriginatesFromGraphOrUndef(Var{"?y"}));
-  EXPECT_TRUE(scan2.columnOriginatesFromGraphOrUndef(Var{"?z"}));
-  EXPECT_FALSE(scan2.columnOriginatesFromGraphOrUndef(Var{"?g"}));
-  EXPECT_THROW(scan2.columnOriginatesFromGraphOrUndef(Var{"?notExisting"}),
+  EXPECT_TRUE(scan2.columnContainsOnlyKnowledgeGraphNodes(Var{"?x"}));
+  EXPECT_FALSE(scan2.columnContainsOnlyKnowledgeGraphNodes(Var{"?y"}));
+  EXPECT_TRUE(scan2.columnContainsOnlyKnowledgeGraphNodes(Var{"?z"}));
+  EXPECT_FALSE(scan2.columnContainsOnlyKnowledgeGraphNodes(Var{"?g"}));
+  EXPECT_THROW(scan2.columnContainsOnlyKnowledgeGraphNodes(Var{"?notExisting"}),
                ad_utility::Exception);
 
   IndexScan scan3{qec, Permutation::OSP,
                   SparqlTripleSimple{iri("<a>"), Var{"?y"}, iri("<c>")}};
-  EXPECT_THROW(scan3.columnOriginatesFromGraphOrUndef(Var{"?x"}),
+  EXPECT_THROW(scan3.columnContainsOnlyKnowledgeGraphNodes(Var{"?x"}),
                ad_utility::Exception);
-  EXPECT_FALSE(scan3.columnOriginatesFromGraphOrUndef(Var{"?y"}));
-  EXPECT_THROW(scan3.columnOriginatesFromGraphOrUndef(Var{"?z"}),
+  EXPECT_FALSE(scan3.columnContainsOnlyKnowledgeGraphNodes(Var{"?y"}));
+  EXPECT_THROW(scan3.columnContainsOnlyKnowledgeGraphNodes(Var{"?z"}),
                ad_utility::Exception);
 }
 
@@ -1868,7 +1873,7 @@ TEST(IndexScanTest, StripColumns) {
         baseScan.makeTreeWithStrippedColumns(varsWithNonExistent).value();
     EXPECT_EQ(subsetScan->getResultWidth(), varsToKeep.size());
 
-    auto [_, wasNew] = cacheKeys.insert(subsetScan->getCacheKey());
+    auto [_, wasNew] = cacheKeys.insert(std::string{subsetScan->getCacheKey()});
     EXPECT_TRUE(wasNew);
 
     using namespace ::testing;
@@ -1879,7 +1884,7 @@ TEST(IndexScanTest, StripColumns) {
         getVarsAndColumnIndices(varsToKeep, baseScan);
     // Build expected variable to column mapping with dense, ordered column
     // indices
-    VariableToColumnMap expected;
+    auto expected = makeVariableToColumnMap();
     std::vector<ColumnIndex> originalColumnIndices;
     for (size_t i = 0; i < columnOrigins.size(); ++i) {
       expected[columnOrigins[i].first] = def(i);
@@ -2013,8 +2018,8 @@ TEST(IndexScanTest, StripColumns) {
 
     // Test column origin function for variables that exist in both scans
     for (const auto& var : varsToKeep) {
-      EXPECT_EQ(strippedScanOp.columnOriginatesFromGraphOrUndef(var),
-                baseScan.columnOriginatesFromGraphOrUndef(var));
+      EXPECT_EQ(strippedScanOp.columnContainsOnlyKnowledgeGraphNodes(var),
+                baseScan.columnContainsOnlyKnowledgeGraphNodes(var));
     }
   };
 
@@ -2282,14 +2287,15 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesFilterCorrectlyOptionalJoin) {
 
   auto makeJoinSide = [this]() {
     using P = Result::IdTableVocabPair;
-    LocalVocab vocab;
+    LocalVocab vocab = makeLocalVocab();
     vocab.getIndexAndAddIfNotContained(LocalVocabEntry{
         ad_utility::triple_component::Literal::literalWithoutQuotes("Test"),
         qec_->getLocalVocabContext()});
-    return std::array{P{makeIdTable({iri("<a>"), iri("<c>")}), LocalVocab{}},
-                      P{makeIdTable({iri("<c>")}), LocalVocab{}},
-                      P{makeIdTable({iri("<c>"), iri("<q>"), iri("<xb>")}),
-                        std::move(vocab)}};
+    return std::array{
+        P{makeIdTable({iri("<a>"), iri("<c>")}), makeLocalVocab()},
+        P{makeIdTable({iri("<c>")}), makeLocalVocab()},
+        P{makeIdTable({iri("<c>"), iri("<q>"), iri("<xb>")}),
+          std::move(vocab)}};
   };
 
   auto [joinSideResults, scanResults] = consumeRanges(
@@ -2356,9 +2362,9 @@ TEST_P(IndexScanWithLazyJoin,
 
   using P = Result::IdTableVocabPair;
   std::array joinSide{
-      P{makeIdTableFromVector({{Id::makeFromBool(true)}}), LocalVocab{}},
-      P{makeIdTable({iri("<a>")}), LocalVocab{}},
-      P{makeIdTable({iri("<b>")}), LocalVocab{}}};
+      P{makeIdTableFromVector({{Id::makeFromBool(true)}}), makeLocalVocab()},
+      P{makeIdTable({iri("<a>")}), makeLocalVocab()},
+      P{makeIdTable({iri("<b>")}), makeLocalVocab()}};
 
   auto [joinSideResults, scanResults] = consumeRanges(
       scan.prefilterTables(LazyResult{std::move(joinSide)}, 0, false));
@@ -2391,14 +2397,14 @@ TEST_P(IndexScanWithLazyJoin,
 
   using P = Result::IdTableVocabPair;
   std::array joinSide{
-      P{makeIdTableFromVector({{Id::makeFromBool(true)}}), LocalVocab{}},
-      P{makeIdTable({iri("<a>")}), LocalVocab{}},
+      P{makeIdTableFromVector({{Id::makeFromBool(true)}}), makeLocalVocab()},
+      P{makeIdTable({iri("<a>")}), makeLocalVocab()},
       P{makeIdTableFromVector(
             {{Id::makeFromBlankNodeIndex(BlankNodeIndex::make(0))}}),
-        LocalVocab{}},
+        makeLocalVocab()},
       P{makeIdTableFromVector(
             {{Id::makeFromBlankNodeIndex(BlankNodeIndex::make(1))}}),
-        LocalVocab{}}};
+        makeLocalVocab()}};
 
   auto [joinSideResults, scanResults] = consumeRanges(
       scan.prefilterTables(LazyResult{std::move(joinSide)}, 0, false));
@@ -2444,7 +2450,7 @@ TEST_P(IndexScanWithLazyJoin,
   // hand side. This should now be fixed.
   static constexpr size_t numBlocksJoinSide = 20;
   for (size_t i = 0; i < numBlocksJoinSide; ++i) {
-    joinSide.push_back(P{makeIdTable({iri("<a>")}), LocalVocab{}});
+    joinSide.push_back(P{makeIdTable({iri("<a>")}), makeLocalVocab()});
   };
 
   // Assert that, because we don't have new blocks on the scan side, we
@@ -2497,12 +2503,12 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesEventuallyPushDummyBlock) {
 
   using P = Result::IdTableVocabPair;
   std::array joinSide{
-      P{makeIdTableFromVector({{Id::makeFromBool(true)}}), LocalVocab{}},
-      P{makeIdTableFromVector({{Id::makeFromBool(true)}}), LocalVocab{}},
-      P{makeIdTableFromVector({{Id::makeFromBool(true)}}), LocalVocab{}},
-      P{makeIdTableFromVector({{Id::makeFromBool(true)}}), LocalVocab{}},
-      P{makeIdTableFromVector({{Id::makeFromBool(true)}}), LocalVocab{}},
-      P{makeIdTableFromVector({{Id::makeFromBool(true)}}), LocalVocab{}}};
+      P{makeIdTableFromVector({{Id::makeFromBool(true)}}), makeLocalVocab()},
+      P{makeIdTableFromVector({{Id::makeFromBool(true)}}), makeLocalVocab()},
+      P{makeIdTableFromVector({{Id::makeFromBool(true)}}), makeLocalVocab()},
+      P{makeIdTableFromVector({{Id::makeFromBool(true)}}), makeLocalVocab()},
+      P{makeIdTableFromVector({{Id::makeFromBool(true)}}), makeLocalVocab()},
+      P{makeIdTableFromVector({{Id::makeFromBool(true)}}), makeLocalVocab()}};
 
   auto [joinSideResults, scanResults] = consumeRanges(
       scan.prefilterTables(LazyResult{std::move(joinSide)}, 0, false));

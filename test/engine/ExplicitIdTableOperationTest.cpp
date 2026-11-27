@@ -13,11 +13,15 @@
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/LocalVocabEntryTestHelpers.h"
+#include "../util/LocalVocabTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
-#include "engine/ExplicitIdTableOperation.h"
+#include "../util/VariableToColumnMapTestHelpers.h"
 #include "engine/QueryExecutionContext.h"
+#include "engine/operation/ExplicitIdTableOperation.h"
 #include "global/Id.h"
 #include "parser/TripleComponent.h"
+
+using ad_utility::testing::makeLocalVocab;
 
 using ad_utility::testing::colIndices;
 using ad_utility::testing::localVocabEntryFromStringRepresentation;
@@ -48,7 +52,7 @@ std::shared_ptr<IdTable> createTestIdTable(size_t numRows, size_t numCols) {
 
 // Helper function to create VariableToColumnMap
 VariableToColumnMap createTestVariableMap(size_t numVars) {
-  VariableToColumnMap map;
+  auto map = makeVariableToColumnMap();
   for (size_t i = 0; i < numVars; ++i) {
     map[Variable("?var" + std::to_string(i))] = makeAlwaysDefinedColumn(i);
   }
@@ -86,9 +90,9 @@ class ExplicitIdTableOperationTest : public ::testing::TestWithParam<bool> {
 
   QueryExecutionContext* qec_ = getTestQec();
   std::shared_ptr<IdTable> testTable_;
-  VariableToColumnMap testVariables_;
+  VariableToColumnMap testVariables_ = makeVariableToColumnMap();
   qlm::vector<ColumnIndex> testSortedColumns_{qec_->getAllocator()};
-  LocalVocab testLocalVocab_;
+  LocalVocab testLocalVocab_ = makeLocalVocab();
   std::string testCacheKey_;
 };
 
@@ -152,12 +156,12 @@ TEST_P(ExplicitIdTableOperationTest, KnownEmptyResult) {
   {
     auto emptyTable = std::make_shared<IdTable>(2, makeAllocator());
     ExplicitIdTableOperation op(qec_, wrapTable(emptyTable), testVariables_,
-                                colIndices({}), LocalVocab{}, "empty");
+                                colIndices({}), makeLocalVocab(), "empty");
     EXPECT_TRUE(op.knownEmptyResult());
   }
   {
     ExplicitIdTableOperation op(qec_, wrapTable(testTable_), testVariables_,
-                                colIndices({}), LocalVocab{}, "empty");
+                                colIndices({}), makeLocalVocab(), "empty");
     EXPECT_FALSE(op.knownEmptyResult());
   }
 }
@@ -196,7 +200,7 @@ TEST_P(ExplicitIdTableOperationTest, ComputeResultWithLaziness) {
 
 // _____________________________________________________________________________
 TEST_P(ExplicitIdTableOperationTest, ComputeResultWithLocalVocab) {
-  LocalVocab localVocab;
+  LocalVocab localVocab = makeLocalVocab();
   LocalVocabEntry testEntry = localVocabEntryFromStringRepresentation(
       "\"test_word\"", qec_->getLocalVocabContext());
   localVocab.getIndexAndAddIfNotContained(testEntry);
@@ -215,7 +219,7 @@ TEST_P(ExplicitIdTableOperationTest, ComputeResultWithLocalVocab) {
 
 // Test cloneImpl functionality
 TEST_P(ExplicitIdTableOperationTest, CloneImpl) {
-  LocalVocab localVocab;
+  LocalVocab localVocab = makeLocalVocab();
   LocalVocabEntry testEntry = localVocabEntryFromStringRepresentation(
       "\"clone_test\"", qec_->getLocalVocabContext());
   localVocab.getIndexAndAddIfNotContained(testEntry);
@@ -255,7 +259,7 @@ TEST_P(ExplicitIdTableOperationTest, CloneImpl) {
 TEST_P(ExplicitIdTableOperationTest, ConstructionWithSortedColumns) {
   auto sortedCols = colIndices({1, 0});
   ExplicitIdTableOperation op(qec_, wrapTable(testTable_), testVariables_,
-                              sortedCols, LocalVocab{}, testCacheKey_);
+                              sortedCols, makeLocalVocab(), testCacheKey_);
 
   EXPECT_THAT(op.resultSortedOn(), ElementsAre(ColumnIndex{1}, ColumnIndex{0}));
 }
@@ -265,9 +269,9 @@ TEST_P(ExplicitIdTableOperationTest, DifferentTableSizes) {
   // Test with single row
   auto singleRowTable = createTestIdTable(1, 3);
   auto singleRowVars = createTestVariableMap(3);
-  ExplicitIdTableOperation singleRowOp(qec_, wrapTable(singleRowTable),
-                                       singleRowVars, colIndices({}), {},
-                                       testCacheKey_);
+  ExplicitIdTableOperation singleRowOp(
+      qec_, wrapTable(singleRowTable), singleRowVars, colIndices({}),
+      LocalVocab{qec_->getAllocator()}, testCacheKey_);
 
   EXPECT_EQ(singleRowOp.sizeEstimate(), 1u);
   EXPECT_EQ(singleRowOp.getResultWidth(), 3u);
@@ -276,8 +280,9 @@ TEST_P(ExplicitIdTableOperationTest, DifferentTableSizes) {
   // Test with many rows
   auto largeTable = createTestIdTable(100, 1);
   auto largeTableVars = createTestVariableMap(1);
-  ExplicitIdTableOperation largeOp(qec_, wrapTable(largeTable), largeTableVars,
-                                   colIndices({}), {}, testCacheKey_);
+  ExplicitIdTableOperation largeOp(
+      qec_, wrapTable(largeTable), largeTableVars, colIndices({}),
+      LocalVocab{qec_->getAllocator()}, testCacheKey_);
 
   EXPECT_EQ(largeOp.sizeEstimate(), 100u);
   EXPECT_EQ(largeOp.getResultWidth(), 1u);
@@ -286,12 +291,13 @@ TEST_P(ExplicitIdTableOperationTest, DifferentTableSizes) {
 
 // Test variable to column mapping
 TEST_P(ExplicitIdTableOperationTest, VariableToColumnMapping) {
-  VariableToColumnMap customVars;
-  customVars[Variable("?subject")] = makeAlwaysDefinedColumn(0);
-  customVars[Variable("?predicate")] = makeAlwaysDefinedColumn(1);
+  auto customVars = makeVariableToColumnMap(
+      {{Variable("?subject"), makeAlwaysDefinedColumn(0)},
+       {Variable("?predicate"), makeAlwaysDefinedColumn(1)}});
 
   ExplicitIdTableOperation op(qec_, wrapTable(testTable_), customVars,
-                              colIndices({}), {}, testCacheKey_);
+                              colIndices({}), LocalVocab{qec_->getAllocator()},
+                              testCacheKey_);
 
   auto computedVars = op.computeVariableToColumnMap();
   EXPECT_EQ(computedVars.size(), 2u);

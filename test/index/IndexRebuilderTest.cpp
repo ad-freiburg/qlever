@@ -18,7 +18,6 @@
 #include <chrono>
 #include <fstream>
 #include <future>
-#include <iterator>
 #include <memory>
 #include <numeric>
 #include <optional>
@@ -35,6 +34,7 @@
 #include "../util/IdTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/LocalVocabEntryTestHelpers.h"
+#include "../util/LocalVocabTestHelpers.h"
 #include "../util/RuntimeParametersTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
 #include "backports/filesystem.h"
@@ -56,6 +56,8 @@
 #include "util/FilesystemHelpers.h"
 #include "util/SourceLocation.h"
 
+using ad_utility::testing::makeLocalVocab;
+
 using ad_utility::testing::iriLocalVocabEntry;
 using ad_utility::testing::localVocabEntry;
 
@@ -68,14 +70,6 @@ using namespace std::string_literals;
 namespace {
 auto V = ad_utility::testing::VocabId;
 auto B = ad_utility::testing::BlankNodeId;
-
-// Read a file into a buffer.
-std::vector<char> fileToBuffer(const std::string& filename) {
-  std::ifstream f{filename, std::ios::binary};
-  EXPECT_TRUE(f.is_open()) << "Could not open file " << filename;
-  return std::vector(std::istreambuf_iterator<char>(f),
-                     std::istreambuf_iterator<char>());
-}
 
 // Select the correct suffixes.
 std::vector<std::string> getVocabSuffixesForType(
@@ -137,9 +131,9 @@ TEST(IndexRebuilder, materializeEmptyLocalVocab) {
   EXPECT_THAT(localVocabMapping, ::testing::UnorderedElementsAre());
 
   for (const auto& suffix : getVocabSuffixesForType(type.value())) {
-    EXPECT_EQ(
-        fileToBuffer("materializeEmptyLocalVocab"s + VOCAB_SUFFIX + suffix),
-        fileToBuffer(vocabFileName + suffix));
+    EXPECT_EQ(qlever::util::readBinaryFile("materializeEmptyLocalVocab"s +
+                                           VOCAB_SUFFIX + suffix),
+              qlever::util::readBinaryFile(vocabFileName + suffix));
   }
 }
 
@@ -172,7 +166,7 @@ TEST(IndexRebuilder, materializeLocalVocab) {
   auto k = getId("<k>");
   auto l = makeVocabEntry("<l>");
   auto m = makeVocabEntry("<m>");
-  LocalVocab localVocab;
+  LocalVocab localVocab = makeLocalVocab();
   auto add = [&localVocab](const LocalVocabEntry& entry) {
     return localVocab.getIndexAndAddIfNotContained(entry);
   };
@@ -255,7 +249,7 @@ TEST(IndexRebuilder, materializeLocalVocabProgressBatches) {
 
   // `materializeLocalVocab` takes pointers to the entries, which are stored in
   // a `LocalVocab`.
-  LocalVocab localVocab;
+  LocalVocab localVocab = makeLocalVocab();
   std::vector<LocalVocabIndex> entries;
   for (size_t i = 0; i < numEntries; ++i) {
     entries.push_back(localVocab.getIndexAndAddIfNotContained(
@@ -596,8 +590,8 @@ TEST(IndexRebuilder, createPermutationWriterTask) {
   threadPool.join();
   for (std::string_view suffix : suffixes) {
     EXPECT_TRUE(ql::filesystem::exists(prefix + suffix));
-    EXPECT_EQ(fileToBuffer(index.getOnDiskBase() + suffix),
-              fileToBuffer(prefix + suffix));
+    EXPECT_EQ(qlever::util::readBinaryFile(index.getOnDiskBase() + suffix),
+              qlever::util::readBinaryFile(prefix + suffix));
   }
 }
 
@@ -651,7 +645,7 @@ TEST(IndexRebuilder, materializeToIndex) {
         // `materializeLocalVocab` (regression test for issue #3172). The
         // triple already exists in the index, so the expected counts below
         // are unchanged.
-        LocalVocab outsideVocab;
+        LocalVocab outsideVocab = makeLocalVocab();
         Id localA = Id::makeFromLocalVocabIndex(
             outsideVocab.getIndexAndAddIfNotContained(
                 iriLocalVocabEntry("<a>", index.getLocalVocabContext())));
@@ -680,8 +674,7 @@ TEST(IndexRebuilder, materializeToIndex) {
       // progress line (with a percentage and an average speed) to the rebuild's
       // log file.
       {
-        auto logStream = ad_utility::makeIfstream(logFile);
-        std::string logContent{std::istreambuf_iterator<char>{logStream}, {}};
+        auto logContent = qlever::util::readBinaryFile<std::string>(logFile);
         using ::testing::HasSubstr;
         EXPECT_THAT(logContent, HasSubstr("Writing new vocabulary (merging "
                                           "existing and new words) ..."));
@@ -735,6 +728,18 @@ TEST(IndexRebuilder, materializeToIndex) {
         EXPECT_EQ(newIndex.numDistinctSubjects().internal, 0);
         EXPECT_EQ(newIndex.numDistinctObjects().normal, 4);
         EXPECT_EQ(newIndex.numDistinctObjects().internal, 0);
+      }
+      // The patterns are copied from the old index, and so are their
+      // statistics.
+      if (usePatterns) {
+        const auto& oldImpl = index.getImpl();
+        EXPECT_EQ(newIndex.getNumDistinctSubjectPredicatePairs(),
+                  oldImpl.getNumDistinctSubjectPredicatePairs());
+        EXPECT_EQ(newIndex.getAvgNumDistinctPredicatesPerSubject(),
+                  oldImpl.getAvgNumDistinctPredicatesPerSubject());
+        EXPECT_EQ(newIndex.getAvgNumDistinctSubjectsPerPredicate(),
+                  oldImpl.getAvgNumDistinctSubjectsPerPredicate());
+        EXPECT_EQ(newIndex.getNumDistinctSubjectPredicatePairs(), 2);
       }
     }
   }

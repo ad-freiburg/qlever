@@ -5,7 +5,6 @@
 #include "index/DocsDB.h"
 
 #include "backports/algorithm.h"
-#include "global/Constants.h"
 
 // _____________________________________________________________________________
 void DocsDB::init(const std::string& fileName) {

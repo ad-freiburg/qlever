@@ -48,8 +48,8 @@ struct TestContext {
       "<s8> <city_name> \"düsseldorf\"@de-AT";
 
   QueryExecutionContext* qec = ad_utility::testing::getQec(turtleInput);
-  VariableToColumnMap varToColMap;
-  LocalVocab localVocab;
+  VariableToColumnMap varToColMap{qec->getAllocator()};
+  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
   IdTable table{qec->getAllocator()};
   sparqlExpression::EvaluationContext context{
       *qec,

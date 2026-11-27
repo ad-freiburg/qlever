@@ -9,8 +9,8 @@
 
 #include "DeltaTriplesTestHelpers.h"
 #include "engine/ExecuteUpdate.h"
-#include "engine/Load.h"
 #include "engine/QueryPlanner.h"
+#include "engine/operation/Load.h"
 #include "index/TripleComponentConversions.h"
 #include "parser/SparqlParser.h"
 #include "util/GTestHelpers.h"
@@ -21,6 +21,7 @@
 #include "util/OperationTestHelpers.h"
 #include "util/RuntimeParametersTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
+#include "util/VariableToColumnMapTestHelpers.h"
 
 namespace {
 
@@ -74,10 +75,10 @@ TEST_F(LoadTest, basicMethods) {
   EXPECT_THAT(load.getMultiplicity(1), testing::Eq(1));
   EXPECT_THAT(load.getMultiplicity(2), testing::Eq(1));
   EXPECT_THAT(load.getExternallyVisibleVariableColumns(),
-              testing::UnorderedElementsAreArray(VariableToColumnMap{
-                  {Variable("?s"), makeAlwaysDefinedColumn(0)},
-                  {Variable("?p"), makeAlwaysDefinedColumn(1)},
-                  {Variable("?o"), makeAlwaysDefinedColumn(2)}}));
+              testing::UnorderedElementsAreArray(makeVariableToColumnMap(
+                  {{Variable("?s"), makeAlwaysDefinedColumn(0)},
+                   {Variable("?p"), makeAlwaysDefinedColumn(1)},
+                   {Variable("?o"), makeAlwaysDefinedColumn(2)}})));
   EXPECT_THAT(load.getSizeEstimate(), testing::Eq(100'000));
   EXPECT_THAT(load.getCostEstimate(), testing::Eq(1'000'000));
   EXPECT_THAT(load.knownEmptyResult(), testing::IsFalse());
@@ -356,7 +357,7 @@ TEST_F(LoadTest, clone) {
 TEST_F(LoadTest, Integration) {
   auto parsedUpdate = SparqlParser::parseUpdate(
       &blankNodeManager_, &testQec->getIndex().encodedIriManager(),
-      "LOAD <https://mundhahs.dev>");
+      testQec->getAllocator(), "LOAD <https://mundhahs.dev>");
   ASSERT_THAT(parsedUpdate, testing::SizeIs(1));
   auto qec =
       ad_utility::testing::getQec(ad_utility::testing::TestIndexConfig{});
@@ -381,7 +382,7 @@ TEST_F(LoadTest, Integration) {
 TEST_F(LoadTest, IntegrationWithBlankNodes) {
   auto parsedUpdate = SparqlParser::parseUpdate(
       &blankNodeManager_, &testQec->getIndex().encodedIriManager(),
-      "LOAD <https://mundhahs.dev>");
+      testQec->getAllocator(), "LOAD <https://mundhahs.dev>");
   ASSERT_THAT(parsedUpdate, testing::SizeIs(1));
   auto qec =
       ad_utility::testing::getQec(ad_utility::testing::TestIndexConfig{});

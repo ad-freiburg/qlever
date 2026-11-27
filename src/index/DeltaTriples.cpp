@@ -12,13 +12,9 @@
 
 #include "index/DeltaTriples.h"
 
-#include <absl/strings/str_cat.h>
-
 #include "Permutation.h"
 #include "backports/algorithm.h"
 #include "backports/filesystem.h"
-#include "engine/ExecuteUpdate.h"
-#include "engine/ExportQueryExecutionTrees.h"
 #include "index/ExportIds.h"
 #include "index/Index.h"
 #include "index/IndexImpl.h"
@@ -26,6 +22,7 @@
 #include "index/LocatedTriples.h"
 #include "index/TripleComponentConversions.h"
 #include "util/ChunkedForLoop.h"
+#include "util/FilesystemHelpers.h"
 #include "util/serializer/TripleSerializer.h"
 
 // ____________________________________________________________________________
@@ -582,7 +579,12 @@ DeltaTriples::DeltaTriples(const Index& index)
     : DeltaTriples(index.getImpl()) {}
 
 // ____________________________________________________________________________
-DeltaTriples::DeltaTriples(const IndexImpl& index) : index_{index} {}
+DeltaTriples::DeltaTriples(const IndexImpl& index)
+    : index_{index},
+      // The delta triples are part of the state of the index, not of a query,
+      // so they must not count toward the memory limit of the queries (which
+      // the allocator of the index typically is).
+      localVocab_{ad_utility::makeUnlimitedAllocator<Id>()} {}
 
 // ____________________________________________________________________________
 DeltaTriplesManager::DeltaTriplesManager(const IndexImpl& index)
@@ -740,13 +742,14 @@ void DeltaTriples::writeToDisk() const {
                }) |
            ql::views::join;
   };
-  ql::filesystem::path tempPath = filenameForPersisting_.value();
-  tempPath += ".tmp";
-  ad_utility::serializeIds(
-      tempPath, localVocab_,
-      std::array{toRange(triplesSetsNormal_.triplesDeleted_),
-                 toRange(triplesSetsNormal_.triplesInserted_)});
-  ql::filesystem::rename(tempPath, filenameForPersisting_.value());
+  qlever::util::writeFileAtomically(
+      filenameForPersisting_.value(),
+      [this, &toRange](const ql::filesystem::path& temporaryPath) {
+        ad_utility::serializeIds(
+            temporaryPath, localVocab_,
+            std::array{toRange(triplesSetsNormal_.triplesDeleted_),
+                       toRange(triplesSetsNormal_.triplesInserted_)});
+      });
 }
 
 // _____________________________________________________________________________
@@ -756,7 +759,8 @@ void DeltaTriples::readFromDisk() {
   }
   AD_CONTRACT_CHECK(localVocab_.empty());
   auto [vocab, idRanges] = ad_utility::deserializeIds(
-      filenameForPersisting_.value(), index_.getLocalVocabContext());
+      filenameForPersisting_.value(), index_.getLocalVocabContext(),
+      localVocab_.allocator());
   if (idRanges.empty()) {
     return;
   }

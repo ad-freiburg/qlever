@@ -92,11 +92,11 @@ std::optional<GeoDistanceCall> getGeoDistanceExpressionParameters(
       return std::nullopt;
     }
     if (constant->isIri()) {
-      return UnitOfMeasurementValueGetter::litOrIriToUnit(
+      return UnitOfMeasurementValueGetter::litOrIriToValue(
           LiteralOrIri{constant->getIri()});
     }
     if (constant->isLiteral()) {
-      return UnitOfMeasurementValueGetter::litOrIriToUnit(
+      return UnitOfMeasurementValueGetter::litOrIriToValue(
           LiteralOrIri{constant->getLiteral()});
     }
     return std::nullopt;

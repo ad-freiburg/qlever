@@ -10,11 +10,12 @@
 #include "./util/IdTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "engine/Result.h"
-#include "engine/Values.h"
 #include "engine/idTable/IdTable.h"
+#include "engine/operation/Values.h"
 #include "util/IndexTestHelpers.h"
 #include "util/LocalVocabEntryTestHelpers.h"
 #include "util/OperationTestHelpers.h"
+#include "util/VariableToColumnMapTestHelpers.h"
 
 using TC = TripleComponent;
 using ValuesComponents = std::vector<std::vector<TripleComponent>>;
@@ -48,10 +49,10 @@ TEST(Values, basicMethods) {
   EXPECT_FLOAT_EQ(valuesOp.getMultiplicity(4), 1.0f);
 
   using V = Variable;
-  VariableToColumnMap expectedVariables{
-      {V{"?x"}, makeAlwaysDefinedColumn(0)},
-      {V{"?y"}, makeAlwaysDefinedColumn(1)},
-      {V{"?z"}, makePossiblyUndefinedColumn(2)}};
+  auto expectedVariables =
+      makeVariableToColumnMap({{V{"?x"}, makeAlwaysDefinedColumn(0)},
+                               {V{"?y"}, makeAlwaysDefinedColumn(1)},
+                               {V{"?z"}, makePossiblyUndefinedColumn(2)}});
   EXPECT_THAT(valuesOp.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
 }

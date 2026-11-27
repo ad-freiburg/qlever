@@ -26,6 +26,7 @@
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
 #include "engine/sparqlExpressions/UuidExpressions.h"
+#include "util/VariableToColumnMapTestHelpers.h"
 
 namespace {
 
@@ -39,7 +40,7 @@ TEST(SparqlExpressionMemberFunctions, isResultAlwaysDefined) {
   using namespace ::testing;
 
   // Setup VariableToColumnMap with different variable statuses
-  VariableToColumnMap varColMap;
+  auto varColMap = makeVariableToColumnMap();
   Variable alwaysDefinedVar{"?alwaysDefined"};
   Variable possiblyUndefVar{"?possiblyUndef"};
   Variable unboundVar{"?unbound"};
@@ -209,7 +210,7 @@ TEST(SparqlExpressionMemberFunctions, isDeterministic) {
 
   EXPECT_TRUE(NowDatetimeExpression{"2024-06-18T12:00:00"}.isDeterministic());
 
-  ParsedQuery pq;
+  ParsedQuery pq{ad_utility::testing::makeAllocator()};
   EXPECT_TRUE(ExistsExpression{pq}.isDeterministic());
 
   EXPECT_FALSE(makeUniqueBlankNodeExpression()->isDeterministic());

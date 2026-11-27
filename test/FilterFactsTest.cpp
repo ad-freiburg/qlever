@@ -18,6 +18,7 @@
 #include "engine/filterFacts/Canonicalizer.h"
 #include "engine/filterFacts/Recognizers.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
+#include "util/RuntimeParametersTestHelpers.h"
 
 namespace {
 
@@ -33,18 +34,21 @@ struct Canonical {
   std::vector<Conjunct> conjuncts_;
 };
 
-// Parse `SELECT * { ?a <p> ?ga . ?b <p> ?gb . FILTER(<filter>) }` and
-// canonicalize its FILTER.
-Canonical canonical(std::string_view filter) {
+// Parse `SELECT * { ?a <p> ?ga . ?b <p> ?gb . <definitions> FILTER(<filter>)
+// }` and canonicalize its FILTER with the definitions of the group.
+Canonical canonical(std::string_view filter,
+                    std::string_view definitions = "") {
   Canonical result{
       ad_utility::testing::parseQuery(absl::StrCat(
           "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
           "PREFIX unit: <http://qudt.org/vocab/unit/> "
-          "SELECT * { ?a <p> ?ga . ?b <p> ?gb . FILTER(",
-          filter, ") }")),
+          "SELECT * { ?a <p> ?ga . ?b <p> ?gb . ",
+          definitions, " FILTER(", filter, ") }")),
       {}};
-  for (const auto& f : result.query_._rootGraphPattern._filters) {
-    ql::ranges::move(canonicalize(f.expression_),
+  const auto& group = result.query_._rootGraphPattern;
+  auto defs = collectDefinitions(group._graphPatterns);
+  for (const auto& f : group._filters) {
+    ql::ranges::move(canonicalize(f.expression_, defs),
                      std::back_inserter(result.conjuncts_));
   }
   return result;
@@ -116,6 +120,100 @@ TEST(FilterFactsCanonicalizer, Distance) {
                   distanceComparison(Comparison::LT, 400)));
 }
 
+// Test that a variable is replaced by its definition from `VALUES` or `BIND`
+// (for the distance and the number).
+TEST(FilterFactsCanonicalizer, Definitions) {
+  auto expect = [](std::string_view definitions, std::string_view filter,
+                   Comparison op, double meters,
+                   ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    EXPECT_THAT(canonical(filter, definitions).conjuncts_,
+                ElementsAre(distanceComparison(op, meters)));
+  };
+  expect("VALUES ?r { 500 }", "geof:metricDistance(?ga, ?gb) <= ?r",
+         Comparison::LE, 500);
+  expect("BIND(0.5 AS ?r)", "geof:distance(?ga, ?gb) < ?r", Comparison::LT,
+         500);
+  expect("BIND(geof:metricDistance(?ga, ?gb) AS ?d)", "?d <= 500",
+         Comparison::LE, 500);
+
+  // A variable with several values is not replaced.
+  auto several =
+      canonical("geof:metricDistance(?ga, ?gb) <= ?r", "VALUES ?r { 500 600 }");
+  EXPECT_THAT(several.conjuncts_,
+              ElementsAre(opaque(several.query_._rootGraphPattern._filters[0]
+                                     .expression_.getPimpl())));
+
+  // A variable without a value (two `VALUES` clauses without a common value) is
+  // not replaced.
+  auto none = canonical("geof:metricDistance(?ga, ?gb) <= ?r",
+                        "VALUES ?r { 500 } VALUES ?r { 600 }");
+  EXPECT_THAT(
+      none.conjuncts_,
+      ElementsAre(opaque(
+          none.query_._rootGraphPattern._filters[0].expression_.getPimpl())));
+}
+
+// Test that only the columns of `VALUES` without `UNDEF`, the `BIND`s of
+// constants and the `BIND`s whose target is equivalent to their expression are
+// definitions.
+TEST(FilterFactsCanonicalizer, CollectDefinitions) {
+  using ::testing::Key;
+  using ::testing::UnorderedElementsAre;
+  auto query = ad_utility::testing::parseQuery(
+      "SELECT * { ?a <p> ?ga . BIND(?ga AS ?x) BIND(STR(?x) AS ?u) "
+      "BIND(?gb AS ?y) ?b <p> ?gb . "
+      "BIND(RAND() AS ?z) BIND(NOW() AS ?n) BIND(?ga AS ?w) ?w <q> ?o . "
+      "VALUES (?r ?s) { (1 UNDEF) } BIND(500 AS ?c) ?c <q> ?o2 }");
+  auto defs = collectDefinitions(query._rootGraphPattern._graphPatterns);
+
+  // `?x` is only used by a later `BIND` and `NOW()` is the same in all rows,
+  // but `?u` uses `?x`, which may be unbound, `?y` is bound before `?gb`, `?z`
+  // is not deterministic, and `?w` is bound again by a later triple.
+  EXPECT_THAT(defs.expressions_,
+              UnorderedElementsAre(Key(V{"?x"}), Key(V{"?n"})));
+
+  // The target of a `BIND` of a constant has this value, even if a later
+  // triple binds it again.
+  EXPECT_THAT(defs.constants_,
+              UnorderedElementsAre(Key(V{"?r"}), Key(V{"?c"})));
+
+  // A later subquery with a `GROUP BY` may bind the target by an alias of its
+  // `SELECT` clause, and a later named cached result may bind any variable.
+  auto subquery = ad_utility::testing::parseQuery(
+      "SELECT * { ?a <p> ?ga . BIND(?ga AS ?x) BIND(?ga AS ?y) "
+      "{ SELECT (MIN(?o) AS ?x) { ?s <q> ?o } GROUP BY ?s } }");
+  EXPECT_THAT(collectDefinitions(subquery._rootGraphPattern._graphPatterns)
+                  .expressions_,
+              UnorderedElementsAre(Key(V{"?y"})));
+  auto cached = ad_utility::testing::parseQuery(
+      "SELECT * { ?a <p> ?ga . BIND(?ga AS ?x) "
+      "SERVICE ql:cached-result-with-name-foo {} }");
+  EXPECT_THAT(
+      collectDefinitions(cached._rootGraphPattern._graphPatterns).expressions_,
+      ::testing::IsEmpty());
+
+  // A variable of several `VALUES` clauses has the values in all of them
+  // without `UNDEF` in its column.
+  auto values = ad_utility::testing::parseQuery(
+      "SELECT * { VALUES ?r { 1 2 3 } VALUES ?r { UNDEF 1 4 } "
+      "VALUES ?r { 3 4 2 } }");
+  EXPECT_THAT(
+      collectDefinitions(values._rootGraphPattern._graphPatterns).constants_,
+      UnorderedElementsAre(::testing::Pair(
+          V{"?r"}, ElementsAre(TripleComponent{2}, TripleComponent{3}))));
+
+  // A `BIND` of `UNDEF` (here of an unknown function in the syntax test mode)
+  // is not a constant, because a later triple binds its target freely.
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::syntaxTestMode_>(true);
+  auto undef = ad_utility::testing::parseQuery(
+      "SELECT * { BIND(<unknown>() AS ?u) ?u <q> ?o }");
+  EXPECT_THAT(
+      collectDefinitions(undef._rootGraphPattern._graphPatterns).constants_,
+      ::testing::IsEmpty());
+}
+
 // Test that every other expression stays `Opaque`.
 TEST(FilterFactsCanonicalizer, Opaque) {
   // Expect that `filter` is a single `Opaque` conjunct with the whole
@@ -137,6 +235,7 @@ TEST(FilterFactsCanonicalizer, Opaque) {
   // A right side that is not a number.
   expectOpaque("geof:metricDistance(?ga, ?gb) <= \"500\"");
   expectOpaque("geof:metricDistance(?ga, ?gb) <= ?a");
+  expectOpaque("geof:metricDistance(?ga, ?gb) <= STRLEN(?a)");
 
   // A left side that is not a distance in a unit of length.
   expectOpaque("geof:metricDistance(?ga, ?gb) + 1 <= 500");

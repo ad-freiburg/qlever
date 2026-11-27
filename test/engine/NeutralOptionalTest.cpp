@@ -9,8 +9,8 @@
 #include "../util/LocalVocabEntryTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
 #include "./ValuesForTesting.h"
-#include "engine/NeutralOptional.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/operation/NeutralOptional.h"
 
 // _____________________________________________________________________________
 TEST(NeutralOptional, getChildren) {
@@ -279,7 +279,7 @@ TEST(NeutralOptional, ensureSingleRowWhenChildIsEmpty) {
 // _____________________________________________________________________________
 TEST(NeutralOptional, ensureResultIsProperlyPropagated) {
   auto* qec = ad_utility::testing::getQec();
-  LocalVocab localVocab{};
+  LocalVocab localVocab{ad_utility::testing::makeAllocator()};
   localVocab.getIndexAndAddIfNotContained(
       ad_utility::testing::localVocabEntryFromStringRepresentation(
           "\"Test\"", qec->getLocalVocabContext()));

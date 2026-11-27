@@ -9,20 +9,21 @@
 #include "./util/ColumnStrippingTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
+#include "./util/LocalVocabTestHelpers.h"
 #include "./util/RuntimeParametersTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
-#include "engine/ExistsJoin.h"
-#include "engine/GroupBy.h"
-#include "engine/GroupByImpl.h"
-#include "engine/IndexScan.h"
-#include "engine/Join.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
 #include "engine/QueryPlanner.h"
-#include "engine/Sort.h"
-#include "engine/StripColumns.h"
-#include "engine/Values.h"
 #include "engine/ValuesForTesting.h"
+#include "engine/operation/ExistsJoin.h"
+#include "engine/operation/GroupBy.h"
+#include "engine/operation/GroupByImpl.h"
+#include "engine/operation/IndexScan.h"
+#include "engine/operation/Join.h"
+#include "engine/operation/Sort.h"
+#include "engine/operation/StripColumns.h"
+#include "engine/operation/Values.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/BlankNodeExpression.h"
 #include "engine/sparqlExpressions/CountStarExpression.h"
@@ -42,6 +43,9 @@
 #include "util/IndexTestHelpers.h"
 #include "util/LocalVocabEntryTestHelpers.h"
 #include "util/OperationTestHelpers.h"
+#include "util/VariableToColumnMapTestHelpers.h"
+
+using ad_utility::testing::makeLocalVocab;
 
 static constexpr auto executor = &ad_utility::testing::singleThreadExecutor;
 
@@ -456,7 +460,7 @@ TEST_F(GroupByOptimizations, countStarOptimizationWorksAsExpected) {
         qec,
         makeIdTableFromVector({{Id::makeUndefined()}, {1}, {2}, {2}, {4}, {8}}),
         std::vector<std::optional<Variable>>{Variable{"?a"}}, false,
-        std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt, true);
+        std::vector<ColumnIndex>{}, makeLocalVocab(), std::nullopt, true);
     GroupByImpl groupBy{
         qec,
         {},
@@ -701,7 +705,7 @@ TEST_F(GroupByOptimizations, existsInGroupByAlias) {
 
   auto makeExistsArgument = [](const std::vector<Variable>& variables,
                                const std::vector<std::vector<int64_t>>& rows) {
-    ParsedQuery pq;
+    ParsedQuery pq{makeAllocator()};
     parsedQuery::Values valuesClause;
     valuesClause._inlineValues._variables = variables;
     for (const auto& row : rows) {
@@ -918,11 +922,11 @@ TEST_F(GroupByOptimizations,
   // Check the result.
   auto d = DoubleId;
   using enum ColumnIndexAndTypeInfo::UndefStatus;
-  VariableToColumnMap expectedVariables{
-      {Variable{"?a"}, {0, AlwaysDefined}},
-      {Variable{"?b"}, {1, AlwaysDefined}},
-      {Variable{"?x"}, {2, PossiblyUndefined}},
-      {Variable{"?y"}, {3, PossiblyUndefined}}};
+  auto expectedVariables =
+      makeVariableToColumnMap({{Variable{"?a"}, {0, AlwaysDefined}},
+                               {Variable{"?b"}, {1, AlwaysDefined}},
+                               {Variable{"?x"}, {2, PossiblyUndefined}},
+                               {Variable{"?y"}, {3, PossiblyUndefined}}});
   EXPECT_THAT(groupBy.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
   auto expected = makeIdTableFromVector(
@@ -975,10 +979,10 @@ TEST_F(GroupByOptimizations,
   // Check the result.
   auto d = DoubleId;
   using enum ColumnIndexAndTypeInfo::UndefStatus;
-  VariableToColumnMap expectedVariables{
-      {Variable{"?a"}, {0, AlwaysDefined}},
-      {Variable{"?b"}, {1, AlwaysDefined}},
-      {Variable{"?x"}, {2, PossiblyUndefined}}};
+  auto expectedVariables =
+      makeVariableToColumnMap({{Variable{"?a"}, {0, AlwaysDefined}},
+                               {Variable{"?b"}, {1, AlwaysDefined}},
+                               {Variable{"?x"}, {2, PossiblyUndefined}}});
   EXPECT_THAT(groupBy.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
   auto expected = makeIdTableFromVector(
@@ -1031,10 +1035,10 @@ TEST_F(GroupByOptimizations,
   // Check the result.
   auto d = DoubleId;
   using enum ColumnIndexAndTypeInfo::UndefStatus;
-  VariableToColumnMap expectedVariables{
-      {Variable{"?a"}, {0, AlwaysDefined}},
-      {Variable{"?c"}, {1, AlwaysDefined}},
-      {Variable{"?x"}, {2, PossiblyUndefined}}};
+  auto expectedVariables =
+      makeVariableToColumnMap({{Variable{"?a"}, {0, AlwaysDefined}},
+                               {Variable{"?c"}, {1, AlwaysDefined}},
+                               {Variable{"?x"}, {2, PossiblyUndefined}}});
   EXPECT_THAT(groupBy.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
   auto expected = makeIdTableFromVector(
@@ -1095,14 +1099,14 @@ TEST_F(GroupByOptimizations, correctResultForHashMapOptimizationManyVariables) {
   // Check the result.
   auto d = DoubleId;
   using enum ColumnIndexAndTypeInfo::UndefStatus;
-  VariableToColumnMap expectedVariables{
-      {Variable{"?a"}, {0, AlwaysDefined}},
-      {Variable{"?b"}, {1, AlwaysDefined}},
-      {Variable{"?c"}, {2, AlwaysDefined}},
-      {Variable{"?d"}, {3, AlwaysDefined}},
-      {Variable{"?e"}, {4, AlwaysDefined}},
-      {Variable{"?f"}, {5, AlwaysDefined}},
-      {Variable{"?x"}, {6, PossiblyUndefined}}};
+  auto expectedVariables =
+      makeVariableToColumnMap({{Variable{"?a"}, {0, AlwaysDefined}},
+                               {Variable{"?b"}, {1, AlwaysDefined}},
+                               {Variable{"?c"}, {2, AlwaysDefined}},
+                               {Variable{"?d"}, {3, AlwaysDefined}},
+                               {Variable{"?e"}, {4, AlwaysDefined}},
+                               {Variable{"?f"}, {5, AlwaysDefined}},
+                               {Variable{"?x"}, {6, PossiblyUndefined}}});
   EXPECT_THAT(groupBy.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
   auto expected =
@@ -1169,11 +1173,11 @@ TEST_F(GroupByOptimizations, hashMapOptimizationGroupedVariable) {
   // Check the result.
   auto d = DoubleId;
   using enum ColumnIndexAndTypeInfo::UndefStatus;
-  VariableToColumnMap expectedVariables{
-      {Variable{"?a"}, {0, AlwaysDefined}},
-      {Variable{"?x"}, {1, PossiblyUndefined}},
-      {Variable{"?y"}, {2, PossiblyUndefined}},
-      {Variable{"?z"}, {3, PossiblyUndefined}}};
+  auto expectedVariables =
+      makeVariableToColumnMap({{Variable{"?a"}, {0, AlwaysDefined}},
+                               {Variable{"?x"}, {1, PossiblyUndefined}},
+                               {Variable{"?y"}, {2, PossiblyUndefined}},
+                               {Variable{"?z"}, {3, PossiblyUndefined}}});
   EXPECT_THAT(groupBy.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
   auto expected = makeIdTableFromVector(
@@ -1244,11 +1248,11 @@ TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxSum) {
   auto i = IntId;
   auto undef = ValueId::makeUndefined();
   using enum ColumnIndexAndTypeInfo::UndefStatus;
-  VariableToColumnMap expectedVariables{
-      {Variable{"?a"}, {0, AlwaysDefined}},
-      {Variable{"?x"}, {1, PossiblyUndefined}},
-      {Variable{"?z"}, {2, PossiblyUndefined}},
-      {Variable{"?w"}, {3, PossiblyUndefined}}};
+  auto expectedVariables =
+      makeVariableToColumnMap({{Variable{"?a"}, {0, AlwaysDefined}},
+                               {Variable{"?x"}, {1, PossiblyUndefined}},
+                               {Variable{"?z"}, {2, PossiblyUndefined}},
+                               {Variable{"?w"}, {3, PossiblyUndefined}}});
   EXPECT_THAT(groupBy.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
   // The sum `13.37 + 1.0 + 4.0` differs from the double `18.37` in the lowest
@@ -1332,11 +1336,11 @@ TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxSumIntegers) {
   // Check the result.
   auto i = IntId;
   using enum ColumnIndexAndTypeInfo::UndefStatus;
-  VariableToColumnMap expectedVariables{
-      {Variable{"?a"}, {0, AlwaysDefined}},
-      {Variable{"?x"}, {1, PossiblyUndefined}},
-      {Variable{"?z"}, {2, PossiblyUndefined}},
-      {Variable{"?w"}, {3, PossiblyUndefined}}};
+  auto expectedVariables =
+      makeVariableToColumnMap({{Variable{"?a"}, {0, AlwaysDefined}},
+                               {Variable{"?x"}, {1, PossiblyUndefined}},
+                               {Variable{"?z"}, {2, PossiblyUndefined}},
+                               {Variable{"?w"}, {3, PossiblyUndefined}}});
   EXPECT_THAT(groupBy.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
   auto expected = makeIdTableFromVector(
@@ -2389,10 +2393,10 @@ TEST(GroupBy, GroupedVariableInExpressions) {
   // Check the result.
   auto d = DoubleId;
   using enum ColumnIndexAndTypeInfo::UndefStatus;
-  VariableToColumnMap expectedVariables{
-      {Variable{"?a"}, {0, AlwaysDefined}},
-      {Variable{"?x"}, {1, PossiblyUndefined}},
-      {Variable{"?y"}, {2, PossiblyUndefined}}};
+  auto expectedVariables =
+      makeVariableToColumnMap({{Variable{"?a"}, {0, AlwaysDefined}},
+                               {Variable{"?x"}, {1, PossiblyUndefined}},
+                               {Variable{"?y"}, {2, PossiblyUndefined}}});
   EXPECT_THAT(groupBy.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
   auto expected =
@@ -2452,10 +2456,10 @@ TEST(GroupBy, AliasResultReused) {
   // Check the result.
   auto d = DoubleId;
   using enum ColumnIndexAndTypeInfo::UndefStatus;
-  VariableToColumnMap expectedVariables{
-      {Variable{"?a"}, {0, AlwaysDefined}},
-      {Variable{"?x"}, {1, PossiblyUndefined}},
-      {Variable{"?y"}, {2, PossiblyUndefined}}};
+  auto expectedVariables =
+      makeVariableToColumnMap({{Variable{"?a"}, {0, AlwaysDefined}},
+                               {Variable{"?x"}, {1, PossiblyUndefined}},
+                               {Variable{"?y"}, {2, PossiblyUndefined}}});
   EXPECT_THAT(groupBy.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
   auto expected =
@@ -2474,8 +2478,8 @@ TEST(GroupBy, AddedHavingRows) {
       " VALUES (?x ?y) {(0 1) (0 3) (0 5) (1 4) (1 3) } }"
       "GROUP BY ?x HAVING (?count > 2)";
   auto qec = ad_utility::testing::getQec();
-  auto pq =
-      SparqlParser::parseQuery(&qec->getIndex().encodedIriManager(), query);
+  auto pq = SparqlParser::parseQuery(&qec->getIndex().encodedIriManager(),
+                                     makeAllocator(), query);
   QueryPlanner qp{qec, std::make_shared<ad_utility::CancellationHandle<>>()};
   auto tree = qp.createExecutionTree(pq);
 
@@ -2486,10 +2490,10 @@ TEST(GroupBy, AddedHavingRows) {
   EXPECT_THAT(pq.selectClause().getSelectedVariables(),
               ::testing::ElementsAre(Variable{"?x"}, Variable{"?count"}));
   using enum ColumnIndexAndTypeInfo::UndefStatus;
-  VariableToColumnMap expectedVariables{
-      {Variable{"?x"}, {0, AlwaysDefined}},
-      {Variable{"?count"}, {1, PossiblyUndefined}},
-      {Variable{"?_QLever_internal_variable_0"}, {2, PossiblyUndefined}}};
+  auto expectedVariables = makeVariableToColumnMap(
+      {{Variable{"?x"}, {0, AlwaysDefined}},
+       {Variable{"?count"}, {1, PossiblyUndefined}},
+       {Variable{"?_QLever_internal_variable_0"}, {2, PossiblyUndefined}}});
   EXPECT_THAT(tree->getVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
   const auto& table = res->idTableView();
@@ -2897,7 +2901,7 @@ TEST(GroupBy, localVocabIsProperlyCloned) {
   idTables.push_back(makeIdTableFromVector({{1}, {2}}, &Id::makeFromInt));
   idTables.push_back(makeIdTableFromVector({{2}}, &Id::makeFromInt));
   // This issue occurs only when the vocab contains any actual values.
-  LocalVocab dummy{};
+  LocalVocab dummy = makeLocalVocab();
   dummy.getIndexAndAddIfNotContained(localVocabEntryFromStringRepresentation(
       "\"dummy\"", qec->getLocalVocabContext()));
   auto subtree = makeExecutionTree<ValuesForTesting>(
@@ -3977,7 +3981,8 @@ TEST(GroupBy, aggregateOfComputedEncodableIri) {
         setRuntimeParameterForTest<&RuntimeParameters::groupByHashMapEnabled_>(
             hashMapEnabled);
     qec->clearCacheUnpinnedOnly();
-    auto parsedQuery = SparqlParser::parseQuery(&encodedIriManager, query, {});
+    auto parsedQuery = SparqlParser::parseQuery(&encodedIriManager,
+                                                makeAllocator(), query, {});
     QueryPlanner qp{qec, std::make_shared<ad_utility::CancellationHandle<>>()};
     auto qet = qp.createExecutionTree(parsedQuery);
     auto result = qet->getResult();

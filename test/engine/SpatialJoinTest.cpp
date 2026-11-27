@@ -1,7 +1,7 @@
 //  Copyright 2024 - 2025, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
 //  Author: @Jonathan24680
-//  Author: Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
+//  Author: Christoph Ullinger <ullingec@cs.uni-freiburg.de>
 
 #include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
@@ -22,18 +22,20 @@
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/LocalVocabTestHelpers.h"
 #include "../util/RuntimeParametersTestHelpers.h"
+#include "../util/VariableToColumnMapTestHelpers.h"
 #include "./SpatialJoinTestHelpers.h"
 #include "./ValuesForTesting.h"
 #include "engine/ExportQueryExecutionTrees.h"
-#include "engine/IndexScan.h"
-#include "engine/Join.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryPlanner.h"
-#include "engine/SpatialJoin.h"
 #include "engine/SpatialJoinConfig.h"
 #include "engine/VariableToColumnMap.h"
+#include "engine/operation/IndexScan.h"
+#include "engine/operation/Join.h"
+#include "engine/operation/SpatialJoin.h"
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "index/ExportIds.h"
@@ -42,6 +44,8 @@
 #include "parser/SparqlParser.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
 #include "rdfTypes/Variable.h"
+
+using ad_utility::testing::makeLocalVocab;
 
 namespace {  // anonymous namespace to avoid linker problems
 
@@ -240,12 +244,12 @@ std::shared_ptr<SpatialJoin> makeSpatialJoinFromValues(
       std::make_shared<ad_utility::CancellationHandle<>>();
   // also include some garbage input geometries
   auto pqLeft = SparqlParser::parseQuery(
-      &encodedIriManager,
+      &encodedIriManager, makeAllocator(),
       "PREFIX geo: <http://www.opengis.net/ont/geosparql#>\nSELECT ?a {VALUES "
       "(?a) {(\"POLYGON((8.529 47.375, 8.549 47.375, 8.549 47.395, 8.529 "
       "47.395, 8.529 47.375))\"^^geo:wktLiteral) (\"garbage\") (5) (<>)}}");
   auto pqRight = SparqlParser::parseQuery(
-      &encodedIriManager,
+      &encodedIriManager, makeAllocator(),
       "PREFIX geo: <http://www.opengis.net/ont/geosparql#>\nSELECT ?b {VALUES "
       "(?b) {(\"POINT(8.542 47.385)\"^^geo:wktLiteral)}}");
   QueryPlanner qp{qec, sharedHandle};
@@ -404,20 +408,23 @@ class SpatialJoinVarColParamTest
 
         if (tableEntry.getDatatype() == Datatype::VocabIndex) {
           std::string value =
-              ql::exportIds::idToStringAndType(qec->getIndex(), tableEntry, {})
+              ql::exportIds::idToStringAndType(qec->getIndex(), tableEntry,
+                                               LocalVocab{qec->getAllocator()})
                   .value()
                   .first;
           ASSERT_TRUE(value.find(expectedColumns.at(i).second, 0) !=
                       std::string::npos);
         } else if (tableEntry.getDatatype() == Datatype::Int) {
           std::string value =
-              ql::exportIds::idToStringAndType(qec->getIndex(), tableEntry, {})
+              ql::exportIds::idToStringAndType(qec->getIndex(), tableEntry,
+                                               LocalVocab{qec->getAllocator()})
                   .value()
                   .first;
           ASSERT_EQ(value, expectedColumns.at(i).second);
         } else if (tableEntry.getDatatype() == Datatype::GeoPoint) {
           auto [value, type] =
-              ql::exportIds::idToStringAndType(qec->getIndex(), tableEntry, {})
+              ql::exportIds::idToStringAndType(qec->getIndex(), tableEntry,
+                                               LocalVocab{qec->getAllocator()})
                   .value();
           value = absl::StrCat("\"", value, "\"^^<", type, ">");
           ASSERT_TRUE(value.find(expectedColumns.at(i).second, 0) !=
@@ -478,7 +485,8 @@ class SpatialJoinVarColParamTest
         columnEntries.reserve(r->numRows());
         for (const auto& valueId : col) {
           auto [value, type] =
-              ql::exportIds::idToStringAndType(qec->getIndex(), valueId, {})
+              ql::exportIds::idToStringAndType(qec->getIndex(), valueId,
+                                               LocalVocab{qec->getAllocator()})
                   .value();
           if (valueId.getDatatype() == Datatype::GeoPoint) {
             value = absl::StrCat("\"", value, "\"^^<", type, ">");
@@ -546,7 +554,7 @@ class SpatialJoinVarColParamTest
                             bool addDist, bool withObj, bool withName,
                             bool withGeo) -> VariableToColumnMap {
       size_t currentColumn = 0;
-      VariableToColumnMap expected;
+      auto expected = makeVariableToColumnMap();
 
       auto addV = [&](std::vector<V> vec, bool right = false) {
         for (auto v : vec) {
@@ -743,11 +751,11 @@ TEST(SpatialJoinVarColTest, ChildResultWidth) {
   // The `SpatialJoin`'s `VariableToColumnMap` is expected to include all named
   // columns from the left child and from the right child only the requested
   // ones.
-  VariableToColumnMap expectedVarToCol{
+  auto expectedVarToCol = makeVariableToColumnMap({
       {V{"?a"}, makeAlwaysDefinedColumn(0)},
       {V{"?b"}, makeAlwaysDefinedColumn(1)},
       {V{"?c"}, makeAlwaysDefinedColumn(2)},
-  };
+  });
   EXPECT_THAT(spatialJoin->getVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVarToCol));
 }
@@ -795,11 +803,11 @@ TEST(SpatialJoinVarColTest, InvisibleColumnsAndWithinSwap) {
 
   // We expect the three visible columns (two join cols and the payload column)
   // to be in the result, but not the invisible column.
-  VariableToColumnMap expectedVarToCol{
+  auto expectedVarToCol = makeVariableToColumnMap({
       {Variable{"?a"}, makeAlwaysDefinedColumn(0)},
       {Variable{"?b"}, makeAlwaysDefinedColumn(1)},
       {Variable{"?c"}, makeAlwaysDefinedColumn(2)},
-  };
+  });
   EXPECT_THAT(spatialJoin->getVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVarToCol));
 
@@ -1367,8 +1375,8 @@ Id wktLiteralId(QueryExecutionContext* qec, LocalVocab& localVocab,
       LocalVocabEntry{std::move(literal), qec->getLocalVocabContext()}));
 }
 
-// Regression test for assertion error caused by only invalid geometries
-// surviving prefiltering:
+// Test that a side with only invalid geometries after prefiltering counts as
+// empty (instead of causing an assertion error), for example in:
 //
 // PREFIX geo: <http://www.opengis.net/ont/geosparql#>
 // PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
@@ -1382,7 +1390,7 @@ TEST(SpatialJoin, InvalidGeometriesAreExcludedFromNonEmptyCheck) {
   auto* qec = ad_utility::testing::getQec();
 
   // Build the valid and invalid literals.
-  LocalVocab localVocab;
+  LocalVocab localVocab = makeLocalVocab();
   auto wktId = [&](std::string_view wkt) {
     return wktLiteralId(qec, localVocab, wkt);
   };
@@ -1423,7 +1431,7 @@ TEST(SpatialJoin, InvalidGeometriesAreExcludedFromNonEmptyCheck) {
   EXPECT_EQ(result.idTableView().numRows(), 0);
 
   // Only `POINT(0 0)` from `?a` is a valid geometry that was added to the
-  // sweeper; none of the values of `?b` (two invalid literals and one point
+  // event lists; none of the values of `?b` (two invalid literals and one point
   // that is not contained in `?a`) contribute a valid geometry.
   auto details = spatialJoin->runtimeInfo().details_;
   EXPECT_THAT(details, AllOf(HasKeyMatching("num-valid-geoms-parsed", Eq(1)),
@@ -1435,12 +1443,52 @@ TEST(SpatialJoin, InvalidGeometriesAreExcludedFromNonEmptyCheck) {
                   "invalid or unsupported geometry literals (?b: 2)")));
 }
 
+// Test that no geometry of the larger side is added if the smaller side has no
+// valid geometry, also for a join type that otherwise adds geometries outside
+// of the bounding box of the smaller side.
+TEST(SpatialJoin, NoValidGeometryOnSmallerSideSkipsLargerSide) {
+  auto* qec = ad_utility::testing::getQec();
+  LocalVocab localVocab = makeLocalVocab();
+  auto wktId = [&](std::string_view wkt) {
+    return wktLiteralId(qec, localVocab, wkt);
+  };
+  auto makeChild = [&](const Variable& var, const VectorTable& rows) {
+    return ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, makeIdTableFromVector(rows),
+        std::vector<std::optional<Variable>>{var}, false,
+        std::vector<ColumnIndex>{}, localVocab.clone());
+  };
+
+  // `?a`: one invalid literal. `?b`: two valid polygons (as literals, which
+  // are never skipped before parsing).
+  VectorTable a{{wktId("not wkt")}};
+  VectorTable b{{wktId("POLYGON((0 0,1 0,1 1,0 0))")},
+                {wktId("POLYGON((5 5,6 5,6 6,5 5))")}};
+  auto spatialJoinOperation = ad_utility::makeExecutionTree<SpatialJoin>(
+      qec,
+      SpatialJoinConfiguration{LibSpatialJoinConfig{SpatialJoinType::CONTAINS},
+                               Variable{"?a"}, Variable{"?b"}, std::nullopt,
+                               PayloadVariables::all(),
+                               SpatialJoinAlgorithm::LIBSPATIALJOIN},
+      makeChild(Variable{"?a"}, a), makeChild(Variable{"?b"}, b));
+  auto spatialJoin = std::dynamic_pointer_cast<SpatialJoin>(
+      spatialJoinOperation->getRootOperation());
+
+  // The result is empty, and all three literals are parsed, but none of them
+  // is added to the event lists.
+  auto result = spatialJoin->computeResult(false);
+  EXPECT_EQ(result.idTableView().numRows(), 0);
+  EXPECT_THAT(spatialJoin->runtimeInfo().details_,
+              AllOf(HasKeyMatching("num-valid-geoms-parsed", Eq(0)),
+                    HasKeyMatching("num-geoms-parsed", Eq(3))));
+}
+
 // Test that the warning for skipped rows lists the left side before the
 // right side, no matter which of the two is the smaller side (which the
 // algorithm parses first).
 TEST(SpatialJoin, InvalidGeometriesWarningListsLeftSideFirst) {
   auto* qec = ad_utility::testing::getQec();
-  LocalVocab localVocab;
+  LocalVocab localVocab = makeLocalVocab();
   auto wktId = [&](std::string_view wkt) {
     return wktLiteralId(qec, localVocab, wkt);
   };
@@ -1497,7 +1545,7 @@ TEST(SpatialJoin, InvalidGeometriesWarningListsLeftSideFirst) {
 // not a valid geometry, each with the number of skipped rows per side.
 TEST(SpatialJoin, SkippedRowsWarning) {
   auto* qec = ad_utility::testing::getQec();
-  LocalVocab localVocab;
+  LocalVocab localVocab = makeLocalVocab();
   auto wktId = [&](std::string_view wkt) {
     return wktLiteralId(qec, localVocab, wkt);
   };

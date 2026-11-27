@@ -4,10 +4,14 @@
 
 #include <gtest/gtest.h>
 
+#include "./util/LocalVocabTestHelpers.h"
 #include "engine/Result.h"
 #include "util/ContainersWithAllocator.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
+#include "util/VariableToColumnMapTestHelpers.h"
+
+using ad_utility::testing::makeLocalVocab;
 
 using namespace std::chrono_literals;
 using ::testing::AnyOf;
@@ -46,7 +50,7 @@ std::vector<Result::Generator> getAllSubSplits(const IdTable& idTable) {
       for (size_t i = 0; i < clone.size(); ++i) {
         subSplit.push_back(clone[i]);
         if (splitIndex < split.size() && split[splitIndex] == i) {
-          IdTableVocabPair pair{std::move(subSplit), LocalVocab{}};
+          IdTableVocabPair pair{std::move(subSplit), makeLocalVocab()};
           co_yield pair;
           // Move back if not moved out to reuse buffer.
           subSplit = std::move(pair.idTable_);
@@ -55,7 +59,7 @@ std::vector<Result::Generator> getAllSubSplits(const IdTable& idTable) {
         }
       }
       if (subSplit.size() > 0) {
-        co_yield {std::move(subSplit), LocalVocab{}};
+        co_yield {std::move(subSplit), makeLocalVocab()};
       }
     }(std::move(reverseIndex), idTable.clone()));
   }
@@ -79,7 +83,7 @@ TEST(Result, verifyIdTableThrowsWhenActuallyLazy) {
 // _____________________________________________________________________________
 TEST(Result, idTableViewReturnsViewOfMaterializedTable) {
   auto idTable = makeIdTableFromVector({{1, 2}, {3, 4}});
-  Result result{idTable.clone(), sortOrder(), LocalVocab{}};
+  Result result{idTable.clone(), sortOrder(), makeLocalVocab()};
   ASSERT_TRUE(result.isFullyMaterialized());
   IdTableView<0> view = result.idTableView();
   EXPECT_EQ(view.numRows(), 2u);
@@ -98,12 +102,13 @@ TEST(Result, idTableViewThrowsWhenActuallyLazy) {
 // _____________________________________________________________________________
 TEST(Result, cloneIdTableReturnsCopy) {
   auto idTable = makeIdTableFromVector({{1, 2}, {3, 4}});
-  Result result{idTable.clone(), sortOrder(), LocalVocab{}};
+  Result result{idTable.clone(), sortOrder(), makeLocalVocab()};
   ASSERT_TRUE(result.isFullyMaterialized());
   IdTable cloned = result.cloneIdTable();
   EXPECT_EQ(cloned, idTable);
   // Verify it is a deep copy, not a reference to the same data.
-  EXPECT_NE(&cloned(0, 0), &result.idTableView()(0, 0));
+  EXPECT_NE(memoryOf(cloned.getColumn(0)),
+            memoryOf(result.idTableView().getColumn(0)));
 }
 
 // _____________________________________________________________________________
@@ -127,7 +132,7 @@ TEST(Result, verifyIdTableThrowsOnSecondAccess) {
 // _____________________________________________________________________________
 TEST(Result, verifyIdTablesThrowsWhenFullyMaterialized) {
   Result result1{IdTable{ad_utility::makeUnlimitedAllocator<IdTable>()},
-                 sortOrder(), LocalVocab{}};
+                 sortOrder(), makeLocalVocab()};
   EXPECT_TRUE(result1.isFullyMaterialized());
   EXPECT_THROW(result1.idTables(), ad_utility::Exception);
 
@@ -159,12 +164,13 @@ TEST_P(ResultSortTest, verifyAssertSortOrderIsRespectedSucceedsWhenSorted) {
   }
 
   if (std::get<0>(GetParam())) {
-    EXPECT_NO_THROW((Result{std::move(idTable),
-                            sortOrder(std::get<1>(GetParam())), LocalVocab{}}));
+    EXPECT_NO_THROW(
+        (Result{std::move(idTable), sortOrder(std::get<1>(GetParam())),
+                makeLocalVocab()}));
   } else {
     AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
         (Result{std::move(idTable), sortOrder(std::get<1>(GetParam())),
-                LocalVocab{}}),
+                makeLocalVocab()}),
         HasSubstr("compareRowsBySortColumns"), ad_utility::Exception);
   }
 }
@@ -185,7 +191,7 @@ TEST(Result,
   auto matcher = HasSubstr("colIndex < idTable.numColumns()");
 
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      (Result{idTable.clone(), sortOrder({3}), LocalVocab{}}), matcher,
+      (Result{idTable.clone(), sortOrder({3}), makeLocalVocab()}), matcher,
       Exception);
 
   for (auto& generator : getAllSubSplits(idTable)) {
@@ -195,8 +201,8 @@ TEST(Result,
   }
 
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      (Result{idTable.clone(), sortOrder({2, 1337}), LocalVocab{}}), matcher,
-      Exception);
+      (Result{idTable.clone(), sortOrder({2, 1337}), makeLocalVocab()}),
+      matcher, Exception);
 
   for (auto& generator : getAllSubSplits(idTable)) {
     Result result{std::move(generator), sortOrder({2, 1337})};
@@ -207,7 +213,7 @@ TEST(Result,
 
 // _____________________________________________________________________________
 TEST(Result, verifyRunOnNewChunkComputedThrowsWithFullyMaterializedResult) {
-  Result result{makeIdTableFromVector({{}}), sortOrder(), LocalVocab{}};
+  Result result{makeIdTableFromVector({{}}), sortOrder(), makeLocalVocab()};
 
   EXPECT_THROW(result.runOnNewChunkComputed(
                    [](const IdTableVocabPair&, std::chrono::microseconds) {},
@@ -225,15 +231,15 @@ TEST(Result, verifyRunOnNewChunkComputedFiresCorrectly) {
   Result result{
       [](auto* qec, auto& t1, auto& t2, auto& t3) -> Result::Generator {
         std::this_thread::sleep_for(1ms);
-        LocalVocab localVocab{};
+        LocalVocab localVocab = makeLocalVocab();
         localVocab.getIndexAndAddIfNotContained(
             LocalVocabEntry::literalWithoutQuotes("Test",
                                                   qec->getLocalVocabContext()));
         co_yield {t1.clone(), std::move(localVocab)};
         std::this_thread::sleep_for(3ms);
-        co_yield {t2.clone(), LocalVocab{}};
+        co_yield {t2.clone(), makeLocalVocab()};
         std::this_thread::sleep_for(5ms);
-        co_yield {t3.clone(), LocalVocab{}};
+        co_yield {t3.clone(), makeLocalVocab()};
         // Work after the last chunk is reported to `onGeneratorFinished`.
         std::this_thread::sleep_for(5ms);
       }(queryExecutionContext, idTable1, idTable2, idTable3),
@@ -335,7 +341,7 @@ TEST(Result, verifyRunOnNewChunkCallsFinishOnCancellation) {
 TEST(Result, verifyRunOnNewChunkDoesNotReportChunkTimeTwiceOnError) {
   Result result{[](IdTable idTable) -> Result::Generator {
                   std::this_thread::sleep_for(1ms);
-                  co_yield {std::move(idTable), LocalVocab{}};
+                  co_yield {std::move(idTable), makeLocalVocab()};
                 }(makeIdTableFromVector({{}})),
                 sortOrder()};
   uint32_t callCounterFinished = 0;
@@ -367,7 +373,7 @@ TEST(Result, verifyRunOnNewChunkCallsFinishOnPartialConsumption) {
 
   {
     Result result{[](IdTable idTable) -> Result::Generator {
-                    co_yield {std::move(idTable), LocalVocab{}};
+                    co_yield {std::move(idTable), makeLocalVocab()};
                   }(makeIdTableFromVector({{}})),
                   sortOrder()};
 
@@ -390,7 +396,7 @@ TEST(Result, verifyRunOnNewChunkCallsFinishOnPartialConsumption) {
 
 // _____________________________________________________________________________
 TEST(Result, verifyCacheDuringConsumptionThrowsWhenFullyMaterialized) {
-  Result result{makeIdTableFromVector({{}}), sortOrder(), LocalVocab{}};
+  Result result{makeIdTableFromVector({{}}), sortOrder(), makeLocalVocab()};
   EXPECT_THROW(result.cacheDuringConsumption(
                    [](const std::optional<IdTableVocabPair>&,
                       const IdTableVocabPair&) { return true; },
@@ -445,10 +451,10 @@ TEST(Result, cacheDuringConsumptionAbortsValueWhenRunningIntoMemoryLimit) {
   Result result{[](bool& innerFlag) -> Result::Generator {
                   co_yield {IdTable{1, ad_utility::makeAllocatorWithLimit<Id>(
                                            ad_utility::MemorySize::bytes(0))},
-                            LocalVocab{}};
+                            makeLocalVocab()};
                   IdTable idTable{1, ad_utility::makeUnlimitedAllocator<Id>()};
                   idTable.push_back({Id::makeFromBool(true)});
-                  co_yield {std::move(idTable), LocalVocab{}};
+                  co_yield {std::move(idTable), makeLocalVocab()};
                   innerFlag = true;
                 }(flag),
                 sortOrder({0})};
@@ -471,7 +477,7 @@ TEST(
                                          ad_utility::MemorySize::bytes(1) *
                                          BYTES_PER_ID_COLUMN_ENTRY)};
                   idTable.push_back({Id::makeFromBool(true)});
-                  co_yield {std::move(idTable), LocalVocab{}};
+                  co_yield {std::move(idTable), makeLocalVocab()};
                   innerFlag = true;
                 }(flag),
                 sortOrder({0})};
@@ -499,7 +505,7 @@ TEST(Result, verifyApplyLimitOffsetDoesCorrectlyApplyLimitAndOffset) {
       ++callCounter;
     };
     {
-      Result result{idTable.clone(), sortOrder(), LocalVocab{}};
+      Result result{idTable.clone(), sortOrder(), makeLocalVocab()};
       result.applyLimitOffset(limitOffset, callback);
       EXPECT_EQ(callCounter, 1);
       EXPECT_EQ(result.idTableView(), comparisonTable);
@@ -507,7 +513,7 @@ TEST(Result, verifyApplyLimitOffsetDoesCorrectlyApplyLimitAndOffset) {
     {
       // Now test the limit offset application for shared results;
       Result result2{std::make_shared<const IdTable>(idTable.clone()),
-                     sortOrder(), LocalVocab{}};
+                     sortOrder(), makeLocalVocab()};
       result2.applyLimitOffset(limitOffset, callback);
       EXPECT_EQ(callCounter, 2);
       EXPECT_EQ(result2.idTableView(), comparisonTable);
@@ -556,7 +562,7 @@ TEST(Result, verifyApplyLimitOffsetHandlesZeroLimitCorrectly) {
   LimitOffsetClause limitOffset{0, 1};
   {
     uint32_t callCounter = 0;
-    Result result{idTable.clone(), sortOrder(), LocalVocab{}};
+    Result result{idTable.clone(), sortOrder(), makeLocalVocab()};
     result.applyLimitOffset(limitOffset, [&](std::chrono::microseconds,
                                              const IdTableView<0>& innerTable) {
       EXPECT_EQ(innerTable.numRows(), 0);
@@ -585,7 +591,7 @@ TEST(Result, verifyApplyLimitOffsetHandlesNonZeroOffsetWithoutLimitCorrectly) {
   LimitOffsetClause limitOffset{std::nullopt, 1};
   {
     uint32_t callCounter = 0;
-    Result result{idTable.clone(), sortOrder(), LocalVocab{}};
+    Result result{idTable.clone(), sortOrder(), makeLocalVocab()};
     result.applyLimitOffset(limitOffset, [&](std::chrono::microseconds,
                                              const IdTableView<0>& innerTable) {
       EXPECT_EQ(innerTable.numRows(), 3);
@@ -621,7 +627,7 @@ TEST(Result, verifyApplyLimitOffsetIsNoOpWhenLimitClauseIsRedundant) {
   LimitOffsetClause limitOffset{std::nullopt, 0};
   uint32_t callCounter = 0;
   {
-    Result result{idTable.clone(), sortOrder(), LocalVocab{}};
+    Result result{idTable.clone(), sortOrder(), makeLocalVocab()};
     result.applyLimitOffset(
         limitOffset, [&](std::chrono::microseconds, const IdTableView<0>&) {
           ++callCounter;
@@ -650,7 +656,7 @@ TEST_P(ResultLimitTest,
        verifyAssertThatLimitWasRespectedDoesNotThrowIfLimitWasRespected) {
   auto idTable = makeIdTableFromVector({{0, 7}, {1, 6}, {2, 5}, {3, 4}});
   {
-    Result result{idTable.clone(), sortOrder(), LocalVocab{}};
+    Result result{idTable.clone(), sortOrder(), makeLocalVocab()};
     if (std::get<0>(GetParam())) {
       EXPECT_NO_THROW(
           result.assertThatLimitWasRespected(std::get<1>(GetParam())));
@@ -699,12 +705,13 @@ TEST_P(ResultDefinednessTest,
   if constexpr (!ad_utility::areExpensiveChecksEnabled) {
     GTEST_SKIP_("Expensive checks are disabled, skipping test.");
   }
-  VariableToColumnMap map{
-      {Variable{"?a"}, {0, ColumnIndexAndTypeInfo::AlwaysDefined}},
-      {Variable{"?b"}, {1, ColumnIndexAndTypeInfo::PossiblyUndefined}}};
+  auto map = makeVariableToColumnMap(
+      {{Variable{"?a"}, {0, ColumnIndexAndTypeInfo::AlwaysDefined}},
+       {Variable{"?b"}, {1, ColumnIndexAndTypeInfo::PossiblyUndefined}}});
 
   {
-    Result result{std::get<1>(GetParam())->clone(), sortOrder(), LocalVocab{}};
+    Result result{std::get<1>(GetParam())->clone(), sortOrder(),
+                  makeLocalVocab()};
     if (std::get<0>(GetParam())) {
       EXPECT_NO_THROW(result.checkDefinedness(map));
     } else {
@@ -734,7 +741,12 @@ INSTANTIATE_TEST_SUITE_P(
 // _____________________________________________________________________________
 TEST(Result, assertionOnNullptrConstruction) {
   EXPECT_ANY_THROW(
-      Result(Result::IdTablePtr(nullptr), sortOrder(), LocalVocab{}));
+      Result(Result::IdTablePtr(nullptr), sortOrder(), makeLocalVocab()));
+}
+
+// Test that merging the local vocabs of zero results throws.
+TEST(Result, getMergedLocalVocabThrowsWithoutResults) {
+  EXPECT_ANY_THROW(Result::getMergedLocalVocab(std::vector<Result>{}));
 }
 
 // _____________________________________________________________________________
@@ -744,10 +756,11 @@ TEST(Result, assertionOnNullptrConstruction) {
 TEST(Result, viewBackedResultIsFullyMaterialized) {
   auto idTable = makeIdTableFromVector({{1, 2}, {3, 4}, {5, 6}});
   IdTableView<0> view = idTable.asStaticView<0>();
-  Result result{view, sortOrder(), LocalVocab{}};
+  Result result{view, sortOrder(), makeLocalVocab()};
   EXPECT_TRUE(result.isFullyMaterialized());
   // The returned view must alias the original data, not a copy.
-  EXPECT_EQ(&result.idTableView()(0, 0), &idTable(0, 0));
+  EXPECT_EQ(memoryOf(result.idTableView().getColumn(0)),
+            memoryOf(idTable.getColumn(0)));
   EXPECT_EQ(result.idTableView(), idTable);
 }
 
@@ -755,17 +768,17 @@ TEST(Result, viewBackedResultIsFullyMaterialized) {
 TEST(Result, viewBackedResultCloneIdTable) {
   auto idTable = makeIdTableFromVector({{1, 2}, {3, 4}});
   IdTableView<0> view = idTable.asStaticView<0>();
-  Result result{view, sortOrder(), LocalVocab{}};
+  Result result{view, sortOrder(), makeLocalVocab()};
   IdTable cloned = result.cloneIdTable();
   EXPECT_EQ(cloned, idTable);
   // Must be a deep copy, not an alias into the original data.
-  EXPECT_NE(&cloned(0, 0), &idTable(0, 0));
+  EXPECT_NE(memoryOf(cloned.getColumn(0)), memoryOf(idTable.getColumn(0)));
 }
 
 // _____________________________________________________________________________
 TEST(Result, viewBackedResultThrowsOnIdTables) {
   auto idTable = makeIdTableFromVector({{1, 2}});
-  Result result{idTable.asStaticView<0>(), sortOrder(), LocalVocab{}};
+  Result result{idTable.asStaticView<0>(), sortOrder(), makeLocalVocab()};
   EXPECT_THROW(result.idTables(), ad_utility::Exception);
 }
 
@@ -778,18 +791,20 @@ TEST(Result, viewBackedApplyLimitOffset) {
   LimitOffsetClause limitOffset{2, 2};
   auto comparisonTable = makeIdTableFromVector({{2, 7}, {3, 6}});
   uint32_t callCounter = 0;
-  Result result{view, sortOrder(), LocalVocab{}};
+  Result result{view, sortOrder(), makeLocalVocab()};
   result.applyLimitOffset(limitOffset, [&](std::chrono::microseconds,
                                            const IdTableView<0>& innerTable) {
     EXPECT_EQ(innerTable, comparisonTable);
     // The sub-view must alias the original data at offset 2 (no copy).
-    EXPECT_EQ(&innerTable(0, 0), &idTable(2, 0));
+    EXPECT_EQ(memoryOf(innerTable.getColumn(0)),
+              memoryOf(idTable.getColumn(0).subspan(2)));
     ++callCounter;
   });
   EXPECT_EQ(callCounter, 1);
   EXPECT_EQ(result.idTableView(), comparisonTable);
   // After the limit/offset the result view still aliases the original data.
-  EXPECT_EQ(&result.idTableView()(0, 0), &idTable(2, 0));
+  EXPECT_EQ(memoryOf(result.idTableView().getColumn(0)),
+            memoryOf(idTable.getColumn(0).subspan(2)));
 }
 
 // _____________________________________________________________________________
@@ -800,10 +815,10 @@ TEST(Result, viewBackedSortOrderIsRespected) {
   // Sorted by column 0 — must not throw.
   auto idTable = makeIdTableFromVector({{1, 6}, {2, 5}, {3, 4}});
   IdTableView<0> view = idTable.asStaticView<0>();
-  EXPECT_NO_THROW((Result{view, sortOrder({0}), LocalVocab{}}));
+  EXPECT_NO_THROW((Result{view, sortOrder({0}), makeLocalVocab()}));
 
   // Not sorted by column 1 — must throw.
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      (Result{view, sortOrder({1}), LocalVocab{}}),
+      (Result{view, sortOrder({1}), makeLocalVocab()}),
       HasSubstr("compareRowsBySortColumns"), ad_utility::Exception);
 }

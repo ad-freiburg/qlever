@@ -9,8 +9,8 @@
 
 #include "backports/span.h"
 #include "engine/Result.h"
-#include "engine/Union.h"
 #include "engine/idTable/IdTable.h"
+#include "engine/operation/Union.h"
 #include "index/LocalVocab.h"
 #include "util/CancellationHandle.h"
 #include "util/views/ChunkedIotaView.h"
@@ -122,7 +122,7 @@ struct SortedUnionImpl
 
   // Result storage.
   IdTable resultTable_;
-  LocalVocab localVocab_{};
+  LocalVocab localVocab_{resultTable_.getAllocator()};
 
   // Metadata
   ad_utility::AllocatorWithLimit<Id> allocator_;
@@ -203,7 +203,7 @@ struct SortedUnionImpl
     auto result = Result::IdTableVocabPair{std::move(resultTable_),
                                            std::move(localVocab_)};
     resultTable_ = IdTable{resultTable_.numColumns(), allocator_};
-    localVocab_ = LocalVocab{};
+    localVocab_ = LocalVocab{allocator_};
     return result;
   }
 
