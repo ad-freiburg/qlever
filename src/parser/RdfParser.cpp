@@ -1098,10 +1098,12 @@ bool TurtleParser<T>::pnameLnRelaxed() {
   auto view = tok_.view();
   // Characters that can be part of neither the prefix nor the local name of a
   // prefixed name, unless they are escaped. They are used below to determine
-  // where the prefix and the local name end. Note that the `:` (the last of
-  // the `prefixDelimiters`) terminates the prefix, but may legally occur
-  // inside a local name, hence it is not one of the delimiters of the local
-  // name. Instead, those include the `\` that starts an escape sequence.
+  // where the prefix and the local name end.
+  //
+  // NOTE: The `:` (the last of the `prefixDelimiters`) terminates the prefix,
+  // but may legally occur inside a local name, hence it is not one of the
+  // delimiters of the local name. Instead, those include the `\` that starts
+  // an escape sequence.
   constexpr std::string_view prefixDelimiters = " \t\r\n,;[]():";
   constexpr std::string_view localNameDelimitersAndEscape = " \t\r\n,;[]()\\";
   static_assert(prefixDelimiters.substr(0, prefixDelimiters.size() - 1) ==
@@ -1117,11 +1119,12 @@ bool TurtleParser<T>::pnameLnRelaxed() {
   if (pos == std::string::npos || view[pos] != ':') {
     return false;
   }
-  // The local name ends at the first delimiter that is not escaped. An escape
-  // sequence like `\;` or `\,` (see `PN_LOCAL_ESC` in the Turtle grammar) is
-  // skipped as a whole, so that an escaped delimiter does not end the local
-  // name. The escape sequences are resolved later, when the local name is
-  // unescaped. A `\` at the end of the input is a `ParseException`, so that
+  // Find the end of the local name, which is the first delimiter that is not
+  // escaped. An escape sequence like `\;` or `\,` (see `PN_LOCAL_ESC` in the
+  // Turtle grammar) is skipped as a whole. It is resolved later, when the
+  // local name is unescaped.
+  //
+  // NOTE: A `\` at the end of the input is a `ParseException`, so that
   // `RdfStreamParser` retries with more input when its buffer ends there.
   auto findDelimiterOrEscape = [&view](size_t start) {
     return ad_utility::findFirstOfWithLookupTable(

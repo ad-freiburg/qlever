@@ -1172,15 +1172,18 @@ TEST(RdfParserTest, commentThatEndsWithADot) {
   forAllParsers(testWithParser);
 }
 
-// An escape sequence in a prefixed name that is split by the end of a block
-// must not fail, but make the stream parser read more input.
+// Test that an escape sequence in a prefixed name that is split by the end of
+// a block does not fail, but makes the stream parser read more input.
 TEST(RdfParserTest, escapeSequenceSplitByBlockBoundary) {
+  // A file with one statement, whose subject has an escaped `;`.
   std::string filename{gtestCurrentTestName()};
   absl::Cleanup cleanup = [&filename] { ad_utility::deleteFile(filename); };
   std::string prefix = "@prefix wd: <www.wikidata.org/> .\n";
   std::string statement = R"(wd:a\;b <y> <z> .)";
   ad_utility::makeOfstream(filename) << prefix << statement << '\n';
-  // A buffer that ends directly after the `\`.
+
+  // With a buffer that ends directly after the `\`, all parsers still yield
+  // the triple.
   auto bufferSize =
       ad_utility::MemorySize::bytes(prefix.size() + statement.find('\\') + 1);
   auto testWithParser = [&](auto t) {
@@ -1192,7 +1195,6 @@ TEST(RdfParserTest, escapeSequenceSplitByBlockBoundary) {
   forAllParsers(testWithParser);
 }
 
-// _____________________________________________________________________________
 // Test that a comment at the end of the input needs no trailing newline (the
 // end of the input also ends the comment), and that a `\r` ends a comment.
 TEST(RdfParserTest, commentAtEndOfInputWithoutNewline) {
