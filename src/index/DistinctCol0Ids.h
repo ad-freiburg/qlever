@@ -195,9 +195,10 @@ std::optional<Id> smallerId(std::optional<Id> first, std::optional<Id> second);
 class ResultBuilder {
   // The number of rows after which a chunk is handed out. This is a soft bound
   // that only serves to keep the memory usage of a single chunk bounded: all
-  // the rows of a single ID always end up in the same chunk, so a chunk may
-  // exceed this size by the number of graphs of one ID. The sizes of the chunks
-  // don't matter otherwise.
+  // the rows of a single ID and all the IDs of a single call to `addSortedIds`
+  // always end up in the same chunk, so a chunk may exceed this size by the
+  // number of graphs of one ID or by the number of rows of one block. The sizes
+  // of the chunks don't matter otherwise.
   static constexpr size_t chunkSize = 100'000;
 
   CompressedRelationReader::Allocator allocator_;
@@ -209,6 +210,9 @@ class ResultBuilder {
   // IDs; neither its contents on entry nor the contents that it is left with
   // are of any interest.
   ad_utility::VectorWithMemoryLimit<Id> sortedGraphs_;
+  // The last ID that was appended by `addSortedIds` (which may have been
+  // handed out with a previous chunk already).
+  std::optional<Id> lastSortedId_ = std::nullopt;
 
  public:
   ResultBuilder(bool addGraphColumn,
@@ -219,6 +223,11 @@ class ResultBuilder {
   // one row per graph ID is appended (in ascending order of the graph IDs),
   // else a single row.
   void addId(Id id, const GraphSet& graphs);
+
+  // Append the distinct IDs of `ids` that are larger than the last ID that was
+  // appended so far. The `ids` have to be sorted and must not be smaller than
+  // that last ID. This may only be called if no graph IDs were requested.
+  void addSortedIds(ql::span<const Id> ids);
 
   // Return true iff the current chunk has reached `chunkSize` rows and should
   // be handed out via `extractChunk`.
