@@ -993,3 +993,72 @@ TEST(JoinAlgorithms, SpecialOptionalJoinComplexCombination) {
   };
   testSpecialOptionalJoinWithSplits(leftTable, rightTable, expectedResult);
 }
+
+// Test that a left row is not added with UNDEF when its partner is in a right
+// block after the `FETCH_BLOCKS` (3) blocks that are fetched at once for the
+// current value of the first join column.
+TEST(JoinAlgorithms, SpecialOptionalJoinPartnerAfterThirdFetchedBlock) {
+  // The number of fetched blocks is based on this constant in the code.
+  static_assert(ad_utility::detail::FETCH_BLOCKS == 3);
+  // One left row [1, 4] and the right blocks [1, 0] [1, 1] [1, 2] [1, 3]
+  // [1, 4]. The join compares only the first column, so it reads the first
+  // right block and then fetches three more, which all contain 1. The left row
+  // has no partner in these four blocks, but in the fifth. Without the fifth
+  // block, all blocks are read at once.
+  auto left = makeVec(makeTable({{I(1), I(4), I(10)}}));
+  auto right = makeVec(
+      makeTable({{I(1), I(0), I(20)}}), makeTable({{I(1), I(1), I(21)}}),
+      makeTable({{I(1), I(2), I(22)}}), makeTable({{I(1), I(3), I(23)}}),
+      makeTable({{I(1), I(4), I(24)}}));
+
+  // The left row is joined with its partner and nothing else.
+  testSpecialOptionalJoin(std::move(left), std::move(right),
+                          {{I(1), I(4), I(10), I(24)}});
+}
+
+// Test that the left rows without a partner are added at the right position of
+// the sorted result when the right blocks with the current value of the first
+// join column are joined in two parts.
+TEST(JoinAlgorithms, SpecialOptionalJoinRowsWithoutPartnerBetweenParts) {
+  // The number of fetched blocks is based on this constant in the code.
+  static_assert(ad_utility::detail::FETCH_BLOCKS == 3);
+  // The right blocks [1, 2] [1, 4] [1, 6] [1, 8] [1, 10] [2, 3]. As above, the
+  // first part has the right rows with 2, 4, 6, 8 in the second column, the
+  // second part the row with 10. On the left, the row with 1 has no partner
+  // before the first part, 9 between the parts and 11 after both parts. The row
+  // with 8 has a partner only in the first part, the row with UNDEF in all
+  // right rows with 1.
+  auto left = makeTable({{I(1), U2(), I(10)},
+                         {I(1), I(1), I(11)},
+                         {I(1), I(4), I(12)},
+                         {I(1), I(8), I(13)},
+                         {I(1), I(9), I(14)},
+                         {I(1), I(10), I(15)},
+                         {I(1), I(11), I(16)},
+                         {I(2), I(3), I(17)},
+                         {I(2), I(5), I(18)}});
+  auto right = makeTable({{I(1), I(2), I(20)},
+                          {I(1), I(4), I(21)},
+                          {I(1), I(6), I(22)},
+                          {I(1), I(8), I(23)},
+                          {I(1), I(10), I(24)},
+                          {I(2), I(3), I(25)}});
+  IdJoinResult expected{
+      {I(1), I(1), I(11), U2()},   {I(1), I(2), I(10), I(20)},
+      {I(1), I(4), I(10), I(21)},  {I(1), I(4), I(12), I(21)},
+      {I(1), I(6), I(10), I(22)},  {I(1), I(8), I(10), I(23)},
+      {I(1), I(8), I(13), I(23)},  {I(1), I(9), I(14), U2()},
+      {I(1), I(10), I(10), I(24)}, {I(1), I(10), I(15), I(24)},
+      {I(1), I(11), I(16), U2()},  {I(2), I(3), I(17), I(25)},
+      {I(2), I(5), I(18), U2()}};
+  // `testSpecialOptionalJoin` also checks that the result is sorted.
+  testSpecialOptionalJoin(makeVec(left), splitIdTable(right, {1, 2, 3, 4, 5}),
+                          expected);
+
+  // The same with other blocks on the right.
+  for (const auto& splits :
+       generateSplitConfigurations(right.numRows(), 10, 123)) {
+    testSpecialOptionalJoin(makeVec(left), splitIdTable(right, splits),
+                            expected);
+  }
+}

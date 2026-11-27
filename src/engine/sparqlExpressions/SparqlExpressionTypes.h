@@ -164,12 +164,12 @@ struct EvaluationContext {
 
   // The `Id`s of `variable` in the rows `[_beginIndex, _endIndex)` if the input
   // is sorted by `variable`, `std::nullopt` otherwise.
-  std::optional<ql::span<const Id>> getSortedColumnOrNullopt(
+  std::optional<ConstIdColumnRef> getSortedColumnOrNullopt(
       const Variable& variable) const;
 
   // Like `getSortedColumnOrNullopt`, but also `std::nullopt` if the column
   // contains UNDEF.
-  std::optional<ql::span<const Id>> getSortedAlwaysDefinedColumnOrNullopt(
+  std::optional<ConstIdColumnRef> getSortedAlwaysDefinedColumnOrNullopt(
       const Variable& variable) const;
 
   // The size (in number of elements) that this evaluation context refers to.

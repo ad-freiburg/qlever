@@ -9,8 +9,11 @@
 #include <variant>
 #include <vector>
 
+#include "backports/span.h"
+#include "global/Id.h"
 #include "parser/Alias.h"
 #include "rdfTypes/Variable.h"
+#include "util/ContainersWithAllocator.h"
 
 namespace parsedQuery {
 
@@ -18,13 +21,16 @@ namespace parsedQuery {
 struct ClauseBase {
   // The variables that are visible in the query body. Will be used in the case
   // of `SELECT *` and to check invariants of the `ParsedQuery`.
-  std::vector<Variable> visibleVariables_;
+  qlm::vector<Variable> visibleVariables_;
+
+  explicit ClauseBase(const qlever::Allocator<Id>& allocator)
+      : visibleVariables_{allocator} {}
 
   // Add a variable that is visible in the query body.
   void addVisibleVariable(const Variable& variable);
 
   // Get all the variables that are visible in the query body.
-  const std::vector<Variable>& getVisibleVariables() const;
+  const qlm::vector<Variable>& getVisibleVariables() const;
 };
 
 /// The `SELECT` clause of a  SPARQL query. It contains the selected variables
@@ -36,8 +42,11 @@ struct SelectClause : ClauseBase {
 
  private:
   struct VarsAndAliases {
-    std::vector<Variable> vars_;
-    std::vector<Alias> aliases_;
+    qlm::vector<Variable> vars_;
+    qlm::vector<Alias> aliases_;
+
+    explicit VarsAndAliases(const qlever::Allocator<Id>& allocator)
+        : vars_{allocator}, aliases_{allocator} {}
   };
 
   // An empty struct to identify the `SELECT *` case
@@ -47,6 +56,11 @@ struct SelectClause : ClauseBase {
   std::variant<VarsAndAliases, Asterisk> varsAndAliasesOrAsterisk_;
 
  public:
+  // A `SELECT` clause that has no variables or aliases yet.
+  explicit SelectClause(const qlever::Allocator<Id>& allocator)
+      : ClauseBase{allocator},
+        varsAndAliasesOrAsterisk_{VarsAndAliases{allocator}} {}
+
   /// If true, then this `SelectClause` represents `SELECT *`. If false,
   /// variables and aliases were manually selected.
   [[nodiscard]] bool isAsterisk() const;
@@ -59,19 +73,19 @@ struct SelectClause : ClauseBase {
   // and aliases have to be specified at once via a single call to
   // `setSelected`.
   using VarOrAlias = std::variant<Variable, Alias>;
-  void setSelected(std::vector<VarOrAlias> varsOrAliases);
+  void setSelected(qlm::vector<VarOrAlias> varsOrAliases);
   void addAlias(VarOrAlias varOrAlias, bool isInternal);
 
   // Overload of `setSelected` (see above) for the simple case, where only
   // variables and no aliases are selected.
-  void setSelected(std::vector<Variable> variables);
+  void setSelected(qlm::vector<Variable> variables);
 
   /// Get all the selected variables. This includes the variables to which
   /// aliases are bound. For example for `SELECT ?x (?a + ?b AS ?c)`,
   /// `getSelectedVariables` will return `{?x, ?c}`. If `isAsterisk()` is true
   /// (`SELECT *`), then all the variables for which `addVisibleVariable()`
   /// was called, will be returned.
-  [[nodiscard]] const std::vector<Variable>& getSelectedVariables() const;
+  [[nodiscard]] const qlm::vector<Variable>& getSelectedVariables() const;
 
   /// Same as `getSelectedVariables`, but the variables will be returned as
   /// `std::string`.
@@ -80,14 +94,14 @@ struct SelectClause : ClauseBase {
   /// Get all the aliases (not the simple variables) that were selected. For
   /// example for `SELECT ?x (?a + ?b AS ?c)`,
   /// `{(?a + ?b AS ?c)}` will be returned.
-  [[nodiscard]] const std::vector<Alias>& getAliases() const;
+  [[nodiscard]] ql::span<const Alias> getAliases() const;
 
   /// Delete all the aliases and return them, but keep the variables that they
   /// are bound to as selected. This is used for queries without `GROUP BY`,
   /// where all aliases become ordinary `BIND` clauses, and for queries with
   /// `GROUP BY` and a trailing `VALUES` clause, where some of them do (see
   /// `ParsedQuery::moveAliasesAfterPostQueryValues`).
-  std::vector<Alias> deleteAliasesButKeepVariables();
+  qlm::vector<Alias> deleteAliasesButKeepVariables();
 };
 }  // namespace parsedQuery
 

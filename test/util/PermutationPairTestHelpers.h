@@ -295,8 +295,8 @@ inline std::string toString(Mode mode) {
 struct CompareAllColumns {
   template <typename A, typename B>
   bool operator()(const A& a, const B& b) const {
-    return ql::ranges::lexicographical_compare(a, b, {}, &Id::getBits,
-                                               &Id::getBits);
+    return ql::ranges::lexicographical_compare(a, b, {}, Id::getBitsL,
+                                               Id::getBitsL);
   }
 };
 

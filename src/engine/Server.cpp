@@ -259,9 +259,28 @@ Server::TimeLimit Server::verifyUserSubmittedQueryTimeout(
   auto defaultTimeout =
       getRuntimeParameter<&RuntimeParameters::defaultQueryTimeout_>();
   if (userTimeout.has_value()) {
-    auto timeoutCandidate =
-        ad_utility::ParseableDuration<TimeLimit>::fromString(
+    // Reject a timeout that cannot be parsed or is out of range.
+    auto parseTimeout = [&userTimeout]() {
+      try {
+        return ad_utility::ParseableDuration<TimeLimit>::fromString(
             userTimeout.value());
+      } catch (const std::runtime_error& e) {
+        throw HttpError(boost::beast::http::status::bad_request, e.what());
+      }
+    };
+    auto timeoutCandidate = parseTimeout();
+
+    // Reject a timeout that is not strictly positive.
+    //
+    // NOTE: A negative timeout would pass the comparison with the default
+    // timeout below. A large negative one would overflow in the conversion to
+    // nanoseconds for the timer and become a timeout of many years.
+    if (timeoutCandidate <= TimeLimit::zero()) {
+      throw HttpError(
+          boost::beast::http::status::bad_request,
+          absl::StrCat("User submitted timeout '", userTimeout.value(),
+                       "' must be strictly positive."));
+    }
     if (timeoutCandidate > defaultTimeout && !accessTokenOk) {
       throw HttpError(
           boost::beast::http::status::forbidden,
@@ -895,11 +914,13 @@ Awaitable<void> Server::processSparqlOperation(
       throw;
     }
   };
-  auto visitQuery = [&index, &visitOperation](Query query) -> Awaitable<void> {
+  auto visitQuery = [this, &index,
+                     &visitOperation](Query query) -> Awaitable<void> {
     // We need to copy the query string because `visitOperation` below also
     // needs it.
-    auto parsedQuery = SparqlParser::parseQuery(
-        &index.encodedIriManager(), query.query_, query.datasetClauses_);
+    auto parsedQuery =
+        SparqlParser::parseQuery(&index.encodedIriManager(), allocator(),
+                                 query.query_, query.datasetClauses_);
     if (parsedQuery.hasUpdateClause()) {
       throw std::runtime_error(absl::StrCat(
           "SPARQL QUERY was requested via the HTTP request, but the "
@@ -909,7 +930,7 @@ Awaitable<void> Server::processSparqlOperation(
     return visitOperation({std::move(parsedQuery)}, "SPARQL query",
                           std::move(query.query_));
   };
-  auto visitUpdate = [&index, &visitOperation, &requireValidAccessToken](
+  auto visitUpdate = [this, &index, &visitOperation, &requireValidAccessToken](
                          Update update) -> Awaitable<void> {
     requireValidAccessToken("SPARQL Update");
     // We need to copy the update string because `visitOperation` below also
@@ -917,8 +938,8 @@ Awaitable<void> Server::processSparqlOperation(
     auto tracer = std::make_shared<ad_utility::timer::TimeTracer>("update");
     tracer->beginTrace("parsing");
     auto parsedUpdates = SparqlParser::parseUpdate(
-        index.getBlankNodeManager(), &index.encodedIriManager(), update.update_,
-        update.datasetClauses_);
+        index.getBlankNodeManager(), &index.encodedIriManager(), allocator(),
+        update.update_, update.datasetClauses_);
     tracer->endTrace("parsing");
     if (!ql::ranges::all_of(parsedUpdates, &ParsedQuery::hasUpdateClause)) {
       throw std::runtime_error(absl::StrCat(
@@ -930,13 +951,13 @@ Awaitable<void> Server::processSparqlOperation(
                           std::move(update.update_), tracer);
   };
   auto visitGraphStore =
-      [&request, &visitOperation, &requireValidAccessToken,
+      [this, &request, &visitOperation, &requireValidAccessToken,
        &index](GraphStoreOperation operation) -> Awaitable<void> {
     auto tracer = std::make_shared<ad_utility::timer::TimeTracer>("update");
     tracer->beginTrace("parsing");
     std::vector<ParsedQuery> parsedOperations =
-        GraphStoreProtocol::transformGraphStoreProtocol(std::move(operation),
-                                                        request, index);
+        GraphStoreProtocol::transformGraphStoreProtocol(
+            std::move(operation), request, index, allocator());
     tracer->endTrace("parsing");
 
     if (ql::ranges::any_of(parsedOperations, &ParsedQuery::hasUpdateClause)) {

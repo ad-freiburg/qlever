@@ -691,8 +691,9 @@ void convertMaterializedView(const std::string& oldBasename,
         ". Please delete the view and create it again after the conversion.")};
   }
   viewInfo["version"] = MATERIALIZED_VIEWS_VERSION;
-  ad_utility::makeOfstream(absl::StrCat(newViewBasename, VIEW_INFO_SUFFIX))
-      << viewInfo.dump() << std::endl;
+  std::string serializedViewInfo = absl::StrCat(viewInfo.dump(), "\n");
+  qlever::util::writeFileAtomically(
+      absl::StrCat(newViewBasename, VIEW_INFO_SUFFIX), serializedViewInfo);
 }
 
 // Convert all materialized views of the index with the base name `oldBasename`
@@ -749,7 +750,8 @@ void copyFilesThatNeedNoConversion(const std::string& oldBasename,
     AD_CORRECTNESS_CHECK(ql::starts_with(filename, oldBasename));
     filename.remove_prefix(oldBasename.size());
     handledFiles.emplace_back(oldFile);
-    fs::copy_file(oldFile, absl::StrCat(newBasename, filename));
+    qlever::util::copyFileAtomically(oldFile,
+                                     absl::StrCat(newBasename, filename));
   };
   AD_LOG_INFO << "Copying the files that need no conversion ..." << std::endl;
   for (auto suffix :
@@ -892,10 +894,13 @@ void convertIndexToCurrentFormat(const std::string& oldBasename,
   // Write the configuration last, with the version of the target format. An
   // index without its configuration file cannot be loaded at all, so if the
   // conversion is interrupted, the incomplete index is not mistaken for a
-  // complete one.
+  // complete one. The file is written atomically, so that also an interruption
+  // while it is written leaves no (incomplete) configuration file behind.
   configuration[indexFormatVersionKey] = targetVersion;
-  ad_utility::makeOfstream(absl::StrCat(newBasename, CONFIGURATION_FILE))
-      << configuration.dump(4) << std::endl;
+  std::string serializedConfiguration =
+      absl::StrCat(configuration.dump(4), "\n");
+  qlever::util::writeFileAtomically(
+      absl::StrCat(newBasename, CONFIGURATION_FILE), serializedConfiguration);
 
   AD_LOG_INFO << "Conversion of the index completed, the converted index is \""
               << newBasename << "\"" << std::endl;

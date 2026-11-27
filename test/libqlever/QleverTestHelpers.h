@@ -38,6 +38,7 @@
 #include "util/CancellationHandle.h"
 #include "util/Exception.h"
 #include "util/File.h"
+#include "util/FilesystemHelpers.h"
 #include "util/SourceLocation.h"
 
 namespace ad_utility::testing {
@@ -59,7 +60,8 @@ inline UpdateMetadata applyUpdateToEngine(qlever::Qlever& engine,
                                           const std::string& update) {
   ad_utility::BlankNodeManager blankNodeManager;
   auto parsedUpdates = SparqlParser::parseUpdate(
-      &blankNodeManager, ad_utility::testing::encodedIriManager(), update);
+      &blankNodeManager, ad_utility::testing::encodedIriManager(),
+      engine.allocator(), update);
   AD_CORRECTNESS_CHECK(parsedUpdates.size() == 1);
   auto plannedUpdate =
       engine.planQuery(engine.bindParsedQuery(std::move(parsedUpdates[0])));
@@ -153,8 +155,7 @@ inline void writeTestBlobFile(const std::string& filename) {
   source.queryAndPinResultWithName("blobPin",
                                    "SELECT ?s ?o WHERE { ?s <p> ?o }");
   auto compressedBlob = source.serializeVocabAndNamedCacheToCompressedBlob();
-  ad_utility::File file{filename, "w"};
-  file.write(compressedBlob.data(), compressedBlob.size());
+  qlever::util::writeFileAtomically(filename, compressedBlob);
 }
 
 // The query for the result pinned in the blob of `writeTestBlobFile`, and its

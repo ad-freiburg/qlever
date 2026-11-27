@@ -9,14 +9,11 @@
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_join.h>
 
-#include <string_view>
 #include <vector>
 
 #include "parser/ParsedQuery.h"
 #include "parser/TripleComponent.h"
-#include "util/Exception.h"
 #include "util/Forward.h"
-#include "util/VariantRangeFilter.h"
 
 namespace parsedQuery {
 
@@ -54,7 +51,8 @@ auto m(Args&&... args) {
 }  // namespace
 
 // Special member functions for the `Subquery` class
-Subquery::Subquery() : _subquery{m()} {}
+Subquery::Subquery(const qlever::Allocator<Id>& allocator)
+    : _subquery{m(allocator)} {}
 Subquery::Subquery(const ParsedQuery& pq) : _subquery{m(pq)} {}
 Subquery::Subquery(ParsedQuery&& pq) noexcept : _subquery{m(std::move(pq))} {}
 Subquery::Subquery(Subquery&& pq) noexcept

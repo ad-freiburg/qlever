@@ -84,6 +84,7 @@ CPP_concept IsTransparent = CPP_requires_ref(HasIsTransparent, T);
 template <typename Base>
 class HeterogeneousContainer : public Base {
  public:
+  using typename Base::allocator_type;
   using typename Base::const_iterator;
   using typename Base::hasher;
   using typename Base::iterator;
@@ -105,6 +106,12 @@ class HeterogeneousContainer : public Base {
 
  public:
   using Base::Base;
+
+  // The `std` containers have no constructor from an initializer list and an
+  // allocator (the Boost containers do), so we add it here.
+  HeterogeneousContainer(std::initializer_list<value_type> list,
+                         const allocator_type& allocator)
+      : Base(list, 0, allocator) {}
 
   // The member functions that take a key. The default template arguments
   // (`Key = key_type`) are needed for keys that are given as a braced

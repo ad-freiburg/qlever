@@ -14,6 +14,7 @@
 
 #include <vector>
 
+#include "../../util/AllocatorTestHelpers.h"
 #include "../../util/GTestHelpers.h"
 #include "../../util/IdTableHelpers.h"
 #include "../../util/IndexTestHelpers.h"
@@ -23,6 +24,7 @@
 #include "engine/binaryExport/BinaryExport.h"
 #include "global/Id.h"
 #include "parser/SelectClause.h"
+#include "util/ContainersWithAllocator.h"
 
 using namespace qlever::binary_export;
 
@@ -85,9 +87,12 @@ void expectBatch(std::string_view batch, const std::vector<Id>& ids,
 std::string exportBytes(const QueryExecutionTree& qet,
                         const std::vector<std::string>& varNames,
                         LimitOffsetClause limitAndOffset = {}) {
-  parsedQuery::SelectClause selectClause;
-  selectClause.setSelected(ad_utility::transform(
-      varNames, [](const std::string& name) { return Variable{name}; }));
+  auto allocator = ad_utility::testing::makeAllocator();
+  parsedQuery::SelectClause selectClause{allocator};
+  auto variables = ad_utility::transform(
+      varNames, [](const std::string& name) { return Variable{name}; });
+  selectClause.setSelected(
+      qlm::vector<Variable>{variables.begin(), variables.end(), allocator});
   std::string result;
   for (std::string_view chunk : exportAsQLeverBinary(
            qet, selectClause, limitAndOffset,

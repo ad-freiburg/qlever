@@ -11,6 +11,7 @@
 #include "./util/AllocatorTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
+#include "./util/VariableToColumnMapTestHelpers.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
@@ -502,7 +503,7 @@ auto testNotComparableHelper(T leftValue, U rightValue,
   auto trace = generateLocationTrace(
       l, "testLessThanGreaterThanEqualMultipleValuesHelper was called here");
   ad_utility::AllocatorWithLimit<Id> alloc{makeAllocator()};
-  VariableToColumnMap map;
+  auto map = makeVariableToColumnMap();
   LocalVocab localVocab{ad_utility::testing::makeAllocator()};
   IdTable table{alloc};
   sparqlExpression::EvaluationContext context{
@@ -1047,6 +1048,7 @@ TEST(RelationalExpression, SetOfIntervals) {
 }
 
 TEST(RelationalExpression, InExpressionSimpleMemberVariables) {
+  const auto emptyMap = makeVariableToColumnMap();
   auto makeInt = [](int i) {
     return std::make_unique<sparqlExpression::IdExpression>(
         ValueId::makeFromInt(i));
@@ -1056,12 +1058,12 @@ TEST(RelationalExpression, InExpressionSimpleMemberVariables) {
   children.push_back(makeInt(27));
   auto first = makeInt(42);
   using namespace ::testing;
-  std::vector matchers{HasSubstr(children[0]->getCacheKey({})),
-                       HasSubstr(children[1]->getCacheKey({})),
-                       HasSubstr(first->getCacheKey({}))};
+  std::vector matchers{HasSubstr(children[0]->getCacheKey(emptyMap)),
+                       HasSubstr(children[1]->getCacheKey(emptyMap)),
+                       HasSubstr(first->getCacheKey(emptyMap))};
   auto expression = InExpression(std::move(first), std::move(children));
 
-  EXPECT_THAT(expression.getCacheKey({}), AllOfArray(matchers));
+  EXPECT_THAT(expression.getCacheKey(emptyMap), AllOfArray(matchers));
 }
 
 // Regression test for https://github.com/ad-freiburg/qlever/issues/3559
