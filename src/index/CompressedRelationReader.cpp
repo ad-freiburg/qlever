@@ -17,7 +17,9 @@
 
 #include <algorithm>
 #include <numeric>
+#include <range/v3/view/chunk_by.hpp>
 
+#include "backports/functional.h"
 #include "engine/idTable/IdColumnByteIO.h"
 #include "global/RuntimeParameters.h"
 #include "index/DistinctCol0Ids.h"
@@ -215,8 +217,8 @@ auto CompressedRelationReader::readBlocksConcurrently(
                     cancellationHandle, &locatedTriplesPerBlock,
                     blocks = std::move(relevantBlockMetadata),
                     transform = std::move(transform)](size_t i) {
-    using Result = std::optional<
-        std::invoke_result_t<const Transform&, DecompressedBlock>>;
+    using Result = std::optional<std::decay_t<
+        std::invoke_result_t<const Transform&, DecompressedBlock>>>;
     cancellationHandle->throwIfCancelled();
     LazyScanMetadata stats;
     const auto& blockMetadata = blocks.at(i);
@@ -269,7 +271,7 @@ CompressedRelationReader::lazyScan(
   auto blocks = readBlocksConcurrently(
       scanSpec, std::move(relevantBlockMetadata), additionalColumns,
       cancellationHandle, locatedTriplesPerBlock, std::move(executor),
-      std::move(columnSubset), [](DecompressedBlock block) { return block; });
+      std::move(columnSubset), ql::identity{});
   using BlocksView = typename decltype(blocks)::element_type;
 
   // Yield the blocks in order, apply the `limitOffset`, and keep track of the
@@ -763,15 +765,10 @@ IdTable CompressedRelationReader::getDistinctColIdsAndCounts(
       locatedTriplesPerBlock, std::move(executor), ColumnIndices{0},
       [this](const DecompressedBlock& block) {
         IdTableStatic<2> runs(allocator_);
-        const auto& colIds = block.getColumn(0);
-        for (size_t begin = 0; begin < colIds.size();) {
-          size_t end = begin + 1;
-          while (end < colIds.size() && isSameId(colIds[end], colIds[begin])) {
-            ++end;
-          }
-          runs.push_back({colIds[begin],
-                          Id::makeFromInt(static_cast<int64_t>(end - begin))});
-          begin = end;
+        for (auto run :
+             ::ranges::views::chunk_by(block.getColumn(0), isSameId)) {
+          runs.push_back({run.front(), Id::makeFromInt(static_cast<int64_t>(
+                                           ::ranges::distance(run)))});
         }
         return runs;
       });
@@ -792,7 +789,8 @@ IdTable CompressedRelationReader::getDistinctColIdsAndCounts(
   // Append the counts from the metadata in order up to (and including) the
   // `bound` (all of them if it is `std::nullopt`).
   auto nextFromMetadata = countsFromMetadata.begin();
-  auto appendCountsFromMetadataUpTo = [&](std::optional<Id> bound) {
+  auto appendCountsFromMetadataUpTo = [&nextFromMetadata, &countsFromMetadata,
+                                       &appendRun](std::optional<Id> bound) {
     for (; nextFromMetadata != countsFromMetadata.end() &&
            (!bound.has_value() || nextFromMetadata->first <= bound.value());
          ++nextFromMetadata) {
@@ -822,28 +820,30 @@ IdTable CompressedRelationReader::getDistinctColIdsAndCounts(
   }
   appendCountsFromMetadataUpTo(std::nullopt);
 
-  // Apply the `limitOffset` to the rows of the scan that the counts stand for:
-  // drop the groups and reduce the counts of the rows before the OFFSET and
-  // after the LIMIT.
+  // Apply the `limitOffset` to the rows of the scan that the counts stand for.
+  // Each group stands for the rows [groupBegin, groupEnd) of the scan. Keep
+  // the groups that intersect the rows [offset, end) of the `limitOffset`,
+  // with the size of that intersection as their count.
   if (limitOffset.isUnconstrained()) {
     return std::move(table).toDynamic();
   }
+  const uint64_t offset = limitOffset._offset;
+  const uint64_t end =
+      limitOffset.upperBound(std::numeric_limits<uint64_t>::max());
   auto counts = table.getColumn(1);
-  uint64_t remainingOffset = limitOffset._offset;
+  uint64_t groupBegin = 0;
   size_t firstRow = 0;
-  for (; firstRow < table.numRows() &&
-         static_cast<uint64_t>(counts[firstRow].getInt()) <= remainingOffset;
-       ++firstRow) {
-    remainingOffset -= counts[firstRow].getInt();
-  }
-  uint64_t remainingLimit = limitOffset.limitOrDefault();
-  size_t endRow = firstRow;
-  for (; endRow < table.numRows() && remainingLimit > 0; ++endRow) {
-    uint64_t count = static_cast<uint64_t>(counts[endRow].getInt()) -
-                     (endRow == firstRow ? remainingOffset : 0);
-    count = std::min(count, remainingLimit);
-    remainingLimit -= count;
-    counts[endRow] = Id::makeFromInt(static_cast<int64_t>(count));
+  size_t endRow = 0;
+  for (; endRow < table.numRows() && groupBegin < end; ++endRow) {
+    uint64_t groupEnd =
+        groupBegin + static_cast<uint64_t>(counts[endRow].getInt());
+    if (groupEnd <= offset) {
+      firstRow = endRow + 1;
+    } else {
+      counts[endRow] = Id::makeFromInt(static_cast<int64_t>(
+          std::min(groupEnd, end) - std::max(groupBegin, offset)));
+    }
+    groupBegin = groupEnd;
   }
   table.erase(table.begin() + endRow, table.end());
   table.erase(table.begin(), table.begin() + firstRow);

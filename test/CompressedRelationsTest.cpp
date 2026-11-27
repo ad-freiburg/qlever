@@ -1640,7 +1640,9 @@ TEST(CompressedRelationReader, getDistinctCol0IdsChecksItsPreconditions) {
 TEST(CompressedRelationReader, getDistinctColIdsAndCounts) {
   // Relation 1 spans several blocks of its own, its `col1Id` changes every
   // three rows. Relations 2 to 30 have two triples each, so their blocks
-  // contain several `col0Id`s.
+  // contain several `col0Id`s. Relation 31 also spans several blocks of its
+  // own, its `col1Id` changes only once, after four rows (so the blocks that
+  // are known from their metadata come after the last block that is read).
   constexpr int graph = 103496581;
   std::vector<RelationInput> inputs{{1, {}}};
   for (int i = 0; i < 20; ++i) {
@@ -1648,6 +1650,10 @@ TEST(CompressedRelationReader, getDistinctColIdsAndCounts) {
   }
   for (int col0 = 2; col0 <= 30; ++col0) {
     inputs.push_back({col0, {{0, 0}, {0, 1}}});
+  }
+  inputs.push_back({31, {}});
+  for (int i = 0; i < 20; ++i) {
+    inputs.back().col1And2_.push_back({i < 4 ? 0 : 1, i});
   }
   addGraphColumnIfNecessary(inputs);
   auto [filename, cleanup] = testFilenameWithCleanup();
@@ -1684,11 +1690,12 @@ TEST(CompressedRelationReader, getDistinctColIdsAndCounts) {
     return expected.numRows();
   };
 
-  // Without delta triples, there are 30 distinct `col0Id`s and 7 distinct
-  // `col1Id`s for the `col0Id` 1.
+  // Without delta triples, there are 31 distinct `col0Id`s, 7 distinct
+  // `col1Id`s for the `col0Id` 1, and 2 for the `col0Id` 31.
   auto noDeltaTriples = makeLocatedTriplesPerBlock(blocks, {}, true);
-  EXPECT_EQ(expectCountsOfScan(noDeltaTriples, std::nullopt), 30);
+  EXPECT_EQ(expectCountsOfScan(noDeltaTriples, std::nullopt), 31);
   EXPECT_EQ(expectCountsOfScan(noDeltaTriples, V(1)), 7);
+  EXPECT_EQ(expectCountsOfScan(noDeltaTriples, V(31)), 2);
 
   // LIMIT and OFFSET apply to the rows of the scan, also when they start or end
   // in the middle of a block or of a group.
@@ -1721,6 +1728,43 @@ TEST(CompressedRelationReader, getDistinctColIdsAndCounts) {
                                  false);
   expectCountsOfScan(deleted, std::nullopt);
   expectCountsOfScan(deleted, V(1));
+}
+
+// Test that `getDistinctColIdsAndCounts` doesn't count the rows of a block that
+// is read, but whose graphs the graph filter doesn't allow.
+TEST(CompressedRelationReader, getDistinctColIdsAndCountsWithGraphFilter) {
+  // Relations 1 to 12 with two triples each, three relations per block, so
+  // each block contains several `col0Id`s. The blocks alternate between the
+  // graphs 10 and 11.
+  std::vector<RelationInput> inputs;
+  for (int col0 = 1; col0 <= 12; ++col0) {
+    int graph = (col0 - 1) / 3 % 2 == 0 ? 10 : 11;
+    inputs.push_back({col0, {{0, 0, graph}, {0, 1, graph}}});
+  }
+  auto [filename, cleanup] = testFilenameWithCleanup();
+  auto [blocks, metaData, reader] = writeAndOpenRelations(inputs, filename, 4);
+  ASSERT_EQ(blocks.size(), 4);
+  ASSERT_EQ(blocks.at(1).firstTriple_.col0Id_, V(4));
+  LocatedTriplesPerBlock locatedTriples{};
+  locatedTriples.setOriginalMetadata(blocks);
+  locatedTriples.updateAugmentedMetadata();
+
+  // Only the rows of the blocks in the graph 10 are counted.
+  CompressedRelationReader::ScanSpecAndBlocks scanSpecAndBlocks{
+      ScanSpecification{std::nullopt, std::nullopt, std::nullopt,
+                        makeLocalVocab(),
+                        ScanSpecification::GraphFilter::Whitelist({V(10)})},
+      getBlockMetadataRangesfromVec(blocks)};
+  auto result = reader->getDistinctColIdsAndCounts(
+      0, scanSpecAndBlocks,
+      std::make_shared<ad_utility::CancellationHandle<>>(), locatedTriples,
+      executor(), {});
+  EXPECT_EQ(result, makeIdTableFromVector({{V(1), I(2)},
+                                           {V(2), I(2)},
+                                           {V(3), I(2)},
+                                           {V(7), I(2)},
+                                           {V(8), I(2)},
+                                           {V(9), I(2)}}));
 }
 
 // Test that `getDistinctColIdsAndCounts` counts a triple that occurs in several
