@@ -187,6 +187,7 @@ TEST(RuntimeParameters, allParametersAreRegistered) {
   check(params.serviceMaxValueRows_);
   check(params.serviceMaxRedirects_);
   check(params.queryPlanningBudget_);
+  check(params.queryPlanningMaxCandidatePlans_);
   check(params.throwOnUnboundVariables_);
   check(params.cacheMaxSizeLazyResult_);
   check(params.websocketUpdatesEnabled_);

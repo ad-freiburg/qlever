@@ -560,7 +560,8 @@ class QueryPlanner {
   enum class FilterMode {
     // Only apply matching filters, that is filters are only added to plans that
     // already bind all the variables that are used in the filter. The plans
-    // with the added filters are added to the candidate set. This mode is used
+    // with the added filters are added to the candidate set (one plan per
+    // unfiltered plan and set of filter variables). This mode is used
     // in the dynamic programming approach, where we don't apply the filters
     // greedily. The enforced filter substitutes are applied in this mode, too.
     KeepUnfiltered,
@@ -655,8 +656,10 @@ class QueryPlanner {
 
   // Internal subroutine of `fillDpTab` that  only works on a single connected
   // component of the input. Throws if the subtrees in the `connectedComponent`
-  // are not in fact connected (via their variables).
-  SubtreePlanVec runDynamicProgrammingOnConnectedComponent(
+  // are not in fact connected (via their variables). Return `std::nullopt` if
+  // more than `query-planning-max-candidate-plans` candidate plans are
+  // created.
+  std::optional<SubtreePlanVec> runDynamicProgrammingOnConnectedComponent(
       SubtreePlanVec connectedComponent,
       const FiltersAndOptionalSubstitutes& filters,
       const TextLimitVec& textLimits, const TripleGraph& tg,

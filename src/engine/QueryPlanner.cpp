@@ -1417,17 +1417,43 @@ void QueryPlanner::applyFiltersIfPossible(
   // NOTE 1: In the `KeepUnfiltered` mode, the filtered plan is added as a
   // candidate next to the unfiltered one, because applying a filter later can
   // be cheaper (for example, when a join with a small result makes the large
-  // side much smaller first). Each row must be passed to this function only
-  // once, otherwise such candidates are added twice.
+  // side much smaller first). The filters with the same variables are applied
+  // together on top of one candidate (and not one candidate per filter),
+  // otherwise the DP keeps one plan per subset of these filters, which makes
+  // planning exponential in the number of filters. Filters with different
+  // variables still get separate candidates (the cache key of a candidate
+  // with only some of the filters can match a materialized view). Each row
+  // must be passed to this function only once, otherwise such candidates are
+  // added twice.
   //
   // NOTE 2: The `ApplyAllFiltersAndReplaceUnfiltered` mode applies all
   // remaining filters regardless of their variables. It is used for the final
   // plans of a group graph pattern, so that no filter is missed.
 
+  // In the `KeepUnfiltered` mode, assign each filter to the group of the
+  // first filter with the same variables (see NOTE 1 above).
+  std::vector<size_t> groupOfFilter;
+  if constexpr (mode == FilterMode::KeepUnfiltered) {
+    std::vector<ad_utility::HashSet<Variable>> variableSets;
+    for (const auto& filterAndSubst : filters) {
+      auto& variables = variableSets.emplace_back();
+      for (const auto* variable :
+           filterAndSubst.filter_.expression_.containedVariables()) {
+        variables.insert(*variable);
+      }
+    }
+    for (const auto& variables : variableSets) {
+      groupOfFilter.push_back(ql::ranges::find(variableSets, variables) -
+                              variableSets.begin());
+    }
+  }
+
   // The new plans are collected first and added to `row` in one go at the
   // end, because adding them inside the loop would invalidate the iterators.
   SubtreePlanVec addedPlans{row.get_allocator()};
   for (auto& plan : row) {
+    // The candidate per group of filters in the `KeepUnfiltered` mode.
+    std::vector<std::optional<SubtreePlan>> filteredPlans(groupOfFilter.size());
     for (const auto& [i, filterAndSubst] :
          ::ranges::views::enumerate(filters)) {
       checkCancellation();
@@ -1527,17 +1553,31 @@ void QueryPlanner::applyFiltersIfPossible(
       if (applyAll ||
           plan._qet->getRootOperation()->areVariablesAlwaysDefined(
               filterAndSubst.filter_.expression_.containedVariables())) {
-        // Apply this filter regularly.
+        // Apply this filter regularly, in the `KeepUnfiltered` mode on top of
+        // the filters of the same group applied so far.
+        std::optional<SubtreePlan>* filteredPlan = nullptr;
+        if constexpr (mode == FilterMode::KeepUnfiltered) {
+          filteredPlan = &filteredPlans.at(groupOfFilter.at(i));
+        }
+        const SubtreePlan& base =
+            filteredPlan != nullptr && filteredPlan->has_value()
+                ? filteredPlan->value()
+                : plan;
         SubtreePlan newPlan = makeSubtreePlan<Filter>(
-            _qec, plan._qet, filterAndSubst.filter_.expression_);
-        mergeSubtreePlanIds(newPlan, newPlan, plan);
+            _qec, base._qet, filterAndSubst.filter_.expression_);
+        mergeSubtreePlanIds(newPlan, newPlan, base);
         newPlan._idsOfIncludedFilters |= (size_t(1) << i);
         newPlan.type = plan.type;
         if constexpr (mode != FilterMode::KeepUnfiltered) {
           plan = std::move(newPlan);
         } else {
-          addedPlans.push_back(std::move(newPlan));
+          *filteredPlan = std::move(newPlan);
         }
+      }
+    }
+    for (auto& filteredPlan : filteredPlans) {
+      if (filteredPlan.has_value()) {
+        addedPlans.push_back(std::move(filteredPlan.value()));
       }
     }
   }
@@ -1623,11 +1663,15 @@ size_t QueryPlanner::findUniqueNodeIds(const SubtreePlanVec& connectedComponent,
 }
 
 // _____________________________________________________________________________
-SubtreePlanVec QueryPlanner::runDynamicProgrammingOnConnectedComponent(
+std::optional<SubtreePlanVec>
+QueryPlanner::runDynamicProgrammingOnConnectedComponent(
     SubtreePlanVec connectedComponent,
     const FiltersAndOptionalSubstitutes& filters,
     const TextLimitVec& textLimits, const TripleGraph& tg,
     ReplacementPlans&& replacementPlans) const {
+  const size_t numCandidatePlansBefore = numCandidatePlans_;
+  const size_t maxNumCandidatePlans = getRuntimeParameter<
+      &RuntimeParameters::queryPlanningMaxCandidatePlans_>();
   SubtreePlanMatrix dpTab{allocator()};
   // find the unique number of nodes in the current connected component
   // (there might be duplicates because we already have multiple candidates
@@ -1654,6 +1698,16 @@ SubtreePlanVec QueryPlanner::runDynamicProgrammingOnConnectedComponent(
       checkCancellation();
       auto newPlans = merge(dpTab[i - 1], dpTab[k - i - 1], tg, filters);
       extendDpRow(newPlans);
+
+      // Give up if the number of candidate plans exceeds the limit.
+      //
+      // NOTE: This happens when `countSubgraphs` underestimates the size of
+      // the search space, the caller then falls back to the greedy planner.
+      // The limit is only checked after each `merge`, so it can be exceeded
+      // by the candidate plans of one `merge`.
+      if (numCandidatePlans_ - numCandidatePlansBefore > maxNumCandidatePlans) {
+        return std::nullopt;
+      }
     }
     // As we only passed in connected components, we expect the result to always
     // be nonempty.
@@ -1698,8 +1752,9 @@ size_t QueryPlanner::countSubgraphs(std::vector<const SubtreePlan*> graph,
   // create simple `SubtreePlans` for them which just have the correct
   // variables. We only create one subtree plan for each set of variables that
   // is contained in the `filters`, because this will bring the estimate of this
-  // function closer to the actual behavior of the DP query planner (it always
-  // applies either all possible filters at once, or none of them).
+  // function closer to the actual behavior of the DP query planner (it applies
+  // the filters with the same variables together, see
+  // `applyFiltersIfPossible`).
   SubtreePlanVec dummyPlansForFilter{allocator()};
   ad_utility::HashSet<ad_utility::HashSet<Variable>>
       deduplicatedFilterVariables;
@@ -1914,46 +1969,68 @@ SubtreePlanMatrix QueryPlanner::fillDpTab(const QueryPlanner::TripleGraph& tg,
           << std::endl;
     }
 
-    auto [applicableReplacementPlans, hasApplicableReplacementPlans] =
-        findApplicableReplacementPlans(replacementPlans, coveredNodes,
-                                       useGreedyPlanning);
+    // Plan the `seeds` of the component with the greedy or the dynamic
+    // programming planner, return `std::nullopt` if the latter gives up (see
+    // `runDynamicProgrammingOnConnectedComponent`).
+    auto planComponent = [&](SubtreePlanVec seeds,
+                             ReplacementPlans allReplacementPlans,
+                             bool greedy) -> std::optional<SubtreePlanVec> {
+      auto [applicableReplacementPlans, hasApplicableReplacementPlans] =
+          findApplicableReplacementPlans(allReplacementPlans, coveredNodes,
+                                         greedy);
+      if (!greedy) {
+        return runDynamicProgrammingOnConnectedComponent(
+            std::move(seeds), filtersAndOptSubstitutes, textLimitVec, tg,
+            std::move(applicableReplacementPlans));
+      }
 
-    auto impl = useGreedyPlanning
-                    ? &QueryPlanner::runGreedyPlanningOnConnectedComponent
-                    : &QueryPlanner::runDynamicProgrammingOnConnectedComponent;
+      // Greedy planning needs special logic to properly handle replacement
+      // plans.
+      SubtreePlanVec lastDpRow{allocator()};
+      if (hasApplicableReplacementPlans) {
+        // Plan once with a copy of `seeds` and without replacements to
+        // have a baseline plan. This plan may be better than the replacement
+        // if a certain sorting is required that the replacement doesn't
+        // provide.
+        ql::ranges::move(runGreedyPlanningOnConnectedComponent(
+                             seeds, filtersAndOptSubstitutes, textLimitVec, tg,
+                             ReplacementPlans{allocator()}),
+                         std::back_inserter(lastDpRow));
 
-    SubtreePlanVec lastDpRow{allocator()};
-
-    auto addCandidates = [&lastDpRow](SubtreePlanVec candidates) {
-      std::move(candidates.begin(), candidates.end(),
-                std::back_inserter(lastDpRow));
+        // Then remove the plans for the nodes covered by replacement plans and
+        // insert the replacement plans.
+        prepareReplacementPlansForGreedyPlanner(applicableReplacementPlans,
+                                                seeds);
+      }
+      ql::ranges::move(
+          runGreedyPlanningOnConnectedComponent(
+              std::move(seeds), filtersAndOptSubstitutes, textLimitVec, tg,
+              std::move(applicableReplacementPlans)),
+          std::back_inserter(lastDpRow));
+      return lastDpRow;
     };
 
-    // Greedy planning needs special logic to properly handle replacement plans.
-    if (useGreedyPlanning && hasApplicableReplacementPlans) {
-      // Plan once with a copy of `components` and without replacements to have
-      // a baseline plan. This plan may be better than the replacement if a
-      // certain sorting is required that the replacement doesn't provide.
-      addCandidates(std::invoke(impl, this, component, filtersAndOptSubstitutes,
-                                textLimitVec, tg,
-                                ReplacementPlans{allocator()}));
-
-      // Then remove the plans for the nodes covered by replacement plans and
-      // insert the replacement plans.
-      prepareReplacementPlansForGreedyPlanner(applicableReplacementPlans,
-                                              component);
+    // Plan the `component`, fall back to the greedy planner if the dynamic
+    // programming planner gives up.
+    auto lastDpRow =
+        useGreedyPlanning
+            ? planComponent(std::move(component), replacementPlans, true)
+            : planComponent(component, replacementPlans, false);
+    if (!lastDpRow.has_value()) {
+      AD_LOG_INFO << "Falling back to the greedy query planner, because the "
+                     "dynamic programming planner exceeded the maximal number "
+                     "of candidate plans"
+                  << std::endl;
+      useGreedyPlanning = true;
+      lastDpRow = planComponent(std::move(component), replacementPlans, true);
     }
-
-    addCandidates(std::invoke(impl, this, std::move(component),
-                              filtersAndOptSubstitutes, textLimitVec, tg,
-                              std::move(applicableReplacementPlans)));
     planningInfo_.push_back(ConnectedComponentPlanningInfo{
         useGreedyPlanning ? PlanningAlgorithm::GREEDY
                           : PlanningAlgorithm::DYNAMIC_PROGRAMMING,
         static_cast<size_t>(absl::popcount(coveredNodes)),
         numConnectedSubgraphs, budget,
         numCandidatePlans_ - numCandidatePlansBefore});
-    lastDpRowFromComponents.push_back(std::move(lastDpRow));
+    lastDpRowFromComponents.push_back(std::move(lastDpRow.value()));
     checkCancellation();
   }
   size_t numConnectedComponents = lastDpRowFromComponents.size();

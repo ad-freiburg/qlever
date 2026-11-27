@@ -4665,17 +4665,20 @@ TEST(QueryPlanner, nonDeterministicOperandNotDistributedOverUnion) {
               ::testing::A<const QueryExecutionTree&>()));
 }
 
+namespace {
+// Plan the `query` and return the information about how each connected
+// component was planned.
+std::vector<ConnectedComponentPlanningInfo> planningInfo(std::string query) {
+  QueryPlanner qp = makeQueryPlanner();
+  ParsedQuery pq = parseQuery(std::move(query));
+  qp.createExecutionTree(pq);
+  return qp.planningInfo();
+}
+}  // namespace
+
 // Test the information about how each connected component of a query was
 // planned.
 TEST(QueryPlanner, planningInfo) {
-  // The information for the given query.
-  auto planningInfo = [](std::string query) {
-    QueryPlanner qp = makeQueryPlanner();
-    ParsedQuery pq = parseQuery(std::move(query));
-    qp.createExecutionTree(pq);
-    return qp.planningInfo();
-  };
-
   // A path of three triples is one connected component, with six connected
   // subgraphs (three single triples, two pairs, and all three).
   auto info = planningInfo("SELECT * { ?x <p> ?y . ?y <q> ?z . ?z <r> ?w }");
@@ -4709,6 +4712,41 @@ TEST(QueryPlanner, planningInfo) {
   EXPECT_EQ(info[1].numConnectedSubgraphs_, 2u);
   EXPECT_EQ(info[1].budget_, 1u);
   EXPECT_GT(info[1].numCandidatePlans_, 0u);
+}
+
+// Test that the dynamic programming planner applies the filters with the same
+// variables together, so that the number of candidate plans does not grow with
+// the number of such filters.
+TEST(QueryPlanner, filtersWithSameVariablesAreAppliedTogether) {
+  // A path of three triples with one filter on `?y`.
+  auto oneFilter = planningInfo(
+      "SELECT * { ?x <p> ?y . ?y <q> ?z . ?z <r> ?w FILTER (?y != 1) }");
+  ASSERT_EQ(oneFilter.size(), 1u);
+  EXPECT_EQ(oneFilter[0].algorithm_, PlanningAlgorithm::DYNAMIC_PROGRAMMING);
+
+  // The same path with four filters on `?y` has as many candidate plans.
+  auto fourFilters = planningInfo(
+      "SELECT * { ?x <p> ?y . ?y <q> ?z . ?z <r> ?w FILTER (?y != 1) "
+      "FILTER (?y != 2) FILTER (?y != 3) FILTER (?y != 4) }");
+  ASSERT_EQ(fourFilters.size(), 1u);
+  EXPECT_EQ(fourFilters[0].algorithm_, PlanningAlgorithm::DYNAMIC_PROGRAMMING);
+  EXPECT_EQ(fourFilters[0].numCandidatePlans_, oneFilter[0].numCandidatePlans_);
+}
+
+// Test that the dynamic programming planner falls back to the greedy planner
+// when it creates more than `query-planning-max-candidate-plans` candidate
+// plans.
+TEST(QueryPlanner, fallbackToGreedyPlanning) {
+  // A path of three triples, with at most one candidate plan.
+  auto cleanup = setRuntimeParameterForTest<
+      &RuntimeParameters::queryPlanningMaxCandidatePlans_>(1);
+  auto info = planningInfo("SELECT * { ?x <p> ?y . ?y <q> ?z . ?z <r> ?w }");
+  ASSERT_EQ(info.size(), 1u);
+
+  // The six connected subgraphs are within the budget, but the first `merge`
+  // already creates more than one candidate plan.
+  EXPECT_EQ(info[0].numConnectedSubgraphs_, 6u);
+  EXPECT_EQ(info[0].algorithm_, PlanningAlgorithm::GREEDY);
 }
 
 // Test that the operations and execution trees that the query planner creates
