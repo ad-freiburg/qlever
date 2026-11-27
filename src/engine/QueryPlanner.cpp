@@ -1871,7 +1871,7 @@ QueryPlanner::wrapFiltersWithoutSubstitutes(
 void QueryPlanner::prefilterSeeds(
     SubtreePlanVec& seeds, size_t numTripleNodes,
     const FiltersAndOptionalSubstitutes& filters) const {
-  if (_qec == nullptr || filters.empty() ||
+  if (filters.empty() ||
       !getRuntimeParameter<
           &RuntimeParameters::enablePrefilterOnIndexScans_>()) {
     return;
@@ -1892,8 +1892,7 @@ void QueryPlanner::prefilterSeeds(
       prefilters.emplace_back();
     }
   }
-  if (ql::ranges::all_of(prefilters,
-                         [](const auto& pairs) { return pairs.empty(); })) {
+  if (ql::ranges::all_of(prefilters, ql::ranges::empty)) {
     return;
   }
 

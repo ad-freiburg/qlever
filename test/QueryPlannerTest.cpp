@@ -4736,46 +4736,35 @@ TEST(QueryPlanner, plannerAllocationsCountTowardsMemoryLimit) {
 // final plan sits on a prefiltered scan and finds nothing left to prefilter.
 // With prefiltering disabled, the scan stays as it is.
 TEST(QueryPlanner, prefilterSeedScansOnce) {
+  using ::testing::AllOf;
+  using ::testing::Eq;
+  using ::testing::ResultOf;
   auto qec = ad_utility::testing::getQec(
       "<a> <p> 1 . <b> <p> 2 . <c> <p> 3 . <d> <p> 4 . <e> <p> 5 .");
   std::string query = "SELECT * { ?x <p> ?o FILTER(?o > 3) }";
-  auto prefilterOfTheFilter = [&]() {
-    return parseQuery(query)
-        ._rootGraphPattern._filters.at(0)
-        .expression_.getPrefilterExpressionForMetadata(
-            qec->getLocalVocabContext());
-  };
+  auto prefilter = parseQuery(query)
+                       ._rootGraphPattern._filters.at(0)
+                       .expression_.getPrefilterExpressionForMetadata(
+                           qec->getLocalVocabContext());
 
-  // The plan is a `Filter` on a scan that was prefiltered at the seed level.
   // A prefiltered scan is not cached (this is also how `FilterTest` checks
   // for prefiltering), and the filter's prefilter applies to it no more.
-  {
-    auto tree = h::parseAndPlan(query, qec);
-    const auto* filter =
-        dynamic_cast<const Filter*>(tree->getRootOperation().get());
-    ASSERT_NE(filter, nullptr);
-    auto scan = filter->getSubtree()->getRootOperation();
-    ASSERT_NE(dynamic_cast<const IndexScan*>(scan.get()), nullptr);
-    EXPECT_FALSE(scan->canResultBeCached());
-    EXPECT_FALSE(scan->getUpdatedQueryExecutionTreeWithPrefilterApplied(
-                         prefilterOfTheFilter())
-                     .has_value());
-  }
+  auto scan = [&prefilter](bool isPrefiltered) {
+    auto prefilterApplies = [&prefilter](const IndexScan& indexScan) {
+      return indexScan
+          .getUpdatedQueryExecutionTreeWithPrefilterApplied(prefilter)
+          .has_value();
+    };
+    return AllOf(
+        h::IndexScanFromStrings("?x", "<p>", "?o"),
+        h::RootOperation<IndexScan>(
+            AllOf(AD_PROPERTY(IndexScan, canResultBeCached, Eq(!isPrefiltered)),
+                  ResultOf(prefilterApplies, Eq(!isPrefiltered)))));
+  };
 
-  // With prefiltering disabled, the scan is untouched and the prefilter would
-  // still apply to it.
-  {
-    [[maybe_unused]] const auto& rtp = setRuntimeParameterForTest<
-        &RuntimeParameters::enablePrefilterOnIndexScans_>(false);
-    auto tree = h::parseAndPlan(query, qec);
-    const auto* filter =
-        dynamic_cast<const Filter*>(tree->getRootOperation().get());
-    ASSERT_NE(filter, nullptr);
-    auto scan = filter->getSubtree()->getRootOperation();
-    ASSERT_NE(dynamic_cast<const IndexScan*>(scan.get()), nullptr);
-    EXPECT_TRUE(scan->canResultBeCached());
-    EXPECT_TRUE(scan->getUpdatedQueryExecutionTreeWithPrefilterApplied(
-                        prefilterOfTheFilter())
-                    .has_value());
-  }
+  h::expect(query, h::Filter("?o > 3", scan(true)), qec);
+
+  [[maybe_unused]] const auto& rtp = setRuntimeParameterForTest<
+      &RuntimeParameters::enablePrefilterOnIndexScans_>(false);
+  h::expect(query, h::Filter("?o > 3", scan(false)), qec);
 }

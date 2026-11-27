@@ -14,6 +14,7 @@
 #include <string>
 #include <utility>
 
+#include "backports/memory.h"
 #include "engine/MaterializedViews.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/VariableToColumnMap.h"
@@ -598,7 +599,8 @@ std::optional<std::pair<bool, size_t>> IndexScan::sizeEstimateFromDroppedBlocks(
   // relation) makes the estimate inexact.
   size_t rows = metadata.numRows_;
   bool exact = true;
-  auto dropBlocksBefore = [&](const CompressedBlockMetadata* it,
+  auto dropBlocksBefore = [&rows, &exact, &metadata](
+                              const CompressedBlockMetadata* it,
                               const CompressedBlockMetadata* until) {
     for (; it != until; ++it) {
       rows -= std::min(rows, it->numRows_);
@@ -608,8 +610,14 @@ std::optional<std::pair<bool, size_t>> IndexScan::sizeEstimateFromDroppedBlocks(
   };
   const CompressedBlockMetadata* next = allBlocks.data();
   for (const auto& range : keptRanges) {
-    dropBlocksBefore(next, std::to_address(range.begin()));
-    next = std::to_address(range.end());
+    // `ql::to_address` may dereference its argument, so it must not be applied
+    // to an end iterator.
+    if (range.empty()) {
+      continue;
+    }
+    const CompressedBlockMetadata* rangeBegin = ql::to_address(range.begin());
+    dropBlocksBefore(next, rangeBegin);
+    next = rangeBegin + range.size();
   }
   dropBlocksBefore(next, allBlocks.data() + allBlocks.size());
   return std::pair{exact, rows};
