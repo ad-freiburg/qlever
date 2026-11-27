@@ -148,7 +148,10 @@ void Index::setTextName(const std::string& name) {
 bool& Index::usePatterns() { return pimpl_->usePatterns(); }
 
 // ____________________________________________________________________________
-bool& Index::loadAllPermutations() { return pimpl_->loadAllPermutations(); }
+std::optional<std::vector<Permutation::Enum>>&
+Index::permutationsToBuildOrLoad() {
+  return pimpl_->permutationsToBuildOrLoad();
+}
 
 // ____________________________________________________________________________
 bool& Index::addHasWordTriples() { return pimpl_->addHasWordTriples(); }
@@ -261,6 +264,16 @@ Index::NumNormalAndInternal Index::numDistinctPredicates() const {
 
 // ____________________________________________________________________________
 bool Index::hasAllPermutations() const { return pimpl_->hasAllPermutations(); }
+
+// ____________________________________________________________________________
+bool Index::hasPermutation(Permutation::Enum permutation) const {
+  return pimpl_->hasPermutation(permutation);
+}
+
+// ____________________________________________________________________________
+std::vector<Permutation::Enum> Index::loadedPermutations() const {
+  return pimpl_->loadedPermutations();
+}
 
 // ____________________________________________________________________________
 std::vector<float> Index::getMultiplicities(

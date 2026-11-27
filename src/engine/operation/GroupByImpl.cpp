@@ -885,9 +885,11 @@ std::optional<IdTable> GroupByImpl::computeGroupByForSingleIndexScan() const {
     return std::nullopt;
   }
 
+  // The scans on a permutation that doesn't have the graph as its last column
+  // are not supported by the following optimizations.
   if (indexScan->numVariables() <= 1 ||
       !indexScan->graphsToFilter().areAllGraphsAllowed() ||
-      !isImplicitGroupBy_) {
+      !indexScan->graph().isUndef() || !isImplicitGroupBy_) {
     return std::nullopt;
   }
 
@@ -986,7 +988,7 @@ std::optional<IdTable> GroupByImpl::computeGroupByObjectWithCount() const {
   auto indexScan =
       std::dynamic_pointer_cast<IndexScan>(_subtree->getRootOperation());
   if (!indexScan || !indexScan->graphsToFilter().areAllGraphsAllowed() ||
-      indexScan->numVariables() != 2) {
+      !indexScan->graph().isUndef() || indexScan->numVariables() != 2) {
     return std::nullopt;
   }
   const auto& permutedTriple = indexScan->getPermutedTriple();
@@ -1110,7 +1112,7 @@ GroupByImpl::getPermutationForThreeVariableTriple(
       std::dynamic_pointer_cast<const IndexScan>(tree.getRootOperation());
 
   if (!indexScan || !indexScan->graphsToFilter().areAllGraphsAllowed() ||
-      indexScan->numVariables() != 3) {
+      !indexScan->graph().isUndef() || indexScan->numVariables() != 3) {
     return {};
   }
   {
@@ -1126,12 +1128,23 @@ GroupByImpl::getPermutationForThreeVariableTriple(
   // correctly or we can't use it.
 
   if (indexScan->permutation().permutationType() == Permutation::Type::NORMAL) {
+    // Return the first of the `permutations` that is loaded, if any.
+    auto firstLoaded =
+        [this](std::initializer_list<Permutation::Enum> permutations)
+        -> boost::optional<const Permutation&> {
+      const auto* permutation =
+          getIndex().getImpl().firstLoadedPermutation(permutations);
+      if (permutation == nullptr) {
+        return boost::none;
+      }
+      return *permutation;
+    };
     if (variableByWhichToSort == indexScan->subject()) {
-      return getIndex().getImpl().getPermutation(Permutation::SPO);
+      return firstLoaded({Permutation::SPO, Permutation::SOP});
     } else if (variableByWhichToSort == indexScan->predicate()) {
-      return getIndex().getImpl().getPermutation(Permutation::POS);
+      return firstLoaded({Permutation::POS, Permutation::PSO});
     } else if (variableByWhichToSort == indexScan->object()) {
-      return getIndex().getImpl().getPermutation(Permutation::OSP);
+      return firstLoaded({Permutation::OSP, Permutation::OPS});
     }
   } else if (indexScan->permutation().permutationType() ==
                  Permutation::Type::MATERIALIZED_VIEW &&

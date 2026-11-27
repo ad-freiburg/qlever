@@ -838,7 +838,7 @@ CompressedRelationReader::decompressAndPostprocessBlock(
   if (scanConfig.locatedTriples_.containsTriples(metadata.blockIndex_)) {
     decompressedBlock = scanConfig.locatedTriples_.mergeTriples(
         metadata.blockIndex_, decompressedBlock, numIndexColumns,
-        includeGraphColumn);
+        includeGraphColumn, scanConfig.fixedColumns_);
     hasUpdates = true;
   }
   bool wasPostprocessed = false;
@@ -1149,8 +1149,12 @@ auto CompressedRelationReader::getScanConfig(
   }();
   FilterDuplicatesAndGraphs graphFilter{scanSpec.graphFilter(),
                                         graphColumnIndex, deleteGraphColumn};
-  return {std::move(columnIndices), std::move(outputColumns),
-          std::move(columnSubset), std::move(graphFilter), locatedTriples};
+  return {std::move(columnIndices),
+          std::move(outputColumns),
+          std::move(columnSubset),
+          std::move(graphFilter),
+          locatedTriples,
+          {scanSpec.col0Id(), scanSpec.col1Id(), scanSpec.col2Id()}};
 }
 
 // _____________________________________________________________________________

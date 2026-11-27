@@ -132,7 +132,6 @@ class IndexFormatConverterTest : public ::testing::Test {
   std::pair<Index, LocatedTriplesSharedState> loadConvertedIndex() {
     Index index{ad_utility::makeUnlimitedAllocator<Id>()};
     index.usePatterns() = true;
-    index.loadAllPermutations() = true;
     index.createFromOnDiskIndex(newBasename_, false);
     index.addTextFromOnDiskIndex();
     auto locatedTriples =
@@ -316,7 +315,7 @@ TEST_F(IndexFormatConverterTest, convertedIndexHasTheSameContent) {
       };
   auto expectedSortedTriples = sortedTriplesOfPermutation(Permutation::SPO);
   EXPECT_EQ(expectedSortedTriples.size(), expectedTriples().size());
-  for (auto permutationEnum : Permutation::ALL) {
+  for (auto permutationEnum : Permutation::GRAPH_LAST) {
     EXPECT_EQ(sortedTriplesOfPermutation(permutationEnum),
               expectedSortedTriples)
         << Permutation::toString(permutationEnum);
@@ -651,8 +650,8 @@ class MultiBlockIndexFormatConverterTest : public ::testing::Test {
   Index loadConvertedIndex(bool allPermutations = true) const {
     Index index{ad_utility::makeUnlimitedAllocator<Id>()};
     index.usePatterns() = allPermutations;
-    index.loadAllPermutations() = allPermutations;
     index.createFromOnDiskIndex(newBasename_, false);
+    EXPECT_EQ(index.hasAllPermutations(), allPermutations);
     return index;
   }
 
@@ -661,7 +660,8 @@ class MultiBlockIndexFormatConverterTest : public ::testing::Test {
   static std::vector<Permutation::Enum> permutationsOfIndex(
       bool allPermutations) {
     if (allPermutations) {
-      return std::vector<Permutation::Enum>(Permutation::ALL);
+      return std::vector<Permutation::Enum>(Permutation::GRAPH_LAST.begin(),
+                                            Permutation::GRAPH_LAST.end());
     }
     return {Permutation::PSO, Permutation::POS};
   }
@@ -671,8 +671,9 @@ class MultiBlockIndexFormatConverterTest : public ::testing::Test {
   // index has many blocks), pretend that it is in the previous format, and
   // convert it. Check that the converted index has exactly the same content as
   // the index that it was converted from, and return the number of blocks that
-  // each permutation of the latter had (in the order of `Permutation::ALL`), so
-  // that a test can check which case it actually covers.
+  // each permutation of the latter had (in the order of
+  // `Permutation::GRAPH_LAST`), so that a test can check which case it actually
+  // covers.
   std::vector<size_t> convertAndExpectTheSameContent(
       std::string turtleInput, bool allPermutations = true) {
     auto permutations = permutationsOfIndex(allPermutations);
@@ -821,7 +822,7 @@ TEST_F(MultiBlockIndexFormatConverterTest, convertEmptyIndex) {
   {
     Index oldIndex = ad_utility::testing::makeTestIndex(
         oldBasename_, ad_utility::testing::TestIndexConfig{""});
-    for (auto permutationEnum : Permutation::ALL) {
+    for (auto permutationEnum : Permutation::GRAPH_LAST) {
       EXPECT_TRUE(oldIndex.getImpl()
                       .getPermutation(permutationEnum)
                       .metaData()
@@ -839,7 +840,7 @@ TEST_F(MultiBlockIndexFormatConverterTest, convertEmptyIndex) {
   Index newIndex = loadConvertedIndex();
   auto locatedTriples =
       newIndex.deltaTriplesManager().getCurrentLocatedTriplesSharedState();
-  for (auto permutationEnum : Permutation::ALL) {
+  for (auto permutationEnum : Permutation::GRAPH_LAST) {
     SCOPED_TRACE(Permutation::toString(permutationEnum));
     const auto& permutation =
         newIndex.getImpl().getPermutation(permutationEnum);

@@ -15,6 +15,31 @@ UpdateMetadata ExecuteUpdate::executeUpdate(
     DeltaTriples& deltaTriples, const CancellationHandle& cancellationHandle,
     ad_utility::timer::TimeTracer& tracer) {
   UpdateMetadata metadata{};
+  // A `CLEAR GRAPH` or `DROP GRAPH` with a fixed graph doesn't have to
+  // evaluate its graph pattern, see `DeltaTriples::dropGraph`.
+  if (const auto& graph = query.updateClause().op_.graphToClear_;
+      graph.has_value()) {
+    // Find out whether the graph contains triples (the evaluation of the graph
+    // pattern stops at the first non-empty block).
+    tracer.beginTrace("checkIfGraphIsNonEmpty");
+    auto result = qet.getResult(true);
+    if (result->isFullyMaterialized()) {
+      metadata.clearedGraphWasNonEmpty_ = !result->idTableView().empty();
+    } else {
+      metadata.clearedGraphWasNonEmpty_ = ql::ranges::any_of(
+          result->idTables(),
+          [](const auto& pair) { return !pair.idTable_.empty(); });
+    }
+    tracer.endTrace("checkIfGraphIsNonEmpty");
+    metadata.inUpdate_ = DeltaTriplesCount{0, 0};
+    tracer.beginTrace("dropGraph");
+    if (auto graphId = getIdOfGraph(index, deltaTriples, graph.value())) {
+      deltaTriples.dropGraph(cancellationHandle, graphId.value());
+    }
+    deltaTriples.consolidateAll();
+    tracer.endTrace("dropGraph");
+    return metadata;
+  }
   // Fully materialize the result for now. This makes it easier to execute the
   // update. We have to keep the local vocab alive until the triples are
   // inserted using `deleteTriples`/`insertTriples` to keep LocalVocabIds valid.
@@ -51,6 +76,30 @@ UpdateMetadata ExecuteUpdate::executeUpdate(
 // This does not seem to impact performance significantly because the lookups
 // on disk are the bottleneck (we looked at the flamegraph for a whole update
 // operation). Still, it would be cleaner to avoid these copies.
+// _____________________________________________________________________________
+std::optional<Id> ExecuteUpdate::getIdOfGraph(
+    const Index& index, const DeltaTriples& deltaTriples,
+    const ad_utility::triple_component::Iri& graph) {
+  if (auto id = toValueId(TripleComponent{graph}, index.getImpl())) {
+    return id;
+  }
+  // A graph that is not contained in the vocabulary of the index can only
+  // have delta triples, so its IRI is contained in their local vocabulary.
+  auto idOrEntry =
+      toIdOrLocalVocabEntry(ad_utility::triple_component::LiteralOrIri{graph},
+                            index.getLocalVocabContext());
+  if (const auto* id = std::get_if<Id>(&idOrEntry)) {
+    return *id;
+  }
+  auto localVocabIndex = deltaTriples.localVocab().getIndexOrNullopt(
+      std::get<LocalVocabEntry>(idOrEntry));
+  if (!localVocabIndex.has_value()) {
+    return std::nullopt;
+  }
+  return Id::makeFromLocalVocabIndex(localVocabIndex.value());
+}
+
+// _____________________________________________________________________________
 std::pair<std::vector<ExecuteUpdate::TransformedTriple>, LocalVocab>
 ExecuteUpdate::transformTriplesTemplate(
     const IndexImpl& index, const VariableToColumnMap& variableColumns,

@@ -88,8 +88,72 @@ void DeltaTriples::clear() {
   };
   clearImpl(triplesSetsNormal_, locatedTriples_->getLocatedTriples<false>());
   clearImpl(triplesSetsInternal_, locatedTriples_->getLocatedTriples<true>());
+  droppedGraphs_.reset();
   // Update the index of the located triples to mark that they have changed.
   locatedTriples_->index_++;
+}
+
+// ____________________________________________________________________________
+void DeltaTriples::dropGraph(CancellationHandle cancellationHandle, Id graph) {
+  // Erase the delta triples (inserted or deleted ones) of the `graph` from the
+  // sets and from all the loaded permutations.
+  auto eraseDeltaTriplesOfGraph = [this, graph,
+                                   &cancellationHandle](auto isInternal) {
+    auto& state = getState<isInternal.value>();
+    for (auto* triplesSet : {&state.triplesInserted_, &state.triplesDeleted_}) {
+      std::vector<IdTriple<0>> triples;
+      for (const auto& triple : *triplesSet) {
+        if (triple.ids()[ADDITIONAL_COLUMN_GRAPH_ID] == graph) {
+          triples.push_back(triple);
+        }
+      }
+      if (triples.empty()) {
+        continue;
+      }
+      for (auto permutation : Permutation::all<isInternal>()) {
+        if (index_.hasPermutation(permutation)) {
+          eraseTriplesInPermutation(permutation, triples, isInternal,
+                                    cancellationHandle);
+        }
+      }
+      for (const auto& triple : triples) {
+        triplesSet->erase(triple);
+      }
+    }
+  };
+  using ad_utility::use_value_identity::vi;
+  eraseDeltaTriplesOfGraph(vi<false>);
+  eraseDeltaTriplesOfGraph(vi<true>);
+
+  // A graph that is only contained in the local vocabulary has no triples in
+  // the original index.
+  if (graph.getDatatype() != Datatype::LocalVocabIndex) {
+    auto droppedGraphs = droppedGraphs_ != nullptr
+                             ? std::make_shared<DroppedGraphs>(*droppedGraphs_)
+                             : std::make_shared<DroppedGraphs>();
+    droppedGraphs->add(graph);
+    setDroppedGraphs(std::move(droppedGraphs));
+  }
+  locatedTriples_->index_++;
+}
+
+// ____________________________________________________________________________
+void DeltaTriples::setDroppedGraphs(
+    std::shared_ptr<const DroppedGraphs> droppedGraphs) {
+  droppedGraphs_ = std::move(droppedGraphs);
+  auto set = [this](auto& locatedTriples) {
+    for (auto& locatedTriplesPerBlock : locatedTriples) {
+      locatedTriplesPerBlock.setDroppedGraphs(droppedGraphs_);
+    }
+  };
+  set(locatedTriples_->getLocatedTriples<false>());
+  set(locatedTriples_->getLocatedTriples<true>());
+}
+
+// ____________________________________________________________________________
+std::vector<Id> DeltaTriples::droppedGraphs() const {
+  return droppedGraphs_ != nullptr ? droppedGraphs_->graphs()
+                                   : std::vector<Id>{};
 }
 
 // ____________________________________________________________________________
@@ -135,6 +199,9 @@ nlohmann::json DeltaTriples::vacuum(
             std::make_shared<ad_utility::CancellationHandle<>>();
         // Erase located triples
         for (auto permutation : Permutation::all<isInternal>()) {
+          if (!index_.hasPermutation(permutation)) {
+            continue;
+          }
           eraseTriplesInPermutation(permutation, triples, isInternal,
                                     cancellationHandle);
         }
@@ -203,6 +270,10 @@ void DeltaTriples::locateAndAddTriples(CancellationHandle cancellationHandle,
   constexpr const auto& allPermutations = Permutation::all<isInternal>();
   auto& lt = locatedTriples_->getLocatedTriples<isInternal>();
   for (auto permutation : allPermutations) {
+    // The triples are only located in the permutations that are loaded.
+    if (!index_.hasPermutation(permutation)) {
+      continue;
+    }
     tracer.beginTrace(std::string{Permutation::toString(permutation)});
     tracer.beginTrace("locateTriples");
     auto& basePerm = index_.getPermutation(permutation);
@@ -694,6 +765,12 @@ void DeltaTriples::setOriginalMetadata(
           : locatedTriples_->getLocatedTriplesForPermutation<false>(
                 permutation);
   locatedTriplesPerBlock.setOriginalMetadata(std::move(metadata));
+  // The position of the graph in the key order, see
+  // `LocatedTriplesPerBlock::removeRowsOfDroppedGraphs`.
+  const auto& keys = Permutation::toKeyOrder(permutation).keys();
+  locatedTriplesPerBlock.setGraphKeyPosition(
+      static_cast<size_t>(ql::ranges::find(keys, 3) - keys.begin()));
+  locatedTriplesPerBlock.setDroppedGraphs(droppedGraphs_);
 }
 
 // _____________________________________________________________________________
@@ -745,10 +822,23 @@ void DeltaTriples::writeToDisk() const {
   qlever::util::writeFileAtomically(
       filenameForPersisting_.value(),
       [this, &toRange](const ql::filesystem::path& temporaryPath) {
-        ad_utility::serializeIds(
-            temporaryPath, localVocab_,
-            std::array{toRange(triplesSetsNormal_.triplesDeleted_),
-                       toRange(triplesSetsNormal_.triplesInserted_)});
+        // The dropped graphs are stored as a third range of `Id`s (and
+        // only if there are any, such that older versions of QLever can still
+        // read the file in this case).
+        if (droppedGraphs_ == nullptr || droppedGraphs_->empty()) {
+          ad_utility::serializeIds(
+              temporaryPath, localVocab_,
+              std::array{toRange(triplesSetsNormal_.triplesDeleted_),
+                         toRange(triplesSetsNormal_.triplesInserted_)});
+        } else {
+          auto droppedGraphs = droppedGraphs_->graphs();
+          using Range = ad_utility::InputRangeTypeErased<Id>;
+          ad_utility::serializeIds(
+              temporaryPath, localVocab_,
+              std::array{Range{toRange(triplesSetsNormal_.triplesDeleted_)},
+                         Range{toRange(triplesSetsNormal_.triplesInserted_)},
+                         Range{droppedGraphs}});
+        }
       });
 }
 
@@ -764,7 +854,7 @@ void DeltaTriples::readFromDisk() {
   if (idRanges.empty()) {
     return;
   }
-  AD_CORRECTNESS_CHECK(idRanges.size() == 2);
+  AD_CORRECTNESS_CHECK(idRanges.size() == 2 || idRanges.size() == 3);
   auto toTriples = [](const std::vector<Id>& ids) {
     Triples triples;
     static_assert(Triples::value_type::PayloadSize == 0);
@@ -784,6 +874,13 @@ void DeltaTriples::readFromDisk() {
   };
   auto cancellationHandle =
       std::make_shared<CancellationHandle::element_type>();
+  // The graphs have to be dropped first, because dropping a graph erases its
+  // delta triples (which were inserted after the graph was dropped).
+  if (idRanges.size() == 3) {
+    for (Id graph : idRanges.at(2)) {
+      dropGraph(cancellationHandle, graph);
+    }
+  }
   insertTriples<Consolidate::No>(cancellationHandle, toTriples(idRanges.at(1)));
   deleteTriples<Consolidate::No>(cancellationHandle, toTriples(idRanges.at(0)));
   consolidateAll();
@@ -848,6 +945,26 @@ void DeltaTriples::addFromSnapshotDiff(
     remapId(idMapping, id, localVocab_, index_);
   });
   tracer.endTrace("computeLocatedTriplesDiff");
+  // Drop the graphs that were dropped after the `oldState` (the graphs that
+  // were dropped before are not contained in the rebuilt index anyway). This
+  // has to happen before the triples of the `difference` are added, because
+  // dropping a graph erases its delta triples.
+  tracer.beginTrace("dropGraphs");
+  auto droppedGraphsOf = [](const LocatedTriplesState& state) {
+    return state.getLocatedTriplesForPermutation<false>(Permutation::PSO)
+        .droppedGraphs();
+  };
+  const auto& oldDroppedGraphs = droppedGraphsOf(oldState);
+  if (const auto& newDroppedGraphs = droppedGraphsOf(newState)) {
+    for (Id graph : newDroppedGraphs->graphs()) {
+      if (oldDroppedGraphs != nullptr && oldDroppedGraphs->contains(graph)) {
+        continue;
+      }
+      remapId(idMapping, graph, localVocab_, index_);
+      dropGraph(cancellationHandle, graph);
+    }
+  }
+  tracer.endTrace("dropGraphs");
   tracer.beginTrace("insertDiffedTriples");
   auto addTriples = [this, &cancellationHandle, &difference, &tracer](
                         auto isInternal, auto insertOrDelete) {

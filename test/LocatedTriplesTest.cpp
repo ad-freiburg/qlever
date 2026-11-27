@@ -1174,3 +1174,82 @@ TEST_F(LocatedTriplesTest, computeDiff) {
                       IdTriple<0>{std::array{I(0), I(0), I(0), I(0)}},
                       IdTriple<0>{std::array{I(4), I(0), I(0), I(0)}})));
 }
+
+// _____________________________________________________________________________
+TEST(DroppedGraphs, addAndLookup) {
+  DroppedGraphs droppedGraphs;
+  EXPECT_TRUE(droppedGraphs.empty());
+  droppedGraphs.add(V(7));
+  droppedGraphs.add(V(3));
+  droppedGraphs.add(V(7));
+  EXPECT_EQ(droppedGraphs.size(), 2);
+  EXPECT_THAT(droppedGraphs.graphs(), ::testing::ElementsAre(V(3), V(7)));
+  EXPECT_TRUE(droppedGraphs.contains(V(3)));
+  EXPECT_FALSE(droppedGraphs.contains(V(4)));
+  EXPECT_TRUE(droppedGraphs.containsGraphInRange(V(1), V(3)));
+  EXPECT_TRUE(droppedGraphs.containsGraphInRange(V(4), V(9)));
+  EXPECT_FALSE(droppedGraphs.containsGraphInRange(V(4), V(6)));
+  EXPECT_FALSE(droppedGraphs.containsGraphInRange(V(8), V(9)));
+}
+
+// The rows of dropped graphs are removed from the blocks before the located
+// triples are merged, and the blocks with dropped graphs count as blocks with
+// updates.
+TEST(DroppedGraphs, mergeTriplesRemovesDroppedGraphs) {
+  // A single block with three triples in the graphs 10 and 11 (the graph is
+  // the last column).
+  auto block =
+      makeIdTableFromVector({{1, 2, 3, 10}, {1, 2, 4, 11}, {1, 3, 3, 10}}, V);
+  CompressedBlockMetadata metadata{{std::nullopt,
+                                    3,
+                                    {V(1), V(2), V(3), V(10)},
+                                    {V(1), V(3), V(3), V(10)},
+                                    std::vector{V(10), V(11)},
+                                    false},
+                                   0};
+  LocatedTriplesPerBlock locatedTriples;
+  locatedTriples.setOriginalMetadata(std::vector{metadata});
+  EXPECT_FALSE(locatedTriples.containsTriples(0));
+  auto droppedGraphs = std::make_shared<DroppedGraphs>();
+  droppedGraphs->add(V(12));
+  locatedTriples.setDroppedGraphs(droppedGraphs);
+  // The graph 12 is not contained in the block.
+  EXPECT_FALSE(locatedTriples.containsTriples(0));
+  droppedGraphs->add(V(10));
+  EXPECT_TRUE(locatedTriples.containsTriples(0));
+  EXPECT_FALSE(locatedTriples.isEmpty());
+  EXPECT_EQ(locatedTriples.numTriples(0), (NumAddedAndDeleted{0, 3}));
+  EXPECT_EQ(locatedTriples.mergeTriples(0, block, 3, true),
+            makeIdTableFromVector({{1, 2, 4, 11}}, V));
+  // Two index columns (the first column is fixed by the scan).
+  auto blockWithoutFirstColumn =
+      makeIdTableFromVector({{2, 3, 10}, {2, 4, 11}, {3, 3, 10}}, V);
+  EXPECT_EQ(locatedTriples.mergeTriples(0, blockWithoutFirstColumn, 2, true),
+            makeIdTableFromVector({{2, 4, 11}}, V));
+
+  // The graph as the first column of the permutation, fixed by the scan. The
+  // block contains the graphs from its first to its last triple.
+  LocatedTriplesPerBlock graphFirst;
+  graphFirst.setOriginalMetadata(
+      std::vector{CompressedBlockMetadata{{std::nullopt,
+                                           2,
+                                           {V(10), V(2), V(3), V(4)},
+                                           {V(10), V(2), V(4), V(4)},
+                                           std::nullopt,
+                                           false},
+                                          0}});
+  graphFirst.setGraphKeyPosition(0);
+  graphFirst.setDroppedGraphs(droppedGraphs);
+  EXPECT_TRUE(graphFirst.containsTriples(0));
+  auto blockOfGraph = makeIdTableFromVector({{2, 3, 4}, {2, 4, 4}}, V);
+  EXPECT_EQ(graphFirst
+                .mergeTriples(0, blockOfGraph, 2, true,
+                              {V(10), std::nullopt, std::nullopt})
+                .numRows(),
+            0);
+  // A block that only contains graphs that are not dropped.
+  auto otherGraphs = std::make_shared<DroppedGraphs>();
+  otherGraphs->add(V(11));
+  graphFirst.setDroppedGraphs(otherGraphs);
+  EXPECT_FALSE(graphFirst.containsTriples(0));
+}

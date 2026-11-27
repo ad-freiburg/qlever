@@ -30,6 +30,13 @@ class ExecuteUpdate {
           ad_utility::timer::DEFAULT_TIME_TRACER);
 
  private:
+  // Return the `Id` of the `graph`, either from the vocabulary of the `index`
+  // or from the local vocabulary of the `deltaTriples`, or `nullopt` if the
+  // graph is contained in neither (and therefore has no triples).
+  static std::optional<Id> getIdOfGraph(
+      const Index& index, const DeltaTriples& deltaTriples,
+      const ad_utility::triple_component::Iri& graph);
+
   // Resolve all `TripleComponent`s and `Graph`s in a vector of
   // `SparqlTripleSimpleWithGraph` into `Variable`s or `Id`s.
   static std::pair<std::vector<ExecuteUpdate::TransformedTriple>, LocalVocab>

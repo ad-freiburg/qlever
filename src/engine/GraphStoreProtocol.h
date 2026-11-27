@@ -249,7 +249,8 @@ class GraphStoreProtocol {
           AD_CORRECTNESS_CHECK(updateMetadata.size() == 2);
           const auto& dropMeta = updateMetadata.at(0);
           AD_CORRECTNESS_CHECK(dropMeta.inUpdate_.has_value());
-          if (dropMeta.inUpdate_.value().triplesDeleted_ > 0) {
+          if (dropMeta.inUpdate_.value().triplesDeleted_ > 0 ||
+              dropMeta.clearedGraphWasNonEmpty_.value_or(false)) {
             response.result(boost::beast::http::status::ok);
           } else {
             response.result(boost::beast::http::status::created);

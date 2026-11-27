@@ -22,6 +22,11 @@ struct GraphUpdate {
   using Triples = updateClause::UpdateTriples;
   Triples toInsert_;
   Triples toDelete_;
+  // If set, this update deletes all the triples of this graph (`CLEAR GRAPH`
+  // or `DROP GRAPH`, also as part of `COPY` and `MOVE`). The `toDelete_` and
+  // the graph pattern of the query then also express this, but the update can
+  // be executed without evaluating them (see `DeltaTriples::dropGraph`).
+  std::optional<GraphRef> graphToClear_;
 
   // Create a `GraphUpdate` that inserts and deletes nothing. The `allocator` is
   // used for the triples.

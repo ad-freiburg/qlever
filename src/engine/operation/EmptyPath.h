@@ -151,6 +151,16 @@ class EmptyPath : public Operation {
   // The index of the first column that is carried over from the child.
   size_t firstPayloadColumn() const { return numKgColumns(); }
 
+  // Return the distinct values of the second column of the `permutation`
+  // (together with their graph if `addGraphColumn` is true), restricted to the
+  // `idFilter` if specified, sorted and without duplicates. They are computed
+  // from a full scan, which is only used if no permutation that starts with
+  // the respective column is loaded.
+  IdTable distinctCol1IdsViaFullScan(
+      const Permutation& permutation, const ScanSpecification& scanSpec,
+      bool addGraphColumn,
+      const std::optional<std::vector<Id>>& idFilter) const;
+
   // Return all distinct entities of the knowledge graph (as tables with
   // `numKgColumns()` columns), sorted and without duplicates. If `idFilter` is
   // set, only the entities contained in it are returned. `idFilter` has to be
