@@ -2846,80 +2846,53 @@ auto QueryPlanner::createJoinWithPathSearch(
   if (static_cast<bool>(aRootOp) == static_cast<bool>(bRootOp)) {
     return std::nullopt;
   }
+  const PathSearch& pathSearch = aRootOp ? *aRootOp : *bRootOp;
+  const SubtreePlan& sibling = aRootOp ? b : a;
 
-  auto pathSearch = aRootOp ? aRootOp : bRootOp;
-  auto sibling = bRootOp ? a : b;
-
-  auto decideColumns = [aRootOp](std::array<ColumnIndex, 2> joinColumns)
-      -> std::pair<ColumnIndex, ColumnIndex> {
-    auto thisCol = aRootOp ? joinColumns[0] : joinColumns[1];
-    auto otherCol = aRootOp ? joinColumns[1] : joinColumns[0];
-    return {thisCol, otherCol};
-  };
-
-  // Only source and target may be bound directly
-  if (jcs.size() > 2) {
+  // The path search replaces the join with the sibling, so the sibling must
+  // not have any columns other than the join columns.
+  if (sibling._qet->getVariableColumns().size() != jcs.size()) {
     return std::nullopt;
   }
 
-  auto sourceColumn = pathSearch->getSourceColumn();
-  auto targetColumn = pathSearch->getTargetColumn();
-
-  // Either source or target column have to be a variable to create a join
-  if (!sourceColumn && !targetColumn) {
-    return std::nullopt;
-  }
-
-  // A join on an edge property column should not create any candidates
-  auto isJoinOnSourceOrTarget = [sourceColumn,
-                                 targetColumn](size_t joinColumn) {
-    return ((sourceColumn && sourceColumn.value() == joinColumn) ||
-            (targetColumn && targetColumn.value() == joinColumn));
-  };
-
-  if (jcs.size() == 2) {
-    // To join source and target, both must be variables
-    if (!sourceColumn || !targetColumn) {
+  // Only unbound source and target columns can be bound to the sibling, and
+  // only to columns that are always defined, because an undefined value would
+  // match paths from or to any node.
+  std::optional<ColumnIndex> siblingSourceCol;
+  std::optional<ColumnIndex> siblingTargetCol;
+  for (const auto& [aCol, bCol] : jcs) {
+    auto [pathSearchCol, siblingCol] =
+        aRootOp ? std::pair{aCol, bCol} : std::pair{bCol, aCol};
+    const auto& info =
+        sibling._qet->getVariableAndInfoByColumnIndex(siblingCol).second;
+    if (info.mightContainUndef_ != ColumnIndexAndTypeInfo::AlwaysDefined) {
       return std::nullopt;
     }
-
-    auto [firstCol, firstOtherCol] = decideColumns(jcs[0]);
-
-    auto [secondCol, secondOtherCol] = decideColumns(jcs[1]);
-
-    if (!isJoinOnSourceOrTarget(firstCol) &&
-        !isJoinOnSourceOrTarget(secondCol)) {
-      return std::nullopt;
-    }
-
-    if (sourceColumn == firstCol && targetColumn == secondCol) {
-      pathSearch->bindSourceAndTargetSide(sibling._qet, firstOtherCol,
-                                          secondOtherCol);
-    } else if (sourceColumn == secondCol && targetColumn == firstCol) {
-      pathSearch->bindSourceAndTargetSide(sibling._qet, secondOtherCol,
-                                          firstOtherCol);
+    if (pathSearchCol == pathSearch.getSourceColumn() &&
+        !pathSearch.isSourceBound()) {
+      siblingSourceCol = siblingCol;
+    } else if (pathSearchCol == pathSearch.getTargetColumn() &&
+               !pathSearch.isTargetBound()) {
+      siblingTargetCol = siblingCol;
     } else {
       return std::nullopt;
     }
-  } else if (jcs.size() == 1) {
-    auto [thisCol, otherCol] = decideColumns(jcs[0]);
-
-    if (!isJoinOnSourceOrTarget(thisCol)) {
-      return std::nullopt;
-    }
-
-    if (sourceColumn && sourceColumn == thisCol &&
-        !pathSearch->isSourceBound()) {
-      pathSearch->bindSourceSide(sibling._qet, otherCol);
-    } else if (targetColumn && targetColumn == thisCol &&
-               !pathSearch->isTargetBound()) {
-      pathSearch->bindTargetSide(sibling._qet, otherCol);
-    }
-  } else {
-    return std::nullopt;
   }
 
-  SubtreePlan plan = makeSubtreePlan(pathSearch);
+  // The path search might be shared with other plans, so bind a copy.
+  auto boundPathSearch = std::dynamic_pointer_cast<PathSearch>(
+      std::shared_ptr<Operation>{pathSearch.clone()});
+  if (siblingSourceCol.has_value() && siblingTargetCol.has_value()) {
+    boundPathSearch->bindSourceAndTargetSide(
+        sibling._qet, siblingSourceCol.value(), siblingTargetCol.value());
+  } else if (siblingSourceCol.has_value()) {
+    boundPathSearch->bindSourceSide(sibling._qet, siblingSourceCol.value());
+  } else {
+    // `jcs` is never empty, so at least one side is bound.
+    boundPathSearch->bindTargetSide(sibling._qet, siblingTargetCol.value());
+  }
+
+  SubtreePlan plan = makeSubtreePlan(boundPathSearch);
   mergeSubtreePlanIds(plan, a, b);
   return plan;
 }

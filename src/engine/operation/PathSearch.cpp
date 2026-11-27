@@ -259,14 +259,26 @@ Result PathSearch::computeResult([[maybe_unused]] bool requestLaziness) {
     auto sideTime = timer.msecs();
     timer.start();
 
+    // A side that is bound to an empty result matches no paths.
+    bool sourceBoundToTree =
+        sourceTree_.has_value() || sourceAndTargetTree_.has_value();
+    bool targetBoundToTree =
+        targetTree_.has_value() || sourceAndTargetTree_.has_value();
+    bool boundSideIsEmpty = (sourceBoundToTree && sources.empty()) ||
+                            (targetBoundToTree && targets.empty());
+
     PathsLimited paths{allocator()};
     IdColumn allSources;
-    if (sources.empty()) {
-      allSources = binSearch.getSources();
-      sources = allSources;
+    if (!boundSideIsEmpty) {
+      if (sources.empty()) {
+        allSources = binSearch.getSources();
+        sources = allSources;
+      }
+      // Sources and targets from the same tree are pairs.
+      bool cartesian = config_.cartesian_ && !sourceAndTargetTree_.has_value();
+      paths = allPaths(sources, targets, binSearch, cartesian,
+                       config_.numPathsPerTarget_, config_.maxDepth_);
     }
-    paths = allPaths(sources, targets, binSearch, config_.cartesian_,
-                     config_.numPathsPerTarget_, config_.maxDepth_);
 
     timer.stop();
     auto searchTime = timer.msecs();

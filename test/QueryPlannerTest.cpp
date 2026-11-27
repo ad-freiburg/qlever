@@ -1530,23 +1530,34 @@ TEST(QueryPlanner, PathSearchSourceBound) {
                                  Variable("?path"),
                                  Variable("?edge"),
                                  {}};
+  auto query = [](std::string_view values) {
+    return absl::StrCat(
+        "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
+        "SELECT ?start ?end ?path ?edge WHERE {",
+        values,
+        "SERVICE pathSearch: {"
+        "_:path pathSearch:algorithm pathSearch:allPaths ;"
+        "pathSearch:source ?source ;"
+        "pathSearch:target <z> ;"
+        "pathSearch:pathColumn ?path ;"
+        "pathSearch:edgeColumn ?edge ;"
+        "pathSearch:start ?start;"
+        "pathSearch:end ?end;"
+        "{SELECT * WHERE {"
+        "?start <p> ?end."
+        "}}}}");
+  };
+  h::expect(query("VALUES ?source {<x>}"),
+            h::pathSearch(config, true, true, scan("?start", "<p>", "?end"),
+                          h::ValuesClause("VALUES (?source) { (<x>) }")),
+            qec);
+  // A source that is already bound is not bound again.
   h::expect(
-      "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
-      "SELECT ?start ?end ?path ?edge WHERE {"
-      "VALUES ?source {<x>}"
-      "SERVICE pathSearch: {"
-      "_:path pathSearch:algorithm pathSearch:allPaths ;"
-      "pathSearch:source ?source ;"
-      "pathSearch:target <z> ;"
-      "pathSearch:pathColumn ?path ;"
-      "pathSearch:edgeColumn ?edge ;"
-      "pathSearch:start ?start;"
-      "pathSearch:end ?end;"
-      "{SELECT * WHERE {"
-      "?start <p> ?end."
-      "}}}}",
+      query("VALUES ?source {<x>} VALUES ?source {<x> <y>}"),
       h::pathSearch(config, true, true, scan("?start", "<p>", "?end"),
-                    h::ValuesClause("VALUES (?source) { (<x>) }")),
+                    h::UnorderedJoins(
+                        h::ValuesClause("VALUES (?source) { (<x>) }"),
+                        h::ValuesClause("VALUES (?source) { (<x>) (<y>) }"))),
       qec);
 }
 
@@ -1565,23 +1576,34 @@ TEST(QueryPlanner, PathSearchTargetBound) {
                                  Variable("?path"),
                                  Variable("?edge"),
                                  {}};
+  auto query = [](std::string_view values) {
+    return absl::StrCat(
+        "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
+        "SELECT ?start ?end ?path ?edge WHERE {",
+        values,
+        "SERVICE pathSearch: {"
+        "_:path pathSearch:algorithm pathSearch:allPaths ;"
+        "pathSearch:source <x> ;"
+        "pathSearch:target ?target ;"
+        "pathSearch:pathColumn ?path ;"
+        "pathSearch:edgeColumn ?edge ;"
+        "pathSearch:start ?start;"
+        "pathSearch:end ?end;"
+        "{SELECT * WHERE {"
+        "?start <p> ?end."
+        "}}}}");
+  };
+  h::expect(query("VALUES ?target {<z>}"),
+            h::pathSearch(config, true, true, scan("?start", "<p>", "?end"),
+                          h::ValuesClause("VALUES (?target) { (<z>) }")),
+            qec);
+  // A target that is already bound is not bound again.
   h::expect(
-      "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
-      "SELECT ?start ?end ?path ?edge WHERE {"
-      "VALUES ?target {<z>}"
-      "SERVICE pathSearch: {"
-      "_:path pathSearch:algorithm pathSearch:allPaths ;"
-      "pathSearch:source <x> ;"
-      "pathSearch:target ?target ;"
-      "pathSearch:pathColumn ?path ;"
-      "pathSearch:edgeColumn ?edge ;"
-      "pathSearch:start ?start;"
-      "pathSearch:end ?end;"
-      "{SELECT * WHERE {"
-      "?start <p> ?end."
-      "}}}}",
+      query("VALUES ?target {<z>} VALUES ?target {<y> <z>}"),
       h::pathSearch(config, true, true, scan("?start", "<p>", "?end"),
-                    h::ValuesClause("VALUES (?target) { (<z>) }")),
+                    h::UnorderedJoins(
+                        h::ValuesClause("VALUES (?target) { (<z>) }"),
+                        h::ValuesClause("VALUES (?target) { (<y>) (<z>) }"))),
       qec);
 }
 
@@ -1654,6 +1676,78 @@ TEST(QueryPlanner, PathSearchBothBoundIndividually) {
       h::pathSearch(config, true, true, scan("?start", "<p>", "?end"),
                     h::ValuesClause("VALUES (?source) { (<x>) }"),
                     h::ValuesClause("VALUES (?target) { (<z>) }")),
+      qec);
+}
+
+// A sibling with columns other than the source or target is not bound, because
+// the path search does not output these columns.
+TEST(QueryPlanner, PathSearchSourceNotBoundToSiblingWithOtherColumns) {
+  auto scan = h::IndexScanFromStrings;
+  auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+
+  PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
+                                 Variable{"?source"},
+                                 IdColumn{getId("<z>")},
+                                 Variable("?start"),
+                                 Variable("?end"),
+                                 Variable("?path"),
+                                 Variable("?edge"),
+                                 {}};
+  h::expect(
+      "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
+      "SELECT * WHERE {"
+      "?source <p> ?o ."
+      "SERVICE pathSearch: {"
+      "_:path pathSearch:algorithm pathSearch:allPaths ;"
+      "pathSearch:source ?source ;"
+      "pathSearch:target <z> ;"
+      "pathSearch:pathColumn ?path ;"
+      "pathSearch:edgeColumn ?edge ;"
+      "pathSearch:start ?start;"
+      "pathSearch:end ?end;"
+      "{SELECT * WHERE {"
+      "?start <p> ?end."
+      "}}}}",
+      h::UnorderedJoins(
+          h::pathSearch(config, false, true, scan("?start", "<p>", "?end")),
+          scan("?source", "<p>", "?o")),
+      qec);
+}
+
+// A possibly undefined sibling column is not bound, because an undefined value
+// matches paths from any source.
+TEST(QueryPlanner, PathSearchSourceNotBoundToUndefinedColumn) {
+  auto scan = h::IndexScanFromStrings;
+  auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+
+  PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
+                                 Variable{"?source"},
+                                 IdColumn{getId("<z>")},
+                                 Variable("?start"),
+                                 Variable("?end"),
+                                 Variable("?path"),
+                                 Variable("?edge"),
+                                 {}};
+  h::expect(
+      "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
+      "SELECT * WHERE {"
+      "VALUES ?source {<x> UNDEF}"
+      "SERVICE pathSearch: {"
+      "_:path pathSearch:algorithm pathSearch:allPaths ;"
+      "pathSearch:source ?source ;"
+      "pathSearch:target <z> ;"
+      "pathSearch:pathColumn ?path ;"
+      "pathSearch:edgeColumn ?edge ;"
+      "pathSearch:start ?start;"
+      "pathSearch:end ?end;"
+      "{SELECT * WHERE {"
+      "?start <p> ?end."
+      "}}}}",
+      h::UnorderedJoins(
+          h::pathSearch(config, false, true, scan("?start", "<p>", "?end")),
+          h::ValuesClause("VALUES (?source) { (<x>) (UNDEF) }")),
       qec);
 }
 
