@@ -151,7 +151,7 @@ void WKTParser::processQueue(size_t t) {
           // A geometry from the persisted store is collected instead of parsed.
           // Its bounding box serves for the prefilter (no further disk access).
           if (auto stored = storedGeometryRow(job); stored.has_value()) {
-            if (_prefilterLatLngBox.has_value() &&
+            if (_usePrefiltering && _prefilterLatLngBox.has_value() &&
                 !::util::geo::intersects(
                     _prefilterLatLngBox.value(),
                     ad_utility::detail::projectInt32WebMercToDoubleLatLng(
