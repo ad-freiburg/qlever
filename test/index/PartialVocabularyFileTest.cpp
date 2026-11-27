@@ -89,8 +89,9 @@ static_assert(
 
 // Test that the block index of a partial vocabulary file describes its blocks
 // exactly: the blocks are non-empty, contiguous, together hold all the words
-// in order, and their first and last words are the ones in the index. The
-// words are long enough that a partial vocabulary spans several blocks.
+// in order, their last words are the ones in the index, and their first
+// elements are lower bounds. The words are long enough that a partial
+// vocabulary spans several blocks.
 TEST(PartialVocabularyFile, blockIndexAndBlocks) {
   auto [filenames, cleanup] =
       makePartialVocabularyFilenamesInFreshDirectory(partialVocabBasename, 3);
@@ -122,6 +123,10 @@ TEST(PartialVocabularyFile, blockIndexAndBlocks) {
   EXPECT_GE(statistics.numBlocks_, 5u);
   // The serialized form of a word takes at least 17 bytes plus the word.
   EXPECT_GT(statistics.numBytes_, totalNumWords * 17);
+  // The block index holds one word (of 14 bytes here) plus some metadata per
+  // block.
+  EXPECT_GT(statistics.numBytesOfBlockIndex_, statistics.numBlocks_ * 14);
+  EXPECT_LT(statistics.numBytesOfBlockIndex_, statistics.numBlocks_ * 200);
   for (size_t p = 0; p < 3; ++p) {
     // The first partial vocabulary has all the words and hence spans several
     // blocks, the last one about a third of them.
@@ -131,11 +136,17 @@ TEST(PartialVocabularyFile, blockIndexAndBlocks) {
       auto block = input.getBlock(p, b);
       ASSERT_FALSE(block.empty());
       EXPECT_EQ(block.size(), input.numElementsInBlock(p, b));
+      // The first element of a block is only a lower bound: the first word of
+      // the file for the first block, else the last word of the previous block.
       EXPECT_EQ(input.firstElement(p, b).iriOrLiteral(),
+                b == 0 ? block.front().iriOrLiteral()
+                       : input.lastElement(p, b - 1).iriOrLiteral());
+      EXPECT_LE(input.firstElement(p, b).iriOrLiteral(),
                 block.front().iriOrLiteral());
       EXPECT_EQ(input.lastElement(p, b).iriOrLiteral(),
                 block.back().iriOrLiteral());
       EXPECT_EQ(input.firstElement(p, b).partialFileId_, p);
+      EXPECT_EQ(input.lastElement(p, b).partialFileId_, p);
       EXPECT_EQ(block[0].iriOrLiteral(), block.front().iriOrLiteral());
       for (const auto& word : block) {
         EXPECT_EQ(word.partialFileId_, p);
@@ -160,6 +171,52 @@ TEST(PartialVocabularyFile, blockIndexAndBlocks) {
   TripleComponentWithIndex first;
   reader >> first;
   EXPECT_EQ(first.iriOrLiteral(), words[2].front());
+}
+
+// Test that a block ends at a short word: once a block has reached
+// `PARTIAL_VOCAB_BLOCK_SIZE`, it ends after the shortest of the next
+// `PARTIAL_VOCAB_BLOCK_CUT_WINDOW` words, also when a single word is longer
+// than a whole block. The blocks still hold all the words in order.
+TEST(PartialVocabularyFile, blocksEndAtShortWords) {
+  auto [filenames, cleanup] =
+      makePartialVocabularyFilenamesInFreshDirectory(partialVocabBasename, 1);
+  // Mostly long words, every fifth word is short, and one word is longer than
+  // three blocks. The fixed-width number keeps the words sorted.
+  const size_t blockSize = PARTIAL_VOCAB_BLOCK_SIZE.getBytes();
+  const size_t numWords = 20 * blockSize / 600;
+  std::vector<std::string> words;
+  for (size_t k = 0; k < numWords; ++k) {
+    size_t padding = k % 5 == 4 ? 0 : (k == 50 ? 3 * blockSize : 600);
+    words.push_back(
+        absl::StrFormat("\"w%08d%s\"", k, std::string(padding, 'x')));
+  }
+  writePartialVocabulary(filenames.wordsFiles_[0], words);
+
+  // Every block but the last is at least a block large and ends with a short
+  // word (in particular the one that holds the very long word), and the
+  // blocks hold all the words in order.
+  PartialVocabularyRunsInput input{partialVocabBasename, 1};
+  const size_t numBlocks = input.numBlocks(0);
+  ASSERT_GE(numBlocks, 15u);
+  std::vector<std::string> allWords;
+  for (size_t b = 0; b < numBlocks; ++b) {
+    auto block = input.getBlock(0, b);
+    if (b + 1 < numBlocks) {
+      EXPECT_GE(input.numBytesInBlock(0, b), blockSize);
+      EXPECT_EQ(input.lastElement(0, b).iriOrLiteral().size(), 11u) << b;
+    }
+    for (const auto& word : block) {
+      allWords.emplace_back(word.iriOrLiteral());
+    }
+  }
+  EXPECT_EQ(allWords, words);
+  size_t blockOfLongWord = 0;
+  while (input.lastElement(0, blockOfLongWord).iriOrLiteral() <
+         words[50].substr(0, 11)) {
+    ++blockOfLongWord;
+  }
+  EXPECT_GT(input.numBytesInBlock(0, blockOfLongWord), 3 * blockSize);
+  EXPECT_LT(blockOfLongWord + 1, numBlocks);
 }
 
 // Test that `appendToBlock` folds a word that is equal to the last word of the

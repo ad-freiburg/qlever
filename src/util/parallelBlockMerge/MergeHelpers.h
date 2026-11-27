@@ -92,7 +92,9 @@ BlockRange
     });
   }
   // The first block all of whose elements are not smaller than `hi_`, that is
-  // the (exclusive) end of the range of blocks.
+  // the (exclusive) end of the range of blocks. If `firstElement` is only a
+  // lower bound of the first element (see `RunsInputPolicy.h`), the range may
+  // end one block later than necessary, and that block is trimmed to nothing.
   //
   // NOTE: The predicate is deliberately `comparator(firstElement, hi_)` and not
   // `!comparator(hi_, firstElement)`. The latter would be off by one and would
