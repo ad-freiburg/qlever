@@ -369,8 +369,9 @@ class CompressedRelationReader {
   // Get the exact size of the result of the scan, taking the given located
   // triples into account. This requires locating the triples exactly in each
   // of the relevant blocks, which reads the first and the last block of the
-  // scan and all the blocks that contain located triples. The
-  // `cancellationHandle` is checked before each of these reads.
+  // scan and all the blocks that contain located triples or a triple that
+  // occurs in several graphs. The `cancellationHandle` is checked before each
+  // of these reads.
   size_t getResultSizeOfScan(
       const ScanSpecAndBlocks& scanSpecAndBlocks,
       const LocatedTriplesPerBlock& locatedTriplesPerBlock,
@@ -471,7 +472,8 @@ class CompressedRelationReader {
   // its first `numColumns` columns, are already known from its metadata alone,
   // including the number of triples. In addition to
   // `columnValuesAreKnownFromMetadata` this requires that there are no delta
-  // triples for the block at all.
+  // triples for the block at all, and no triples that occur in several graphs
+  // (which a scan without the graph column yields only once).
   static bool contentsAreKnownFromMetadata(
       const CompressedBlockMetadata& block, size_t numColumns,
       const LocatedTriplesPerBlock& locatedTriples);

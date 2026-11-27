@@ -14,6 +14,7 @@
 
 #include "backports/concepts.h"
 #include "backports/functional.h"
+#include "util/Coverage.h"
 #include "util/SourceLocation.h"
 #include "util/TypeTraits.h"
 
@@ -209,14 +210,11 @@ constexpr void adCorrectnessCheckImpl(
 // call is an inconvenient indirection (e.g. when stepping through the code in
 // a debugger). This is the single place where this reasoning is documented.
 //
-// NOTE 2: Clang's source-based coverage (which the coverage build uses) honors
-// the attribute completely, GCC's `gcov` only partially.
+// NOTE 2: For how the lambda is excluded from the coverage instrumentation, see
+// `QL_EXCLUDE_FROM_COVERAGE` in `util/Coverage.h`.
 #ifdef QLEVER_COVERAGE_FRIENDLY_CHECKS
-#define AD_CORRECTNESS_CHECK_CONDITION(condition)         \
-  [&]() __attribute__((no_profile_instrument_function)) { \
-    return static_cast<bool>(condition);                  \
-  }                                                       \
-  ()
+#define AD_CORRECTNESS_CHECK_CONDITION(condition) \
+  [&]() QL_EXCLUDE_FROM_COVERAGE { return static_cast<bool>(condition); }()
 #else
 #define AD_CORRECTNESS_CHECK_CONDITION(condition) static_cast<bool>(condition)
 #endif

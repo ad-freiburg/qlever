@@ -16,7 +16,6 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
-#include <fstream>
 #include <range/v3/view/cartesian_product.hpp>
 #include <string>
 #include <vector>
@@ -26,6 +25,7 @@
 #include "backports/filesystem.h"
 #include "util/CompressedBlockFile.h"
 #include "util/File.h"
+#include "util/FilesystemHelpers.h"
 #include "util/Random.h"
 #include "util/Views.h"
 #include "util/jthread.h"
@@ -63,15 +63,6 @@ std::vector<char> readBytes(
   EXPECT_EQ(result.back(), 'X');
   result.pop_back();
   return result;
-}
-
-// The raw bytes of the file with the given `filename`, straight from disk and
-// without going through the `CompressedBlockFile`.
-std::vector<char> rawFileContents(const std::string& filename) {
-  std::ifstream stream{filename, std::ios::binary};
-  EXPECT_TRUE(stream.good());
-  return std::vector<char>{std::istreambuf_iterator<char>{stream},
-                           std::istreambuf_iterator<char>{}};
 }
 
 // The blocks that a round trip has appended: the bytes that went in, and the
@@ -230,7 +221,9 @@ TEST(CompressedBlockFile, uncompressedBlocksAreStoredVerbatim) {
     CompressedBlockFile file{filename, ad_utility::NO_BLOCK_COMPRESSION};
     EXPECT_EQ(file.compressionLevel(), ad_utility::NO_BLOCK_COMPRESSION);
     RoundTrip roundTrip = checkRoundTrip(file);
-    std::vector<char> contents = rawFileContents(filename);
+    // The raw bytes of the file, straight from disk and without going through
+    // the `CompressedBlockFile`.
+    std::vector<char> contents = qlever::util::readBinaryFile(filename);
     for (size_t i : integerRange(roundTrip.metadata_.size())) {
       const auto& metadata = roundTrip.metadata_.at(i);
       const std::vector<char>& expected = roundTrip.expected_.at(i);
