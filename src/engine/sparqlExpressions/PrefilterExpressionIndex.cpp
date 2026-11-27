@@ -278,41 +278,66 @@ static BlockMetadataRanges getNegationAwareUnionOfBlockRanges(
 }  // namespace detail
 
 // This function retrieves the `BlockRange`s for `CompressedBlockMetadata`
-// values that contain bounding `ValueId`s with different underlying datatypes.
+// values that contain bounding `ValueId`s with different underlying datatypes,
+// and of those that contain words of a secondary vocabulary. All of these are
+// kept by every prefilter.
 static BlockMetadataRanges getRangesMixedDatatypeBlocks(
     const ValueIdSubrange& idRange, BlockMetadataSpan blockRange) {
   using enum Datatype;
   if (idRange.empty()) {
     return {};
   }
-  std::vector<ValueIdItPair> mixedDatatypeRanges;
-  // Ensure that `idRange` holds access to even number of ValueIds.
   AD_CORRECTNESS_CHECK(idRange.size() % 2 == 0);
-  const auto checkDifferentDtype = [](const auto& idPair) {
-    auto firstId = idPair.begin();
-    auto dType1 = (*firstId).getDatatype();
-    auto dType2 = (*std::next(firstId)).getDatatype();
-    // ValueIds representing LocalVocab and Vocab entries are contained in mixed
-    // and sorted order over the CompressedBlockMetadata values. Thus, we don't
-    // discard them if they contain a mix of LocalVocab and Vocab ValueIds.
-    if ((dType1 == VocabIndex && dType2 == LocalVocabIndex) ||
-        (dType1 == LocalVocabIndex && dType2 == VocabIndex)) {
-      return false;
-    }
-    return dType1 != dType2;
+
+  // `VocabIndex`, `LocalVocabIndex`, and `SecondaryVocabIndex` count as one
+  // datatype here: `LocalVocabIndex` IDs are interleaved with the IDs of both
+  // vocabularies, so only the three together form a contiguous run.
+  auto group = [](Datatype datatype) {
+    return datatype == LocalVocabIndex || datatype == SecondaryVocabIndex
+               ? VocabIndex
+               : datatype;
   };
-  ql::ranges::for_each(idRange | ranges::views::chunk(2) |
-                           ranges::views::filter(checkDifferentDtype),
-                       [&mixedDatatypeRanges](const auto& idPair) {
-                         auto firstId = idPair.begin();
-                         mixedDatatypeRanges.emplace_back(firstId,
-                                                          std::next(firstId));
-                       });
+
+  // The IDs in `idRange` (first and last ID of each block) are sorted, and the
+  // datatype is the most significant part of an ID, so the datatypes form
+  // sorted runs. Find the end of each run by binary search, which costs
+  // O(#datatypes * log #blocks) instead of a pass over all blocks. A block has
+  // mixed datatypes iff a run ends between its first ID (even position) and
+  // its last ID (odd position).
+  std::vector<ValueIdItPair> mixedDatatypeRanges;
+  auto begin = idRange.begin();
+  auto end = idRange.end();
+  auto runBegin = begin;
+  while (runBegin != end) {
+    auto currentGroup = group((*runBegin).getDatatype());
+    auto runEnd = ql::ranges::partition_point(
+        runBegin, end, [&group, currentGroup](const ValueId& id) {
+          return group(id.getDatatype()) == currentGroup;
+        });
+    if (currentGroup == VocabIndex) {
+      // The IDs of the secondary vocabulary (and the local vocab entries stored
+      // in it) are sorted after all words of the main vocabulary, but by their
+      // insertion order, not by their string value (see
+      // `index/vocabulary/SecondaryVocabulary.h`). No prefilter can judge
+      // them, so keep all blocks from the first of them to the end of the run.
+      static constexpr auto firstSecondaryVocabId =
+          ValueId::makeFromSecondaryVocabIndex(SecondaryVocabIndex::make(0));
+      auto secondaryBegin = ql::ranges::partition_point(
+          runBegin, runEnd,
+          [](const ValueId& id) { return id < firstSecondaryVocabId; });
+      if (secondaryBegin != runEnd) {
+        mixedDatatypeRanges.emplace_back(secondaryBegin, runEnd);
+      }
+    }
+    if (runEnd != end && (runEnd - begin) % 2 == 1) {
+      mixedDatatypeRanges.emplace_back(std::prev(runEnd), runEnd);
+    }
+    runBegin = runEnd;
+  }
   return detail::mapping::mapValueIdItRangesToBlockItRanges(
       mixedDatatypeRanges, idRange, blockRange);
 }
 
-// Return `CompOp`s as string.
 static std::string getRelationalOpStr(const CompOp relOp) {
   using enum CompOp;
   switch (relOp) {
@@ -707,17 +732,11 @@ BlockMetadataRanges IsDatatypeExpression<IsDatatype::IRI>::evaluateImpl(
   // `VocabIndex`/`LocalVocabIndex`) and encoded IRIs (datatype `EncodedVal`).
   // We therefore have to keep the blocks for *both* representations.
   //
-  // TODO<joka921> There is a third range: the IRIs of a secondary vocabulary
-  // (datatype `SecondaryVocabIndex`, see
-  // `index/vocabulary/SecondaryVocabulary.h`). Those sort after all of the
-  // ranges below, so neither the `> <>` prefilter nor the datatype range of
-  // the encoded IRIs covers them, which means that blocks consisting entirely
-  // of such IRIs are incorrectly pruned. This is a known limitation for now,
-  // because apart from unit tests, a secondary vocabulary is only created when
-  // a blob of `NamedCachedQueryBlobManager` that contains new words is loaded,
-  // but it has to be fixed before it is used more widely, together with the
-  // semantic comparison of those `Id`s (see the detailed note at
-  // `valueIdComparators::detail::compareIdsImpl`).
+  // The IRIs of a secondary vocabulary (datatype `SecondaryVocabIndex`, see
+  // `index/vocabulary/SecondaryVocabulary.h`) form a third range, which is
+  // covered by neither of the two below. This is fine, because all blocks
+  // that contain words of a secondary vocabulary are kept by every prefilter
+  // (see `getRangesMixedDatatypeBlocks`).
   //
   // (1) Vocabulary IRIs: Ids containing LITERAL values precede IRI related Ids
   // in order. The smallest possible IRI is represented by "<>", we use its

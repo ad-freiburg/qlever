@@ -450,8 +450,9 @@ inline bool areTypesCompatible(Datatype typeA, Datatype typeB) {
 //    every local vocab entry that is in neither vocabulary, see the detailed
 //    note in `index/LocalVocabEntry.h`.
 // So with a secondary vocabulary present, all kinds of semantic comparisons
-// (`FILTER`, `ORDER BY`, the range filters above, and the prefilters in
-// `PrefilterExpressionIndex.cpp`) silently yield wrong results.
+// (`FILTER`, `ORDER BY`, and the range filters above) silently yield wrong
+// results. The prefilters in `PrefilterExpressionIndex.cpp` are not affected,
+// because they keep all blocks that contain words of a secondary vocabulary.
 //
 // This is a known limitation for now: apart from unit tests, a secondary
 // vocabulary is only created when a blob of `NamedCachedQueryBlobManager` that
