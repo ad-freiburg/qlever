@@ -29,6 +29,7 @@
 
 #include "./GTestHelpers.h"
 #include "./IndexTestHelpers.h"
+#include "./TestException.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/Constants.h"
 #include "index/CompressedRelationReader.h"
@@ -423,16 +424,16 @@ WriteResult writeRows(const TestRows& rows, const std::string& basename,
       size_t blockIndex = numBlocksSeen.fetch_add(1);
       bool fail = config.failingCallbackBlock_ == blockIndex;
       if (fail && config.failingCallbackThrows_) {
-        throw std::runtime_error{"callback failed by throwing"};
+        throw TestException{"callback failed by throwing"};
       }
       boost::asio::post(
           ad_utility::testing::multiThreadExecutor(),
           [block, done = std::move(done), fail]() mutable {
             // Touch the block to make sure that it is alive.
             AD_CORRECTNESS_CHECK(!block->empty());
-            std::move(done)(fail ? std::make_exception_ptr(
-                                       std::runtime_error{"callback failed"})
-                                 : nullptr);
+            std::move(done)(
+                fail ? std::make_exception_ptr(TestException{"callback failed"})
+                     : nullptr);
           });
     });
     result.result_ = chunkwisePermutationWriter::createPermutationPair(

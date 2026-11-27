@@ -17,6 +17,7 @@
 #include <thread>
 
 #include "./util/GTestHelpers.h"
+#include "./util/TestException.h"
 #include "util/ThreadSafeReorderBuffer.h"
 #include "util/TransparentFunctors.h"
 
@@ -125,8 +126,7 @@ TEST(ThreadSafeReorderBuffer, exceptionWakesUpTheConsumer) {
   buffer.setNumSlots(1);
   std::thread thrower{[&buffer]() {
     std::this_thread::sleep_for(5ms);
-    buffer.storeException(
-        std::make_exception_ptr(std::runtime_error{"failed"}));
+    buffer.storeException(std::make_exception_ptr(TestException{"failed"}));
   }};
   // The long tick interval makes sure that the consumer is woken up by the
   // notification, not by the timeout.
