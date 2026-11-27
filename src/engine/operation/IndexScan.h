@@ -342,13 +342,14 @@ class IndexScan final : public Operation {
   std::pair<bool, size_t> computeSizeEstimate() const;
 
   // For a prefiltered scan with a fixed first column that keeps most of the
-  // blocks of its relation (e.g. after a `!=` prefilter), the size estimate
-  // from the relation's metadata minus the rows of the dropped blocks. This
-  // is cheap when few blocks were dropped, whereas summing the rows of the
+  // blocks of its relation (e.g. after a `!=` prefilter), the number of rows of
+  // the relation (from its `metadata`) minus the rows of the dropped blocks.
+  // This is cheap when few blocks were dropped, whereas summing the rows of the
   // kept blocks walks almost the whole relation. `std::nullopt` if the
-  // relation has no metadata entry, has updates, or lost at least as many
-  // blocks as it kept; the caller then sums the kept blocks.
-  std::optional<std::pair<bool, size_t>> sizeEstimateFromDroppedBlocks() const;
+  // relation has updates or lost at least as many blocks as it kept; the
+  // caller then sums the kept blocks.
+  std::optional<std::pair<bool, size_t>> sizeEstimateFromDroppedBlocks(
+      const CompressedRelationMetadata& metadata) const;
 
   qlm::string getCacheKeyImpl() const override;
 

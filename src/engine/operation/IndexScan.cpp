@@ -536,25 +536,33 @@ std::pair<bool, size_t> IndexScan::computeSizeEstimate() const {
   // triples, the estimate is the same, but marked as inexact. This is also
   // what the general case below computes, because it counts the located
   // triples of a block as inserted and as deleted at the same time (see
-  // `LocatedTriplesPerBlock::numTriples`). Prefiltered scans and small
+  // `LocatedTriplesPerBlock::numTriples`). A prefiltered scan subtracts the
+  // rows of the dropped blocks, see `sizeEstimateFromDroppedBlocks`. Small
   // relations that share a block with other relations (and hence have no
   // metadata entry) use the general case.
-  if (numVariables() == 2 && !scanSpecAndBlocksIsPrefiltered_) {
+  if (numVariables() == 2) {
     const auto& col0Id = scanSpecAndBlocks_.scanSpec_.col0Id();
     AD_CORRECTNESS_CHECK(col0Id.has_value());
     auto metadata = permutation().metaData().getMetaDataIfPresent(*col0Id);
     if (metadata.has_value()) {
-      const auto& blocks = scanSpecAndBlocks_.getBlockMetadataView();
-      AD_CORRECTNESS_CHECK(ql::ranges::begin(blocks) !=
-                           ql::ranges::end(blocks));
-      size_t firstBlockIndex = ql::ranges::begin(blocks)->blockIndex_;
-      size_t lastBlockIndex = std::prev(ql::ranges::end(blocks))->blockIndex_;
-      bool hasLocatedTriples =
-          permutation()
-              .getLocatedTriplesForPermutation(locatedTriplesState())
-              .containsLocatedTriplesInBlockRange(firstBlockIndex,
-                                                  lastBlockIndex);
-      return {!hasLocatedTriples, metadata->numRows_};
+      if (scanSpecAndBlocksIsPrefiltered_) {
+        if (auto estimate = sizeEstimateFromDroppedBlocks(*metadata);
+            estimate.has_value()) {
+          return estimate.value();
+        }
+      } else {
+        const auto& blocks = scanSpecAndBlocks_.getBlockMetadataView();
+        AD_CORRECTNESS_CHECK(ql::ranges::begin(blocks) !=
+                             ql::ranges::end(blocks));
+        size_t firstBlockIndex = ql::ranges::begin(blocks)->blockIndex_;
+        size_t lastBlockIndex = std::prev(ql::ranges::end(blocks))->blockIndex_;
+        bool hasLocatedTriples =
+            permutation()
+                .getLocatedTriplesForPermutation(locatedTriplesState())
+                .containsLocatedTriplesInBlockRange(firstBlockIndex,
+                                                    lastBlockIndex);
+        return {!hasLocatedTriples, metadata->numRows_};
+      }
     }
   }
 
@@ -562,25 +570,14 @@ std::pair<bool, size_t> IndexScan::computeSizeEstimate() const {
   //
   // NOTE: Starting from C++20, we could use `std::midpoint` to compute the
   // mean of `lower` and `upper` in a safe way.
-  if (numVariables() == 2 && scanSpecAndBlocksIsPrefiltered_) {
-    if (auto estimate = sizeEstimateFromDroppedBlocks(); estimate.has_value()) {
-      return estimate.value();
-    }
-  }
   auto [lower, upper] = permutation().getSizeEstimateForScan(
       scanSpecAndBlocks_, locatedTriplesState());
   return {lower == upper, lower + (upper - lower) / 2};
 }
 
 // _____________________________________________________________________________
-std::optional<std::pair<bool, size_t>>
-IndexScan::sizeEstimateFromDroppedBlocks() const {
-  const auto& col0Id = scanSpecAndBlocks_.scanSpec_.col0Id();
-  AD_CORRECTNESS_CHECK(col0Id.has_value());
-  auto metadata = permutation().metaData().getMetaDataIfPresent(*col0Id);
-  if (!metadata.has_value()) {
-    return std::nullopt;
-  }
+std::optional<std::pair<bool, size_t>> IndexScan::sizeEstimateFromDroppedBlocks(
+    const CompressedRelationMetadata& metadata) const {
   // All blocks of the relation, and the ranges of them that were kept.
   auto allBlocks = getScanSpecAndBlocks().getBlockMetadataSpan();
   const auto& keptRanges = scanSpecAndBlocks_.blockMetadata_;
@@ -599,14 +596,14 @@ IndexScan::sizeEstimateFromDroppedBlocks() const {
   // after the kept ranges). A dropped block that also holds rows of a
   // neighboring relation (possible for the first and last block of the
   // relation) makes the estimate inexact.
-  size_t rows = metadata->numRows_;
+  size_t rows = metadata.numRows_;
   bool exact = true;
   auto dropBlocksBefore = [&](const CompressedBlockMetadata* it,
                               const CompressedBlockMetadata* until) {
     for (; it != until; ++it) {
       rows -= std::min(rows, it->numRows_);
-      exact = exact && it->firstTriple_.col0Id_ == *col0Id &&
-              it->lastTriple_.col0Id_ == *col0Id;
+      exact = exact && it->firstTriple_.col0Id_ == metadata.col0Id_ &&
+              it->lastTriple_.col0Id_ == metadata.col0Id_;
     }
   };
   const CompressedBlockMetadata* next = allBlocks.data();
