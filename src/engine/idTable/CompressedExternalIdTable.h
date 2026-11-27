@@ -157,10 +157,13 @@ class CompressedExternalIdTableWriter {
   }
 
   // Set the ZSTD compression level of the blocks that are written from now
-  // on. The blocks are typically read back exactly once, so a fast level is
-  // appropriate; the default is `DEFAULT_RUN_COMPRESSION`, and a negative
-  // level (see `MERGE_PHASE_SPILL_COMPRESSION`) is even faster at the price
-  // of larger files.
+  // on. The default is `DEFAULT_RUN_COMPRESSION`. Must not be called while a
+  // block is being written.
+  //
+  // NOTE: The blocks are typically read back exactly once, so a fast level is
+  // appropriate. A negative level (see `MERGE_PHASE_SPILL_COMPRESSION`) is
+  // even faster at the price of larger files. The decompression does not
+  // depend on the level.
   void setCompressionLevel(int level) { compressionLevel_ = level; }
 
   // Store an `idTable`. The blocks of all its columns are compressed and

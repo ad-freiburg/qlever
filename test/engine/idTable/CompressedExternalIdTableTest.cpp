@@ -756,9 +756,8 @@ TEST(CompressedExternalIdTable, clearResetsBoundaryMetadata) {
   checkBlockContents(writer, secondBatch, rowsPerBlockFor(blockSize));
 }
 
-// The compression level of the writer is a pure trade-off between CPU and bytes
-// on disk. Check that it doesn't change the stored blocks, and that it really
-// is applied.
+// Test that the compression level of the writer does not change the stored
+// blocks, and that it is applied (a fast negative level gives a larger file).
 TEST(CompressedExternalIdTable, writerCompressionLevel) {
   // The columns hold few distinct values, such that the blocks are highly
   // compressible and the file sizes below differ clearly.
@@ -792,6 +791,9 @@ TEST(CompressedExternalIdTable, writerCompressionLevel) {
   auto sizeDefault = writeWithLevel(
       ad_utility::compressedExternalIdTable::DEFAULT_RUN_COMPRESSION);
   auto sizeStrong = writeWithLevel(19);
+
+  // The fast negative level gives the largest file.
+  //
   // NOTE: For these random (and small) blocks, a higher positive level does
   // not necessarily yield a smaller file, so only the fast negative level is
   // compared to the others.
@@ -1508,11 +1510,14 @@ TEST(CompressedExternalIdTable, sorterMergeSpillCompression) {
   EXPECT_GT(uncompressed.spillFileSize_, fast.spillFileSize_);
 }
 
-// The compression level of the presorted runs (see `setRunCompressionLevel`)
-// must not change the sorted output, but it must be applied to the file of the
-// runs.
+// Test that the compression level of the presorted runs (see
+// `setRunCompressionLevel`) does not change the sorted output, and that it is
+// applied to the file of the runs.
 TEST(CompressedExternalIdTable, sorterRunCompressionLevel) {
   auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
+
+  // An input with few distinct values per column, so that the runs are highly
+  // compressible.
   std::vector<JoinColumnAndBounds> bounds;
   for (size_t columnIdx = 0; columnIdx < NUM_COLS; ++columnIdx) {
     bounds.push_back(JoinColumnAndBounds{columnIdx, 0, 20});
@@ -1538,6 +1543,7 @@ TEST(CompressedExternalIdTable, sorterRunCompressionLevel) {
     return ql::filesystem::file_size(filename);
   };
 
+  // The fast negative level gives a larger file than a strong level.
   auto sizeFast = sortWithLevel(-5);
   auto sizeStrong = sortWithLevel(19);
   EXPECT_GT(sizeFast, sizeStrong);
