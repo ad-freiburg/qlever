@@ -1607,8 +1607,10 @@ TEST_F(ServiceTest, unconsumedLazySiblingResultDoesNotCrash) {
   sibling.reset();
 }
 
-// `OptionalJoin` and `Minus` with two join columns request fully materialized
-// inputs, even if their own result is requested lazily (see #4025).
+// Test that `OptionalJoin` and `Minus` with two join columns work next to a
+// `Service` whose sibling result is not pushed down. They request fully
+// materialized inputs, even if their own result is requested lazily (see
+// #4025).
 TEST_F(ServiceTest, precomputeSiblingResultForMultiColumnOptionalAndMinus) {
   // The sibling result is too large to be pushed down, so it is handed back to
   // the sibling.
@@ -1652,8 +1654,9 @@ TEST_F(ServiceTest, precomputeSiblingResultForMultiColumnOptionalAndMinus) {
   EXPECT_EQ(minusResult.idTableView(), expected);
 }
 
-// A lazy precomputed sibling result is materialized when the caller requests a
-// fully materialized result. Otherwise, e.g. a `Sort` that is skipped by
+// Test that a lazy precomputed sibling result is materialized when the caller
+// requests a fully materialized result, and passed on as is when the caller
+// requests a lazy result. Without the former, e.g. a `Sort` that is skipped by
 // `precomputeSiblingResult` and requests a materialized input breaks (#2375).
 TEST_F(ServiceTest, lazyPrecomputedSiblingResultIsMaterializedOnRequest) {
   auto cleanup =
@@ -1715,9 +1718,9 @@ TEST_F(ServiceTest, lazyPrecomputedSiblingResultIsMaterializedOnRequest) {
                                      matchesIdTableFromVector({{3, 4}})));
 }
 
-// If the conversion of a lazy precomputed sibling result fails (here because of
-// the memory limit), the error is propagated, and the incomplete result is
-// neither cached nor kept for later.
+// Test that an error during the conversion of a lazy precomputed sibling
+// result (here because of the memory limit) is propagated, and that the
+// incomplete result is neither cached nor kept for later.
 TEST_F(ServiceTest, failedMaterializationOfLazyPrecomputedSiblingResult) {
   auto cleanup =
       setRuntimeParameterForTest<&RuntimeParameters::serviceMaxValueRows_>(0);
