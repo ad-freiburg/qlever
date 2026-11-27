@@ -611,10 +611,8 @@ std::optional<std::pair<bool, size_t>> IndexScan::sizeEstimateFromDroppedBlocks(
   const CompressedBlockMetadata* next = allBlocks.data();
   for (const auto& range : keptRanges) {
     // `ql::to_address` may dereference its argument, so it must not be applied
-    // to an end iterator.
-    if (range.empty()) {
-      continue;
-    }
+    // to an end iterator. `getRelevantBlocks` stores no empty ranges.
+    AD_CORRECTNESS_CHECK(!range.empty());
     const CompressedBlockMetadata* rangeBegin = ql::to_address(range.begin());
     dropBlocksBefore(next, rangeBegin);
     next = rangeBegin + range.size();

@@ -2693,3 +2693,52 @@ TEST(IndexScan, sizeEstimateOfPrefilteredScanFromRelationMetadata) {
   // Most blocks dropped (the kept-blocks path).
   EXPECT_EQ(estimateAfter(ge(IntId(40))), EstimateAndExact(9, true));
 }
+
+// Test that the size estimate of a prefiltered scan does not use the relation
+// metadata when the relation has updates, but sums up the kept blocks.
+TEST(IndexScan, sizeEstimateOfPrefilteredScanWithUpdates) {
+  using namespace makeFilterExpression;
+  using namespace filterHelper;
+  // Same layout as in `sizeEstimateOfPrefilteredScanFromRelationMetadata`.
+  std::string kg;
+  for (size_t i = 0; i < 49; ++i) {
+    kg += absl::StrCat("<x", i, "> <p> ", i, " . ");
+  }
+  kg += "<x0> <q> 0 .";
+  TestIndexConfig config{kg};
+  config.rowsPerBlock = 2;
+  auto index = std::make_shared<Index>(makeTestIndex(std::move(config)));
+  auto getId = makeGetId(*index);
+
+  // Insert a triple into the first block of `<p>`, which the prefilter drops.
+  auto cancellationHandle =
+      std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
+  auto g = qlever::specialIds().at(QLEVER_INTERNAL_GRAPH_IRI);
+  index->deltaTriplesManager().modify<void>([&](DeltaTriples& deltaTriples) {
+    deltaTriples.insertTriples(
+        cancellationHandle,
+        {IdTriple<0>{std::array{getId("<x1>"), getId("<p>"), IntId(0), g}}});
+  });
+
+  // The `QueryExecutionContext` reads the located triples at its creation.
+  QueryResultCache cache;
+  NamedResultCache namedCache;
+  auto materializedViewsManager = std::make_shared<MaterializedViewsManager>();
+  QueryExecutionContext qec{
+      index,
+      &cache,
+      makeAllocator(ad_utility::MemorySize::megabytes(100)),
+      &namedCache,
+      materializedViewsManager,
+      executor()};
+  SparqlTripleSimple triple{Tc{Variable{"?x"}}, iri("<p>"), Tc{Variable{"?o"}}};
+  IndexScan scan{&qec, Permutation::POS, triple};
+  auto prefiltered = scan.getUpdatedQueryExecutionTreeWithPrefilterApplied(
+      makePrefilterVec(pr(ge(IntId(10)), Variable{"?o"})));
+  ASSERT_TRUE(prefiltered.has_value());
+  auto& prefilteredScan =
+      dynamic_cast<IndexScan&>(*prefiltered.value()->getRootOperation());
+  // The kept blocks have no updates, so their sum is exact.
+  EXPECT_EQ(prefilteredScan.getSizeEstimate(), 39u);
+  EXPECT_TRUE(prefilteredScan.sizeEstimateIsExactForTesting());
+}

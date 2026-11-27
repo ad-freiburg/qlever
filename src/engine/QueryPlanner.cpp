@@ -1906,9 +1906,6 @@ void QueryPlanner::prefilterSeeds(
       continue;
     }
     for (const auto& pairs : prefilters) {
-      if (pairs.empty()) {
-        continue;
-      }
       auto prefiltered =
           seed._qet->getRootOperation()
               ->getUpdatedQueryExecutionTreeWithPrefilterApplied(pairs);
