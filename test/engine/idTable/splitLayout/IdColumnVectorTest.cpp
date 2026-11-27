@@ -112,12 +112,15 @@ TEST(IdColumnVectorTest, eraseAndInsert) {
 // vectors, which compares their elements.
 TEST(IdColumnVectorTest, initializerListAndEquality) {
   using Column = IdColumnVector<std::allocator<Id>>;
+  // A column of two `Id`s from an initializer list.
   auto ids = sampleIds();
   Column column{ids.at(0), ids.at(1)};
   ASSERT_EQ(column.size(), 2u);
   EXPECT_EQ(column[0], ids.at(0));
   EXPECT_EQ(column[1], ids.at(1));
 
+  // Two columns are equal if and only if they have the same elements in the
+  // same order.
   EXPECT_TRUE(column == (Column{ids.at(0), ids.at(1)}));
   EXPECT_FALSE(column != (Column{ids.at(0), ids.at(1)}));
   EXPECT_TRUE(column != (Column{ids.at(1), ids.at(0)}));

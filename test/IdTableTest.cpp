@@ -1264,33 +1264,38 @@ TEST(IdTable, addEmptyColumn) {
 // `IdRef` and `ConstIdRef` are `Id&` and `const Id&`, with it they are proxies
 // that can also refer to an `Id` (see `IdRef.h`).
 TEST(IdTable, rangeAlgorithmOnColumnWithIdRef) {
+  // A table with one column and three rows, and a const reference to it.
   IdTable table{1, ad_utility::makeUnlimitedAllocator<Id>()};
   table.push_back({V(1)});
   table.push_back({V(2)});
   table.push_back({V(3)});
   const auto& constTable = table;
 
+  // Write via `IdRef`.
   ql::ranges::for_each(table.getColumn(0), [](IdRef id) { id = V(7); });
   EXPECT_THAT(table.getColumn(0), ::testing::ElementsAre(V(7), V(7), V(7)));
 
+  // Read via `ConstIdRef`.
   size_t numSevens = 0;
   ql::ranges::for_each(constTable.getColumn(0), [&numSevens](ConstIdRef id) {
     numSevens += (id == V(7)) ? 1 : 0;
   });
   EXPECT_EQ(numSevens, 3);
 
-  // With `auto&&`, writing needs `AD_FWD`, because the proxy of the split
+  // Write via `auto&&`. This needs `AD_FWD`, because the proxy of the split
   // layout can only be assigned to as an rvalue.
   ql::ranges::for_each(table.getColumn(0),
                        [](auto&& id) -> void { AD_FWD(id) = V(8); });
   EXPECT_THAT(table.getColumn(0), ::testing::ElementsAre(V(8), V(8), V(8)));
 
+  // Read via `auto&&`.
   size_t numEights = 0;
   ql::ranges::for_each(
       constTable.getColumn(0),
       [&numEights](auto&& id) -> void { numEights += (id == V(8)) ? 1 : 0; });
   EXPECT_EQ(numEights, 3);
 
+  // Read via `Id` (by value).
   numEights = 0;
   ql::ranges::for_each(table.getColumn(0), [&numEights](const Id id) {
     numEights += (id == V(8)) ? 1 : 0;

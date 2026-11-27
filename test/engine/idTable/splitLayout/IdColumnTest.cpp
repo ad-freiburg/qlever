@@ -397,6 +397,8 @@ TEST(IdColumnRangesForEachTest,
 // give the same result for every library are made, so `IdRef::Base` is not
 // checked, and `IdRef` and `ConstIdRef` only with `USE_SPLIT_LAYOUT`.
 TEST(IdColumnRangesForEachTest, parameterTypesForSplitColumn) {
+  // `auto&&` and `Id` are accepted for a mutable and for a const column,
+  // `auto&` and `Id&` are rejected.
   using Column = const IdColumnRef&;
   using ConstColumn = const ConstIdColumnRef&;
   const auto generic = [](auto&&) -> void {};
@@ -417,6 +419,7 @@ TEST(IdColumnRangesForEachTest, parameterTypesForSplitColumn) {
                 idIsSplitLayoutId);
   static_assert(!std::is_constructible_v<IdRef::Base, Id&>);
 
+  // Write and read via `auto&&`.
   auto ids = sampleIds();
   auto [payloads, datatypes] = splitIds(ids);
   const IdColumnRef column{payloads.data(), datatypes.data(), payloads.size()};
