@@ -128,16 +128,20 @@ class Permutation {
 
   // For a given relation, determine the `col1Id`s and their counts. This is
   // used for `computeGroupByObjectWithCount`. The `col0Id` must have metadata
-  // in `meta_`.
+  // in `meta_`. The blocks are read on the `executor`, see
+  // `CompressedRelationReader::getDistinctColIdsAndCounts`.
   IdTable getDistinctCol1IdsAndCounts(
       Id col0Id, const CancellationHandle& cancellationHandle,
-      const LocatedTriplesState& locatedTriplesState,
+      const LocatedTriplesState& locatedTriplesState, qlever::Executor executor,
       const LimitOffsetClause& limitOffset) const;
 
-  IdTable getDistinctCol0IdsAndCounts(
+  // The same for the `col0Id`s of a full scan of this permutation. See
+  // `CompressedRelationReader::getDistinctColIdsAndCounts` for the
+  // `minPercentKnownBlocks` and when `std::nullopt` is returned.
+  std::optional<IdTable> getDistinctCol0IdsAndCounts(
       const CancellationHandle& cancellationHandle,
-      const LocatedTriplesState& locatedTriplesState,
-      const LimitOffsetClause& limitOffset) const;
+      const LocatedTriplesState& locatedTriplesState, qlever::Executor executor,
+      const LimitOffsetClause& limitOffset, double minPercentKnownBlocks) const;
 
 #ifndef QLEVER_REDUCED_FEATURE_SET_FOR_CPP17
   // Lazily compute the distinct `col0Id`s of a full scan of this permutation.

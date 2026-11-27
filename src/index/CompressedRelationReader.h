@@ -479,12 +479,22 @@ class CompressedRelationReader {
       const LocatedTriplesPerBlock& locatedTriples);
 
   // Determine the distinct values and their counts for the column at
-  // `columnIndex` (must be 0 or 1). Used for GROUP BY optimizations.
-  IdTable getDistinctColIdsAndCounts(
+  // `columnIndex` (must be 0 or 1, and the first column that the `scanSpec`
+  // doesn't fix). Used for GROUP BY optimizations. The `limitOffset` applies
+  // to the rows of the scan, not to the result. Return `std::nullopt` if less
+  // than `minPercentKnownBlocks` percent of the blocks of the scan have
+  // contents that are known from their metadata (see
+  // `contentsAreKnownFromMetadata`).
+  //
+  // NOTE: The counts of these blocks are taken from their metadata. The other
+  // blocks are read, decompressed, and counted on the `executor` (see
+  // `lazyScan`), so this function must not be called from one of its threads.
+  std::optional<IdTable> getDistinctColIdsAndCounts(
       ColumnIndex columnIndex, const ScanSpecAndBlocks& scanSpecAndBlocks,
       const CancellationHandle& cancellationHandle,
       const LocatedTriplesPerBlock& locatedTriplesPerBlock,
-      const LimitOffsetClause& limitOffset) const;
+      qlever::Executor executor, const LimitOffsetClause& limitOffset,
+      double minPercentKnownBlocks) const;
 
   std::optional<CompressedRelationMetadata> getMetadataForSmallRelation(
       const ScanSpecAndBlocks& scanSpecAndBlocks, Id col0Id,
@@ -593,6 +603,20 @@ class CompressedRelationReader {
       const CompressedBlockMetadata& blockMetadata,
       std::optional<std::reference_wrapper<LazyScanMetadata>> scanMetadata,
       const LocatedTriplesPerBlock&) const;
+
+  // Read, decompress, and postprocess the `relevantBlockMetadata` concurrently
+  // on the `executor` (see `lazyScan`), and apply the `transform` to each of
+  // the blocks there as well. Return a view that yields, in order, a pair of
+  // the transformed block (`std::nullopt` if the block was skipped because of
+  // its graphs) and the statistics of reading it.
+  template <typename Transform>
+  auto readBlocksConcurrently(
+      const ScanSpecification& scanSpec,
+      std::vector<CompressedBlockMetadata> relevantBlockMetadata,
+      ColumnIndicesRef additionalColumns, CancellationHandle cancellationHandle,
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+      qlever::Executor executor, std::optional<ColumnIndices> columnSubset,
+      Transform transform) const;
 
   // Return a vector that consists of the concatenation of `baseColumns` and
   // `additionalColumns`

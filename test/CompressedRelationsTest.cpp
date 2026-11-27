@@ -1634,6 +1634,108 @@ TEST(CompressedRelationReader, getDistinctCol0IdsChecksItsPreconditions) {
   }
 }
 
+// Test that `getDistinctColIdsAndCounts` yields the same counts as grouping
+// the rows of a full scan, both for the `col0Id`s and for the `col1Id`s of a
+// fixed `col0Id`.
+TEST(CompressedRelationReader, getDistinctColIdsAndCounts) {
+  // Relation 1 spans several blocks of its own, its `col1Id` changes every
+  // three rows. Relations 2 to 30 have two triples each, so their blocks
+  // contain several `col0Id`s.
+  constexpr int graph = 103496581;
+  std::vector<RelationInput> inputs{{1, {}}};
+  for (int i = 0; i < 20; ++i) {
+    inputs.at(0).col1And2_.push_back({i / 3, i});
+  }
+  for (int col0 = 2; col0 <= 30; ++col0) {
+    inputs.push_back({col0, {{0, 0}, {0, 1}}});
+  }
+  addGraphColumnIfNecessary(inputs);
+  auto [filename, cleanup] = testFilenameWithCleanup();
+  auto [blocks, metaData, reader] = writeAndOpenRelations(inputs, filename, 8);
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+
+  // Expect that the counts for the `col0Id`s (or for the `col1Id`s of the
+  // `col0Id` if it is given) are those of the rows of the scan, with the
+  // `limitOffset` applied to these rows. Return the number of distinct values.
+  auto expectCountsOfScan = [&](const LocatedTriplesPerBlock& locatedTriples,
+                                std::optional<Id> col0Id,
+                                LimitOffsetClause limitOffset = {},
+                                source_location l = AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    CompressedRelationReader::ScanSpecAndBlocks scanSpecAndBlocks{
+        ScanSpecification{col0Id, std::nullopt, std::nullopt},
+        getBlockMetadataRangesfromVec(locatedTriples.getAugmentedMetadata())};
+    auto scan = reader->scan(scanSpecAndBlocks, {}, cancellationHandle,
+                             locatedTriples, executor(), limitOffset);
+    IdTable expected{2, ad_utility::makeUnlimitedAllocator<Id>()};
+    for (Id colId : scan.getColumn(0)) {
+      if (!expected.empty() && expected.getColumn(0).back() == colId) {
+        auto& count = expected.getColumn(1).back();
+        count = I(count.getInt() + 1);
+      } else {
+        expected.push_back({colId, I(1)});
+      }
+    }
+    auto result = reader->getDistinctColIdsAndCounts(
+        col0Id.has_value() ? 1 : 0, scanSpecAndBlocks, cancellationHandle,
+        locatedTriples, executor(), limitOffset, 0);
+    EXPECT_TRUE(result.has_value());
+    if (result.has_value()) {
+      EXPECT_EQ(result.value(), expected);
+    }
+    return expected.numRows();
+  };
+
+  // Without delta triples, there are 30 distinct `col0Id`s and 7 distinct
+  // `col1Id`s for the `col0Id` 1.
+  auto noDeltaTriples = makeLocatedTriplesPerBlock(blocks, {}, true);
+  EXPECT_EQ(expectCountsOfScan(noDeltaTriples, std::nullopt), 30);
+  EXPECT_EQ(expectCountsOfScan(noDeltaTriples, V(1)), 7);
+
+  // No block of relation 1 has a single `col1Id`, so the counts are only
+  // computed if no minimum percentage of such blocks is required.
+  EXPECT_EQ(reader->getDistinctColIdsAndCounts(
+                1,
+                {ScanSpecification{V(1), std::nullopt, std::nullopt},
+                 getBlockMetadataRangesfromVec(
+                     noDeltaTriples.getAugmentedMetadata())},
+                cancellationHandle, noDeltaTriples, executor(), {}, 1),
+            std::nullopt);
+
+  // LIMIT and OFFSET apply to the rows of the scan, also when they start or end
+  // in the middle of a block or of a group.
+  for (uint64_t offset : {0, 5, 21}) {
+    for (std::optional<uint64_t> limit :
+         {std::optional<uint64_t>{1}, std::optional<uint64_t>{9},
+          std::optional<uint64_t>{}}) {
+      expectCountsOfScan(noDeltaTriples, std::nullopt, {limit, offset});
+      expectCountsOfScan(noDeltaTriples, V(1), {limit, offset});
+    }
+  }
+
+  // Inserted triples are counted. The triple `1 100 0` is located in the first
+  // block of relation 2, which then is the last block of the scan for the
+  // `col0Id` 1, so only part of it belongs to that scan.
+  auto inserted =
+      makeLocatedTriplesPerBlock(blocks,
+                                 {IdTriple<>{{V(1), V(100), V(0), V(graph)}},
+                                  IdTriple<>{{V(1), V(2), V(50), V(graph)}},
+                                  IdTriple<>{{V(15), V(0), V(2), V(graph)}}},
+                                 true);
+  expectCountsOfScan(inserted, std::nullopt);
+  expectCountsOfScan(inserted, V(1));
+
+  // Deleted triples are not counted.
+  auto deleted =
+      makeLocatedTriplesPerBlock(blocks,
+                                 {IdTriple<>{{V(1), V(2), V(7), V(graph)}},
+                                  IdTriple<>{{V(15), V(0), V(1), V(graph)}}},
+                                 false);
+  expectCountsOfScan(deleted, std::nullopt);
+  expectCountsOfScan(deleted, V(1));
+}
+
 // Test that `getDistinctColIdsAndCounts` counts a triple that occurs in several
 // graphs only once, like a scan without the graph column.
 TEST(CompressedRelationReader, getDistinctColIdsAndCountsDuplicatesInGraphs) {
@@ -1644,12 +1746,14 @@ TEST(CompressedRelationReader, getDistinctColIdsAndCountsDuplicatesInGraphs) {
   auto [blocks, metaData, reader] = writeAndOpenRelations(inputs, filename, 8);
   auto locatedTriples = makeLocatedTriplesPerBlock(blocks, {}, true);
   auto getCounts = [&](std::optional<Id> col0Id) {
-    return reader->getDistinctColIdsAndCounts(
-        col0Id.has_value() ? 1 : 0,
-        {ScanSpecification{col0Id, std::nullopt, std::nullopt},
-         getBlockMetadataRangesfromVec(blocks)},
-        std::make_shared<ad_utility::CancellationHandle<>>(), locatedTriples,
-        {});
+    return reader
+        ->getDistinctColIdsAndCounts(
+            col0Id.has_value() ? 1 : 0,
+            {ScanSpecification{col0Id, std::nullopt, std::nullopt},
+             getBlockMetadataRangesfromVec(blocks)},
+            std::make_shared<ad_utility::CancellationHandle<>>(),
+            locatedTriples, executor(), {}, 0)
+        .value();
   };
 
   // There are two distinct triples, both with `col0Id` 1 and `col1Id` 0.

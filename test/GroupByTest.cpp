@@ -2174,6 +2174,147 @@ TEST(GroupByOptimizationsDeltaTriples,
               optionalHasTable({{getId("<x>"), I(3)}}));
 }
 
+// Test that `computeGroupByForFullIndexScan` without a COUNT is only used if at
+// least `group-by-index-scan-min-percent-known-blocks` percent of the blocks
+// have a single value in the grouped column, and that the optimizations with a
+// COUNT are always used.
+TEST(GroupByIndexScan, minPercentKnownBlocks) {
+  // The subject `<s0>` has 8 triples and `<s1>` to `<s4>` have one each, all
+  // with the predicate `<p>`. This makes two blocks with only `<s0>` and one
+  // block with four subjects.
+  std::string turtle;
+  for (int i = 0; i < 8; ++i) {
+    turtle += "<s0> <p> <o" + std::to_string(i) + "> . ";
+  }
+  for (int s = 1; s <= 4; ++s) {
+    turtle += "<s" + std::to_string(s) + "> <p> <o0> . ";
+  }
+  TestIndexConfig config{std::move(turtle)};
+  config.rowsPerBlock = 4;
+  QecWrapper ctx{std::make_shared<Index>(makeTestIndex(std::move(config)))};
+  auto qec = ctx.makeQec();
+
+  // `SELECT ?x WHERE { ?x ?y ?z } GROUP BY ?x` (if `fullScan`, with
+  // `(COUNT(?x) AS ?count)` if `withCount`) or
+  // `SELECT ?x (COUNT(?x) AS ?count) WHERE { ?x <p> ?z } GROUP BY ?x`.
+  Variable varX{"?x"};
+  auto computeGroupBy = [&](double minPercentKnownBlocks, bool fullScan,
+                            bool withCount) {
+    auto cleanup = setRuntimeParameterForTest<
+        &RuntimeParameters::groupByIndexScanMinPercentKnownBlocks_>(
+        minPercentKnownBlocks);
+    std::vector<Alias> aliases;
+    if (withCount) {
+      aliases.push_back(
+          Alias{SparqlExpressionPimpl{
+                    std::make_unique<CountExpression>(
+                        false, std::make_unique<VariableExpression>(varX)),
+                    "COUNT(?x)"},
+                Variable{"?count"}});
+    }
+    if (fullScan) {
+      auto scan = makeExecutionTree<IndexScan>(
+          &qec, Permutation::Enum::SPO,
+          SparqlTripleSimple{varX, Variable{"?y"}, Variable{"?z"}});
+      return GroupByImpl{&qec, {varX}, std::move(aliases), std::move(scan)}
+          .computeGroupByForFullIndexScan();
+    }
+    auto scan = makeExecutionTree<IndexScan>(
+        &qec, Permutation::Enum::PSO,
+        SparqlTripleSimple{varX, iri("<p>"), Variable{"?z"}});
+    return GroupByImpl{&qec, {varX}, std::move(aliases), std::move(scan)}
+        .computeGroupByObjectWithCount();
+  };
+
+  // Without a COUNT, the threshold applies (two thirds of the blocks have a
+  // single subject).
+  EXPECT_TRUE(computeGroupBy(0, true, false).has_value());
+  EXPECT_TRUE(computeGroupBy(66, true, false).has_value());
+  EXPECT_FALSE(computeGroupBy(67, true, false).has_value());
+  EXPECT_FALSE(computeGroupBy(100, true, false).has_value());
+
+  // With a COUNT, the optimizations are used even for a threshold of 100.
+  EXPECT_TRUE(computeGroupBy(100, true, true).has_value());
+  EXPECT_TRUE(computeGroupBy(100, false, true).has_value());
+}
+
+// Test that `computeGroupByForFullIndexScan` yields the same result as the
+// GROUP BY without this optimization, for blocks with many distinct subjects,
+// with delta triples, and with LIMIT and OFFSET.
+TEST(GroupByOptimizationsDeltaTriples, fullIndexScanManyDistinctPerBlock) {
+  // The subject `<s0>` has 12 triples, which fill blocks of their own. The
+  // subjects `<s1>` to `<s20>` have one to three triples each, so most of their
+  // blocks contain several subjects.
+  std::string turtle;
+  for (int i = 0; i < 12; ++i) {
+    turtle += "<s0> <p> <o" + std::to_string(i) + "> . ";
+  }
+  for (int s = 1; s <= 20; ++s) {
+    for (int i = 0; i <= s % 3; ++i) {
+      turtle +=
+          "<s" + std::to_string(s) + "> <p> <o" + std::to_string(i) + "> . ";
+    }
+  }
+  TestIndexConfig config{std::move(turtle)};
+  config.rowsPerBlock = 4;
+  QecWrapper ctx{std::make_shared<Index>(makeTestIndex(std::move(config)))};
+
+  // Insert triples into a block of `<s0>` and into blocks with several
+  // subjects (one of them with a new subject `<o5>`), and delete a triple of
+  // `<s0>` and of `<s7>`.
+  auto getId = makeGetId(*ctx.index_);
+  auto g = getId(std::string(DEFAULT_GRAPH_IRI));
+  auto p = getId("<p>");
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  ctx.index_->deltaTriplesManager().modify<void>([&](DeltaTriples& dt) {
+    dt.insertTriples(cancellationHandle,
+                     {IdTriple<0>{{getId("<o5>"), p, getId("<s3>"), g}},
+                      IdTriple<0>{{getId("<s0>"), p, getId("<s1>"), g}},
+                      IdTriple<0>{{getId("<s1>"), p, getId("<o11>"), g}}});
+    dt.deleteTriples(cancellationHandle,
+                     {IdTriple<0>{{getId("<s0>"), p, getId("<o3>"), g}},
+                      IdTriple<0>{{getId("<s7>"), p, getId("<o0>"), g}}});
+  });
+  auto qec = ctx.makeQec();
+
+  // `SELECT ?x (COUNT(?x) AS ?count) WHERE { ?x ?y ?z } GROUP BY ?x`, with
+  // the `limitOffset` applied to the index scan.
+  Variable varX{"?x"};
+  auto makeGroupBy = [&](LimitOffsetClause limitOffset) {
+    auto scan = makeExecutionTree<IndexScan>(
+        &qec, Permutation::Enum::SPO,
+        SparqlTripleSimple{varX, Variable{"?y"}, Variable{"?z"}});
+    scan->applyLimitOffset(limitOffset, true);
+    auto countXPimpl = SparqlExpressionPimpl{
+        std::make_unique<CountExpression>(
+            false, std::make_unique<VariableExpression>(varX)),
+        "COUNT(?x)"};
+    std::vector<Alias> aliases{
+        Alias{std::move(countXPimpl), Variable{"?count"}}};
+    return GroupByImpl{&qec, {varX}, aliases, std::move(scan)};
+  };
+
+  // The optimization (used because of the COUNT, although most blocks have
+  // several subjects) yields the result of the GROUP BY without it, also when
+  // the LIMIT and OFFSET start or end in the middle of a block or of a group.
+  for (LimitOffsetClause limitOffset :
+       {LimitOffsetClause{}, LimitOffsetClause{5, 3},
+        LimitOffsetClause{9, 13}}) {
+    auto expected = [&]() {
+      auto cleanup = setRuntimeParameterForTest<
+          &RuntimeParameters::groupByDisableIndexScanOptimizations_>(true);
+      return makeGroupBy(limitOffset)
+          .computeResultOnlyForTesting(false)
+          .idTableView()
+          .clone();
+    }();
+    auto result = makeGroupBy(limitOffset).computeGroupByForFullIndexScan();
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(result.value(), expected);
+  }
+}
+
 // _____________________________________________________________________________
 TEST(GroupByOptimizationsDeltaTriples, joinWithFullScanCardinalityAfterInsert) {
   // Index with 3 triples, all with subject <a>. SPO cardinality of <a> = 3.

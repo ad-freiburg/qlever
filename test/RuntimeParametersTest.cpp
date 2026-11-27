@@ -133,6 +133,27 @@ TEST(RuntimeParameters, backgroundThreadSharePercentIsAPercentage) {
   EXPECT_EQ(params.backgroundThreadSharePercent_.get(), 12.5);
 }
 
+// Test that `group-by-index-scan-min-percent-known-blocks` accepts the values
+// from 0 to 100 and rejects all others.
+TEST(RuntimeParameters, groupByIndexScanMinPercentKnownBlocksIsAPercentage) {
+  RuntimeParameters params;
+
+  // The bounds are accepted.
+  for (std::string_view value : {"0", "100"}) {
+    EXPECT_NO_THROW(params.setFromAssignment(
+        absl::StrCat("group-by-index-scan-min-percent-known-blocks=", value)));
+  }
+
+  // The rejected values leave the parameter unchanged.
+  for (std::string_view value : {"-1", "100.5", "nan"}) {
+    AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+        params.setFromAssignment(absl::StrCat(
+            "group-by-index-scan-min-percent-known-blocks=", value)),
+        HasSubstr("must be between 0 and 100"), std::runtime_error);
+  }
+  EXPECT_EQ(params.groupByIndexScanMinPercentKnownBlocks_.get(), 100.0);
+}
+
 // Test that `getKeys` and `toMap` (the building blocks of
 // `--set-runtime-parameter help`) are consistent with each other.
 TEST(RuntimeParameters, getKeysAndToMapAreConsistent) {
@@ -184,6 +205,7 @@ TEST(RuntimeParameters, allParametersAreRegistered) {
   check(params.useBinsearchTransitivePath_);
   check(params.groupByHashMapEnabled_);
   check(params.groupByDisableIndexScanOptimizations_);
+  check(params.groupByIndexScanMinPercentKnownBlocks_);
   check(params.serviceMaxValueRows_);
   check(params.serviceMaxRedirects_);
   check(params.queryPlanningBudget_);

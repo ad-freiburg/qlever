@@ -118,6 +118,15 @@ struct RuntimeParameters {
   Bool groupByHashMapEnabled_{false, "group-by-hash-map-enabled"};
   Bool groupByDisableIndexScanOptimizations_{
       false, "group-by-disable-index-scan-optimizations"};
+  // The GROUP BY of a full index scan without a COUNT, like
+  // `SELECT ?s WHERE { ?s ?p ?o } GROUP BY ?s`, takes the values of the blocks
+  // with a single value in the grouped column from their metadata, and reads
+  // the other blocks. It is only used if at least this percentage of the blocks
+  // are such blocks, otherwise the GROUP BY is evaluated normally (which is
+  // faster for the blocks that have to be read, because it groups the rows in
+  // parallel to the scan). See `computeGroupByForFullIndexScan`.
+  Double groupByIndexScanMinPercentKnownBlocks_{
+      50.0, "group-by-index-scan-min-percent-known-blocks"};
   SizeT serviceMaxValueRows_{10'000, "service-max-value-rows"};
   SizeT serviceMaxRedirects_{1, "service-max-redirects"};
   SizeT queryPlanningBudget_{1500, "query-planning-budget"};
