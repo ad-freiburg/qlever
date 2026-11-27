@@ -85,6 +85,8 @@ class CompressedExternalIdTableWriter {
 
   // The filename and actual file to which the `IdTable` is written .
   std::string filename_;
+  // The ZSTD compression level of the blocks, see `setCompressionLevel`.
+  int compressionLevel_ = compressedExternalIdTable::DEFAULT_RUN_COMPRESSION;
   // The offset at which the next block is written. The blocks are written
   // with the positioned `File::write`, so a thread only has to reserve its
   // range here, see `compressAndWriteBlockOfColumn`.
@@ -153,6 +155,16 @@ class CompressedExternalIdTableWriter {
   const MemorySize& blockSizeUncompressed() const {
     return blockSizeUncompressed_;
   }
+
+  // Set the ZSTD compression level of the blocks that are written from now
+  // on. The default is `DEFAULT_RUN_COMPRESSION`. Must not be called while a
+  // block is being written.
+  //
+  // NOTE: The blocks are typically read back exactly once, so a fast level is
+  // appropriate. A negative level (see `MERGE_PHASE_SPILL_COMPRESSION`) is
+  // even faster at the price of larger files. The decompression does not
+  // depend on the level.
+  void setCompressionLevel(int level) { compressionLevel_ = level; }
 
   // Store an `idTable`. The blocks of all its columns are compressed and
   // written in parallel, see `compressAndWriteBlockOfColumn`.
@@ -246,7 +258,7 @@ class CompressedExternalIdTableWriter {
     auto uncompressedSize = (upper - lower) * BYTES_PER_ID_COLUMN_ENTRY;
     auto compressed = idColumnByteIO::encode(
         column.subspan(lower, upper - lower), [this](const auto& chunks) {
-          return zstdContext_.compressChunks(chunks);
+          return zstdContext_.compressChunks(chunks, compressionLevel_);
         });
     auto offset = nextOffset_.fetch_add(static_cast<off_t>(compressed.size()));
     // NOTE: This throws if not all the bytes could be written.
@@ -853,6 +865,10 @@ class CompressedExternalIdTableBase {
   PushBlockCallback<CompressedExternalIdTableBase> makePushBlockCallback() {
     return {this};
   }
+
+  // Set the compression level of the blocks that are written to disk, see
+  // `CompressedExternalIdTableWriter::setCompressionLevel`.
+  void setRunCompressionLevel(int level) { writer_.setCompressionLevel(level); }
 
   // Delete the underlying file and reset the sorter. May only be called if no
   // active `getBlocks()` generator that has not been fully iterated over is
