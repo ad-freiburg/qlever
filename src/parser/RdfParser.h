@@ -10,6 +10,7 @@
 #ifndef QLEVER_SRC_PARSER_RDFPARSER_H
 #define QLEVER_SRC_PARSER_RDFPARSER_H
 
+#include <absl/cleanup/cleanup.h>
 #include <absl/strings/str_cat.h>
 #include <gtest/gtest_prod.h>
 
@@ -537,6 +538,41 @@ class NQuadParser : public TurtleParser<Tokenizer_T> {
   bool nQuadObject();
   bool nQuadGraphLabel();
   bool nQuadLiteral();
+};
+
+// Parser supporting the TriG format: https://www.w3.org/TR/trig/. This allows
+// assigning different graphs to triples, similar to N-Quads, but keeping the
+// Turtle syntax.
+template <class Tokenizer_T>
+class TriGParser : public TurtleParser<Tokenizer_T> {
+  using Base = TurtleParser<Tokenizer_T>;
+
+ public:
+  using Base::Base;
+
+ protected:
+  bool statement() override;
+
+ private:
+  bool block();
+  bool labelOrSubject();
+  bool wrappedGraph();
+  bool triplesOrGraph();
+  bool namedGraph();
+
+  // Switch `defaultGraphIri_` to `newGraph`, and return a scope guard that
+  // restores the previous value when it is destroyed - including if an
+  // exception unwinds through the caller, e.g. because the parser's buffer
+  // ends mid-block (see `RdfStreamParser::resetStateAndRead`).
+  [[nodiscard]] auto switchDefaultGraph(TripleComponent&& newGraph) {
+    auto savedGraph = std::move(this->defaultGraphIri_);
+    this->defaultGraphIri_ = std::move(newGraph);
+    absl::Cleanup restoreGraph = [this, savedGraph =
+                                            std::move(savedGraph)]() mutable {
+      this->defaultGraphIri_ = std::move(savedGraph);
+    };
+    return restoreGraph;
+  }
 };
 
 /**

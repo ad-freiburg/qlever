@@ -132,3 +132,5 @@ template class RdfAsyncParallelParser<TurtleParser<Tokenizer>>;
 template class RdfAsyncParallelParser<TurtleParser<TokenizerCtre>>;
 template class RdfAsyncParallelParser<NQuadParser<Tokenizer>>;
 template class RdfAsyncParallelParser<NQuadParser<TokenizerCtre>>;
+template class RdfAsyncParallelParser<TriGParser<Tokenizer>>;
+template class RdfAsyncParallelParser<TriGParser<TokenizerCtre>>;

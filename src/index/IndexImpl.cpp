@@ -401,8 +401,12 @@ void IndexImpl::updateInputFileSpecificationsAndLog(
   }
   // For a single input stream, if parallel parsing is not specified explicitly
   // on the command line, we set if implicitly for backward compatibility.
+  // This backward-compatibility default never applies to TriG, because the
+  // parallel parser cannot safely split `GRAPH <g> { ... }` blocks, see
+  // `RdfAsyncMultifileParser::makeFileParser`.
   if (!parallelParsingSpecifiedViaJson.has_value() && spec.size() == 1 &&
-      !spec.at(0).parseInParallelSetExplicitly_) {
+      !spec.at(0).parseInParallelSetExplicitly_ &&
+      spec.at(0).filetype_ != qlever::Filetype::TriG) {
     AD_LOG_WARN
         << "Implicitly using the parallel parser for a single input file "
            "for reasons of backward compatibility; this is deprecated, "
