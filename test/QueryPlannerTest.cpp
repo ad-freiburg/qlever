@@ -4730,3 +4730,41 @@ TEST(QueryPlanner, plannerAllocationsCountTowardsMemoryLimit) {
   // When the tree is destroyed, the memory is released again.
   EXPECT_EQ(allocator.amountMemoryLeft(), memoryLeftBefore);
 }
+
+// Test that the scans of a group graph pattern are prefiltered once at the
+// seed level (`QueryPlanner::applyPrefiltersToIndexScans`): the `Filter` on top
+// of the final plan sits on a prefiltered scan and finds nothing left to
+// prefilter. With prefiltering disabled, the scan stays as it is.
+TEST(QueryPlanner, prefilterIndexScansOnce) {
+  using ::testing::AllOf;
+  using ::testing::Eq;
+  using ::testing::ResultOf;
+  auto qec = ad_utility::testing::getQec(
+      "<a> <p> 1 . <b> <p> 2 . <c> <p> 3 . <d> <p> 4 . <e> <p> 5 .");
+  std::string query = "SELECT * { ?x <p> ?o FILTER(?o > 3) }";
+  auto prefilter = parseQuery(query)
+                       ._rootGraphPattern._filters.at(0)
+                       .expression_.getPrefilterExpressionForMetadata(
+                           qec->getLocalVocabContext());
+
+  // A prefiltered scan is not cached (this is also how `FilterTest` checks
+  // for prefiltering), and the filter's prefilter applies to it no more.
+  auto scan = [&prefilter](bool isPrefiltered) {
+    auto prefilterApplies = [&prefilter](const IndexScan& indexScan) {
+      return indexScan
+          .getUpdatedQueryExecutionTreeWithPrefilterApplied(prefilter)
+          .has_value();
+    };
+    return AllOf(
+        h::IndexScanFromStrings("?x", "<p>", "?o"),
+        h::RootOperation<IndexScan>(
+            AllOf(AD_PROPERTY(IndexScan, canResultBeCached, Eq(!isPrefiltered)),
+                  ResultOf(prefilterApplies, Eq(!isPrefiltered)))));
+  };
+
+  h::expect(query, h::Filter("?o > 3", scan(true)), qec);
+
+  [[maybe_unused]] const auto& rtp = setRuntimeParameterForTest<
+      &RuntimeParameters::enablePrefilterOnIndexScans_>(false);
+  h::expect(query, h::Filter("?o > 3", scan(false)), qec);
+}
