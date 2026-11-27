@@ -11,8 +11,8 @@
 
 #include "./printers/PayloadVariablePrinters.h"
 #include "QueryPlannerTestHelpers.h"
-#include "engine/SpatialJoin.h"
 #include "engine/SpatialJoinConfig.h"
+#include "engine/operation/SpatialJoin.h"
 #include "global/Constants.h"
 #include "parser/MagicServiceQuery.h"
 #include "parser/PayloadVariables.h"
@@ -2100,6 +2100,59 @@ TEST(QueryPlanner, ForcedSubstituteAfterSelectiveJoin) {
               PayloadVariables::all(), SpatialJoinAlgorithm::LIBSPATIALJOIN,
               INTERSECTS, std::nullopt, scan("?a", "<p>", "?b"), valuesPoint))),
       qec);
+}
+
+// Test that the greedy planner substitutes a filter with a `SpatialJoin` when
+// both of its sides are joins of two triples (see #4015).
+TEST(QueryPlanner, SpatialJoinFromFilterBetweenJoinsGreedy) {
+  auto scan = h::IndexScanFromStrings;
+  using enum SpatialJoinType::Enum;
+
+  // A geometry `<g0>` of `<r>` and many geometries `<gi>` of entities `<wi>`.
+  std::string kb =
+      "<r> <geom> <g0> . <g0> <wkt> \"POLYGON((0 0,2 0,2 2,0 0))\""
+      "^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n";
+  for (size_t i = 1; i <= 60; ++i) {
+    absl::StrAppend(
+        &kb, "<w", i, "> <geom> <g", i, "> . <g", i, "> <wkt> \"POINT(", i, " ",
+        i, ")\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> .\n");
+  }
+  auto* qec = ad_utility::testing::getQec(kb);
+
+  // The greedy planner joins the two triples of `<r>`, then the `SpatialJoin`
+  // with the geometries of the other side, and then the remaining triple.
+  h::expectGreedy(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE {"
+      "<r> <geom> ?ga . ?ga <wkt> ?a ."
+      "?w <geom> ?gw . ?gw <wkt> ?b ."
+      "FILTER(geof:sfIntersects(?a, ?b)) }",
+      h::Join(
+          h::Sort(h::spatialJoinFilterSubstitute(
+              -1, -1, Var{"?a"}, Var{"?b"}, std::nullopt,
+              PayloadVariables::all(), SpatialJoinAlgorithm::LIBSPATIALJOIN,
+              INTERSECTS, std::nullopt,
+              h::Join(scan("<r>", "<geom>", "?ga"), scan("?ga", "<wkt>", "?a")),
+              scan("?gw", "<wkt>", "?b"))),
+          scan("?w", "<geom>", "?gw")),
+      qec);
+}
+
+// Test that both planners substitute a filter with a `SpatialJoin` when one
+// side of the filter is possibly undefined, here bound in an `OPTIONAL` that
+// shares no variable with the rest.
+TEST(QueryPlanner, SpatialJoinFromFilterWithPossiblyUndefinedSide) {
+  auto scan = h::IndexScanFromStrings;
+  using enum SpatialJoinType::Enum;
+  h::expect(
+      "PREFIX geof: <http://www.opengis.net/def/function/geosparql/> "
+      "SELECT * WHERE { ?x <wkt> ?a . OPTIONAL { ?y <wkt> ?b } "
+      "FILTER(geof:sfIntersects(?a, ?b)) }",
+      h::spatialJoinFilterSubstitute(
+          -1, -1, Var{"?a"}, Var{"?b"}, std::nullopt, PayloadVariables::all(),
+          SpatialJoinAlgorithm::LIBSPATIALJOIN, INTERSECTS, std::nullopt,
+          scan("?x", "<wkt>", "?a"),
+          h::NeutralOptional(scan("?y", "<wkt>", "?b"))));
 }
 
 // _____________________________________________________________________________

@@ -91,6 +91,11 @@ class CombinedRunsInput : public ad_utility::NoCopy {
   }
 
   // ___________________________________________________________________________
+  void reserveBlock(OutputBlock& block, size_t numElements) const {
+    inputs_.front().reserveBlock(block, numElements);
+  }
+
+  // ___________________________________________________________________________
   template <typename R>
   void appendToBlock(OutputBlock& block, R&& row) const {
     inputs_.front().appendToBlock(block, AD_FWD(row));

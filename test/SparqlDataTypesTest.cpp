@@ -12,6 +12,7 @@
 
 #include "./util/AllocatorTestHelpers.h"
 #include "./util/LocalVocabTestHelpers.h"
+#include "./util/VariableToColumnMapTestHelpers.h"
 #include "engine/ConstructBatchEvaluator.h"
 #include "engine/ConstructTemplatePreprocessor.h"
 #include "engine/ConstructTripleInstantiator.h"
@@ -39,15 +40,14 @@ struct ContextWrapper {
       IdTable{ad_utility::testing::makeAllocator()},
       qlm::vector<ColumnIndex>{ad_utility::testing::makeAllocator()},
       makeLocalVocab()};
-  // TODO<joka921> `VariableToColumnMap`
-  VariableToColumnMap _hashMap;
+  VariableToColumnMap variableColumns_ = makeVariableToColumnMap();
 
   ConstructQueryExportContext createContextForRow(size_t row,
                                                   size_t rowOffset = 0) const {
     return {.resultTableRowIndex_ = row,
             .idTable_ = _resultTable.idTableView(),
             .localVocab_ = _resultTable.localVocab(),
-            ._variableColumns = _hashMap,
+            ._variableColumns = variableColumns_,
             ._qecIndex = _index,
             ._rowOffset = rowOffset};
   }
@@ -294,7 +294,7 @@ TEST(SparqlDataTypesTest, VariableInvalidNamesThrowException) {
 TEST(SparqlDataTypesTest, VariableEvaluatesCorrectlyBasedOnContext) {
   auto wrapper = prepareContext();
 
-  wrapper._hashMap[Variable{"?var"}] = makeAlwaysDefinedColumn(0);
+  wrapper.variableColumns_[Variable{"?var"}] = makeAlwaysDefinedColumn(0);
   IdTable table{ad_utility::testing::makeAllocator()};
   table.setNumColumns(1);
   const Id value1 = Id::makeFromInt(69);
@@ -347,7 +347,7 @@ TEST(SparqlDataTypesTest, VariableEvaluatesNothingForUnusedName) {
 TEST(SparqlDataTypesTest, VariableEvaluateIsPropagatedCorrectly) {
   auto wrapper = prepareContext();
 
-  wrapper._hashMap[Variable{"?var"}] = makeAlwaysDefinedColumn(0);
+  wrapper.variableColumns_[Variable{"?var"}] = makeAlwaysDefinedColumn(0);
   IdTable table{ad_utility::testing::makeAllocator()};
   table.setNumColumns(1);
   const Id value = Id::makeFromInt(69);
