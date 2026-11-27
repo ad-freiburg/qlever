@@ -17,7 +17,9 @@ namespace {
 // Parse the given query and return the resulting `ParsedQuery`.
 ParsedQuery parse(std::string query) {
   static EncodedIriManager encodedIriManager;
-  return SparqlParser::parseQuery(&encodedIriManager, std::move(query));
+  return SparqlParser::parseQuery(&encodedIriManager,
+                                  ad_utility::testing::makeAllocator(),
+                                  std::move(query));
 }
 
 // The dataset for the equivalence tests below.

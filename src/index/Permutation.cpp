@@ -104,11 +104,13 @@ IdTable Permutation::scan(const ScanSpecAndBlocks& scanSpecAndBlocks,
                           const CancellationHandle& cancellationHandle,
                           const LocatedTriplesState& locatedTriplesState,
                           qlever::Executor executor,
-                          const LimitOffsetClause& limitOffset) const {
+                          const LimitOffsetClause& limitOffset,
+                          std::optional<ColumnIndices> columnSubset) const {
   throwIfNotLoaded();
   return reader().scan(scanSpecAndBlocks, additionalColumns, cancellationHandle,
                        getLocatedTriplesForPermutation(locatedTriplesState),
-                       std::move(executor), limitOffset);
+                       std::move(executor), limitOffset,
+                       std::move(columnSubset));
 }
 
 // _____________________________________________________________________
@@ -255,10 +257,12 @@ CompressedRelationReader::IdTableGeneratorInputRange Permutation::lazyScan(
     ColumnIndicesRef additionalColumns,
     const CancellationHandle& cancellationHandle,
     const LocatedTriplesState& locatedTriplesState, qlever::Executor executor,
-    const LimitOffsetClause& limitOffset) const {
+    const LimitOffsetClause& limitOffset,
+    std::optional<ColumnIndices> columnSubset) const {
   return lazyScanImpl(reader(), scanSpecAndBlocks, std::move(optBlocks),
                       additionalColumns, cancellationHandle,
-                      locatedTriplesState, std::move(executor), limitOffset);
+                      locatedTriplesState, std::move(executor), limitOffset,
+                      std::move(columnSubset));
 }
 
 // _____________________________________________________________________________
@@ -269,17 +273,18 @@ CompressedRelationReader::IdTableGeneratorInputRange Permutation::lazyScanImpl(
     ColumnIndicesRef additionalColumns,
     const CancellationHandle& cancellationHandle,
     const LocatedTriplesState& locatedTriplesState, qlever::Executor executor,
-    const LimitOffsetClause& limitOffset) const {
+    const LimitOffsetClause& limitOffset,
+    std::optional<ColumnIndices> columnSubset) const {
   ColumnIndices columns{additionalColumns.begin(), additionalColumns.end()};
   if (!optBlocks.has_value()) {
     optBlocks = CompressedRelationReader::convertBlockMetadataRangesToVector(
         scanSpecAndBlocks.blockMetadata_);
   }
-  return reader.lazyScan(scanSpecAndBlocks.scanSpec_,
-                         std::move(optBlocks.value()), std::move(columns),
-                         cancellationHandle,
-                         getLocatedTriplesForPermutation(locatedTriplesState),
-                         std::move(executor), limitOffset);
+  return reader.lazyScan(
+      scanSpecAndBlocks.scanSpec_, std::move(optBlocks.value()),
+      std::move(columns), cancellationHandle,
+      getLocatedTriplesForPermutation(locatedTriplesState), std::move(executor),
+      limitOffset, std::move(columnSubset));
 }
 
 // _____________________________________________________________________________
@@ -292,9 +297,10 @@ Permutation::LazyScanWithReader Permutation::lazyScanWithUnlimitedReader(
   auto independentReader = std::make_unique<CompressedRelationReader>(
       reader().makeReaderWithReboundAllocator(
           ad_utility::makeUnlimitedAllocator<Id>()));
-  auto blocks = lazyScanImpl(
-      *independentReader, scanSpecAndBlocks, std::nullopt, additionalColumns,
-      cancellationHandle, locatedTriplesState, std::move(executor), {});
+  auto blocks =
+      lazyScanImpl(*independentReader, scanSpecAndBlocks, std::nullopt,
+                   additionalColumns, cancellationHandle, locatedTriplesState,
+                   std::move(executor), {}, std::nullopt);
   return {std::move(independentReader), std::move(blocks)};
 }
 

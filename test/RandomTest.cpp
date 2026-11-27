@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <array>
+#include <boost/uuid/string_generator.hpp>
 #include <ctre.hpp>
 #include <random>
 #include <ranges>
@@ -19,6 +20,7 @@
 #include "util/Random.h"
 #include "util/SourceLocation.h"
 #include "util/TypeTraits.h"
+#include "util/UuidGenerator.h"
 
 namespace ad_utility {
 

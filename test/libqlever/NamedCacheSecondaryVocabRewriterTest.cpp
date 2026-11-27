@@ -23,12 +23,16 @@
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/LocalVocabEntryTestHelpers.h"
-#include "engine/ExplicitIdTableOperation.h"
+#include "../util/LocalVocabTestHelpers.h"
+#include "../util/VariableToColumnMapTestHelpers.h"
 #include "engine/NamedResultCache.h"
+#include "engine/operation/ExplicitIdTableOperation.h"
 #include "index/LocalVocabEntry.h"
 #include "index/vocabulary/SecondaryVocabulary.h"
 #include "libqlever/NamedCacheSecondaryVocabRewriter.h"
 #include "util/ContainersWithAllocator.h"
+
+using ad_utility::testing::makeLocalVocab;
 
 using namespace qlever::namedCacheSecondaryVocab;
 using ad_utility::testing::iriLocalVocabEntry;
@@ -262,7 +266,7 @@ TEST(NamedCacheSecondaryVocabRewriter, localVocabEntriesOfExistingWords) {
 
   // The words are contained in the main vocabulary (`<m>`), in the secondary
   // vocabulary of the index (`<a>`), and in neither of them (`<y>`).
-  LocalVocab localVocab;
+  LocalVocab localVocab = makeLocalVocab();
   auto idOf = [&localVocab, &context](std::string_view iriref) {
     return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
         iriLocalVocabEntry(iriref, context)));
@@ -276,7 +280,7 @@ TEST(NamedCacheSecondaryVocabRewriter, localVocabEntriesOfExistingWords) {
   EXPECT_EQ(Id::fromBits(positionOfA.lowerBound_.get()), secondaryId(0));
   auto value = std::make_shared<const Value>(Value{
       std::make_shared<const IdTable>(makeIdTableFromVector({{m}, {a}, {y}})),
-      VariableToColumnMap{{Variable{"?x"}, makeAlwaysDefinedColumn(0)}},
+      makeVariableToColumnMap({{Variable{"?x"}, makeAlwaysDefinedColumn(0)}}),
       qlm::vector<ColumnIndex>{alloc}, std::move(localVocab), "handmade",
       std::nullopt});
 
@@ -305,18 +309,19 @@ TEST(NamedCacheSecondaryVocabRewriter, localVocabEntriesOfExistingWords) {
 TEST(NamedCacheSecondaryVocabRewriter, canonicalColumnOrder) {
   // Column 0 is `?z`, column 1 has no variable, column 2 is `?a`, column 3 is
   // `?m`.
-  VariableToColumnMap map{{Variable{"?z"}, makeAlwaysDefinedColumn(0)},
-                          {Variable{"?a"}, makeAlwaysDefinedColumn(2)},
-                          {Variable{"?m"}, makeAlwaysDefinedColumn(3)}};
+  auto map =
+      makeVariableToColumnMap({{Variable{"?z"}, makeAlwaysDefinedColumn(0)},
+                               {Variable{"?a"}, makeAlwaysDefinedColumn(2)},
+                               {Variable{"?m"}, makeAlwaysDefinedColumn(3)}});
   EXPECT_THAT(canonicalColumnOrder(map, 4), ElementsAre(2, 3, 0));
-  EXPECT_THAT(canonicalColumnOrder({}, 2), IsEmpty());
+  EXPECT_THAT(canonicalColumnOrder(makeVariableToColumnMap(), 2), IsEmpty());
   EXPECT_THAT(canonicalColumnOrder(map, 5), ElementsAre(2, 3, 0));
   EXPECT_ANY_THROW(canonicalColumnOrder(map, 3));
   // A column that belongs to two variables is written only once.
-  VariableToColumnMap twoVariables{
-      {Variable{"?b"}, makeAlwaysDefinedColumn(1)},
-      {Variable{"?c"}, makeAlwaysDefinedColumn(1)},
-      {Variable{"?a"}, makeAlwaysDefinedColumn(0)}};
+  auto twoVariables =
+      makeVariableToColumnMap({{Variable{"?b"}, makeAlwaysDefinedColumn(1)},
+                               {Variable{"?c"}, makeAlwaysDefinedColumn(1)},
+                               {Variable{"?a"}, makeAlwaysDefinedColumn(0)}});
   EXPECT_THAT(canonicalColumnOrder(twoVariables, 2), ElementsAre(0, 1));
 
   auto makeValue = [&map](std::vector<ColumnIndex> sortedOn) {
@@ -325,7 +330,7 @@ TEST(NamedCacheSecondaryVocabRewriter, canonicalColumnOrder) {
             {{1, 7, 5, 3}, {2, 6, 5, 4}}, ad_utility::testing::IntId)),
         map,
         qlm::vector<ColumnIndex>{sortedOn.begin(), sortedOn.end(), alloc},
-        LocalVocab{},
+        makeLocalVocab(),
         "handmade",
         std::nullopt};
   };
@@ -337,11 +342,11 @@ TEST(NamedCacheSecondaryVocabRewriter, canonicalColumnOrder) {
   EXPECT_EQ(ExplicitIdTableOperation::viewOf(copy.result_),
             makeIdTableFromVector({{5, 3, 1}, {5, 4, 2}},
                                   ad_utility::testing::IntId));
-  EXPECT_EQ(
-      copy.varToColMap_,
-      (VariableToColumnMap{{Variable{"?a"}, makeAlwaysDefinedColumn(0)},
-                           {Variable{"?m"}, makeAlwaysDefinedColumn(1)},
-                           {Variable{"?z"}, makeAlwaysDefinedColumn(2)}}));
+  EXPECT_EQ(copy.varToColMap_,
+            (makeVariableToColumnMap(
+                {{Variable{"?a"}, makeAlwaysDefinedColumn(0)},
+                 {Variable{"?m"}, makeAlwaysDefinedColumn(1)},
+                 {Variable{"?z"}, makeAlwaysDefinedColumn(2)}})));
   EXPECT_THAT(copy.resultSortedOn_, ElementsAre(2));
 
   // The sort order is kept up to the first dropped column.
@@ -378,7 +383,7 @@ TEST(NamedCacheSecondaryVocabRewriter, canonicalCacheKey) {
                      {{1, 2}, {3, 4}}, ad_utility::testing::IntId)),
                  std::move(map),
                  qlm::vector<ColumnIndex>{alloc},
-                 LocalVocab{},
+                 makeLocalVocab(),
                  "handmade",
                  std::nullopt};
   };
@@ -388,10 +393,12 @@ TEST(NamedCacheSecondaryVocabRewriter, canonicalCacheKey) {
   };
   // NOTE: The copies are views of the columns of the values (see
   // `canonicalizeForSerialization`), so the values have to outlive them.
-  auto inOrderValue = makeValue({{Variable{"?a"}, makeAlwaysDefinedColumn(0)},
-                                 {Variable{"?b"}, makeAlwaysDefinedColumn(1)}});
-  auto swappedValue = makeValue({{Variable{"?y"}, makeAlwaysDefinedColumn(0)},
-                                 {Variable{"?x"}, makeAlwaysDefinedColumn(1)}});
+  auto inOrderValue = makeValue(
+      makeVariableToColumnMap({{Variable{"?a"}, makeAlwaysDefinedColumn(0)},
+                               {Variable{"?b"}, makeAlwaysDefinedColumn(1)}}));
+  auto swappedValue = makeValue(
+      makeVariableToColumnMap({{Variable{"?y"}, makeAlwaysDefinedColumn(0)},
+                               {Variable{"?x"}, makeAlwaysDefinedColumn(1)}}));
   auto inOrder = canonicalize(inOrderValue);
   auto swapped = canonicalize(swappedValue);
   EXPECT_EQ(inOrder.cacheKey_, canonicalCacheKey("handmade", Columns{0, 1}));
@@ -412,10 +419,10 @@ TEST(NamedCacheSecondaryVocabRewriter, canonicalizeWithoutCopy) {
     return Value{
         std::make_shared<const IdTable>(
             makeIdTableFromVector(table, ad_utility::testing::IntId)),
-        VariableToColumnMap{{Variable{"?b"}, makeAlwaysDefinedColumn(0)},
-                            {Variable{"?a"}, makeAlwaysDefinedColumn(2)}},
+        makeVariableToColumnMap({{Variable{"?b"}, makeAlwaysDefinedColumn(0)},
+                                 {Variable{"?a"}, makeAlwaysDefinedColumn(2)}}),
         qlm::vector<ColumnIndex>{sortedOn.begin(), sortedOn.end(), alloc},
-        LocalVocab{},
+        makeLocalVocab(),
         "handmade",
         std::nullopt};
   };
@@ -435,7 +442,7 @@ TEST(NamedCacheSecondaryVocabRewriter, canonicalizeWithoutCopy) {
   EXPECT_EQ(view, makeIdTableFromVector({{4, 1}, {3, 2}},
                                         ad_utility::testing::IntId));
   auto original = ExplicitIdTableOperation::viewOf(sorted.result_);
-  EXPECT_EQ(view.getColumn(0).data(), original.getColumn(2).data());
+  EXPECT_EQ(memoryOf(view.getColumn(0)), memoryOf(original.getColumn(2)));
   EXPECT_THAT(canonical.value_.resultSortedOn_, ElementsAre(1));
 
   // A table that is not in canonical order is copied and sorted.
@@ -452,9 +459,9 @@ TEST(NamedCacheSecondaryVocabRewriter, canonicalizeWithoutCopy) {
   IdTable noColumns{0, alloc};
   noColumns.resize(1);
   Value zeroColumns{std::make_shared<const IdTable>(std::move(noColumns)),
-                    VariableToColumnMap{},
+                    makeVariableToColumnMap(),
                     qlm::vector<ColumnIndex>{alloc},
-                    LocalVocab{},
+                    makeLocalVocab(),
                     "handmade",
                     std::nullopt};
   auto zero = canonicalizeWithPermutation(zeroColumns, secondaryVocab, alloc);

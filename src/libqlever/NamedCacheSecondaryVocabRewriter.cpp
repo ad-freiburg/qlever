@@ -20,7 +20,7 @@
 
 #include "backports/StartsWithAndEndsWith.h"
 #include "backports/algorithm.h"
-#include "engine/ExplicitIdTableOperation.h"
+#include "engine/operation/ExplicitIdTableOperation.h"
 #include "index/IdTableUtils.h"
 #include "index/LocalVocabEntry.h"
 #include "libqlever/CanonicalRowOrder.h"
@@ -72,7 +72,7 @@ void collectNewWords(ConstIdColumnRef column,
     }
     const auto& word = entry->toStringRepresentation();
     if (!secondaryVocab.getId(word).has_value()) {
-      newWords.insert(std::string{word});
+      newWords.insert(word);
     }
   }
 }

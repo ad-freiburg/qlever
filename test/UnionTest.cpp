@@ -11,17 +11,20 @@
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "./util/IdTestHelpers.h"
-#include "engine/IndexScan.h"
-#include "engine/NeutralElementOperation.h"
-#include "engine/OptionalJoin.h"
-#include "engine/Sort.h"
+#include "./util/LocalVocabTestHelpers.h"
 #include "engine/SortedUnionImpl.h"
-#include "engine/Union.h"
+#include "engine/operation/IndexScan.h"
+#include "engine/operation/NeutralElementOperation.h"
+#include "engine/operation/OptionalJoin.h"
+#include "engine/operation/Sort.h"
+#include "engine/operation/Union.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "global/Id.h"
 #include "util/IndexTestHelpers.h"
 #include "util/LocalVocabEntryTestHelpers.h"
 #include "util/OperationTestHelpers.h"
+
+using ad_utility::testing::makeLocalVocab;
 
 using ad_utility::testing::colIndices;
 using ad_utility::testing::localVocabEntryFromStringRepresentation;
@@ -91,7 +94,7 @@ using SortedUnionRange = std::vector<Result::IdTableVocabPair>;
 // `table`.
 SortedUnionRange makeSortedUnionRange(IdTable table) {
   SortedUnionRange range;
-  range.emplace_back(std::move(table), LocalVocab{});
+  range.emplace_back(std::move(table), makeLocalVocab());
   return range;
 }
 
@@ -182,7 +185,7 @@ TEST(Union, computeUnionLazy) {
         IdTable left = makeIdTableFromVector({{V(1)}, {V(2)}, {V(3)}});
         return ad_utility::makeExecutionTree<ValuesForTesting>(
             qec, std::move(left), Vars{Variable{"?x"}}, false, colIndices({}),
-            LocalVocab{}, std::nullopt, nonLazyChildren);
+            makeLocalVocab(), std::nullopt, nonLazyChildren);
       } else {
         // With the `invisibleSubtreeColumns==true` case we test the case, that
         // the input contains variables that are not visible because of a
@@ -191,7 +194,8 @@ TEST(Union, computeUnionLazy) {
             {{V(1), V(3)}, {V(2), V(27)}, {V(3), V(123)}});
         auto tree = ad_utility::makeExecutionTree<ValuesForTesting>(
             qec, std::move(left), Vars{Variable{"?x"}, Variable{"?invisible"}},
-            false, colIndices({}), LocalVocab{}, std::nullopt, nonLazyChildren);
+            false, colIndices({}), makeLocalVocab(), std::nullopt,
+            nonLazyChildren);
         tree->getRootOperation()->setSelectedVariablesForSubquery(
             {Variable{"?x"}});
         return tree;
@@ -201,7 +205,7 @@ TEST(Union, computeUnionLazy) {
     IdTable right = makeIdTableFromVector({{V(4), V(5)}, {V(6), V(7)}});
     auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, std::move(right), Vars{Variable{"?u"}, Variable{"?x"}}, false,
-        colIndices({}), LocalVocab{}, std::nullopt, nonLazyChildren);
+        colIndices({}), makeLocalVocab(), std::nullopt, nonLazyChildren);
 
     Union u{qec, std::move(leftT), std::move(rightT)};
     auto resultTable = u.computeResultOnlyForTesting(true);
@@ -561,7 +565,7 @@ TEST(Union, sortedMergeWithOneSideNonLazy) {
 
   auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{2}}), Vars{Var{"?a"}}, false,
-      colIndices({0}), LocalVocab{}, std::nullopt, true);
+      colIndices({0}), makeLocalVocab(), std::nullopt, true);
 
   auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector({{0}, {1}}), Vars{Var{"?a"}}, false,
@@ -597,7 +601,7 @@ TEST(Union, sortedMergeWithLocalVocab) {
   using Var = Variable;
   auto* qec = ad_utility::testing::getQec();
 
-  LocalVocab vocab1;
+  LocalVocab vocab1 = makeLocalVocab();
   vocab1.getIndexAndAddIfNotContained(localVocabEntryFromStringRepresentation(
       "\"Test1\"", qec->getLocalVocabContext()));
 
@@ -605,7 +609,7 @@ TEST(Union, sortedMergeWithLocalVocab) {
       qec, makeIdTableFromVector({{1}, {2}, {4}}), Vars{Var{"?a"}}, false,
       colIndices({0}), vocab1.clone());
 
-  LocalVocab vocab2;
+  LocalVocab vocab2 = makeLocalVocab();
   vocab2.getIndexAndAddIfNotContained(localVocabEntryFromStringRepresentation(
       "\"Test2\"", qec->getLocalVocabContext()));
   std::vector<IdTable> tables;
@@ -920,7 +924,7 @@ TEST(Union, checkChunkSizeSplitsProperly) {
 }
 
 // _____________________________________________________________________________
-TEST(Union, columnOriginatesFromGraphOrUndef) {
+TEST(Union, columnContainsOnlyKnowledgeGraphNodes) {
   using Var = Variable;
   auto* qec = ad_utility::testing::getQec();
 
@@ -935,33 +939,39 @@ TEST(Union, columnOriginatesFromGraphOrUndef) {
       SparqlTripleSimple{Variable{"?a"}, Variable{"?b"}, Variable{"?c"}});
 
   Union union1{qec, values, values};
-  EXPECT_FALSE(union1.columnOriginatesFromGraphOrUndef(Var{"?a"}));
-  EXPECT_FALSE(union1.columnOriginatesFromGraphOrUndef(Var{"?d"}));
-  EXPECT_THROW(union1.columnOriginatesFromGraphOrUndef(Var{"?notExisting"}),
-               ad_utility::Exception);
+  EXPECT_FALSE(union1.columnContainsOnlyKnowledgeGraphNodes(Var{"?a"}));
+  EXPECT_FALSE(union1.columnContainsOnlyKnowledgeGraphNodes(Var{"?d"}));
+  EXPECT_THROW(
+      union1.columnContainsOnlyKnowledgeGraphNodes(Var{"?notExisting"}),
+      ad_utility::Exception);
 
   Union union2{qec, values, index};
-  EXPECT_FALSE(union2.columnOriginatesFromGraphOrUndef(Var{"?a"}));
-  EXPECT_FALSE(union2.columnOriginatesFromGraphOrUndef(Var{"?b"}));
-  EXPECT_TRUE(union2.columnOriginatesFromGraphOrUndef(Var{"?c"}));
-  EXPECT_FALSE(union2.columnOriginatesFromGraphOrUndef(Var{"?d"}));
-  EXPECT_THROW(union2.columnOriginatesFromGraphOrUndef(Var{"?notExisting"}),
-               ad_utility::Exception);
+  EXPECT_FALSE(union2.columnContainsOnlyKnowledgeGraphNodes(Var{"?a"}));
+  EXPECT_FALSE(union2.columnContainsOnlyKnowledgeGraphNodes(Var{"?b"}));
+  // `?c` is UNDEF for the rows of `values`.
+  EXPECT_FALSE(union2.columnContainsOnlyKnowledgeGraphNodes(Var{"?c"}));
+  EXPECT_FALSE(union2.columnContainsOnlyKnowledgeGraphNodes(Var{"?d"}));
+  EXPECT_THROW(
+      union2.columnContainsOnlyKnowledgeGraphNodes(Var{"?notExisting"}),
+      ad_utility::Exception);
 
   Union union3{qec, index, values};
-  EXPECT_FALSE(union3.columnOriginatesFromGraphOrUndef(Var{"?a"}));
-  EXPECT_FALSE(union3.columnOriginatesFromGraphOrUndef(Var{"?b"}));
-  EXPECT_TRUE(union3.columnOriginatesFromGraphOrUndef(Var{"?c"}));
-  EXPECT_FALSE(union3.columnOriginatesFromGraphOrUndef(Var{"?d"}));
-  EXPECT_THROW(union3.columnOriginatesFromGraphOrUndef(Var{"?notExisting"}),
-               ad_utility::Exception);
+  EXPECT_FALSE(union3.columnContainsOnlyKnowledgeGraphNodes(Var{"?a"}));
+  EXPECT_FALSE(union3.columnContainsOnlyKnowledgeGraphNodes(Var{"?b"}));
+  // `?c` is UNDEF for the rows of `values`.
+  EXPECT_FALSE(union3.columnContainsOnlyKnowledgeGraphNodes(Var{"?c"}));
+  EXPECT_FALSE(union3.columnContainsOnlyKnowledgeGraphNodes(Var{"?d"}));
+  EXPECT_THROW(
+      union3.columnContainsOnlyKnowledgeGraphNodes(Var{"?notExisting"}),
+      ad_utility::Exception);
 
   Union union4{qec, index, index};
-  EXPECT_TRUE(union4.columnOriginatesFromGraphOrUndef(Var{"?a"}));
-  EXPECT_FALSE(union4.columnOriginatesFromGraphOrUndef(Var{"?b"}));
-  EXPECT_TRUE(union4.columnOriginatesFromGraphOrUndef(Var{"?c"}));
-  EXPECT_THROW(union4.columnOriginatesFromGraphOrUndef(Var{"?notExisting"}),
-               ad_utility::Exception);
+  EXPECT_TRUE(union4.columnContainsOnlyKnowledgeGraphNodes(Var{"?a"}));
+  EXPECT_FALSE(union4.columnContainsOnlyKnowledgeGraphNodes(Var{"?b"}));
+  EXPECT_TRUE(union4.columnContainsOnlyKnowledgeGraphNodes(Var{"?c"}));
+  EXPECT_THROW(
+      union4.columnContainsOnlyKnowledgeGraphNodes(Var{"?notExisting"}),
+      ad_utility::Exception);
 }
 
 // _____________________________________________________________________________

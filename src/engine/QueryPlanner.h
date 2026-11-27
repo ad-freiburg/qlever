@@ -18,9 +18,10 @@
 #include <boost/optional.hpp>
 #include <vector>
 
+#include "backports/span.h"
 #include "engine/CheckUsePatternTrick.h"
 #include "engine/QueryExecutionTree.h"
-#include "engine/RuntimeInformation.h"
+#include "engine/operation/RuntimeInformation.h"
 #include "parser/GraphPattern.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/ParsedQuery.h"
@@ -375,7 +376,7 @@ class QueryPlanner {
    */
   struct PlansAndFilters {
     SubtreePlanVec plans_;
-    std::vector<SparqlFilter> filters_;
+    qlm::vector<SparqlFilter> filters_;
   };
 
   PlansAndFilters seedWithScansAndText(const TripleGraph& tg,
@@ -386,14 +387,14 @@ class QueryPlanner {
   // filters with the corresponding substitute subtree plan. This is currently
   // used to translate GeoSPARQL filters to spatial join operations.
   virtual FiltersAndOptionalSubstitutes seedFilterSubstitutes(
-      const std::vector<SparqlFilter>& filters);
+      ql::span<const SparqlFilter> filters);
 
   // Wrap `filters` as `FiltersAndOptionalSubstitutes` without computing any
   // substitutes. This is sufficient for the filter modes that never apply
   // substitutes and avoids constructing throwaway substitute plans (which
   // would also consume internal variable names).
   FiltersAndOptionalSubstitutes wrapFiltersWithoutSubstitutes(
-      const std::vector<SparqlFilter>& filters) const;
+      ql::span<const SparqlFilter> filters) const;
 
   // TODO<RobinTF> Extract to dedicated module, this has little to do with
   // actual query planning.
@@ -429,7 +430,7 @@ class QueryPlanner {
   ParsedQuery::GraphPattern seedFromNegated(
       const TripleComponent& left, const std::vector<PropertyPath>& paths,
       const TripleComponent& right);
-  static ParsedQuery::GraphPattern seedFromVarOrIri(
+  ParsedQuery::GraphPattern seedFromVarOrIri(
       const TripleComponent& left,
       const ad_utility::sparql_types::VarOrIri& varOrIri,
       const TripleComponent& right);
@@ -437,17 +438,19 @@ class QueryPlanner {
   Variable generateUniqueVarName();
 
   // Creates a tree of unions with the given patterns as the trees leaves
-  static ParsedQuery::GraphPattern uniteGraphPatterns(
+  ParsedQuery::GraphPattern uniteGraphPatterns(
       std::vector<ParsedQuery::GraphPattern>&& patterns);
 
   /**
    * @brief Merges two rows of the dp optimization table using various types of
    * joins.
    * @return A new row for the dp table that contains plans created by joining
-   * the result of a plan in a and a plan in b.
+   * the result of a plan in a and a plan in b, also via the substitutes of
+   * the `filters` (see `createJoinsWithSubstitutes`).
    */
   SubtreePlanVec merge(const SubtreePlanVec& a, const SubtreePlanVec& b,
-                       const TripleGraph& tg) const;
+                       const TripleGraph& tg,
+                       const FiltersAndOptionalSubstitutes& filters) const;
 
   // Create `SubtreePlan`s that join `a` and `b` together. The columns are
   // computed automatically.
@@ -522,6 +525,20 @@ class QueryPlanner {
                                                       const SubtreePlan& b,
                                                       const JoinColumns& jcs);
 
+  // Join `a` and `b` via each filter substitute among the `filters` that is
+  // connected to both of them, for example, a `SpatialJoin` with the left
+  // variable in `a` and the right variable in `b`. This is done only if `a` and
+  // `b` share no variable, otherwise no candidate is returned.
+  //
+  // NOTE: This is the only way in which a non-enforced substitute is applied.
+  // Applied to a single plan, it would give a partial `SpatialJoin` with one
+  // child and a dummy size estimate of 1. The greedy planner would choose such
+  // a partial `SpatialJoin` right away, and two of them for the same filter,
+  // one on each side, could never be merged (see #4015).
+  SubtreePlanVec createJoinsWithSubstitutes(
+      const SubtreePlan& a, const SubtreePlan& b,
+      const FiltersAndOptionalSubstitutes& filters) const;
+
   // Helper that generates `IndexScan` query plans on materialized views if they
   // can be used to avoid joins between some of the `triples`. The resulting
   // plans for part of the `triples` are given in a vector of query planning
@@ -545,7 +562,7 @@ class QueryPlanner {
                                 const SubtreePlanMatrix& dpTab) const;
 
   SubtreePlanVec getPatternTrickRow(
-      const std::vector<Alias>& aliases, const SubtreePlanMatrix& dpTab,
+      ql::span<const Alias> aliases, const SubtreePlanMatrix& dpTab,
       const checkUsePatternTrick::PatternTrickTuple& patternTrickTuple);
 
   SubtreePlanVec getHavingRow(const ParsedQuery& pq,
@@ -570,19 +587,16 @@ class QueryPlanner {
     // already bind all the variables that are used in the filter. The plans
     // with the added filters are added to the candidate set. This mode is used
     // in the dynamic programming approach, where we don't apply the filters
-    // greedily. Applying filter substitutes is permitted in this mode.
+    // greedily. The enforced filter substitutes are applied in this mode, too.
     KeepUnfiltered,
     // Only apply matching filters (see above), but the plans with added filters
-    // replace the plans without filters. This is used in the greedy approach,
-    // where filters are always applied as early as possible. Applying filter
-    // substitutes is permitted in this mode.
-    ReplaceUnfiltered,
-    // Same as ReplaceUnfiltered, but do not apply filter substitutes.
+    // replace the plans without filters. Filter substitutes are not applied.
+    // This is used in the greedy approach, where filters are always applied as
+    // early as possible, and for the final plans of the dynamic programming.
     ReplaceUnfilteredNoSubstitutes,
-    // Only apply filter substitutes, but do not apply regular filters.
-    // Required by the dynamic programming approach for a connected component
-    // with fewer than 2 seeds, where a substitute is applicable. Currently
-    // needed for a `SpatialJoin` substitute with a fixed-value side.
+    // Only apply the enforced filter substitutes (currently a `SpatialJoin`
+    // with a fixed-value side), but do not apply regular filters. Used by the
+    // greedy approach and for the final plans of the dynamic programming.
     SeedSubstitutesOnly,
     // Apply all filters (also the nonmatching ones) and replace the unfiltered
     // plans. This has to be called at the end of parsing a group graph pattern
@@ -659,7 +673,7 @@ class QueryPlanner {
    * it as a filter later on).
    */
   SubtreePlanMatrix fillDpTab(const TripleGraph& graph,
-                              std::vector<SparqlFilter> fs,
+                              qlm::vector<SparqlFilter> fs,
                               TextLimitMap& textLimits,
                               const SubtreePlanMatrix& children,
                               ReplacementPlans replacementPlans);
@@ -689,8 +703,7 @@ class QueryPlanner {
   // Note: We also need the added filters, because they behave like additional
   // graph nodes wrt the performance of the DP based query planner.
   size_t countSubgraphs(std::vector<const SubtreePlan*> graph,
-                        const std::vector<SparqlFilter>& filters,
-                        size_t budget);
+                        ql::span<const SparqlFilter> filters, size_t budget);
 
   // Creates a SubtreePlan for the given text leaf node in the triple graph.
   // While doing this the TextLimitMetaObjects are created and updated according
@@ -727,7 +740,7 @@ class QueryPlanner {
 
     // Triples from BasicGraphPatterns that can be joined arbitrarily
     // with each other and with the contents of  `candidatePlans_`
-    parsedQuery::BasicGraphPattern candidateTriples_{};
+    parsedQuery::BasicGraphPattern candidateTriples_;
 
     // The variables that have been used by the children of the `rootPattern_`
     // which we have dealt with so far. They must not be the target of a later
@@ -755,6 +768,7 @@ class QueryPlanner {
           rootPattern_{rootPattern},
           qec_{planner._qec},
           candidatePlans_{allocator()},
+          candidateTriples_{{{}, allocator()}},
           filtersAndSubst_{
               planner.wrapFiltersWithoutSubstitutes(rootPattern->_filters)} {}
 

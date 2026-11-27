@@ -10,6 +10,7 @@
 #include "index/GraphNameManager.h"
 
 #include "backports/filesystem.h"
+#include "util/FilesystemHelpers.h"
 #include "util/serializer/FileSerializer.h"
 
 // _____________________________________________________________________________
@@ -29,12 +30,13 @@ void GraphNameManager::writeToDisk() const {
   if (!filenameForPersisting_.has_value()) {
     return;
   }
-  auto path = filenameForPersisting_.value();
-  auto tempPath = path;
-  tempPath += ".tmp";
-  ad_utility::serialization::FileWriteSerializer serializer{tempPath.string()};
-  serializer | *this;
-  ql::filesystem::rename(tempPath, path);
+  qlever::util::writeFileAtomically(
+      filenameForPersisting_.value(),
+      [this](const ql::filesystem::path& temporaryPath) {
+        ad_utility::serialization::FileWriteSerializer serializer{
+            temporaryPath.string()};
+        serializer | *this;
+      });
 }
 
 // _____________________________________________________________________________

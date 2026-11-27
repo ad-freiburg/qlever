@@ -11,8 +11,8 @@
 
 #include "./AllocatorTestHelpers.h"
 #include "./GTestHelpers.h"
-#include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/operation/Operation.h"
 #include "util/ContainersWithAllocator.h"
 
 using namespace std::chrono_literals;
@@ -32,8 +32,8 @@ class StallForeverOperation : public Operation {
   qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
     return qlm::vector<QueryExecutionTree*>{allocator()};
   }
-  std::string getCacheKeyImpl() const override {
-    return "StallForeverOperation";
+  qlm::string getCacheKeyImpl() const override {
+    return qlm::string{"StallForeverOperation", allocator()};
   }
   std::string getDescriptor() const override {
     return "StallForeverOperationDescriptor";
@@ -46,7 +46,9 @@ class StallForeverOperation : public Operation {
   qlm::vector<ColumnIndex> resultSortedOn() const override {
     return qlm::vector<ColumnIndex>{allocator()};
   }
-  VariableToColumnMap computeVariableToColumnMap() const override { return {}; }
+  VariableToColumnMap computeVariableToColumnMap() const override {
+    return VariableToColumnMap{allocator()};
+  }
 
  public:
   using Operation::Operation;
@@ -76,7 +78,9 @@ class ShallowParentOperation : public Operation {
   explicit ShallowParentOperation(std::shared_ptr<QueryExecutionTree> child)
       : Operation{child->getRootOperation()->getExecutionContext()},
         child_{std::move(child)} {}
-  std::string getCacheKeyImpl() const override { return "ParentOperation"; }
+  qlm::string getCacheKeyImpl() const override {
+    return qlm::string{"ParentOperation", allocator()};
+  }
   std::string getDescriptor() const override {
     return "ParentOperationDescriptor";
   }
@@ -88,7 +92,9 @@ class ShallowParentOperation : public Operation {
   qlm::vector<ColumnIndex> resultSortedOn() const override {
     return qlm::vector<ColumnIndex>{allocator()};
   }
-  VariableToColumnMap computeVariableToColumnMap() const override { return {}; }
+  VariableToColumnMap computeVariableToColumnMap() const override {
+    return VariableToColumnMap{allocator()};
+  }
   qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
     return {{child_.get()}, allocator()};
   }
@@ -121,9 +127,9 @@ class AlwaysFailOperation : public Operation {
   qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
     return qlm::vector<QueryExecutionTree*>{allocator()};
   }
-  std::string getCacheKeyImpl() const override {
+  qlm::string getCacheKeyImpl() const override {
     // Because this operation always fails, it should never be cached.
-    return "AlwaysFailOperationCacheKey";
+    return qlm::string{"AlwaysFailOperationCacheKey", allocator()};
   }
   std::string getDescriptor() const override {
     return "AlwaysFailOperationDescriptor";
@@ -137,12 +143,12 @@ class AlwaysFailOperation : public Operation {
     return {{0}, allocator()};
   }
   VariableToColumnMap computeVariableToColumnMap() const override {
-    if (!variable_.has_value()) {
-      return {};
+    VariableToColumnMap map{allocator()};
+    if (variable_.has_value()) {
+      map[variable_.value()] = ColumnIndexAndTypeInfo{
+          0, ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined};
     }
-    return {{variable_.value(),
-             ColumnIndexAndTypeInfo{
-                 0, ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined}}};
+    return map;
   }
 
  public:
@@ -176,7 +182,7 @@ class CustomGeneratorOperation : public Operation {
   qlm::vector<QueryExecutionTree*> getChildrenImpl() const override {
     return qlm::vector<QueryExecutionTree*>{allocator()};
   }
-  std::string getCacheKeyImpl() const override { AD_FAIL(); }
+  qlm::string getCacheKeyImpl() const override { AD_FAIL(); }
   std::string getDescriptor() const override {
     return "CustomGeneratorOperationDescriptor";
   }
@@ -188,7 +194,9 @@ class CustomGeneratorOperation : public Operation {
   qlm::vector<ColumnIndex> resultSortedOn() const override {
     return qlm::vector<ColumnIndex>{allocator()};
   }
-  VariableToColumnMap computeVariableToColumnMap() const override { return {}; }
+  VariableToColumnMap computeVariableToColumnMap() const override {
+    return VariableToColumnMap{allocator()};
+  }
 
  public:
   CustomGeneratorOperation(QueryExecutionContext* context,
