@@ -13,7 +13,9 @@
 #include "engine/operation/JoinImpl.h"
 
 #include <algorithm>
+#include <limits>
 #include <sstream>
+#include <utility>
 #include <vector>
 
 #include "backports/functional.h"
@@ -30,7 +32,6 @@
 #include "global/RuntimeParameters.h"
 #include "util/Algorithm.h"
 #include "util/Exception.h"
-#include "util/HashMap.h"
 #include "util/Iterators.h"
 #include "util/Math.h"
 #include "util/joinAlgorithms/JoinAlgorithms.h"
@@ -509,18 +510,22 @@ void JoinImpl::hashJoinImpl(const IdTable& dynA, ColumnIndex jc1,
   }
 
   IdTableStatic<OUT_WIDTH> result = std::move(*dynRes).toStatic<OUT_WIDTH>();
+  auto allocator = result.getAllocator();
 
-  // Puts the rows of the given table into a hash map, with the value of
-  // the join column of a row as the key, and returns the hash map.
-  auto idTableToHashMap = [](const auto& table, const ColumnIndex jc) {
-    // This declaration works, because generic lambdas are just syntactic sugar
-    // for templates.
-    using Table = std::decay_t<decltype(table)>;
-    ad_utility::HashMap<Id, std::vector<typename Table::row_type>> map;
-    for (const auto& row : table) {
-      map[row[jc]].push_back(row);
+  static constexpr size_t noRow = std::numeric_limits<size_t>::max();
+
+  // The map has the first row per join entry, `nextRow[i]` the next row with
+  // the same join entry, or `noRow`. Row copies would not use the `allocator`.
+  auto idTableToHashMap = [&allocator](const auto& table,
+                                       const ColumnIndex jc) {
+    qlm::flat_hash_map<Id, size_t> map{allocator};
+    qlm::vector<size_t> nextRow(table.size(), allocator);
+    // Go backwards, such that the rows of a chain are in ascending order.
+    for (size_t i = table.size(); i-- > 0;) {
+      auto [it, inserted] = map.try_emplace(table(i, jc), i);
+      nextRow[i] = inserted ? noRow : std::exchange(it->second, i);
     }
-    return map;
+    return std::pair{std::move(map), std::move(nextRow)};
   };
 
   /*
@@ -543,7 +548,8 @@ void JoinImpl::hashJoinImpl(const IdTable& dynA, ColumnIndex jc1,
                                    const auto& smallerTable,
                                    const ColumnIndex smallerTableJoinColumn) {
         // Put the smaller table into the hash table.
-        auto map = idTableToHashMap(smallerTable, smallerTableJoinColumn);
+        auto [map, nextRow] =
+            idTableToHashMap(smallerTable, smallerTableJoinColumn);
 
         // Create cross product by going through the larger table.
         for (size_t i = 0; i < largerTable.size(); i++) {
@@ -553,7 +559,9 @@ void JoinImpl::hashJoinImpl(const IdTable& dynA, ColumnIndex jc1,
             continue;
           }
 
-          for (const auto& row : entry->second) {
+          for (size_t rowIndex = entry->second; rowIndex != noRow;
+               rowIndex = nextRow[rowIndex]) {
+            const auto row = smallerTable[rowIndex];
             // Based on which table was larger, the arguments of
             // addCombinedRowToIdTable are different.
             // However this information is known at compile time, so the other

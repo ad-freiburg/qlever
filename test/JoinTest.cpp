@@ -24,6 +24,7 @@
 #include "engine/idTable/IdTable.h"
 #include "engine/operation/IndexScan.h"
 #include "engine/operation/Join.h"
+#include "engine/operation/JoinImpl.h"
 #include "engine/operation/NeutralOptional.h"
 #include "engine/operation/Values.h"
 #include "index/IdTableUtils.h"
@@ -232,6 +233,32 @@ std::vector<JoinTestCase> createJoinTestSet() {
 TEST(JoinTest, joinTest) {
   runTestCasesForAllJoinAlgorithms(createJoinTestSet());
 };
+
+// Test that the hash join respects the memory limit of the allocator of the
+// result.
+TEST(JoinTest, hashJoinRespectsTheMemoryLimitOfTheResultAllocator) {
+  // The inputs have no join entry in common, so the result stays empty and only
+  // the hash map needs memory.
+  auto makeTable = [](int64_t firstJoinEntry) {
+    IdTable table{2, makeAllocator()};
+    table.resize(1000);
+    for (size_t i = 0; i < table.size(); ++i) {
+      table(i, 0) = Id::makeFromInt(firstJoinEntry + static_cast<int64_t>(i));
+      table(i, 1) = Id::makeFromInt(static_cast<int64_t>(i));
+    }
+    return table;
+  };
+  IdTable left = makeTable(0);
+  IdTable right = makeTable(1000);
+  auto hashJoin = [&](ad_utility::MemorySize limit) {
+    IdTable result{3, makeAllocator(limit)};
+    JoinImpl::hashJoin(left, 0, right, 0, &result);
+    return result.size();
+  };
+  EXPECT_EQ(hashJoin(ad_utility::MemorySize::megabytes(10)), 0u);
+  EXPECT_THROW(hashJoin(ad_utility::MemorySize::kilobytes(1)),
+               ad_utility::detail::AllocationExceedsLimitException);
+}
 
 // Several helpers for the test cases below.
 namespace {
