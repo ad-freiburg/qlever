@@ -13,12 +13,12 @@
 #include <atomic>
 #include <limits>
 #include <memory>
-#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "../../util/GTestHelpers.h"
+#include "../../util/TestException.h"
 #include "VocabularyMergerTestHelpers.h"
 #include "index/vocabularyMerger/IdMap.h"
 #include "index/vocabularyMerger/SegmentPipeline.h"
@@ -50,7 +50,7 @@ class ThrowingAppendBlockWriter : public BlockWriterBase {
   AppendBlock prepare([[maybe_unused]] WordBlock block) override {
     return [this]() {
       ++numAppendCalls_;
-      throw std::runtime_error{"The vocabulary could not be written"};
+      throw TestException{"The vocabulary could not be written"};
     };
   }
 
@@ -115,7 +115,7 @@ TEST(SegmentPipeline, exceptionOfWriterIsPropagated) {
   auto [filenames, cleanup] =
       makePartialVocabularyFilenamesInFreshDirectory(basename, 1);
   auto writer = makeParallelWriter([](std::string_view, bool) -> uint64_t {
-    throw std::runtime_error{"The vocabulary could not be written"};
+    throw TestException{"The vocabulary could not be written"};
   });
   SegmentPipeline<decltype(lessThan)> pipeline{
       writer,
@@ -133,7 +133,7 @@ TEST(SegmentPipeline, exceptionOfWriterIsPropagated) {
   }
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       pipeline.finish(), ::testing::HasSubstr("could not be written"),
-      std::runtime_error);
+      TestException);
 }
 
 // Test that once a stage has failed, `push` ignores further blocks: it does not
@@ -168,7 +168,7 @@ TEST(SegmentPipeline, pushAfterFailureIsIgnored) {
   EXPECT_NO_THROW(pipeline.push(std::move(blocks[3])));
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       pipeline.finish(), ::testing::HasSubstr("could not be written"),
-      std::runtime_error);
+      TestException);
   EXPECT_EQ(numAppendCalls, 1u);
 }
 

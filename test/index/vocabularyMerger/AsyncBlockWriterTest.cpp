@@ -13,12 +13,12 @@
 
 #include <atomic>
 #include <memory>
-#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "../../util/GTestHelpers.h"
+#include "../../util/TestException.h"
 #include "VocabularyMergerTestHelpers.h"
 #include "index/vocabularyMerger/AsyncBlockWriter.h"
 
@@ -54,7 +54,7 @@ class ThrowingPrepareBlockWriter : public BlockWriterBase {
 
   AppendBlock prepare(WordBlock block) override {
     if (block.firstPosition_ == 0) {
-      throw std::runtime_error{"The block could not be prepared"};
+      throw TestException{"The block could not be prepared"};
     }
     return [this]() { ++numAppended_; };
   }
@@ -94,7 +94,7 @@ TEST(AsyncBlockWriter, exceptionIsPropagated) {
   auto writer =
       makeParallelWriter([&numCalls](std::string_view, bool) -> uint64_t {
         ++numCalls;
-        throw std::runtime_error{"The vocabulary could not be written"};
+        throw TestException{"The vocabulary could not be written"};
       });
   MemoryBudget budget{ad_utility::MemorySize::gigabytes(1)};
   AsyncBlockWriter blockWriter{writer, budget};
@@ -102,7 +102,7 @@ TEST(AsyncBlockWriter, exceptionIsPropagated) {
   blockWriter.push(0, blockOf(makeSegment({"\"b\""}, 0, 1, writer), 1));
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       blockWriter.finish(), ::testing::HasSubstr("could not be written"),
-      std::runtime_error);
+      TestException);
   // The first block threw at its first word, and the second block was skipped
   // (the blocks of a sub-vocabulary are appended in order).
   EXPECT_EQ(numCalls, 1u);
@@ -125,7 +125,7 @@ TEST(AsyncBlockWriter, exceptionOfPrepareIsPropagated) {
   }
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       blockWriter.finish(), ::testing::HasSubstr("could not be prepared"),
-      std::runtime_error);
+      TestException);
   EXPECT_EQ(numAppended, 0u);
 }
 
@@ -136,7 +136,7 @@ TEST(AsyncBlockWriter, pushAfterFailureIsIgnored) {
   auto writer =
       makeParallelWriter([&numCalls](std::string_view, bool) -> uint64_t {
         ++numCalls;
-        throw std::runtime_error{"The vocabulary could not be written"};
+        throw TestException{"The vocabulary could not be written"};
       });
   MemoryBudget budget{ad_utility::MemorySize::gigabytes(1)};
   AsyncBlockWriter blockWriter{writer, budget};
@@ -146,6 +146,6 @@ TEST(AsyncBlockWriter, pushAfterFailureIsIgnored) {
   EXPECT_EQ(blockWriter.numBlocks(), 1u);
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       blockWriter.finish(), ::testing::HasSubstr("could not be written"),
-      std::runtime_error);
+      TestException);
   EXPECT_EQ(numCalls, 1u);
 }
