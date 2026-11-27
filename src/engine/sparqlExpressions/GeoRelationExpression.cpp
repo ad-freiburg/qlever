@@ -23,6 +23,7 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "rdfTypes/GeoSparqlHelpers.h"
+#include "rdfTypes/GeometryInfo.h"
 
 namespace sparqlExpression {
 namespace detail {
@@ -151,6 +152,27 @@ std::optional<De9imRelationCall> getDe9imRelationExpressionParameters(
   return De9imRelationCall{
       {SpatialJoinType::DE9IM, std::move(p1).value(), std::move(p2).value()},
       pattern.value()};
+}
+
+// _____________________________________________________________________________
+std::optional<ad_utility::GeoRectangle> geoRectangleOfConstantGeometry(
+    const TripleComponent& operand) {
+  if (operand.isId() && operand.getId().getDatatype() == Datatype::GeoPoint) {
+    auto point = operand.getId().getGeoPoint();
+    return ad_utility::GeoRectangle{point.getLng(), point.getLat(),
+                                    point.getLng(), point.getLat()};
+  }
+  if (operand.isLiteral()) {
+    auto boundingBox = ad_utility::GeometryInfo::getBoundingBox(
+        operand.getLiteral().toStringRepresentation());
+    if (boundingBox.has_value()) {
+      auto lowerLeft = boundingBox.value().lowerLeft();
+      auto upperRight = boundingBox.value().upperRight();
+      return ad_utility::GeoRectangle{lowerLeft.getLng(), lowerLeft.getLat(),
+                                      upperRight.getLng(), upperRight.getLat()};
+    }
+  }
+  return std::nullopt;
 }
 
 }  // namespace sparqlExpression

@@ -66,6 +66,13 @@ qlm::vector<QueryExecutionTree*> Join::getChildrenImpl() const {
 }
 
 // _____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+Join::getUpdatedQueryExecutionTreeWithPrefilterApplied(
+    const std::vector<PrefilterVariablePair>& prefilters) const {
+  return impl_->getUpdatedQueryExecutionTreeWithPrefilterApplied(prefilters);
+}
+
+// _____________________________________________________________________________
 bool Join::columnContainsOnlyKnowledgeGraphNodes(
     const Variable& variable) const {
   return impl_->columnContainsOnlyKnowledgeGraphNodes(variable);

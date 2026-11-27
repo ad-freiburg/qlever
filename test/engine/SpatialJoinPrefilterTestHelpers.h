@@ -266,11 +266,11 @@ inline void runParsingAndSweeper(
                                        result.idTableView().at(i, leftCol),
                                        result.idTableView().at(i, rightCol), 0);
     }
-    if (spatialJoin->runtimeInfo().details_.contains(
-            "num-geoms-dropped-by-prefilter")) {
-      testResult.numElementsSkippedByPrefilter_ =
-          static_cast<size_t>(spatialJoin->runtimeInfo()
-                                  .details_["num-geoms-dropped-by-prefilter"]);
+    auto& details = spatialJoin->runtimeInfo().details_;
+    if (details.contains("num-geoms-after-block-prefilter")) {
+      testResult.numElementsSkippedByPrefilter_ = static_cast<size_t>(
+          details["num-geoms-after-block-prefilter"].get<int64_t>() -
+          details["num-geoms-after-bbox-prefilter"].get<int64_t>());
     }
     return;
   }
@@ -291,7 +291,7 @@ inline void runParsingAndSweeper(
 
   // Run first parsing step (left side)
   auto [aggBoundingBoxLeft, numGeomAddedLeft, numGeomDroppedLeft,
-        numGeomInvalidLeft, numThreadsLeft] =
+        numGeomDroppedByCellLeft, numGeomInvalidLeft, numThreadsLeft] =
       sjAlgo.parse({prepared.idTableLeft_, prepared.leftJoinCol_, std::nullopt},
                    store, eventsLeft.addCb(storeId), 1, std::nullopt);
   // Only the prefilter of the parser is tested here, so the filter box of the
@@ -303,13 +303,15 @@ inline void runParsingAndSweeper(
     prefilterBox = store.getPaddedBoundingBox(aggBoundingBoxLeft);
   }
   auto [aggBoundingBoxRight, numGeomAddedRight, numGeomDroppedRight,
-        numGeomInvalidRight, numThreadsRight] =
+        numGeomDroppedByCellRight, numGeomInvalidRight, numThreadsRight] =
       sjAlgo.parse(
           {prepared.idTableRight_, prepared.rightJoinCol_, std::nullopt}, store,
           eventsRight.addCb(storeId), 1, prefilterBox);
 
   // Check counters
   size_t numSkipped = numGeomDroppedLeft + numGeomDroppedRight;
+  (void)numGeomDroppedByCellLeft;
+  (void)numGeomDroppedByCellRight;
   size_t numEl = eventsLeft.numObjects() + eventsRight.numObjects();
 
   // Prepare and run the sweep if both sides have a valid geometry (as in

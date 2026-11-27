@@ -3,6 +3,7 @@
 // 2015 - 2017 Björn Buchhold <buchhold@informatik.uni-freiburg.de>, UFR
 // 2018 - 2026 Johannes Kalmbach <kalmbach@informatik.uni-freiburg.de>, UFR
 // 2025 - 2026 Christoph Ullinger <ullingec@informatik.uni-freiburg.de>, UFR
+// 2026        Hannah Bast <bast@cs.uni-freiburg.de>, UFR
 // 2025        Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 //
 // UFR = University of Freiburg, Chair of Algorithms and Data Structures
@@ -26,6 +27,7 @@
 #include "backports/type_traits.h"
 #include "engine/CheckUsePatternTrick.h"
 #include "engine/CountConnectedSubgraphs.h"
+#include "engine/GeoRectangleRowFilter.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
 #include "engine/PermutationSelector.h"
@@ -63,6 +65,8 @@
 #include "engine/operation/Values.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
+#include "engine/sparqlExpressions/PrefilterExpressionIndex.h"
+#include "engine/sparqlExpressions/QueryRewriteExpressionHelpers.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "global/Id.h"
@@ -1881,6 +1885,11 @@ SubtreePlanMatrix QueryPlanner::fillDpTab(const QueryPlanner::TripleGraph& tg,
   // add the respective query plans as filter substitutes.
   auto filtersAndOptSubstitutes = seedFilterSubstitutes(filters);
 
+  // A spatial join with a fixed geometry prefilters the scans of its other
+  // side once, here, and not once per candidate plan.
+  applyConstantGeometryPrefilters(initialPlans, filtersAndOptSubstitutes,
+                                  replacementPlans);
+
   if (filters.size() > 64) {
     AD_THROW("At most 64 filters allowed at the moment.");
   }
@@ -2289,6 +2298,156 @@ bool QueryPlanner::TripleGraph::isSimilar(
 // _____________________________________________________________________________
 void QueryPlanner::setEnablePatternTrick(bool enablePatternTrick) {
   _enablePatternTrick = enablePatternTrick;
+}
+
+// _____________________________________________________________________________
+void QueryPlanner::applyConstantGeometryPrefilters(
+    SubtreePlanVec& seeds, FiltersAndOptionalSubstitutes& filters,
+    ReplacementPlans& replacementPlans) const {
+  if (!getRuntimeParameter<
+          &RuntimeParameters::enablePrefilterOnIndexScans_>()) {
+    return;
+  }
+
+  // The rectangle of the fixed side of `spatialJoin` and the geometry
+  // variable of its other side, if one side is fixed: either a one-row
+  // `VALUES` that the rewriting of the filter attached as a child, or a
+  // variable bound by a `BIND` of a constant expression among the `seeds`
+  // (such a `BIND` is evaluated here, which is cheap: it has one row).
+  auto fixedSideRectangle = [this, &seeds](const SpatialJoin& spatialJoin)
+      -> std::optional<std::pair<ad_utility::GeoRectangle, Variable>> {
+    auto [leftVar, rightVar] = spatialJoin.getSpatialJoinVariables();
+    auto otherVariable = [&leftVar, &rightVar](const Variable& var) {
+      return var == leftVar ? rightVar : leftVar;
+    };
+    for (const auto* child : spatialJoin.getChildren()) {
+      const auto* values =
+          dynamic_cast<const Values*>(child->getRootOperation().get());
+      if (values == nullptr) {
+        continue;
+      }
+      const auto& parsed = values->parsedValues();
+      if (parsed._variables.size() != 1 || parsed._values.size() != 1 ||
+          parsed._values.at(0).size() != 1) {
+        continue;
+      }
+      const auto& var = parsed._variables.at(0);
+      if (var != leftVar && var != rightVar) {
+        continue;
+      }
+      if (auto rectangle = sparqlExpression::geoRectangleOfConstantGeometry(
+              parsed._values.at(0).at(0))) {
+        return std::pair{rectangle.value(), otherVariable(var)};
+      }
+    }
+    for (const auto& plan : seeds) {
+      const auto* bind =
+          dynamic_cast<const Bind*>(plan._qet->getRootOperation().get());
+      if (bind == nullptr) {
+        continue;
+      }
+      const auto& target = bind->bind()._target;
+      if ((target != leftVar && target != rightVar) ||
+          !bind->bind()._expression.getPimpl()->isConstantExpression()) {
+        continue;
+      }
+      auto result = plan._qet->getRootOperation()->getResult(
+          false, ComputationMode::FULLY_MATERIALIZED);
+      if (result == nullptr || !result->isFullyMaterialized()) {
+        continue;
+      }
+      if (auto rectangle = SpatialJoin::boundingRectangleOfColumn(
+              result->idTableView(), plan._qet->getVariableColumn(target),
+              _qec->getIndex())) {
+        return std::pair{rectangle.value(), otherVariable(target)};
+      }
+    }
+    return std::nullopt;
+  };
+
+  // The index scans among the `seeds` that bind `variable`, together with
+  // whether the scan is sorted by it (then its blocks can be pruned).
+  auto scanBindsVariable = [](const SubtreePlan& plan,
+                              const Variable& variable) -> std::optional<bool> {
+    const auto* scan =
+        dynamic_cast<const IndexScan*>(plan._qet->getRootOperation().get());
+    if (scan == nullptr || !plan._qet->containsVariable(variable)) {
+      return std::nullopt;
+    }
+    auto sortedVariable =
+        scan->getSortedVariableAndMetadataColumnIndexForPrefiltering();
+    return sortedVariable.has_value() &&
+           sortedVariable.value().first == variable;
+  };
+
+  for (auto& filterAndSubst : filters) {
+    if (!filterAndSubst.hasSubstitute()) {
+      continue;
+    }
+    auto* spatialJoin = dynamic_cast<SpatialJoin*>(
+        filterAndSubst.substitute_->_qet->getRootOperation().get());
+    if (spatialJoin == nullptr) {
+      continue;
+    }
+    auto rectangleAndVariable = fixedSideRectangle(*spatialJoin);
+    if (!rectangleAndVariable.has_value()) {
+      continue;
+    }
+    const auto& [rectangle, geometryVariable] = rectangleAndVariable.value();
+    auto paddedRectangle = ad_utility::padGeoRectangle(
+        rectangle, spatialJoin->getMaxDist().value_or(0.0));
+    auto makePrefilter = [&paddedRectangle, &geometryVariable]() {
+      std::vector<Operation::PrefilterVariablePair> pairs;
+      pairs.emplace_back(
+          std::make_unique<prefilterExpressions::GeoRectangleExpression>(
+              paddedRectangle),
+          geometryVariable);
+      return pairs;
+    };
+
+    // Prune the blocks of the scans that are sorted by the geometry variable
+    // (the result also carries the row filter). Their estimate, the number
+    // of remaining candidates, is then the estimate of every scan that binds
+    // the variable, so that it does not depend on the permutation.
+    std::optional<uint64_t> numCandidates;
+    for (auto& plan : seeds) {
+      if (scanBindsVariable(plan, geometryVariable) != std::optional{true}) {
+        continue;
+      }
+      auto prefiltered = plan._qet->getRootOperation()
+                             ->getUpdatedQueryExecutionTreeWithPrefilterApplied(
+                                 makePrefilter());
+      if (!prefiltered.has_value()) {
+        continue;
+      }
+      plan._qet = std::move(prefiltered.value());
+      numCandidates =
+          std::min(numCandidates.value_or(plan._qet->getSizeEstimate()),
+                   plan._qet->getSizeEstimate());
+    }
+    if (!numCandidates.has_value()) {
+      continue;
+    }
+    for (auto& plan : seeds) {
+      if (scanBindsVariable(plan, geometryVariable) != std::optional{false}) {
+        continue;
+      }
+      plan._qet = ad_utility::makeExecutionTree<GeoRectangleRowFilter>(
+          _qec, plan._qet, plan._qet->getVariableColumn(geometryVariable),
+          paddedRectangle, numCandidates);
+    }
+    for (auto& row : replacementPlans) {
+      for (auto& plan : row) {
+        if (auto prefiltered =
+                plan._qet->getUpdatedQueryExecutionTreeWithPrefilterApplied(
+                    makePrefilter())) {
+          plan._qet = std::move(prefiltered.value());
+        }
+      }
+    }
+    spatialJoin->setGeometrySideSelectivity(ad_utility::geoRectangleSelectivity(
+        paddedRectangle, _qec->getIndex().getVocab().getGeoCellGrid()));
+  }
 }
 
 // _________________________________________________________________________________

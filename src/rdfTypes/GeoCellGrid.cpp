@@ -9,6 +9,7 @@
 
 #include "rdfTypes/GeoCellGrid.h"
 
+#include <algorithm>
 #include <cmath>
 
 #include "backports/algorithm.h"

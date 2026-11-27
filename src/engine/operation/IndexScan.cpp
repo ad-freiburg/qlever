@@ -1,6 +1,11 @@
-// Copyright 2015, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// Copyright 2015 The QLever Authors, in particular:
+//
+// 2015 Björn Buchhold <buchhold@informatik.uni-freiburg.de>, UFR
+//
+// UFR = University of Freiburg, Chair of Algorithms and Data Structures
+//
+// You may not use this file except in compliance with the Apache 2.0 License,
+// which can be found in the `LICENSE` file at the root of the QLever project.
 
 #include "engine/operation/IndexScan.h"
 
@@ -12,6 +17,7 @@
 #include <string>
 #include <utility>
 
+#include "engine/GeoRectangleRowFilter.h"
 #include "engine/MaterializedViews.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/VariableToColumnMap.h"
@@ -335,8 +341,20 @@ IndexScan::getUpdatedQueryExecutionTreeWithPrefilterApplied(
                                 colIndex),
             scanSpecAndBlocks_.blockMetadata_);
 
-    return makeCopyWithPrefilteredScanSpecAndBlocks(
+    auto copy = makeCopyWithPrefilteredScanSpecAndBlocks(
         {scanSpecAndBlocks_.scanSpec_, blockMetadataRanges});
+    // A geo rectangle can only prune whole blocks here (and for `GeoPoint`s
+    // only by latitude), so also drop the remaining rows outside the
+    // rectangle one by one, before any operation above the scan sees them.
+    if (const auto* geoRectangle =
+            dynamic_cast<const prefilterExpressions::GeoRectangleExpression*>(
+                it->first.get())) {
+      auto geometryColumn = copy->getVariableColumn(sortedVar);
+      return ad_utility::makeExecutionTree<GeoRectangleRowFilter>(
+          getExecutionContext(), std::move(copy), geometryColumn,
+          geoRectangle->rectangle());
+    }
+    return copy;
   }
 
   // If no prefilter applies, return `std::nullopt`.
@@ -456,6 +474,16 @@ IndexScan::makeCopyWithPrefilteredScanSpecAndBlocks(
   AD_CORRECTNESS_CHECK(indexScan != nullptr);
   std::tie(indexScan->sizeEstimateIsExact_, indexScan->sizeEstimate_) =
       indexScan->computeSizeEstimate();
+  // Remember the row total of the unprefiltered blocks for runtime
+  // statistics (e.g. the geo prefilter funnel of the spatial join). If this
+  // scan is itself already a prefiltered copy (e.g. a plan-time prefiltered
+  // scan that is prefiltered again at runtime), keep the row total of the
+  // original, completely unprefiltered scan. The size estimate of the
+  // unprefiltered scan is that total (up to the rows of neighboring relations
+  // in its first and last block), and unlike a loop over all blocks it is
+  // O(1) for a relation with its own metadata entry.
+  indexScan->numBlockRowsBeforePrefilter_ =
+      numBlockRowsBeforePrefilter_.value_or(sizeEstimate_);
   return copy;
 }
 
