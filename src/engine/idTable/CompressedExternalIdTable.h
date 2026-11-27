@@ -24,6 +24,7 @@
 #include "backports/asio.h"
 #include "engine/CallFixedSize.h"
 #include "engine/idTable/AsyncIdTablePusher.h"
+#include "engine/idTable/BitwiseKeySort.h"
 #include "engine/idTable/ExternalIdTableSorterMergeConfig.h"
 #include "engine/idTable/IdColumnByteIO.h"
 #include "engine/idTable/IdTable.h"
@@ -623,6 +624,17 @@ struct PushBlockCallback {
   }
 };
 
+namespace compressedExternalIdTable {
+// Whether a block transformation of a `CompressedExternalIdTableBase` keeps
+// memory for its next block that it can free via `releaseBuffers()` (see
+// `BlockSorter`).
+template <typename T, typename = void>
+constexpr bool hasReleaseBuffers = false;
+template <typename T>
+constexpr bool hasReleaseBuffers<
+    T, std::void_t<decltype(std::declval<T&>().releaseBuffers())>> = true;
+}  // namespace compressedExternalIdTable
+
 // The conversion between the memory limit and the number of rows per block of
 // a `CompressedExternalIdTableBase` (see below). These functions have rather
 // general names, but are tied to that class, hence the dedicated namespace.
@@ -632,22 +644,47 @@ namespace compressedExternalIdTable {
 // `numColumns` columns requires per row of its block size. The factor of two is
 // there because we store two blocks at the same time: One that is currently
 // being sorted and written to disk in the background, and one that is used to
-// collect rows in the calls to `push`.
-inline size_t blockMemoryPerRow(size_t numColumns) {
-  return numColumns * BYTES_PER_ID_COLUMN_ENTRY * 2;
+// collect rows in the calls to `push`. The `transformationBytesPerRow` are the
+// bytes per row that the transformation of a block needs in addition (see
+// `BlockSorter::sortBytesPerRow`).
+inline size_t blockMemoryPerRow(size_t numColumns,
+                                size_t transformationBytesPerRow = 0) {
+  return numColumns * BYTES_PER_ID_COLUMN_ENTRY * 2 + transformationBytesPerRow;
 }
 
 // The number of rows per block that a `CompressedExternalIdTableBase` with
 // `numColumns` columns uses for the given `memory` limit.
-inline size_t blocksizeForMemory(MemorySize memory, size_t numColumns) {
-  return memory.getBytes() / blockMemoryPerRow(numColumns);
+inline size_t blocksizeForMemory(MemorySize memory, size_t numColumns,
+                                 size_t transformationBytesPerRow = 0) {
+  return memory.getBytes() /
+         blockMemoryPerRow(numColumns, transformationBytesPerRow);
 }
 
 // The inverse of `blocksizeForMemory`: the memory limit for which a
 // `CompressedExternalIdTableBase` with `numColumns` columns uses exactly
 // `blocksize` rows per block.
-inline MemorySize memoryForBlocksize(size_t blocksize, size_t numColumns) {
-  return MemorySize::bytes(blocksize * blockMemoryPerRow(numColumns));
+inline MemorySize memoryForBlocksize(size_t blocksize, size_t numColumns,
+                                     size_t transformationBytesPerRow = 0) {
+  return MemorySize::bytes(
+      blocksize * blockMemoryPerRow(numColumns, transformationBytesPerRow));
+}
+
+// The bytes per row that a block transformation `T` of a
+// `CompressedExternalIdTableBase` needs in addition to the block, see
+// `BlockSorter::sortBytesPerRow`. Zero for a transformation that doesn't say.
+template <typename T, typename = void>
+constexpr bool hasSortBytesPerRow = false;
+template <typename T>
+constexpr bool
+    hasSortBytesPerRow<T, std::void_t<decltype(T::sortBytesPerRow(size_t{}))>> =
+        true;
+template <typename T>
+size_t transformationBytesPerRow(size_t numColumns) {
+  if constexpr (hasSortBytesPerRow<T>) {
+    return T::sortBytesPerRow(numColumns);
+  } else {
+    return 0;
+  }
 }
 
 }  // namespace compressedExternalIdTable
@@ -681,8 +718,10 @@ class CompressedExternalIdTableBase {
   MemorySize memory_;
 
   // The number of rows per block in the first phase.
-  size_t blocksize_{
-      compressedExternalIdTable::blocksizeForMemory(memory_, numColumns_)};
+  size_t blocksize_{compressedExternalIdTable::blocksizeForMemory(
+      memory_, numColumns_,
+      compressedExternalIdTable::transformationBytesPerRow<BlockTransformation>(
+          numColumns_))};
   CompressedExternalIdTableWriter writer_;
 
   // The dedicated thread on which the blocks are transformed (for the
@@ -885,6 +924,7 @@ class CompressedExternalIdTableBase {
     resetCurrentBlock(false);
     numElementsPushed_ = 0;
     waitForFuture();
+    releaseTransformationBuffers();
     writer_.clear();
     numBlocksPushed_ = 0;
     isFirstIteration_ = true;
@@ -1019,12 +1059,25 @@ class CompressedExternalIdTableBase {
       AD_CORRECTNESS_CHECK(this->numElementsPushed_ ==
                            this->currentBlock_.size());
       blockTransformation_(this->currentBlock_);
+      releaseTransformationBuffers();
       return false;
     }
     transformAndWriteBlock(std::move(this->currentBlock_));
     resetCurrentBlock(false);
     waitForFuture();
+    releaseTransformationBuffers();
     return true;
+  }
+
+  // Free the memory that the `blockTransformation_` keeps for its next block
+  // (see `BlockSorter`), at the end of the input phase.
+  //
+  // PRECONDITION: No task of the background thread is in flight.
+  void releaseTransformationBuffers() {
+    if constexpr (compressedExternalIdTable::hasReleaseBuffers<
+                      BlockTransformation>) {
+      blockTransformation_.releaseBuffers();
+    }
   }
 };
 
@@ -1176,17 +1229,62 @@ void sortBlockRange(
       ad_utility::globalExecutor(), cancellationHandle);
 }
 
-// The implementation of sorting a single block, see `sortBlockRange` above.
+// The implementation of sorting a single block. A `Comparator` that compares
+// the bits of some columns (see `hasBitwiseKeyColumns`) is sorted via the much
+// faster `sortByBitwiseKeys`, in parallel on the executor of the
+// `parallelism_` (see `BitwiseKeySortParallelism`). Any other comparator is
+// sorted via `sortBlockRange` above.
+//
+// The `buffers_` of `sortByBitwiseKeys` are reused for all the blocks of one
+// sorter and released by `releaseBuffers` at the end of its input phase (see
+// `CompressedExternalIdTableBase::transformAndPushLastBlock`), so that a
+// sorter that is done with sorting does not keep their memory (which is about
+// as large as the memory of its blocks) until it is destroyed.
+//
+// NOTE: The `operator()` is never called concurrently: it runs either on the
+// dedicated background thread of the sorter, or in the thread that ends the
+// input phase, after the background thread is done (see
+// `CompressedExternalIdTableBase`).
 template <typename Comparator>
 struct BlockSorter {
   [[no_unique_address]] Comparator comparator_{};
   ad_utility::SharedCancellationHandle cancellationHandle_;
   // See the `inCallingThread` argument of `sortBlockRange`.
   bool inCallingThread_ = false;
+  BitwiseKeySortParallelism parallelism_{};
+  BitwiseKeySortBuffers buffers_{};
   template <typename T>
   void operator()(T& block) {
-    sortBlockRange(block, comparator_, cancellationHandle_, inCallingThread_);
+    if constexpr (hasBitwiseKeyColumns<Comparator>) {
+      // The bitwise sort cannot be cancelled while it runs, so check once
+      // before it starts.
+      cancellationHandle_->throwIfCancelled();
+      sortByBitwiseKeys(
+          block, Comparator::bitwiseKeyColumns,
+          inCallingThread_ ? BitwiseKeySortParallelism{} : parallelism_,
+          &buffers_);
+    } else {
+      sortBlockRange(block, comparator_, cancellationHandle_, inCallingThread_);
+    }
   }
+
+  // Free the memory of the `buffers_`, see above.
+  void releaseBuffers() { buffers_.release(); }
+
+  // The memory in bytes per row that a sort of a block with `numColumns`
+  // columns needs in addition to the block (which the sorter's memory limit
+  // has to account for, see `compressedExternalIdTable::blockMemoryPerRow`).
+  static size_t sortBytesPerRow(size_t numColumns) {
+    if constexpr (hasBitwiseKeyColumns<Comparator>) {
+      return bitwiseKeySortBytesPerRow(numColumns,
+                                       Comparator::bitwiseKeyColumns);
+    } else {
+      return 0;
+    }
+  }
+
+  // The memory that the `buffers_` currently hold, in bytes.
+  size_t bufferBytes() const { return buffers_.numBytes(); }
 };
 // Deduction guide for the implicit aggregate initialization (its "constructor")
 // in the aggregate above. Is actually not needed in C++20, but GCC 11 requires
@@ -1255,6 +1353,12 @@ class CompressedExternalIdTableSorter
       compressedExternalIdTable::MERGE_PHASE_SPILL_COMPRESSION;
 
  public:
+  // The memory that the sorts of the blocks currently keep for the next block,
+  // in bytes (see `BlockSorter`). For testing.
+  size_t sortBufferBytes() const {
+    return this->blockTransformation_.bufferBytes();
+  }
+
   // Constructor. The sorter can be cancelled via the `cancellationHandle`,
   // which must not be `nullptr` (the default is a handle that is never
   // cancelled): the sorts of the blocks and the merge phase check it regularly
@@ -1280,6 +1384,7 @@ class CompressedExternalIdTableSorter
         cancellationHandle_{std::move(cancellationHandle)} {
     AD_CONTRACT_CHECK(cancellationHandle_ != nullptr);
     this->setAsyncPushExecutor(mergeExecutor_);
+    setBlockSortParallelism();
   }
 
   // When we have a static number of columns, then the `numCols` argument to the
@@ -1319,9 +1424,16 @@ class CompressedExternalIdTableSorter
   // PRECONDITION: No `asyncPushBlock` is in flight.
   void setMergeExecutor(ql::any_io_executor executor, size_t parallelism) {
     AD_CONTRACT_CHECK(parallelism > 0);
+    // A block that is currently being sorted in the background uses the
+    // parallelism that is changed below, so wait for it (without consuming
+    // the future, which `transformAndPushLastBlock` still needs).
+    if (this->compressAndWriteFuture_.valid()) {
+      this->compressAndWriteFuture_.wait();
+    }
     mergeExecutor_ = std::move(executor);
     mergeParallelism_ = parallelism;
     this->setAsyncPushExecutor(mergeExecutor_);
+    setBlockSortParallelism();
   }
 
   // Make this sorter do all its work in the thread that calls its member
@@ -1729,6 +1841,13 @@ class CompressedExternalIdTableSorter
                 << this->memory_.asString()
                 << ". Increasing the memory limit will speed up the merge."
                 << std::endl;
+  }
+
+  // Let the sorts of the blocks (see `BlockSorter`) run on the merge executor
+  // with the merge parallelism, see `setMergeExecutor`.
+  void setBlockSortParallelism() {
+    this->blockTransformation_.parallelism_ =
+        BitwiseKeySortParallelism{mergeExecutor_, mergeParallelism_};
   }
 };
 }  // namespace ad_utility
