@@ -210,6 +210,9 @@ class Index {
   size_t& rowsPerBlock();
   const size_t& rowsPerBlock() const;
 
+  size_t& parsedGeometriesMinLength();
+  const size_t& parsedGeometriesMinLength() const;
+
   void setOnDiskBase(const std::string& onDiskBase);
 
   void setSettingsFile(const std::string& filename);
