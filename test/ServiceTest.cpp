@@ -11,13 +11,17 @@
 
 #include "./util/LocalVocabTestHelpers.h"
 #include "backports/StartsWithAndEndsWith.h"
-#include "engine/Join.h"
-#include "engine/Service.h"
-#include "engine/Sort.h"
-#include "engine/StripColumns.h"
-#include "engine/Values.h"
+#include "engine/MaterializedViews.h"
+#include "engine/NamedResultCache.h"
 #include "engine/ValuesForTesting.h"
 #include "engine/binaryExport/BinaryExport.h"
+#include "engine/operation/Join.h"
+#include "engine/operation/Minus.h"
+#include "engine/operation/OptionalJoin.h"
+#include "engine/operation/Service.h"
+#include "engine/operation/Sort.h"
+#include "engine/operation/StripColumns.h"
+#include "engine/operation/Values.h"
 #include "global/Constants.h"
 #include "global/IndexTypes.h"
 #include "global/RuntimeParameters.h"
@@ -26,6 +30,7 @@
 #include "parser/GraphPatternOperation.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/CancellationHandle.h"
+#include "util/ColumnStrippingTestHelpers.h"
 #include "util/GTestHelpers.h"
 #include "util/HttpClientTestHelpers.h"
 #include "util/IdTableHelpers.h"
@@ -34,6 +39,7 @@
 #include "util/OperationTestHelpers.h"
 #include "util/RuntimeParametersTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
+#include "util/VariableToColumnMapTestHelpers.h"
 #include "util/http/HttpUtils.h"
 
 using ad_utility::testing::makeLocalVocab;
@@ -163,9 +169,9 @@ TEST_F(ServiceTest, basicMethods) {
   ASSERT_EQ(serviceOp.getCostEstimate(), 1'000'000);
   using V = Variable;
   ASSERT_THAT(serviceOp.computeVariableToColumnMap(),
-              ::testing::UnorderedElementsAreArray(VariableToColumnMap{
-                  {V{"?x"}, makePossiblyUndefinedColumn(0)},
-                  {V{"?y"}, makePossiblyUndefinedColumn(1)}}));
+              ::testing::UnorderedElementsAreArray(makeVariableToColumnMap(
+                  {{V{"?x"}, makePossiblyUndefinedColumn(0)},
+                   {V{"?y"}, makePossiblyUndefinedColumn(1)}})));
   ASSERT_FALSE(serviceOp.knownEmptyResult());
   ASSERT_TRUE(serviceOp.getChildren().empty());
 }
@@ -580,6 +586,63 @@ TEST_F(ServiceTest, pushDownValuesPlacesValuesAtEnd) {
       "{\n BIND (1 AS ?x) \nVALUES (?x) { (1) } \n}");
 }
 
+// Test that columns of the sibling that contain `UNDEF` are not pushed down,
+// as their rows would match overlapping sets of remote rows (see #4010).
+TEST_F(ServiceTest, siblingValuesClauseSkipsColumnsWithUndef) {
+  auto iri = ad_utility::testing::iri;
+  using TC = TripleComponent;
+  auto valuesClause = [&](parsedQuery::SparqlValues siblingValues,
+                          bool markAllPossiblyUndefined = false) {
+    Service service{
+        testQec,
+        parsedQuery::Service{
+            {Variable{"?x"}, Variable{"?y"}},
+            TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
+            "",
+            "{ ?x <p> ?y }",
+            false},
+        getResultFunctionFactory("http://localhorst:80/api", "", "")};
+    auto siblingInfo = siblingInfoFromOp(
+        std::make_shared<Values>(testQec, std::move(siblingValues)));
+    if (markAllPossiblyUndefined) {
+      for (auto& [var, info] : siblingInfo.variables_) {
+        info.mightContainUndef_ = ColumnIndexAndTypeInfo::PossiblyUndefined;
+      }
+    }
+    service.siblingInfo_.emplace(std::move(siblingInfo));
+    service.runtimeInfo().addDetail("optimized-with-sibling-result", "yes");
+    auto result = service.getSiblingValuesClause();
+    EXPECT_EQ(service.runtimeInfo().details_["optimized-with-sibling-result"],
+              result.has_value() ? "yes" : "no");
+    return result;
+  };
+
+  // Only `?y` contains `UNDEF`, so only `?x` is pushed down, and the rows that
+  // are then duplicates are removed.
+  EXPECT_EQ(valuesClause({{Variable{"?x"}, Variable{"?y"}},
+                          {{TC(iri("<x>")), TC::UNDEF()},
+                           {TC(iri("<x>")), TC(iri("<y>"))},
+                           {TC(iri("<x2>")), TC(iri("<y>"))}}}),
+            "VALUES (?x) { (<x>) (<x2>) } ");
+
+  // If every common column contains `UNDEF`, no `VALUES` clause is sent.
+  EXPECT_EQ(valuesClause({{Variable{"?x"}, Variable{"?z"}},
+                          {{TC::UNDEF(), TC(iri("<z>"))},
+                           {TC(iri("<x>")), TC(iri("<z>"))}}}),
+            std::nullopt);
+
+  // Without `UNDEF`, all common columns are pushed down.
+  EXPECT_EQ(valuesClause({{Variable{"?x"}, Variable{"?y"}},
+                          {{TC(iri("<x>")), TC(iri("<y>"))}}}),
+            "VALUES (?x ?y) { (<x> <y>) } ");
+
+  // A column that is only marked as possibly undefined is still pushed down.
+  EXPECT_EQ(valuesClause({{Variable{"?x"}, Variable{"?y"}},
+                          {{TC(iri("<x>")), TC(iri("<y>"))}}},
+                         true),
+            "VALUES (?x ?y) { (<x> <y>) } ");
+}
+
 // _____________________________________________________________________________
 TEST_F(ServiceTest, computeResultNoVariables) {
   parsedQuery::Service parsedServiceClause{
@@ -658,6 +721,7 @@ TEST_F(ServiceTest, getCacheKeyWithCaching) {
                 AllOf(StartsWith("SERVICE"), Not(HasSubstr("SILENT")),
                       HasSubstr("<http://localhorst/api>"),
                       HasSubstr("PREFIX doof: <http://doof.org>"),
+                      HasSubstr("SELECT ?x ?y"),
                       HasSubstr(parsedServiceClause.graphPatternAsString_)));
   }
   {
@@ -681,7 +745,50 @@ TEST_F(ServiceTest, getCacheKeyWithCaching) {
                 AllOf(StartsWith("SERVICE"), HasSubstr("SILENT"),
                       HasSubstr("<http://localhorst/api>"),
                       HasSubstr("PREFIX doof: <http://doof.org>"),
+                      HasSubstr("SELECT ?x ?y"),
                       HasSubstr(parsedServiceClause.graphPatternAsString_)));
+  }
+  {
+    SendRequestType getResultFunction = getResultFunctionFactory(
+        "http://localhorst:80/api",
+        "PREFIX doof: <http://doof.org> SELECT ?x ?y WHERE { }",
+        genJsonResult(
+            {"x", "y"},
+            {{"x", "y"}, {"bla", "bli"}, {"blu", "bla"}, {"bli", "blu"}}));
+
+    Service service1{
+        testQec,
+        {{Variable{"?x"}, Variable{"?y"}, Variable{"?z"}},
+         TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
+         "PREFIX doof: <http://doof.org>",
+         "{ }",
+         false},
+        getResultFunction};
+
+    Service service2{
+        testQec,
+        {{Variable{"?x"}, Variable{"?y"}},
+         TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
+         "PREFIX doof: <http://doof.org>",
+         "{ }",
+         false},
+        getResultFunction};
+
+    // Two `Service`s that differ only in their visible variables have
+    // different cache keys.
+    EXPECT_NE(service1.getCacheKey(), service2.getCacheKey());
+  }
+  {
+    parsedQuery::Service parsedServiceClause{
+        {},
+        TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
+        "PREFIX doof: <http://doof.org>",
+        "{ }",
+        false};
+    Service service{
+        testQec, parsedServiceClause,
+        getResultFunctionFactory("http://localhorst:80/api", "", "{}")};
+    EXPECT_THAT(service.getCacheKey(), HasSubstr("SELECT * "));
   }
 }
 
@@ -716,8 +823,8 @@ TEST_F(ServiceTest, bindingToTripleComponent) {
       bTTC({{"type", "literal"}, {"value", "Hallo Welt"}, {"xml:lang", "de"}}),
       TripleComponent::Literal::literalWithoutQuotes("Hallo Welt", "@de"));
 
-  // See the comment in `src/engine/Service.cpp` regarding the support of the
-  // deprecated `typed-literal` type.
+  // See the comment in `src/engine/operation/Service.cpp` regarding the support
+  // of the deprecated `typed-literal` type.
   EXPECT_EQ(
       bTTC({{"type", "typed-literal"},
             {"value", "Hallo Welt"},
@@ -1421,8 +1528,10 @@ TEST_F(ServiceTest, binaryFormat) {
             testQec, makeIdTableFromVector({{1, 2}, {3, 4}}, &Id::makeFromInt),
             std::vector<std::optional<Variable>>{Variable{"?y"},
                                                  Variable{"?x"}})};
-    parsedQuery::SelectClause selectClause;
-    selectClause.setSelected(std::vector{Variable{"?y"}, Variable{"?x"}});
+    auto allocator = ad_utility::testing::makeAllocator();
+    parsedQuery::SelectClause selectClause{allocator};
+    selectClause.setSelected(
+        qlm::vector<Variable>{{Variable{"?y"}, Variable{"?x"}}, allocator});
     std::string bytes;
     for (std::string_view chunk : qlever::binary_export::exportAsQLeverBinary(
              qet, selectClause, {},
@@ -1497,4 +1606,231 @@ TEST_F(ServiceTest, unconsumedLazySiblingResultDoesNotCrash) {
   // callback must not touch the operation anymore.
   join.reset();
   sibling.reset();
+}
+
+// Test that `OptionalJoin` and `Minus` with two join columns work next to a
+// `Service` whose sibling result is not pushed down. They request fully
+// materialized inputs, even if their own result is requested lazily (see
+// #4025).
+TEST_F(ServiceTest, precomputeSiblingResultForMultiColumnOptionalAndMinus) {
+  // The sibling result is too large to be pushed down, so it is handed back to
+  // the sibling.
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::serviceMaxValueRows_>(0);
+  auto makeTree = [&](std::shared_ptr<Operation> op) {
+    return std::make_shared<QueryExecutionTree>(testQec, std::move(op));
+  };
+  auto makeService = [&]() {
+    return makeTree(std::make_shared<Service>(
+        testQec,
+        parsedQuery::Service{
+            {Variable{"?x"}, Variable{"?y"}},
+            TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
+            "PREFIX doof: <http://doof.org>",
+            "{ }",
+            false},
+        getResultFunctionFactory(
+            "http://localhorst:80/api",
+            "PREFIX doof: <http://doof.org> SELECT ?x ?y { }",
+            genJsonResult({"x", "y"}, {{"a", "b"}}),
+            boost::beast::http::status::ok,
+            "application/sparql-results+json")));
+  };
+  auto makeSibling = [&]() {
+    return makeTree(std::make_shared<ValuesForTesting>(
+        testQec, makeIdTableFromVector({{1, 2}, {3, 4}}),
+        std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}},
+        false, std::vector<ColumnIndex>{0, 1}));
+  };
+  auto expected = makeIdTableFromVector({{1, 2}, {3, 4}});
+
+  OptionalJoin optionalJoin{testQec, makeSibling(), makeService()};
+  auto optionalResult = optionalJoin.computeResultOnlyForTesting(true);
+  ASSERT_TRUE(optionalResult.isFullyMaterialized());
+  EXPECT_EQ(optionalResult.idTableView(), expected);
+
+  Minus minus{testQec, makeSibling(), makeService()};
+  auto minusResult = minus.computeResultOnlyForTesting(true);
+  ASSERT_TRUE(minusResult.isFullyMaterialized());
+  EXPECT_EQ(minusResult.idTableView(), expected);
+}
+
+// Test that a lazy precomputed sibling result is materialized when the caller
+// requests a fully materialized result, and passed on as is when the caller
+// requests a lazy result. Without the former, e.g. a `Sort` that is skipped by
+// `precomputeSiblingResult` and requests a materialized input breaks (#2375).
+TEST_F(ServiceTest, lazyPrecomputedSiblingResultIsMaterializedOnRequest) {
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::serviceMaxValueRows_>(0);
+  auto service = std::make_shared<Service>(
+      testQec,
+      parsedQuery::Service{
+          {Variable{"?x"}, Variable{"?y"}},
+          TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
+          "PREFIX doof: <http://doof.org>",
+          "{ }",
+          false},
+      getResultFunctionFactory(
+          "http://localhorst:80/api",
+          "PREFIX doof: <http://doof.org> SELECT ?x ?y { }",
+          genJsonResult({"x", "y"}, {{"a", "b"}}),
+          boost::beast::http::status::ok, "application/sparql-results+json"));
+  auto makeSibling = [&]() {
+    std::vector<IdTable> chunks;
+    chunks.push_back(makeIdTableFromVector({{1, 2}}));
+    chunks.push_back(makeIdTableFromVector({{3, 4}}));
+    return std::make_shared<ValuesForTesting>(
+        testQec, std::move(chunks),
+        std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}},
+        false, std::vector<ColumnIndex>{0, 1});
+  };
+
+  // Requested fully materialized: the chunks are concatenated.
+  auto sibling = makeSibling();
+  Service::precomputeSiblingResult(sibling, service, true, true);
+  ASSERT_TRUE(sibling->precomputedResultBecauseSiblingOfService().has_value());
+  ASSERT_FALSE(sibling->precomputedResultBecauseSiblingOfService()
+                   .value()
+                   ->isFullyMaterialized());
+  auto result = sibling->getResult();
+  ASSERT_TRUE(result->isFullyMaterialized());
+  EXPECT_EQ(result->idTableView(), makeIdTableFromVector({{1, 2}, {3, 4}}));
+  EXPECT_THAT(result->sortedBy(), ::testing::ElementsAre(0, 1));
+  EXPECT_FALSE(sibling->precomputedResultBecauseSiblingOfService().has_value());
+  EXPECT_EQ(
+      sibling->runtimeInfo().details_["lazy-result-materialized-for-parent"],
+      true);
+
+  // Requested lazily: the lazy result is passed on as is. The consumed lazy
+  // result above was cached, so clear the cache.
+  testQec->clearCacheUnpinnedOnly();
+  sibling = makeSibling();
+  Service::precomputeSiblingResult(sibling, service, true, true);
+  result = sibling->getResult(false, ComputationMode::LAZY_IF_SUPPORTED);
+  ASSERT_FALSE(result->isFullyMaterialized());
+  EXPECT_FALSE(sibling->runtimeInfo().details_.contains(
+      "lazy-result-materialized-for-parent"));
+  std::vector<IdTable> chunks;
+  for (auto& pair : result->idTables()) {
+    chunks.push_back(pair.idTable_.clone());
+  }
+  EXPECT_THAT(chunks,
+              ::testing::ElementsAre(matchesIdTableFromVector({{1, 2}}),
+                                     matchesIdTableFromVector({{3, 4}})));
+}
+
+// Test that an error during the conversion of a lazy precomputed sibling
+// result (here because of the memory limit) is propagated, and that the
+// incomplete result is neither cached nor kept for later.
+TEST_F(ServiceTest, failedMaterializationOfLazyPrecomputedSiblingResult) {
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::serviceMaxValueRows_>(0);
+  // Each chunk is 1.6 MB, so the concatenation of both exceeds the 2 MB limit.
+  // The chunks are allocated without a limit, so only the conversion fails.
+  auto index = std::make_shared<Index>(ad_utility::testing::makeTestIndex(
+      ad_utility::testing::TestIndexConfig{}));
+  QueryResultCache cache;
+  NamedResultCache namedCache;
+  QueryExecutionContext qec{
+      index,
+      &cache,
+      ad_utility::testing::makeAllocator(ad_utility::MemorySize::megabytes(2)),
+      &namedCache,
+      std::make_shared<MaterializedViewsManager>(),
+      ad_utility::testing::singleThreadExecutor()};
+
+  auto service = std::make_shared<Service>(
+      &qec,
+      parsedQuery::Service{
+          {Variable{"?x"}, Variable{"?y"}},
+          TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
+          "PREFIX doof: <http://doof.org>",
+          "{ }",
+          false},
+      getResultFunctionFactory(
+          "http://localhorst:80/api",
+          "PREFIX doof: <http://doof.org> SELECT ?x ?y { }",
+          genJsonResult({"x", "y"}, {{"a", "b"}}),
+          boost::beast::http::status::ok, "application/sparql-results+json"));
+  std::vector<IdTable> chunks;
+  for (size_t i = 0; i < 2; ++i) {
+    IdTable chunk{2, ad_utility::makeUnlimitedAllocator<Id>()};
+    chunk.resize(100'000);
+    ql::ranges::fill(chunk.getColumn(0), Id::makeFromInt(1));
+    ql::ranges::fill(chunk.getColumn(1), Id::makeFromInt(2));
+    chunks.push_back(std::move(chunk));
+  }
+  auto sibling = std::make_shared<ValuesForTesting>(
+      &qec, std::move(chunks),
+      std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}});
+
+  Service::precomputeSiblingResult(sibling, service, true, true);
+  ASSERT_TRUE(sibling->precomputedResultBecauseSiblingOfService().has_value());
+  EXPECT_THROW(sibling->getResult(),
+               ad_utility::detail::AllocationExceedsLimitException);
+  EXPECT_FALSE(sibling->precomputedResultBecauseSiblingOfService().has_value());
+  EXPECT_EQ(
+      sibling->runtimeInfo().details_["lazy-result-materialized-for-parent"],
+      true);
+  EXPECT_EQ(sibling->getResult(false, ComputationMode::ONLY_IF_CACHED),
+            nullptr);
+}
+
+// Test that `makeTreeWithStrippedColumns` returns a `Service` with only the
+// requested variables, which requests only these from the remote endpoint, and
+// `std::nullopt` if nothing is to be stripped.
+TEST_F(ServiceTest, makeTreeWithStrippedColumns) {
+  using ::column_stripping_test_helpers::hasVariables;
+  using ::column_stripping_test_helpers::isStrippedColumns;
+  using V = Variable;
+
+  // A `SERVICE` with the visible variables `?x`, `?y` and `?z`.
+  parsedQuery::Service parsedServiceClause{
+      {V{"?x"}, V{"?y"}, V{"?z"}},
+      TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
+      "PREFIX doof: <http://doof.org>",
+      "{ }",
+      false};
+  auto strip = [&](const std::set<V>& requestedVariables) {
+    Service service{testQec, parsedServiceClause};
+    return service.makeTreeWithStrippedColumns(requestedVariables);
+  };
+
+  // Only `?x` and `?z` requested: `?y` is stripped.
+  {
+    auto tree = strip({V{"?x"}, V{"?z"}});
+    ASSERT_TRUE(tree.has_value());
+    EXPECT_THAT(tree->get(), hasVariables({V{"?x"}, V{"?z"}}));
+  }
+
+  // A requested variable that the `Service` does not have is ignored.
+  {
+    auto tree = strip({V{"?x"}, V{"?z"}, V{"?notIncluded"}});
+    ASSERT_TRUE(tree.has_value());
+    EXPECT_THAT(tree->get(), hasVariables({V{"?x"}, V{"?z"}}));
+  }
+
+  // All variables requested: nothing is stripped.
+  EXPECT_EQ(strip({V{"?x"}, V{"?y"}, V{"?z"}}), std::nullopt);
+  EXPECT_EQ(strip({V{"?x"}, V{"?y"}, V{"?z"}, V{"?notIncluded"}}),
+            std::nullopt);
+
+  // None of the variables requested: the `Service` is kept, since a `SELECT`
+  // without variables cannot be sent to the remote endpoint.
+  EXPECT_EQ(strip({}), std::nullopt);
+  EXPECT_EQ(strip({V{"?notIncluded"}}), std::nullopt);
+
+  // The stripped `Service` requests only the remaining variables from the
+  // remote endpoint.
+  {
+    Service service{testQec, parsedServiceClause,
+                    getResultFunctionFactory(
+                        "http://localhorst:80/api",
+                        "PREFIX doof: <http://doof.org> SELECT ?y { }",
+                        genJsonResult({"y"}, {{"bla"}, {"bli"}, {"blu"}}))};
+    auto tree = service.makeTreeWithStrippedColumns({V{"?y"}});
+    ASSERT_TRUE(tree.has_value());
+    EXPECT_THAT(tree->get(),
+                isStrippedColumns<Service>({V{"?y"}}, ::testing::SizeIs(3)));
+  }
 }

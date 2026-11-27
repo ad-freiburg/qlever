@@ -10,6 +10,7 @@
 #include "engine/sparqlExpressions/UuidExpressions.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
+#include "util/VariableToColumnMapTestHelpers.h"
 
 using namespace sparqlExpression;
 TEST(RandomExpression, evaluate) {
@@ -71,42 +72,46 @@ TEST(RandomExpression, insideAggregateReturnsVector) {
 }
 
 TEST(RandomExpression, simpleMemberFunctions) {
+  const auto emptyMap = makeVariableToColumnMap();
   RandomExpression expr;
   ASSERT_TRUE(expr.getUnaggregatedVariables().empty());
-  auto cacheKey = expr.getCacheKey({});
+  auto cacheKey = expr.getCacheKey(emptyMap);
   ASSERT_THAT(cacheKey, ::testing::StartsWith("RAND "));
-  ASSERT_EQ(cacheKey, expr.getCacheKey({}));
+  ASSERT_EQ(cacheKey, expr.getCacheKey(emptyMap));
   // Note: Since the cache key is sampled randomly, the following test has a
   // probability of `1 / 2^64` of a spurious failure.
-  ASSERT_NE(cacheKey, RandomExpression{}.getCacheKey({}));
+  ASSERT_NE(cacheKey, RandomExpression{}.getCacheKey(emptyMap));
 }
 
 // _____________________________________________________________________________
 TEST(RandomExpression, isResultAlwaysDefined) {
-  EXPECT_TRUE(RandomExpression{}.isResultAlwaysDefined({}));
+  EXPECT_TRUE(
+      RandomExpression{}.isResultAlwaysDefined(makeVariableToColumnMap()));
 }
 
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 // The tests for UUID expressions follow almost exactly the pattern
 // of the above defined test for RandomExpression.
 TEST(UuidExpression, simpleMemberFunctionStrUuid) {
+  const auto emptyMap = makeVariableToColumnMap();
   StrUuidExpression strUuid;
   ASSERT_TRUE(strUuid.getUnaggregatedVariables().empty());
-  auto cacheKeyStrUuid = strUuid.getCacheKey({});
+  auto cacheKeyStrUuid = strUuid.getCacheKey(emptyMap);
   ASSERT_THAT(cacheKeyStrUuid, ::testing::StartsWith("STRUUID "));
-  ASSERT_EQ(cacheKeyStrUuid, strUuid.getCacheKey({}));
+  ASSERT_EQ(cacheKeyStrUuid, strUuid.getCacheKey(emptyMap));
   StrUuidExpression strUuid2;
-  ASSERT_NE(cacheKeyStrUuid, strUuid2.getCacheKey({}));
+  ASSERT_NE(cacheKeyStrUuid, strUuid2.getCacheKey(emptyMap));
 }
 
 TEST(UuidExpression, simpleMemberFunctionLitUuid) {
+  const auto emptyMap = makeVariableToColumnMap();
   UuidExpression iriUuid;
   ASSERT_TRUE(iriUuid.getUnaggregatedVariables().empty());
-  auto cacheKeyIriUuid = iriUuid.getCacheKey({});
+  auto cacheKeyIriUuid = iriUuid.getCacheKey(emptyMap);
   ASSERT_THAT(cacheKeyIriUuid, ::testing::StartsWith("UUID "));
-  ASSERT_EQ(cacheKeyIriUuid, iriUuid.getCacheKey({}));
+  ASSERT_EQ(cacheKeyIriUuid, iriUuid.getCacheKey(emptyMap));
   UuidExpression iriUuid2;
-  ASSERT_NE(cacheKeyIriUuid, iriUuid2.getCacheKey({}));
+  ASSERT_NE(cacheKeyIriUuid, iriUuid2.getCacheKey(emptyMap));
 }
 
 TEST(UuidExpression, evaluateStrUuidExpression) {
@@ -204,6 +209,7 @@ TEST(UuidExpression, insideAggregateReturnsVectorStrUuid) {
 
 // _____________________________________________________________________________
 TEST(UuidExpression, isResultAlwaysDefined) {
-  EXPECT_TRUE(UuidExpression{}.isResultAlwaysDefined({}));
-  EXPECT_TRUE(StrUuidExpression{}.isResultAlwaysDefined({}));
+  const auto emptyMap = makeVariableToColumnMap();
+  EXPECT_TRUE(UuidExpression{}.isResultAlwaysDefined(emptyMap));
+  EXPECT_TRUE(StrUuidExpression{}.isResultAlwaysDefined(emptyMap));
 }

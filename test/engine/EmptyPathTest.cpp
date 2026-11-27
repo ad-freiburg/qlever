@@ -17,10 +17,10 @@
 #include "../util/LocalVocabTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
 #include "./ValuesForTesting.h"
-#include "engine/EmptyPath.h"
 #include "engine/MaterializedViews.h"
 #include "engine/NamedResultCache.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/operation/EmptyPath.h"
 #include "index/DeltaTriples.h"
 #include "util/Tie.h"
 
@@ -404,7 +404,7 @@ TEST(EmptyPath, clone) {
 }
 
 // _____________________________________________________________________________
-TEST(EmptyPath, columnOriginatesFromGraphOrUndef) {
+TEST(EmptyPath, columnContainsOnlyKnowledgeGraphNodes) {
   auto* qec = makeQec(kg);
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
   auto emptyPath = makeExistenceCheck(
@@ -413,10 +413,10 @@ TEST(EmptyPath, columnOriginatesFromGraphOrUndef) {
 
   // The checked column always originates from the knowledge graph, even though
   // the values of the child don't.
-  EXPECT_TRUE(emptyPath.columnOriginatesFromGraphOrUndef(Variable{"?x"}));
-  EXPECT_FALSE(emptyPath.columnOriginatesFromGraphOrUndef(Variable{"?y"}));
+  EXPECT_TRUE(emptyPath.columnContainsOnlyKnowledgeGraphNodes(Variable{"?x"}));
+  EXPECT_FALSE(emptyPath.columnContainsOnlyKnowledgeGraphNodes(Variable{"?y"}));
   EXPECT_THROW(
-      emptyPath.columnOriginatesFromGraphOrUndef(Variable{"?notThere"}),
+      emptyPath.columnContainsOnlyKnowledgeGraphNodes(Variable{"?notThere"}),
       ad_utility::Exception);
 }
 
@@ -634,14 +634,14 @@ TEST(EmptyPath, estimatesAndMultiplicities) {
 }
 
 // _____________________________________________________________________________
-TEST(EmptyPath, theGraphColumnDoesNotOriginateFromTheKnowledgeGraph) {
+TEST(EmptyPath, graphColumnDoesNotQualifyAsKnowledgeGraphNodes) {
   auto* qec = makeQec(nquads, true);
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
   EmptyPath emptyPath{qec, Variable{"?x"}, Graphs::All(), Variable{"?g"}};
-  EXPECT_TRUE(emptyPath.columnOriginatesFromGraphOrUndef(Variable{"?x"}));
+  EXPECT_TRUE(emptyPath.columnContainsOnlyKnowledgeGraphNodes(Variable{"?x"}));
   // Graph names are not necessarily subjects or objects of the knowledge graph,
   // so the graph column does not qualify (just like for `IndexScan`).
-  EXPECT_FALSE(emptyPath.columnOriginatesFromGraphOrUndef(Variable{"?g"}));
+  EXPECT_FALSE(emptyPath.columnContainsOnlyKnowledgeGraphNodes(Variable{"?g"}));
 
   // The same holds if the graph column is checked instead of added, because
   // then the values are only a subset of those of the child.
@@ -649,8 +649,10 @@ TEST(EmptyPath, theGraphColumnDoesNotOriginateFromTheKnowledgeGraph) {
       makeExistenceCheck(qec, Variable{"?g"},
                          makeIdTableFromVector({{getId("<a>"), getId("<g1>")}}),
                          {Variable{"?x"}, Variable{"?g"}});
-  EXPECT_TRUE(withGraphChild.columnOriginatesFromGraphOrUndef(Variable{"?x"}));
-  EXPECT_FALSE(withGraphChild.columnOriginatesFromGraphOrUndef(Variable{"?g"}));
+  EXPECT_TRUE(
+      withGraphChild.columnContainsOnlyKnowledgeGraphNodes(Variable{"?x"}));
+  EXPECT_FALSE(
+      withGraphChild.columnContainsOnlyKnowledgeGraphNodes(Variable{"?g"}));
 }
 
 // _____________________________________________________________________________

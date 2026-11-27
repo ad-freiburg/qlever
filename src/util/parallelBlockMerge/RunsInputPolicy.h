@@ -78,7 +78,7 @@ using OutputBlockT = typename OutputBlockType<T>::type;
 template <typename T>
 CPP_requires(
     InputConcept_,
-    requires(const T& t, size_t runIdx, size_t blockIdx,
+    requires(const T& t, size_t runIdx, size_t blockIdx, size_t numElements,
              detail::OutputBlockT<T>& out,
              ql::ranges::range_reference_t<typename T::Block> el)(
         // The number of presorted runs.
@@ -101,6 +101,8 @@ CPP_requires(
         // Create an empty output block, and append a single element to an
         // output block.
         std::is_same_v<decltype(t.makeEmptyBlock()), detail::OutputBlockT<T>>,
+        // Reserve the memory for `numElements` elements in an output block.
+        std::is_same_v<decltype(t.reserveBlock(out, numElements)), void>,
         std::is_same_v<decltype(t.appendToBlock(out, el)), void>,
         // The memory that a single element occupies.
         std::is_convertible_v<decltype(t.memorySizeOfElement(el)),
@@ -145,6 +147,12 @@ CPP_requires(
 // blocks are of a different type than its input blocks (for example because the
 // merge combines equal elements, see `appendToBlock`) declares that type as
 // `T::OutputBlock`, which is then also the type that the merge yields.
+// `reserveBlock(block, numElements)` reserves the memory for `numElements`
+// elements in an (empty) output block. If the number of elements per output
+// block is bounded (see `OutputBlockSize`), the merge calls it for every new
+// output block, so that the block is allocated once instead of growing in
+// several steps. An input for which this is not meaningful can implement it as
+// a no-op.
 //
 // All member functions must be `const` and thread-safe. This is what makes the
 // chunks of a merge independent of each other not only in principle, but also

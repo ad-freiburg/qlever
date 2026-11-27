@@ -44,7 +44,7 @@ PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
 struct TestContextWithGivenTTl {
   ad_utility::testing::TestIndexConfig config;
   QueryExecutionContext* qec = ad_utility::testing::getQec(config);
-  VariableToColumnMap varToColMap;
+  VariableToColumnMap varToColMap{qec->getAllocator()};
   LocalVocab localVocab = ad_utility::testing::makeLocalVocab();
   IdTable table{qec->getAllocator()};
   sparqlExpression::EvaluationContext context{

@@ -27,13 +27,14 @@ EvaluationContext::EvaluationContext(
       _columnsByWhichResultIsSorted{allocator},
       _allocator{allocator},
       _localVocab{localVocab},
+      _variableToColumnMapPreviousResults{allocator},
       cancellationHandle_{std::move(cancellationHandle)},
       orderByComparator_{qec.getLocalVocabContext()} {
   AD_CONTRACT_CHECK(cancellationHandle_);
 }
 
 // _____________________________________________________________________________
-std::optional<ql::span<const Id>> EvaluationContext::getSortedColumnOrNullopt(
+std::optional<ConstIdColumnRef> EvaluationContext::getSortedColumnOrNullopt(
     const Variable& variable) const {
   auto columnIndex = getColumnIndexForVariable(variable);
   if (!columnIndex.has_value() || _columnsByWhichResultIsSorted.empty() ||
@@ -45,7 +46,7 @@ std::optional<ql::span<const Id>> EvaluationContext::getSortedColumnOrNullopt(
 }
 
 // _____________________________________________________________________________
-std::optional<ql::span<const Id>>
+std::optional<ConstIdColumnRef>
 EvaluationContext::getSortedAlwaysDefinedColumnOrNullopt(
     const Variable& variable) const {
   auto column = getSortedColumnOrNullopt(variable);
