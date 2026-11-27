@@ -105,8 +105,8 @@ std::optional<size_t> findNever([[maybe_unused]] std::string_view sv) {
 // A `BlockingBlockSource` whose `getNextBlockImpl` results are scripted in
 // advance, one `Step` per call. A `Step` holding a `qp::ByteBlock` is
 // returned as-is; a `Step` holding a message is thrown as a `TestException`
-// with that message. This is used to exercise the
-// error-forwarding paths (`if (ep) ...` checks and the `catch` clause in
+// with that message. This is used to exercise the error-forwarding paths
+// (`if (ep) ...` checks and the `catch` clause in
 // `BlockingBlockSource::asyncGetNextBlockImpl`) that a real `FileBlockSource`
 // cannot trigger, because reading from a file never throws in practice.
 class ScriptedBlockSource : public qp::BlockingBlockSource {
