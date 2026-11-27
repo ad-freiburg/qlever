@@ -26,6 +26,7 @@ using namespace filterFacts;
 using ::testing::ElementsAre;
 using valueIdComparators::Comparison;
 using V = Variable;
+using Literal = ad_utility::triple_component::Literal;
 
 // A parsed query and the canonical form of the FILTERs of its root group
 // graph pattern (which shares the expressions of the query).
@@ -152,6 +153,48 @@ TEST(FilterFactsCanonicalizer, Definitions) {
       none.conjuncts_,
       ElementsAre(opaque(
           none.query_._rootGraphPattern._filters[0].expression_.getPimpl())));
+}
+
+// Test that a comparison of `LANG(?x)` with constants (also with `IN`, `||`,
+// swapped operands, and definitions) becomes a `LangEquals`, which is not
+// exact if a constant has different values in different rows.
+TEST(FilterFactsCanonicalizer, Lang) {
+  // `?y` is bound by `VALUES` (if it was bound by a triple, the parser would
+  // already apply the language filters).
+  auto expect = [](std::string_view definitions, std::string_view filter,
+                   std::vector<std::string_view> langs, bool exact = true,
+                   ad_utility::source_location l = AD_CURRENT_SOURCE_LOC()) {
+    auto trace = generateLocationTrace(l);
+    std::vector<TripleComponent> rhs;
+    for (auto lang : langs) {
+      rhs.emplace_back(Literal::literalWithoutQuotes(lang));
+    }
+    EXPECT_THAT(
+        canonical(filter, absl::StrCat("VALUES ?y { \"a\"@en } ", definitions))
+            .conjuncts_,
+        ElementsAre(::testing::Field(&Conjunct::canonical_,
+                                     ::testing::VariantWith<LangEquals>(
+                                         LangEquals{V{"?y"}, rhs, exact}))));
+  };
+  expect("", "LANG(?y) = \"en\"", {"en"});
+  expect("", "\"en\" = LANG(?y)", {"en"});
+  expect("BIND(LANG(?y) AS ?l)", "?l = \"en\"", {"en"});
+  expect("BIND(\"en\" AS ?l)", "LANG(?y) = ?l", {"en"});
+  expect("", "LANG(?y) IN (\"en\", \"de\")", {"en", "de"});
+  expect("BIND(LANG(?y) AS ?l)", "?l IN (\"en\", \"de\")", {"en", "de"});
+  expect("", "LANG(?y) = \"en\" || LANG(?y) = \"de\"", {"en", "de"});
+  expect("VALUES ?l { \"en\" \"de\" }", "LANG(?y) = ?l", {"en", "de"}, false);
+
+  // Different variables or other comparisons.
+  for (std::string_view filter :
+       {"LANG(?y) = \"en\" || LANG(?ga) = \"de\"",
+        "LANG(?y) = \"en\" || LANG(?y) != \"de\"", "LANG(?y) != \"en\""}) {
+    EXPECT_THAT(canonical(filter, "VALUES ?y { \"a\"@en }").conjuncts_,
+                ElementsAre(::testing::Field(
+                    &Conjunct::canonical_,
+                    ::testing::VariantWith<Opaque>(::testing::_))))
+        << filter;
+  }
 }
 
 // Test that only the columns of `VALUES` without `UNDEF`, the `BIND`s of
@@ -302,6 +345,36 @@ TEST(FilterFactsRecognizers, DistanceBound) {
         absl::StrCat("geof:metricDistance(", point, ", ",
                      wkt("POINT(7.9 48.1)"), ") <= 500"),
         std::string{"BOUND(?a)"}}) {
+    EXPECT_EQ(recognize(filter), std::nullopt) << filter;
+  }
+}
+
+// Test that a `LangEquals` with plain string literals is recognized as
+// `LangIn`.
+TEST(FilterFactsRecognizers, LangIn) {
+  auto recognize = [](std::string_view filter,
+                      std::string_view definitions = "") {
+    auto conjuncts =
+        canonical(filter, absl::StrCat("VALUES ?y { \"a\"@en } ", definitions))
+            .conjuncts_;
+    EXPECT_EQ(conjuncts.size(), 1u) << filter;
+    return recognizeLangIn(conjuncts.at(0));
+  };
+  EXPECT_THAT(recognize("LANG(?y) IN (\"en\", \"de\")"),
+              ::testing::Optional(LangIn{V{"?y"}, {"en", "de"}}));
+  EXPECT_THAT(recognize("LANG(?y) = "
+                        "\"en\"^^<http://www.w3.org/2001/XMLSchema#string>"),
+              ::testing::Optional(LangIn{V{"?y"}, {"en"}}));
+
+  // A `LangIn` from a `LangEquals` that is not exact is not exact.
+  EXPECT_THAT(recognize("LANG(?y) = ?l", "VALUES ?l { \"en\" \"de\" }"),
+              ::testing::Optional(LangIn{V{"?y"}, {"en", "de"}, false}));
+
+  // A literal with a language tag or a datatype, no literal, no constant at
+  // all, or no `LangEquals`.
+  for (std::string_view filter :
+       {"LANG(?y) = \"en\"@de", "LANG(?y) = \"en\"^^<x>", "LANG(?y) = <en>",
+        "LANG(?y) IN ()", "LANGMATCHES(LANG(?y), \"en\")"}) {
     EXPECT_EQ(recognize(filter), std::nullopt) << filter;
   }
 }
