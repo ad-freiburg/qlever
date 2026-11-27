@@ -9,8 +9,11 @@
 
 #include "libqlever/blobDiff/BlobDiff.h"
 
+#include <absl/crc/crc32c.h>
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_format.h>
+
+#include <cstring>
 
 #include "backports/algorithm.h"
 #include "libqlever/NamedCachedQueryBlobManager.h"
@@ -33,12 +36,13 @@ using ErrorType = BlobDiffErrorType;
 
 constexpr std::array<char, 8> diffFileMagic{'Q', 'L', 'V', 'R',
                                             'B', 'D', 'I', 'F'};
-constexpr uint16_t diffFileVersion = 2;
+constexpr uint16_t diffFileVersion = 3;
 
 // The size of the header of a diff file in bytes (see the file format in
 // `BlobDiff.h`).
 constexpr size_t headerSize = diffFileMagic.size() + sizeof(diffFileVersion) +
-                              3 * sizeof(uint64_t) +
+                              sizeof(uint8_t) + 4 * sizeof(uint64_t) +
+                              sizeof(int32_t) +
                               2 * sizeof(BlobDiffHeader::Checksum);
 
 // Create a `BlobDiffError` of the given `type` with a message that is the
@@ -59,29 +63,71 @@ BlobDiffError wrongBaseError() {
 }  // namespace
 
 // _____________________________________________________________________________
-BlobDiffHeader::Checksum blobChecksum(ql::span<const char> bytes) {
-  auto digest =
-      ad_utility::HashSha256{}(std::string_view{bytes.data(), bytes.size()});
+std::string_view toString(BlobChecksumType type) {
+  switch (type) {
+    case BlobChecksumType::none:
+      return "none";
+    case BlobChecksumType::crc32c:
+      return "crc32c";
+    case BlobChecksumType::sha256:
+      return "sha256";
+  }
+  AD_FAIL();
+}
+
+// _____________________________________________________________________________
+std::optional<BlobChecksumType> blobChecksumTypeFromString(
+    std::string_view name) {
+  for (auto type : {BlobChecksumType::none, BlobChecksumType::crc32c,
+                    BlobChecksumType::sha256}) {
+    if (toString(type) == name) {
+      return type;
+    }
+  }
+  return std::nullopt;
+}
+
+// _____________________________________________________________________________
+BlobDiffHeader::Checksum blobChecksum(ql::span<const char> bytes,
+                                      BlobChecksumType type) {
   BlobDiffHeader::Checksum result{};
-  AD_CORRECTNESS_CHECK(digest.size() == result.size());
-  ql::ranges::transform(digest, result.begin(), ad_utility::staticCast<char>);
+  std::string_view view{bytes.data(), bytes.size()};
+  switch (type) {
+    case BlobChecksumType::none:
+      break;
+    case BlobChecksumType::crc32c: {
+      auto crc = static_cast<uint32_t>(absl::ComputeCrc32c(view));
+      std::memcpy(result.data(), &crc, sizeof(crc));
+      break;
+    }
+    case BlobChecksumType::sha256: {
+      auto digest = ad_utility::HashSha256{}(view);
+      AD_CORRECTNESS_CHECK(digest.size() == result.size());
+      ql::ranges::transform(digest, result.begin(),
+                            ad_utility::staticCast<char>);
+      break;
+    }
+  }
   return result;
 }
 
 // _____________________________________________________________________________
 std::vector<char> computeBlobDiff(ql::span<const char> base,
                                   ql::span<const char> target,
-                                  int compressionLevel) {
-  auto payload =
-      ZstdWrapper::compressWithReference(base, target, compressionLevel);
+                                  const BlobDiffOptions& options) {
+  auto payload = ZstdWrapper::compressWithReference(base, target,
+                                                    options.compressionLevel_);
   ByteBufferWriteSerializer writer;
   writer.reserve(headerSize + payload.size());
   writer << diffFileMagic;
   writer << diffFileVersion;
+  writer << static_cast<uint8_t>(options.checksumType_);
   writer << static_cast<uint64_t>(base.size());
-  writer << blobChecksum(base);
+  writer << blobChecksum(base, options.checksumType_);
   writer << static_cast<uint64_t>(target.size());
-  writer << blobChecksum(target);
+  writer << blobChecksum(target, options.checksumType_);
+  writer << static_cast<int32_t>(options.targetEncoding_.compressionLevel_);
+  writer << static_cast<uint64_t>(options.targetEncoding_.stablePrefixSize_);
   writer << static_cast<uint64_t>(payload.size());
   AD_CORRECTNESS_CHECK(writer.getCurrentPosition() == headerSize);
   writer.serializeBytes(payload.data(), payload.size());
@@ -111,10 +157,23 @@ BlobDiffHeaderOrError readBlobDiffHeader(ql::span<const char> diffFile,
                      ")");
   }
   BlobDiffHeader header;
+  uint8_t checksumType = 0;
+  reader >> checksumType;
+  if (checksumType > static_cast<uint8_t>(BlobChecksumType::sha256)) {
+    return makeError(ErrorType::invalidChecksumType,
+                     "The blob diff file has the unknown checksum type ",
+                     static_cast<int>(checksumType),
+                     " (the file is corrupted)");
+  }
+  header.checksumType_ = static_cast<BlobChecksumType>(checksumType);
   reader >> header.baseSize_;
   reader >> header.baseChecksum_;
   reader >> header.targetSize_;
   reader >> header.targetChecksum_;
+  int32_t compressionLevel = 0;
+  reader >> compressionLevel;
+  header.targetEncoding_.compressionLevel_ = compressionLevel;
+  reader >> header.targetEncoding_.stablePrefixSize_;
   reader >> header.payloadSize_;
   AD_CORRECTNESS_CHECK(reader.getCurrentPosition() == headerSize);
   if (header.payloadSize_ != diffFile.size() - headerSize) {
@@ -169,9 +228,11 @@ DecompressedBlobOrError applyBlobDiffToDecompressedBase(
     return std::move(*error);
   }
   const auto& header = std::get<BlobDiffHeader>(headerOrError);
+  const bool hasChecksums = header.checksumType_ != BlobChecksumType::none;
   // The size is checked first, because it is much cheaper than the checksum.
   if (header.baseSize_ != base.size() ||
-      header.baseChecksum_ != blobChecksum(base)) {
+      (hasChecksums &&
+       header.baseChecksum_ != blobChecksum(base, header.checksumType_))) {
     return wrongBaseError();
   }
   auto payload = diffFile.subspan(headerSize);
@@ -186,8 +247,11 @@ DecompressedBlobOrError applyBlobDiffToDecompressedBase(
                      "decompressed (the file is corrupted): ",
                      error->message_);
   }
+  // NOTE: The decompression has already verified the checksum that is stored
+  // in the payload.
   if (std::get<size_t>(size) != target.size() ||
-      blobChecksum(target) != header.targetChecksum_) {
+      (hasChecksums &&
+       blobChecksum(target, header.checksumType_) != header.targetChecksum_)) {
     return makeError(ErrorType::corruptedPayload,
                      "Applying the blob diff did not yield the expected result "
                      "(the checksum of the result does not match), the diff "
@@ -225,14 +289,18 @@ BlobOrError applyBlobDiffToCompressedBase(
     return makeError(ErrorType::baseNotDecompressible,
                      "The base blob cannot be decompressed: ", error->message_);
   }
-  auto target = applyBlobDiffToDecompressedBase(
-      ql::span<const char>{std::get<DecompressedBase>(base)}, diffFile,
-      maxTargetSize);
+  ql::span<const char> decompressedBase{std::get<DecompressedBase>(base)};
+  auto target = applyBlobDiffToDecompressedBase(decompressedBase, diffFile,
+                                                maxTargetSize);
   if (auto* error = std::get_if<BlobDiffError>(&target)) {
     return std::move(*error);
   }
-  return Manager::compressBlob(
-      ql::span<const char>{std::get<DecompressedBlob>(target)});
+  // The header was already validated above.
+  const auto& encoding =
+      std::get<BlobDiffHeader>(headerOrError).targetEncoding_;
+  return blobCompression::compressBlob(
+      ql::span<const char>{std::get<DecompressedBlob>(target)}, encoding,
+      blobCompression::ReusableBlob{compressedBase, decompressedBase});
 }
 
 // _____________________________________________________________________________
@@ -252,9 +320,13 @@ std::string describeBlobDiff(ql::span<const char> diffFile) {
   };
   return absl::StrFormat(
       "Blob diff of %d bytes: base %d bytes, target %d bytes (both "
-      "decompressed), payload %d bytes (%.2f%% of the decompressed target)",
+      "decompressed), payload %d bytes (%.2f%% of the decompressed target), "
+      "checksums: %s, target compressed with level %d and a stable prefix of "
+      "%d bytes",
       diffFile.size(), header.baseSize_, header.targetSize_,
-      header.payloadSize_, percent(header.payloadSize_, header.targetSize_));
+      header.payloadSize_, percent(header.payloadSize_, header.targetSize_),
+      toString(header.checksumType_), header.targetEncoding_.compressionLevel_,
+      header.targetEncoding_.stablePrefixSize_);
 }
 
 }  // namespace qlever::blobDiff

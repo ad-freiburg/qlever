@@ -487,9 +487,9 @@ NamedCachedQueryBlobManager::tryToSkipAndVerifyBlobHeader(
 
 // _____________________________________________________________________________
 std::vector<char> NamedCachedQueryBlobManager::compressBlob(
-    ql::span<const char> uncompressedBlob) {
-  return ZstdWrapper::compress(uncompressedBlob.data(),
-                               uncompressedBlob.size());
+    ql::span<const char> uncompressedBlob,
+    const blobCompression::BlobEncoding& encoding) {
+  return blobCompression::compressBlob(uncompressedBlob, encoding);
 }
 
 // _____________________________________________________________________________
@@ -588,6 +588,9 @@ std::vector<char> NamedCachedQueryBlobManager::serialize(
         serializer, indexImpl, indexImpl.getVocab().getUnderlyingVocabulary(),
         config.excludedEntryRegexes_);
   }
+  // Everything up to here (the header, the metadata, and the vocabulary) is
+  // the stable prefix of the blob (see `BlobSerializationConfig`).
+  const uint64_t stablePrefixSize = serializer.getCurrentPosition();
   if (useNewFormat) {
     serializer << secondaryVocab;
   }
@@ -618,7 +621,10 @@ std::vector<char> NamedCachedQueryBlobManager::serialize(
       entriesVersion);
   auto uncompressed = std::move(serializer).data();
 
-  return compressBlob(uncompressed);
+  return compressBlob(uncompressed,
+                      blobCompression::BlobEncoding{
+                          config.compressionLevel_,
+                          config.writeStablePrefix_ ? stablePrefixSize : 0});
 }
 
 // _____________________________________________________________________________
