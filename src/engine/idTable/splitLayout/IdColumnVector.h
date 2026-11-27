@@ -18,6 +18,7 @@
 #include "engine/idTable/splitLayout/IdColumn.h"
 #include "engine/idTable/splitLayout/IdRef.h"
 #include "global/Id.h"
+#include "util/CompilerWarnings.h"
 #include "util/Exception.h"
 
 namespace columnBasedIdTable::splitLayout {
@@ -102,6 +103,12 @@ class IdColumnVector {
   [[nodiscard]] size_t size() const noexcept { return payloads_.size(); }
   [[nodiscard]] bool empty() const noexcept { return payloads_.empty(); }
 
+  // NOTE: GCC 13 reports false `-Wstringop-overflow` positives for the
+  // reallocation of `datatypes_` ("writing 1 byte into a region of size 0"),
+  // when `reserve` or `resize` is inlined into certain callers. These are
+  // middle-end warnings, so they are suppressed by a region around the two
+  // functions.
+  DISABLE_STRINGOP_OVERFLOW_WARNINGS
   void reserve(size_t n) {
     payloads_.reserve(n);
     datatypes_.reserve(n);
@@ -110,6 +117,7 @@ class IdColumnVector {
     payloads_.resize(n);
     datatypes_.resize(n);
   }
+  GCC_REENABLE_WARNINGS
   void clear() {
     payloads_.clear();
     datatypes_.clear();

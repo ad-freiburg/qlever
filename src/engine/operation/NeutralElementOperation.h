@@ -6,6 +6,7 @@
 #define QLEVER_SRC_ENGINE_OPERATION_NEUTRALELEMENTOPERATION_H
 
 #include "engine/operation/Operation.h"
+#include "util/CompilerWarnings.h"
 #include "util/ContainersWithAllocator.h"
 
 /// The neutral element wrt `JOIN`. It contains one element, but binds no
@@ -52,12 +53,18 @@ class NeutralElementOperation : public Operation {
  private:
   [[nodiscard]] bool isDeterministicImpl() const override { return true; }
 
+  // NOTE: With `USE_SPLIT_LAYOUT`, GCC 13 reports false `-Wstringop-overflow`
+  // positives for the `resize` below. The region in `IdColumnVector.h` does
+  // not help here, because that header is part of the precompiled header of
+  // the engine, where GCC 13 does not keep such regions.
+  DISABLE_STRINGOP_OVERFLOW_WARNINGS
   Result computeResult([[maybe_unused]] bool requestLaziness) override {
     IdTable idTable{getExecutionContext()->getAllocator()};
     idTable.setNumColumns(0);
     idTable.resize(1);
     return {std::move(idTable), resultSortedOn(), LocalVocab{allocator()}};
   }
+  GCC_REENABLE_WARNINGS
 
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap()
       const override {

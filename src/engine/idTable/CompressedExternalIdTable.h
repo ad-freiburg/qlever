@@ -29,6 +29,7 @@
 #include "engine/idTable/IdTable.h"
 #include "util/AsyncStream.h"
 #include "util/CancellationHandle.h"
+#include "util/CompilerWarnings.h"
 #include "util/ExceptionHandling.h"
 #include "util/File.h"
 #include "util/GlobalExecutor.h"
@@ -561,9 +562,19 @@ class CompressedIdTableRunsInput : public ad_utility::NoCopy {
   // Read and decompress a single block. This is the only function that performs
   // I/O; it is thread-safe, because it only takes a shared lock on the
   // underlying file.
+  //
+  // NOTE: With `USE_SPLIT_LAYOUT`, GCC 13 reports false `-Warray-bounds` and
+  // `-Wstringop-overflow` positives in the construction of the error message
+  // of an `AD_CORRECTNESS_CHECK` in `ZstdContext::decompressChunks`, when it
+  // is inlined into this function. These are middle-end warnings, so they are
+  // suppressed by a region around this function.
+  DISABLE_ARRAY_BOUNDS_WARNINGS
+  DISABLE_STRINGOP_OVERFLOW_WARNINGS
   Block getBlock(size_t run, size_t block) const {
     return writer().template readBlockOfIdTable<NumStaticCols>(run, block);
   }
+  GCC_REENABLE_WARNINGS
+  GCC_REENABLE_WARNINGS
 
   // ________________________________________________________________________
   Block makeEmptyBlock() const {
@@ -796,6 +807,16 @@ class CompressedExternalIdTableBase {
   // columns. The `table` may be arbitrarily large, it is automatically split
   // into blocks. The resulting blocks are exactly the same as if `push` had
   // been called for each row individually.
+  //
+  // NOTE: With `USE_SPLIT_LAYOUT`, GCC 13 reports false `-Wstringop-overflow`
+  // and `-Warray-bounds` positives in the construction of the error message
+  // of an `AD_CONTRACT_CHECK` in `BasicIdColumnView::subspan`, when it is
+  // inlined into this function via `insertAtEnd`. They are suppressed by a
+  // region around this function, like for `getBlock` above.
+  // clang-format off
+  DISABLE_ARRAY_BOUNDS_WARNINGS
+  DISABLE_STRINGOP_OVERFLOW_WARNINGS
+  // clang-format on
   CPP_template(typename Table)(requires IdTableLike<Table>)
   void pushBlock(const Table& table) {
     finishConcurrentPushes();
@@ -818,6 +839,8 @@ class CompressedExternalIdTableBase {
       }
     }
   }
+  GCC_REENABLE_WARNINGS
+  GCC_REENABLE_WARNINGS
 
   // Leave the mode of `asyncPushBlock` (see `CompressedExternalIdTableSorter`),
   // if it is currently active: Push the rows that the `asyncPusher_` has not
