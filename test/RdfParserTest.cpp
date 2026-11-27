@@ -3227,3 +3227,33 @@ TEST(RdfParserTest, tripleTermsFromFile) {
   };
   forAllParsers(run);
 }
+
+// Test the conversion of `RdfParserSettings` to and from JSON: a round trip
+// keeps all the settings, missing keys get their default value, and an unknown
+// behavior for overflowing integers is rejected.
+TEST(RdfParserTest, rdfParserSettingsToAndFromJson) {
+  for (auto behavior :
+       {TurtleParserIntegerOverflowBehavior::Error,
+        TurtleParserIntegerOverflowBehavior::OverflowingToDouble,
+        TurtleParserIntegerOverflowBehavior::AllToDouble}) {
+    RdfParserSettings settings{behavior, true, true};
+    nlohmann::json j = settings;
+    EXPECT_EQ(j.get<RdfParserSettings>(), settings);
+  }
+  nlohmann::json j = RdfParserSettings{
+      TurtleParserIntegerOverflowBehavior::OverflowingToDouble, false, false};
+  EXPECT_EQ(j["parser-integer-overflow-behavior"],
+            "overflowing-integers-become-doubles");
+
+  EXPECT_EQ(nlohmann::json::object().get<RdfParserSettings>(),
+            RdfParserSettings{});
+  EXPECT_EQ(nlohmann::json::parse(R"({"ascii-prefixes-only": true})")
+                .get<RdfParserSettings>(),
+            (RdfParserSettings{TurtleParserIntegerOverflowBehavior::Error,
+                               false, true}));
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      nlohmann::json::parse(R"({"parser-integer-overflow-behavior": "foo"})")
+          .get<RdfParserSettings>(),
+      ::testing::HasSubstr("Invalid behavior for integers that overflow"));
+}

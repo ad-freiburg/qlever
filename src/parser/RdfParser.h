@@ -27,6 +27,7 @@
 #include "index/vocabulary/EncodedIriManager.h"
 #include "parser/AsyncBlockSource.h"
 #include "parser/AsyncFileBlockDriver.h"
+#include "parser/RdfParserSettings.h"
 #include "parser/TripleComponent.h"
 #include "parser/TurtleTokenId.h"
 #include "parser/data/BlankNode.h"
@@ -41,35 +42,6 @@
 
 // Syntax used for parsing the components of an RDF triple term.
 enum class TripleTermSyntax { Turtle, NQuads };
-
-enum class TurtleParserIntegerOverflowBehavior {
-  Error,
-  OverflowingToDouble,
-  AllToDouble
-};
-
-// The settings that control how an RDF parser deals with the input. They are
-// the same for all the parsers of an index build, so the parsers that handle
-// several files (`RdfMultifileParser` and `RdfAsyncMultifileParser`) take them
-// in their constructor and pass them on to every parser that they create for a
-// single file or for a block of a file.
-struct RdfParserSettings {
-  // How to handle integer literals that overflow QLever's 64-bit integers.
-  TurtleParserIntegerOverflowBehavior integerOverflowBehavior_ =
-      TurtleParserIntegerOverflowBehavior::Error;
-  // If true then triples with invalid literals (for example
-  // "noNumber"^^xsd:integer) are ignored. If false an exception is thrown when
-  // such literals are encountered.
-  bool invalidLiteralsAreSkipped_ = false;
-  // If true, the faster `TokenizerCtre` is used instead of the
-  // standard-compliant `Tokenizer` (see the comment on `TurtleParser` below
-  // for the limitations of the relaxed mode).
-  //
-  // NOTE: This setting is only evaluated by the parsers that handle several
-  // files, when they choose the parser for a single file. The parsers for a
-  // single file have the tokenizer as a template parameter.
-  bool useRelaxedParsing_ = false;
-};
 
 namespace detail {
 // Find the end of the last match of the regex `[\r\n]+` in `input`, or

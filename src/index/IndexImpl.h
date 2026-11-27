@@ -414,6 +414,14 @@ class IndexImpl {
 
   const auto& encodedIriManager() const { return encodedIriManager_; }
 
+  // Return the settings of the RDF parser with which this index was built (see
+  // `RdfParserSettings`). For an index that was built before these settings
+  // were stored, return the default settings.
+  RdfParserSettings rdfParserSettings() const {
+    return {turtleParserIntegerOverflowBehavior_,
+            turtleParserSkipIllegalLiterals_, onlyAsciiTurtlePrefixes_};
+  }
+
   // Return the context of the `LocalVocabEntry`s that belong to this index.
   // Mirror `Index::getLocalVocabContext()`, such that callers can spell this
   // the same way no matter whether they hold an `Index` or an `IndexImpl`.

@@ -48,6 +48,11 @@ auto Index::encodedIriManager() const -> const EncodedIriManager& {
 }
 
 // ____________________________________________________________________________
+RdfParserSettings Index::rdfParserSettings() const {
+  return pimpl_->rdfParserSettings();
+}
+
+// ____________________________________________________________________________
 auto Index::getNonConstVocabForTesting() -> Vocab& {
   return pimpl_->getNonConstVocabForTesting();
 }
