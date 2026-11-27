@@ -263,6 +263,16 @@ Index::NumNormalAndInternal Index::numDistinctPredicates() const {
 bool Index::hasAllPermutations() const { return pimpl_->hasAllPermutations(); }
 
 // ____________________________________________________________________________
+bool Index::hasPermutation(Permutation::Enum permutation) const {
+  return pimpl_->hasPermutation(permutation);
+}
+
+// ____________________________________________________________________________
+ql::span<const Permutation::Enum> Index::loadedPermutations() const {
+  return pimpl_->loadedPermutations();
+}
+
+// ____________________________________________________________________________
 std::vector<float> Index::getMultiplicities(
     const Permutation& permutation) const {
   return pimpl_->getMultiplicities(permutation);

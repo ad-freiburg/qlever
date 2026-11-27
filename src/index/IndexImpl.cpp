@@ -1183,10 +1183,26 @@ void IndexImpl::createFromOnDiskIndex(const std::string& onDiskBase,
     } else {
       AD_LOG_INFO
           << "Only the PSO and POS permutation were loaded, SPARQL queries "
-             "with predicate variables will therefore not work"
+             "with predicate variables will therefore be very slow"
           << std::endl;
     }
   }
+
+  // Record which permutations are loaded, see `loadedPermutations()`. With
+  // `doNotLoadPermutations_`, none of them are.
+  auto recordLoadedPermutations = [this](auto allPermutations,
+                                         auto& loadedPermutations) {
+    loadedPermutations.clear();
+    if (doNotLoadPermutations_) {
+      return;
+    }
+    ql::ranges::copy_if(
+        allPermutations, std::back_inserter(loadedPermutations),
+        [this](auto permutation) { return hasPermutation(permutation); });
+  };
+  recordLoadedPermutations(Permutation::all<false>(), loadedPermutations_);
+  recordLoadedPermutations(Permutation::all<true>(),
+                           loadedInternalPermutations_);
 
   // We have to load the patterns first to figure out if the patterns were built
   // at all.
@@ -2128,6 +2144,38 @@ std::shared_ptr<const Permutation> IndexImpl::getPermutationPtr(
   return const_cast<IndexImpl&>(*this).getPermutationPtr(p);
 }
 
+// ____________________________________________________________________________
+bool IndexImpl::hasPermutation(Permutation::Enum permutation) const {
+  return getPermutation(permutation).isLoaded();
+}
+
+// ____________________________________________________________________________
+const Permutation* IndexImpl::firstLoadedPermutation(
+    std::initializer_list<Permutation::Enum> permutations) const {
+  for (auto permutation : permutations) {
+    if (hasPermutation(permutation)) {
+      return &getPermutation(permutation);
+    }
+  }
+  return nullptr;
+}
+
+// ____________________________________________________________________________
+const Permutation& IndexImpl::getFirstLoadedPermutation(
+    std::initializer_list<Permutation::Enum> permutations) const {
+  const auto* result = firstLoadedPermutation(permutations);
+  if (result == nullptr) {
+    throw std::runtime_error{absl::StrCat(
+        "None of the permutations ",
+        absl::StrJoin(permutations, ", ",
+                      [](std::string* out, Permutation::Enum p) {
+                        out->append(Permutation::toString(p));
+                      }),
+        " is loaded, but one of them is required for this operation")};
+  }
+  return *result;
+}
+
 // __________________________________________________________________________
 Index::NumNormalAndInternal IndexImpl::numDistinctSubjects() const {
   AD_CONTRACT_CHECK(
@@ -2207,9 +2255,22 @@ std::vector<float> IndexImpl::getMultiplicities(
 std::vector<float> IndexImpl::getMultiplicities(
     const Permutation& permutation) const {
   auto numTriples = static_cast<float>(this->numTriples().normal);
-  std::array multiplicities{numTriples / numDistinctSubjects().normal,
+  // The number of distinct subjects (objects) is only known if a permutation
+  // that starts with the subject (object) is loaded. Otherwise, we
+  // (optimistically) assume that they are all distinct.
+  auto multiplicity = [this, numTriples](
+                          std::initializer_list<Permutation::Enum> perms,
+                          auto getNumDistinct) {
+    if (firstLoadedPermutation(perms) == nullptr) {
+      return 1.0f;
+    }
+    return numTriples / std::invoke(getNumDistinct, this).normal;
+  };
+  std::array multiplicities{multiplicity({Permutation::SPO, Permutation::SOP},
+                                         &IndexImpl::numDistinctSubjects),
                             numTriples / numDistinctPredicates().normal,
-                            numTriples / numDistinctObjects().normal};
+                            multiplicity({Permutation::OSP, Permutation::OPS},
+                                         &IndexImpl::numDistinctObjects)};
   auto permuted = permutation.keyOrder().permuteTriple(multiplicities);
   return {permuted.begin(), permuted.end()};
 }

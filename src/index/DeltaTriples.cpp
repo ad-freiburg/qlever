@@ -134,7 +134,7 @@ nlohmann::json DeltaTriples::vacuum(
         auto cancellationHandle =
             std::make_shared<ad_utility::CancellationHandle<>>();
         // Erase located triples
-        for (auto permutation : Permutation::all<isInternal>()) {
+        for (auto permutation : index_.loadedPermutations<isInternal>()) {
           eraseTriplesInPermutation(permutation, triples, isInternal,
                                     cancellationHandle);
         }
@@ -200,9 +200,9 @@ void DeltaTriples::locateAndAddTriples(CancellationHandle cancellationHandle,
                                        ql::span<const IdTriple<0>> triples,
                                        bool insertOrDelete,
                                        ad_utility::timer::TimeTracer& tracer) {
-  constexpr const auto& allPermutations = Permutation::all<isInternal>();
   auto& lt = locatedTriples_->getLocatedTriples<isInternal>();
-  for (auto permutation : allPermutations) {
+  // The triples are only located in the permutations that are loaded.
+  for (auto permutation : index_.loadedPermutations<isInternal>()) {
     tracer.beginTrace(std::string{Permutation::toString(permutation)});
     tracer.beginTrace("locateTriples");
     auto& basePerm = index_.getPermutation(permutation);

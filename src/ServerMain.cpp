@@ -148,8 +148,8 @@ int main(int argc, char** argv) {
       "(field `name-text-index`).");
   add("only-pso-and-pos-permutations,o",
       po::bool_switch(&config.onlyPsoAndPos_),
-      "Only load the PSO and POS permutations. This disables queries with "
-      "predicate variables.");
+      "Only load the PSO and POS permutations. This makes queries with "
+      "predicate variables very slow.");
   add("default-query-timeout,s",
       optionFactory
           .getProgramOption<&RuntimeParameters::defaultQueryTimeout_>(),

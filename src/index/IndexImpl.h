@@ -20,6 +20,7 @@
 #include "backports/algorithm.h"
 #include "backports/asio.h"
 #include "backports/filesystem.h"
+#include "backports/span.h"
 #include "engine/Result.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/SpecialIds.h"
@@ -135,6 +136,12 @@ class IndexImpl {
 
   // If false, only PSO and POS permutations are loaded and expected.
   bool loadAllPermutations_ = true;
+
+  // The normal resp. internal permutations that are loaded, in the order of
+  // `Permutation::ALL`. Both are set in `createFromOnDiskIndex`, see
+  // `loadedPermutations()`.
+  std::vector<Permutation::Enum> loadedPermutations_;
+  std::vector<Permutation::Enum> loadedInternalPermutations_;
 
   // Pattern trick data
   bool usePatterns_ = false;
@@ -703,6 +710,31 @@ class IndexImpl {
   }
 
   bool hasAllPermutations() const { return SPO().isLoaded(); }
+
+  // Return true iff the `permutation` is loaded.
+  bool hasPermutation(Permutation::Enum permutation) const;
+
+  // Return those of the `Permutation::all<isInternal>()` that are loaded, in
+  // the order of `Permutation::ALL`. The internal permutations are loaded
+  // together with their normal counterparts.
+  template <bool isInternal = false>
+  ql::span<const Permutation::Enum> loadedPermutations() const {
+    if constexpr (isInternal) {
+      return loadedInternalPermutations_;
+    } else {
+      return loadedPermutations_;
+    }
+  }
+
+  // Return the first of the `permutations` that is loaded, or `nullptr` if
+  // none of them is loaded.
+  const Permutation* firstLoadedPermutation(
+      std::initializer_list<Permutation::Enum> permutations) const;
+
+  // Return the first of the `permutations` that is loaded. Throw if none of
+  // them is loaded.
+  const Permutation& getFirstLoadedPermutation(
+      std::initializer_list<Permutation::Enum> permutations) const;
 
   // ___________________________________________________________________________
   std::vector<float> getMultiplicities(

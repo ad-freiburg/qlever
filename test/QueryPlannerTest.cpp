@@ -2952,28 +2952,28 @@ TEST(QueryPlanner, graphVariablesWithinPattern) {
   // Two variables
   h::expect(
       "SELECT * { GRAPH ?x { ?x ?x <c> } }",
-      h::Filter("?x = ?_QLever_internal_variable_qp_1",
-                h::Filter("?_QLever_internal_variable_qp_0=?x",
+      h::Filter("?_QLever_internal_variable_qp_0=?x",
+                h::Filter("?x = ?_QLever_internal_variable_qp_1",
                           scan(internalVar(0), "?x", "<c>", {}, NamedTag{},
                                {Variable{internalVar(1)}}, {3}))));
   h::expect(
       "SELECT * { GRAPH ?x { ?x <b> ?x } }",
-      h::Filter("?x = ?_QLever_internal_variable_qp_1",
-                h::Filter("?_QLever_internal_variable_qp_0=?x",
+      h::Filter("?_QLever_internal_variable_qp_0=?x",
+                h::Filter("?x = ?_QLever_internal_variable_qp_1",
                           scan("?x", "<b>", internalVar(0), {}, NamedTag{},
                                {Variable{internalVar(1)}}, {3}))));
   h::expect(
       "SELECT * { GRAPH ?x { <a> ?x ?x } }",
-      h::Filter("?x = ?_QLever_internal_variable_qp_1",
-                h::Filter("?_QLever_internal_variable_qp_0=?x",
+      h::Filter("?_QLever_internal_variable_qp_0=?x",
+                h::Filter("?x = ?_QLever_internal_variable_qp_1",
                           scan("<a>", "?x", internalVar(0), {}, NamedTag{},
                                {Variable{internalVar(1)}}, {3}))));
   // Three variables
   h::expect(
       "SELECT * { GRAPH ?x { ?x ?x ?x } }",
-      h::Filter("?x = ?_QLever_internal_variable_qp_2",
-                h::Filter("?_QLever_internal_variable_qp_1=?x",
-                          h::Filter("?_QLever_internal_variable_qp_0=?x",
+      h::Filter("?_QLever_internal_variable_qp_1=?x",
+                h::Filter("?_QLever_internal_variable_qp_0=?x",
+                          h::Filter("?x = ?_QLever_internal_variable_qp_2",
                                     scan(internalVar(1), "?x", internalVar(0),
                                          {}, NamedTag{},
                                          {Variable{internalVar(2)}}, {3})))));
