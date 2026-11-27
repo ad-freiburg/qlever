@@ -27,6 +27,7 @@ EvaluationContext::EvaluationContext(
       _columnsByWhichResultIsSorted{allocator},
       _allocator{allocator},
       _localVocab{localVocab},
+      _variableToColumnMapPreviousResults{allocator},
       cancellationHandle_{std::move(cancellationHandle)},
       orderByComparator_{qec.getLocalVocabContext()} {
   AD_CONTRACT_CHECK(cancellationHandle_);

@@ -151,7 +151,7 @@ class TransitivePathBase : public Operation {
   size_t resultWidth_ = 2;
   size_t minDist_;
   size_t maxDist_;
-  VariableToColumnMap variableColumns_;
+  VariableToColumnMap variableColumns_{allocator()};
   // Indicate that the variable is only bound because the path is empty, not
   // because `bindSides` was called. This means that it is bound to a
   // full scan of all subjects and objects in the knowledge graph, but can be

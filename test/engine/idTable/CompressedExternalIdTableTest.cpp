@@ -29,6 +29,7 @@
 #include "index/ConstantsIndexBuilding.h"
 #include "index/ExternalSortFunctors.h"
 #include "util/ConstexprUtils.h"
+#include "util/Views.h"
 #include "util/jthread.h"
 
 namespace net = boost::asio;
@@ -502,6 +503,33 @@ TEST(CompressedExternalIdTable, pushBlockProducesCorrectSortedOutput) {
   EXPECT_THAT(result, ElementsAreArray(expected));
 }
 
+namespace {
+// A block transformation that records the address of the first column of each
+// block that it is applied to, see the tests below.
+struct RecordBuffer {
+  std::shared_ptr<std::vector<const char*>> buffers_;
+  void operator()(IdTableStatic<NUM_COLS>& block) const {
+    buffers_->push_back(memoryOf(block.getColumn(0)));
+  }
+};
+
+// A `CompressedExternalIdTableBase` that exposes the `asyncPushBlock` mode,
+// which is otherwise only available via `CompressedExternalIdTableSorter`.
+struct AsyncPushingTable
+    : public ad_utility::CompressedExternalIdTableBase<NUM_COLS, RecordBuffer> {
+  using Base =
+      ad_utility::CompressedExternalIdTableBase<NUM_COLS, RecordBuffer>;
+  using Base::Base;
+  using Base::setAsyncPushExecutor;
+  // Push the `table` via the `asyncPusher_` and wait for the push.
+  void asyncPushAndWait(const IdTable& table) {
+    this->asyncPusher_
+        ->asyncPushBlock(asyncPushTestHelpers::viewOf(table), net::use_future)
+        .get();
+  }
+};
+}  // namespace
+
 // Test that the input phase of a `CompressedExternalIdTableBase` only ever
 // allocates two block buffers: the one that the `push` calls fill, and the one
 // that the background thread transforms and writes. Each buffer that the
@@ -517,12 +545,6 @@ TEST(CompressedExternalIdTable, blockBuffersAreRecycled) {
   // The transformation runs on the single background thread, and each run
   // completes before the next block is handed over, so no lock is needed.
   auto buffers = std::make_shared<std::vector<const char*>>();
-  struct RecordBuffer {
-    std::shared_ptr<std::vector<const char*>> buffers_;
-    void operator()(IdTableStatic<NUM_COLS>& block) const {
-      buffers_->push_back(memoryOf(block.getColumn(0)));
-    }
-  };
 
   // Push 20 blocks of exactly one block size each.
   constexpr size_t blockSize = 1000;
@@ -549,6 +571,45 @@ TEST(CompressedExternalIdTable, blockBuffersAreRecycled) {
   // The destructor has waited for the last block, so all of them have been
   // recorded, and from the third block on each block reuses the buffer of the
   // block before its predecessor.
+  ASSERT_EQ(buffers->size(), numBlocks);
+  for (size_t i = 2; i < numBlocks; ++i) {
+    EXPECT_EQ(buffers->at(i), buffers->at(i - 2)) << i;
+  }
+  EXPECT_NE(buffers->at(0), buffers->at(1));
+}
+
+// Test that the blocks of `asyncPushBlock` are recycled in the same way as the
+// blocks of `pushBlock` (see the previous test): the sink of the
+// `AsyncIdTablePusher` hands each complete block to the background thread and
+// gets back the block of the previous background task, which becomes the next
+// block that the pusher fills.
+TEST(CompressedExternalIdTable, asyncPushBlockBuffersAreRecycled) {
+  std::string filename = gtestCurrentTestName();
+  auto alloc = ad_utility::testing::makeAllocator();
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
+  auto buffers = std::make_shared<std::vector<const char*>>();
+
+  constexpr size_t blockSize = 1000;
+  constexpr size_t numBlocks = 20;
+  // The pool has to outlive the table, see `setAsyncPushExecutor`.
+  net::thread_pool pool{2};
+  {
+    AsyncPushingTable table{filename,
+                            NUM_COLS,
+                            memoryForBlocksize(blockSize, NUM_COLS),
+                            alloc,
+                            ad_utility::DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE,
+                            RecordBuffer{buffers}};
+    table.setAsyncPushExecutor(pool.get_executor());
+    // See the previous test for the purpose of the `blockers`.
+    std::vector<std::vector<Id>> blockers;
+    auto block = createRandomlyFilledIdTable(blockSize, NUM_COLS);
+    for ([[maybe_unused]] size_t i : ad_utility::integerRange(numBlocks)) {
+      table.asyncPushAndWait(block);
+      blockers.emplace_back(blockSize);
+    }
+  }
+
   ASSERT_EQ(buffers->size(), numBlocks);
   for (size_t i = 2; i < numBlocks; ++i) {
     EXPECT_EQ(buffers->at(i), buffers->at(i - 2)) << i;
@@ -754,6 +815,51 @@ TEST(CompressedExternalIdTable, clearResetsBoundaryMetadata) {
   writeAndFlush(writer, secondBatch);
   checkBlockMetadata(writer, secondBatch, rowsPerBlockFor(blockSize));
   checkBlockContents(writer, secondBatch, rowsPerBlockFor(blockSize));
+}
+
+// Test that the compression level of the writer does not change the stored
+// blocks, and that it is applied (a fast negative level gives a larger file).
+TEST(CompressedExternalIdTable, writerCompressionLevel) {
+  // The columns hold few distinct values, such that the blocks are highly
+  // compressible and the file sizes below differ clearly.
+  std::vector<JoinColumnAndBounds> bounds;
+  for (size_t columnIdx = 0; columnIdx < 3; ++columnIdx) {
+    bounds.push_back(JoinColumnAndBounds{columnIdx, 0, 20});
+  }
+  std::vector<CopyableIdTable<0>> tables;
+  tables.emplace_back(createRandomlyFilledIdTable(20'000, 3, bounds));
+  tables.emplace_back(createRandomlyFilledIdTable(5'000, 3, bounds));
+  auto blockSize = 8_kB;
+
+  // Write the `tables` with the given compression `level`, check that they
+  // can be read back, and return the size of the resulting file.
+  auto writeWithLevel = [&tables, blockSize](int level) {
+    std::string filename =
+        absl::StrCat(gtestCurrentTestName(), ".", level, ".dat");
+    absl::Cleanup cleanup = [&filename] {
+      ad_utility::deleteFile(filename, false);
+    };
+    ad_utility::CompressedExternalIdTableWriter writer{
+        filename, 3, ad_utility::testing::makeAllocator(), blockSize};
+    writer.setCompressionLevel(level);
+    writeAndFlush(writer, tables);
+    checkBlockMetadata(writer, tables, rowsPerBlockFor(blockSize));
+    checkBlockContents(writer, tables, rowsPerBlockFor(blockSize));
+    return ql::filesystem::file_size(filename);
+  };
+
+  auto sizeFast = writeWithLevel(-5);
+  auto sizeDefault = writeWithLevel(
+      ad_utility::compressedExternalIdTable::DEFAULT_RUN_COMPRESSION);
+  auto sizeStrong = writeWithLevel(19);
+
+  // The fast negative level gives the largest file.
+  //
+  // NOTE: For these random (and small) blocks, a higher positive level does
+  // not necessarily yield a smaller file, so only the fast negative level is
+  // compared to the others.
+  EXPECT_GT(sizeFast, sizeDefault);
+  EXPECT_GT(sizeFast, sizeStrong);
 }
 
 namespace {
@@ -1463,6 +1569,45 @@ TEST(CompressedExternalIdTable, sorterMergeSpillCompression) {
   // The uncompressed spill file is what pays for the CPU that is saved.
   EXPECT_GT(uncompressed.spillFileSize_, compressed.spillFileSize_);
   EXPECT_GT(uncompressed.spillFileSize_, fast.spillFileSize_);
+}
+
+// Test that the compression level of the presorted runs (see
+// `setRunCompressionLevel`) does not change the sorted output, and that it is
+// applied to the file of the runs.
+TEST(CompressedExternalIdTable, sorterRunCompressionLevel) {
+  auto ignoreMemoryLimit = setIgnoreMemoryLimit(true);
+
+  // An input with few distinct values per column, so that the runs are highly
+  // compressible.
+  std::vector<JoinColumnAndBounds> bounds;
+  for (size_t columnIdx = 0; columnIdx < NUM_COLS; ++columnIdx) {
+    bounds.push_back(JoinColumnAndBounds{columnIdx, 0, 20});
+  }
+  IdTable input = createRandomlyFilledIdTable(20'000, NUM_COLS, bounds);
+  auto expected = sortedCopy(input);
+
+  // Sort the `input` with the given run compression `level` and return the
+  // size of the file of the runs.
+  auto sortWithLevel = [&input, &expected](int level) {
+    std::string filename =
+        absl::StrCat(gtestCurrentTestName(), ".", level, ".dat");
+    absl::Cleanup cleanup = [&filename] {
+      ad_utility::deleteFile(filename, false);
+    };
+    // The memory limit is small enough to yield several runs.
+    ad_utility::CompressedExternalIdTableSorter<SortByOSP, NUM_COLS> sorter{
+        filename, NUM_COLS, 100_kB, ad_utility::testing::makeAllocator()};
+    sorter.setRunCompressionLevel(level);
+    sorter.pushBlock(input);
+    auto result = sortedOutput(sorter);
+    EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
+    return ql::filesystem::file_size(filename);
+  };
+
+  // The fast negative level gives a larger file than a strong level.
+  auto sizeFast = sortWithLevel(-5);
+  auto sizeStrong = sortWithLevel(19);
+  EXPECT_GT(sizeFast, sizeStrong);
 }
 
 // _____________________________________________________________________________

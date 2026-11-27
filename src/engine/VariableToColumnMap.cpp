@@ -32,7 +32,7 @@ VariableToColumnMap makeVarToColMapForJoinOperation(
     // Don't include the join columns, shift all variables that appear after
     // join columns to the left s.t. the result will be dense again.
     leftResultWidth -= joinColumns.size();
-    VariableToColumnMap res;
+    VariableToColumnMap res{leftVars.get_allocator()};
     const auto& jcls = joinColumns | ql::views::transform(ad_utility::first);
     // We deliberately copy the entries from the child map, as we have to insert
     // them into the result later on anyway.

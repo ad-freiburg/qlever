@@ -16,6 +16,7 @@
 #include "../util/LocalVocabEntryTestHelpers.h"
 #include "../util/LocalVocabTestHelpers.h"
 #include "../util/OperationTestHelpers.h"
+#include "../util/VariableToColumnMapTestHelpers.h"
 #include "backports/algorithm.h"
 #include "engine/NamedResultCache.h"
 #include "engine/NamedResultCacheSerializer.h"
@@ -49,8 +50,12 @@ class NamedResultCacheSerializerTest : public ::testing::Test {
     ByteBufferWriteSerializer writeSerializer;
     writeSerializer << value;
     ByteBufferReadSerializer readSerializer{std::move(writeSerializer).data()};
-    NamedResultCache::Value result{
-        {}, {}, colIndices({}, allocator), LocalVocab{allocator}, {}, {}};
+    NamedResultCache::Value result{{},
+                                   VariableToColumnMap{allocator},
+                                   colIndices({}, allocator),
+                                   LocalVocab{allocator},
+                                   {},
+                                   {}};
     result.allocatorForSerialization_ = std::move(allocator);
     result.contextForSerialization_ = &qec_->getIndex().getLocalVocabContext();
     readSerializer >> result;
@@ -66,9 +71,9 @@ class NamedResultCacheSerializerTest : public ::testing::Test {
   // Create a simple `Value` with a two-column table, one variable per column,
   // and the given `cacheKey`.
   static NamedResultCache::Value makeSimpleValue(std::string cacheKey) {
-    VariableToColumnMap varColMap;
-    varColMap[Variable{"?x"}] = makeAlwaysDefinedColumn(0);
-    varColMap[Variable{"?y"}] = makeAlwaysDefinedColumn(1);
+    auto varColMap =
+        makeVariableToColumnMap({{Variable{"?x"}, makeAlwaysDefinedColumn(0)},
+                                 {Variable{"?y"}, makeAlwaysDefinedColumn(1)}});
     return NamedResultCache::Value{std::make_shared<const IdTable>(
                                        makeIdTableFromVector({{1, 2}, {3, 4}})),
                                    std::move(varColMap),
@@ -81,8 +86,12 @@ class NamedResultCacheSerializerTest : public ::testing::Test {
   // Read a `Value` from the given serialized `data`.
   NamedResultCache::Value deserializeValue(std::vector<char> data) const {
     ByteBufferReadSerializer readSerializer{std::move(data)};
-    NamedResultCache::Value value{
-        {}, {}, colIndices({}, alloc_), LocalVocab{alloc_}, {}, {}};
+    NamedResultCache::Value value{{},
+                                  VariableToColumnMap{alloc_},
+                                  colIndices({}, alloc_),
+                                  LocalVocab{alloc_},
+                                  {},
+                                  {}};
     value.allocatorForSerialization_ = alloc_;
     value.contextForSerialization_ = &qec_->getIndex().getLocalVocabContext();
     readSerializer >> value;
@@ -104,9 +113,9 @@ TEST_F(NamedResultCacheSerializerTest, ValueSerialization) {
   // following table by `local` and adapt the remainder of the test accordingly.
   auto table = makeIdTableFromVector({{0, 7}, {9, 11}, {13, 17}});
 
-  VariableToColumnMap varColMap;
-  varColMap[Variable{"?x"}] = makeAlwaysDefinedColumn(0);
-  varColMap[Variable{"?y"}] = makePossiblyUndefinedColumn(1);
+  auto varColMap = makeVariableToColumnMap(
+      {{Variable{"?x"}, makeAlwaysDefinedColumn(0)},
+       {Variable{"?y"}, makePossiblyUndefinedColumn(1)}});
 
   auto sortedOn = colIndices({0, 1});
 
@@ -157,9 +166,9 @@ TEST_F(NamedResultCacheSerializerTest, ValueSerialization) {
 TEST_F(NamedResultCacheSerializerTest, ValueSerializationZeroCopy) {
   auto table = makeIdTableFromVector({{0, 7}, {9, 11}, {13, 17}});
 
-  VariableToColumnMap varColMap;
-  varColMap[Variable{"?x"}] = makeAlwaysDefinedColumn(0);
-  varColMap[Variable{"?y"}] = makePossiblyUndefinedColumn(1);
+  auto varColMap = makeVariableToColumnMap(
+      {{Variable{"?x"}, makeAlwaysDefinedColumn(0)},
+       {Variable{"?y"}, makePossiblyUndefinedColumn(1)}});
 
   NamedResultCache::Value value{std::make_shared<const IdTable>(table.clone()),
                                 varColMap,
@@ -173,8 +182,12 @@ TEST_F(NamedResultCacheSerializerTest, ValueSerializationZeroCopy) {
   AlignedByteBufferReadSerializer readSerializer{
       std::move(writeSerializer).data()};
 
-  NamedResultCache::Value deserializedValue{
-      {}, {}, colIndices({}, alloc_), LocalVocab{alloc_}, {}, {}};
+  NamedResultCache::Value deserializedValue{{},
+                                            VariableToColumnMap{alloc_},
+                                            colIndices({}, alloc_),
+                                            LocalVocab{alloc_},
+                                            {},
+                                            {}};
   deserializedValue.allocatorForSerialization_ = alloc_;
   deserializedValue.contextForSerialization_ =
       &qec_->getIndex().getLocalVocabContext();
@@ -206,14 +219,14 @@ TEST_F(NamedResultCacheSerializerTest, CacheSerialization) {
   auto table1 = makeIdTableFromVector({{1, 2}, {3, 4}});
   auto table2 = makeIdTableFromVector({{5, 6, 7}, {8, 9, 10}});
 
-  VariableToColumnMap varColMap1;
-  varColMap1[Variable{"?a"}] = makeAlwaysDefinedColumn(0);
-  varColMap1[Variable{"?b"}] = makeAlwaysDefinedColumn(1);
+  auto varColMap1 =
+      makeVariableToColumnMap({{Variable{"?a"}, makeAlwaysDefinedColumn(0)},
+                               {Variable{"?b"}, makeAlwaysDefinedColumn(1)}});
 
-  VariableToColumnMap varColMap2;
-  varColMap2[Variable{"?x"}] = makeAlwaysDefinedColumn(0);
-  varColMap2[Variable{"?y"}] = makeAlwaysDefinedColumn(1);
-  varColMap2[Variable{"?z"}] = makeAlwaysDefinedColumn(2);
+  auto varColMap2 =
+      makeVariableToColumnMap({{Variable{"?x"}, makeAlwaysDefinedColumn(0)},
+                               {Variable{"?y"}, makeAlwaysDefinedColumn(1)},
+                               {Variable{"?z"}, makeAlwaysDefinedColumn(2)}});
 
   const auto& localVocabContext = qec_->getLocalVocabContext();
   LocalVocab vocab1 = makeLocalVocab();
@@ -493,7 +506,7 @@ TEST_F(NamedResultCacheSerializerTest, SerializationIsDeterministic) {
   // order, but otherwise identical contents.
   auto makeValue = [](bool reverseInsertionOrder) {
     std::vector<std::string> names{"?d", "?c", "?b", "?a"};
-    VariableToColumnMap varColMap;
+    auto varColMap = makeVariableToColumnMap();
     for (size_t i = 0; i < names.size(); ++i) {
       size_t index = reverseInsertionOrder ? names.size() - 1 - i : i;
       varColMap[Variable{names.at(index)}] = makeAlwaysDefinedColumn(index);
@@ -542,9 +555,9 @@ TEST_F(NamedResultCacheSerializerTest, SerializationIsDeterministic) {
 // rewritten the `Id`s to a persistent vocabulary would use it.
 TEST_F(NamedResultCacheSerializerTest, WriteValueWithReplacedColumns) {
   auto table = makeIdTableFromVector({{0, 7}, {9, 11}, {13, 17}});
-  VariableToColumnMap varColMap;
-  varColMap[Variable{"?x"}] = makeAlwaysDefinedColumn(0);
-  varColMap[Variable{"?y"}] = makePossiblyUndefinedColumn(1);
+  auto varColMap = makeVariableToColumnMap(
+      {{Variable{"?x"}, makeAlwaysDefinedColumn(0)},
+       {Variable{"?y"}, makePossiblyUndefinedColumn(1)}});
   LocalVocab localVocab = makeLocalVocab();
   localVocab.getIndexAndAddIfNotContained(iriLocalVocabEntry(
       "<http://example.org/test>", qec_->getLocalVocabContext()));

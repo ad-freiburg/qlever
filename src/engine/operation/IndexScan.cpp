@@ -345,7 +345,7 @@ IndexScan::getUpdatedQueryExecutionTreeWithPrefilterApplied(
 
 // _____________________________________________________________________________
 VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
-  VariableToColumnMap variableToColumnMap;
+  VariableToColumnMap variableToColumnMap{allocator()};
   auto isContained = [&](const Variable& var) {
     return !varsToKeep_.has_value() || varsToKeep_.value().contains(var);
   };
@@ -476,7 +476,7 @@ IdTable IndexScan::materializedIndexScan() const {
       getSubsetOfPermutationColumns());
   AD_LOG_DEBUG << "IndexScan result computation done.\n";
   checkCancellation();
-  idTable = makeAppendConstantColumns()(std::move(idTable));
+  makeAppendConstantColumns()(idTable);
   AD_CORRECTNESS_CHECK(idTable.numColumns() == getResultWidth());
   return idTable;
 }
@@ -738,7 +738,12 @@ CompressedRelationReader::IdTableGeneratorInputRange IndexScan::getLazyScan(
 
   return CompressedRelationReader::IdTableGeneratorInputRange{
       ad_utility::CachingTransformInputRange{
-          std::move(lazyScanOfPermutation), makeAppendConstantColumns(),
+          std::move(lazyScanOfPermutation),
+          [appendConstantColumns =
+               makeAppendConstantColumns()](IdTable& block) {
+            appendConstantColumns(block);
+            return std::move(block);
+          },
           ql::type_identity<LazyScanMetadata>{}}};
 }
 
@@ -1428,7 +1433,7 @@ IndexScan::getSubsetOfPermutationColumns() const {
 
 // _____________________________________________________________________________
 VariableToColumnMap IndexScan::computePermutationColumnIndices() const {
-  VariableToColumnMap map;
+  VariableToColumnMap map{allocator()};
   // NOTE: The internally visible variables also contain the variables that are
   // hidden if this scan is the root of a subquery.
   const auto& varToColInResult = getInternallyVisibleVariableColumns();

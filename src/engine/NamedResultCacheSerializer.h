@@ -143,7 +143,7 @@ void readValue(Serializer& serializer, NamedResultCache::Value& arg,
 
   // Deserialize the `VariableToColumnMap`, see `serializeDeterministically`
   // in `VariableToColumnMap.h`.
-  VariableToColumnMap varToColMap;
+  VariableToColumnMap varToColMap{arg.allocatorForSerialization_.value()};
   serializeDeterministically(serializer, varToColMap);
 
   // Deserialize `resultSortedOn`.
@@ -227,9 +227,12 @@ void NamedResultCache::readFromSerializer(Serializer& serializer,
 
     // Deserialize the value (a `Value` has no default constructor, because
     // its `resultSortedOn_` needs an allocator).
-    Value value{
-        {}, {}, qlm::vector<ColumnIndex>{allocator}, LocalVocab{allocator},
-        {}, {}};
+    Value value{{},
+                VariableToColumnMap{allocator},
+                qlm::vector<ColumnIndex>{allocator},
+                LocalVocab{allocator},
+                {},
+                {}};
     value.allocatorForSerialization_ = allocator;
     value.contextForSerialization_ = &context;
     namedResultCacheSerializer::readValue(serializer, value, readFormatVersion);

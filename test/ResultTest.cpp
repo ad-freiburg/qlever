@@ -9,6 +9,7 @@
 #include "util/ContainersWithAllocator.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
+#include "util/VariableToColumnMapTestHelpers.h"
 
 using ad_utility::testing::makeLocalVocab;
 
@@ -704,9 +705,9 @@ TEST_P(ResultDefinednessTest,
   if constexpr (!ad_utility::areExpensiveChecksEnabled) {
     GTEST_SKIP_("Expensive checks are disabled, skipping test.");
   }
-  VariableToColumnMap map{
-      {Variable{"?a"}, {0, ColumnIndexAndTypeInfo::AlwaysDefined}},
-      {Variable{"?b"}, {1, ColumnIndexAndTypeInfo::PossiblyUndefined}}};
+  auto map = makeVariableToColumnMap(
+      {{Variable{"?a"}, {0, ColumnIndexAndTypeInfo::AlwaysDefined}},
+       {Variable{"?b"}, {1, ColumnIndexAndTypeInfo::PossiblyUndefined}}});
 
   {
     Result result{std::get<1>(GetParam())->clone(), sortOrder(),

@@ -6,6 +6,7 @@
 #include <gtest/gtest.h>
 
 #include "engine/operation/RuntimeInformation.h"
+#include "util/VariableToColumnMapTestHelpers.h"
 
 using namespace std::chrono_literals;
 
@@ -111,12 +112,12 @@ TEST(RuntimeInformation, updateTotalTimeOfOptimizedOutChildren) {
 TEST(RuntimeInformation, setColumnNames) {
   RuntimeInformation rti;
   rti.columnNames_.push_back("?blimbim");
-  rti.setColumnNames({});
+  rti.setColumnNames(makeVariableToColumnMap());
   EXPECT_TRUE(rti.columnNames_.empty());
 
   auto col = makeAlwaysDefinedColumn;
   using V = Variable;
-  VariableToColumnMap m{{V{"?x"}, col(1)}, {V{"?y"}, col(0)}};
+  auto m = makeVariableToColumnMap({{V{"?x"}, col(1)}, {V{"?y"}, col(0)}});
   rti.setColumnNames(m);
   EXPECT_THAT(rti.columnNames_, ::testing::ElementsAre("?y", "?x"));
 }

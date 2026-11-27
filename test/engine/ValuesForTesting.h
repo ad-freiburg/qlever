@@ -248,7 +248,7 @@ class ValuesForTesting : public Operation {
 
  private:
   VariableToColumnMap computeVariableToColumnMap() const override {
-    VariableToColumnMap m;
+    VariableToColumnMap m{allocator()};
     for (auto i = ColumnIndex{0}; i < variables_.size(); ++i) {
       if (!variables_.at(i).has_value()) {
         continue;

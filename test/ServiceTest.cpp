@@ -11,9 +11,13 @@
 
 #include "./util/LocalVocabTestHelpers.h"
 #include "backports/StartsWithAndEndsWith.h"
+#include "engine/MaterializedViews.h"
+#include "engine/NamedResultCache.h"
 #include "engine/ValuesForTesting.h"
 #include "engine/binaryExport/BinaryExport.h"
 #include "engine/operation/Join.h"
+#include "engine/operation/Minus.h"
+#include "engine/operation/OptionalJoin.h"
 #include "engine/operation/Service.h"
 #include "engine/operation/Sort.h"
 #include "engine/operation/StripColumns.h"
@@ -35,6 +39,7 @@
 #include "util/OperationTestHelpers.h"
 #include "util/RuntimeParametersTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
+#include "util/VariableToColumnMapTestHelpers.h"
 #include "util/http/HttpUtils.h"
 
 using ad_utility::testing::makeLocalVocab;
@@ -164,9 +169,9 @@ TEST_F(ServiceTest, basicMethods) {
   ASSERT_EQ(serviceOp.getCostEstimate(), 1'000'000);
   using V = Variable;
   ASSERT_THAT(serviceOp.computeVariableToColumnMap(),
-              ::testing::UnorderedElementsAreArray(VariableToColumnMap{
-                  {V{"?x"}, makePossiblyUndefinedColumn(0)},
-                  {V{"?y"}, makePossiblyUndefinedColumn(1)}}));
+              ::testing::UnorderedElementsAreArray(makeVariableToColumnMap(
+                  {{V{"?x"}, makePossiblyUndefinedColumn(0)},
+                   {V{"?y"}, makePossiblyUndefinedColumn(1)}})));
   ASSERT_FALSE(serviceOp.knownEmptyResult());
   ASSERT_TRUE(serviceOp.getChildren().empty());
 }
@@ -1601,6 +1606,174 @@ TEST_F(ServiceTest, unconsumedLazySiblingResultDoesNotCrash) {
   // callback must not touch the operation anymore.
   join.reset();
   sibling.reset();
+}
+
+// Test that `OptionalJoin` and `Minus` with two join columns work next to a
+// `Service` whose sibling result is not pushed down. They request fully
+// materialized inputs, even if their own result is requested lazily (see
+// #4025).
+TEST_F(ServiceTest, precomputeSiblingResultForMultiColumnOptionalAndMinus) {
+  // The sibling result is too large to be pushed down, so it is handed back to
+  // the sibling.
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::serviceMaxValueRows_>(0);
+  auto makeTree = [&](std::shared_ptr<Operation> op) {
+    return std::make_shared<QueryExecutionTree>(testQec, std::move(op));
+  };
+  auto makeService = [&]() {
+    return makeTree(std::make_shared<Service>(
+        testQec,
+        parsedQuery::Service{
+            {Variable{"?x"}, Variable{"?y"}},
+            TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
+            "PREFIX doof: <http://doof.org>",
+            "{ }",
+            false},
+        getResultFunctionFactory(
+            "http://localhorst:80/api",
+            "PREFIX doof: <http://doof.org> SELECT ?x ?y { }",
+            genJsonResult({"x", "y"}, {{"a", "b"}}),
+            boost::beast::http::status::ok,
+            "application/sparql-results+json")));
+  };
+  auto makeSibling = [&]() {
+    return makeTree(std::make_shared<ValuesForTesting>(
+        testQec, makeIdTableFromVector({{1, 2}, {3, 4}}),
+        std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}},
+        false, std::vector<ColumnIndex>{0, 1}));
+  };
+  auto expected = makeIdTableFromVector({{1, 2}, {3, 4}});
+
+  OptionalJoin optionalJoin{testQec, makeSibling(), makeService()};
+  auto optionalResult = optionalJoin.computeResultOnlyForTesting(true);
+  ASSERT_TRUE(optionalResult.isFullyMaterialized());
+  EXPECT_EQ(optionalResult.idTableView(), expected);
+
+  Minus minus{testQec, makeSibling(), makeService()};
+  auto minusResult = minus.computeResultOnlyForTesting(true);
+  ASSERT_TRUE(minusResult.isFullyMaterialized());
+  EXPECT_EQ(minusResult.idTableView(), expected);
+}
+
+// Test that a lazy precomputed sibling result is materialized when the caller
+// requests a fully materialized result, and passed on as is when the caller
+// requests a lazy result. Without the former, e.g. a `Sort` that is skipped by
+// `precomputeSiblingResult` and requests a materialized input breaks (#2375).
+TEST_F(ServiceTest, lazyPrecomputedSiblingResultIsMaterializedOnRequest) {
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::serviceMaxValueRows_>(0);
+  auto service = std::make_shared<Service>(
+      testQec,
+      parsedQuery::Service{
+          {Variable{"?x"}, Variable{"?y"}},
+          TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
+          "PREFIX doof: <http://doof.org>",
+          "{ }",
+          false},
+      getResultFunctionFactory(
+          "http://localhorst:80/api",
+          "PREFIX doof: <http://doof.org> SELECT ?x ?y { }",
+          genJsonResult({"x", "y"}, {{"a", "b"}}),
+          boost::beast::http::status::ok, "application/sparql-results+json"));
+  auto makeSibling = [&]() {
+    std::vector<IdTable> chunks;
+    chunks.push_back(makeIdTableFromVector({{1, 2}}));
+    chunks.push_back(makeIdTableFromVector({{3, 4}}));
+    return std::make_shared<ValuesForTesting>(
+        testQec, std::move(chunks),
+        std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}},
+        false, std::vector<ColumnIndex>{0, 1});
+  };
+
+  // Requested fully materialized: the chunks are concatenated.
+  auto sibling = makeSibling();
+  Service::precomputeSiblingResult(sibling, service, true, true);
+  ASSERT_TRUE(sibling->precomputedResultBecauseSiblingOfService().has_value());
+  ASSERT_FALSE(sibling->precomputedResultBecauseSiblingOfService()
+                   .value()
+                   ->isFullyMaterialized());
+  auto result = sibling->getResult();
+  ASSERT_TRUE(result->isFullyMaterialized());
+  EXPECT_EQ(result->idTableView(), makeIdTableFromVector({{1, 2}, {3, 4}}));
+  EXPECT_THAT(result->sortedBy(), ::testing::ElementsAre(0, 1));
+  EXPECT_FALSE(sibling->precomputedResultBecauseSiblingOfService().has_value());
+  EXPECT_EQ(
+      sibling->runtimeInfo().details_["lazy-result-materialized-for-parent"],
+      true);
+
+  // Requested lazily: the lazy result is passed on as is. The consumed lazy
+  // result above was cached, so clear the cache.
+  testQec->clearCacheUnpinnedOnly();
+  sibling = makeSibling();
+  Service::precomputeSiblingResult(sibling, service, true, true);
+  result = sibling->getResult(false, ComputationMode::LAZY_IF_SUPPORTED);
+  ASSERT_FALSE(result->isFullyMaterialized());
+  EXPECT_FALSE(sibling->runtimeInfo().details_.contains(
+      "lazy-result-materialized-for-parent"));
+  std::vector<IdTable> chunks;
+  for (auto& pair : result->idTables()) {
+    chunks.push_back(pair.idTable_.clone());
+  }
+  EXPECT_THAT(chunks,
+              ::testing::ElementsAre(matchesIdTableFromVector({{1, 2}}),
+                                     matchesIdTableFromVector({{3, 4}})));
+}
+
+// Test that an error during the conversion of a lazy precomputed sibling
+// result (here because of the memory limit) is propagated, and that the
+// incomplete result is neither cached nor kept for later.
+TEST_F(ServiceTest, failedMaterializationOfLazyPrecomputedSiblingResult) {
+  auto cleanup =
+      setRuntimeParameterForTest<&RuntimeParameters::serviceMaxValueRows_>(0);
+  // Each chunk is 1.6 MB, so the concatenation of both exceeds the 2 MB limit.
+  // The chunks are allocated without a limit, so only the conversion fails.
+  auto index = std::make_shared<Index>(ad_utility::testing::makeTestIndex(
+      ad_utility::testing::TestIndexConfig{}));
+  QueryResultCache cache;
+  NamedResultCache namedCache;
+  QueryExecutionContext qec{
+      index,
+      &cache,
+      ad_utility::testing::makeAllocator(ad_utility::MemorySize::megabytes(2)),
+      &namedCache,
+      std::make_shared<MaterializedViewsManager>(),
+      ad_utility::testing::singleThreadExecutor()};
+
+  auto service = std::make_shared<Service>(
+      &qec,
+      parsedQuery::Service{
+          {Variable{"?x"}, Variable{"?y"}},
+          TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
+          "PREFIX doof: <http://doof.org>",
+          "{ }",
+          false},
+      getResultFunctionFactory(
+          "http://localhorst:80/api",
+          "PREFIX doof: <http://doof.org> SELECT ?x ?y { }",
+          genJsonResult({"x", "y"}, {{"a", "b"}}),
+          boost::beast::http::status::ok, "application/sparql-results+json"));
+  std::vector<IdTable> chunks;
+  for (size_t i = 0; i < 2; ++i) {
+    IdTable chunk{2, ad_utility::makeUnlimitedAllocator<Id>()};
+    chunk.resize(100'000);
+    ql::ranges::fill(chunk.getColumn(0), Id::makeFromInt(1));
+    ql::ranges::fill(chunk.getColumn(1), Id::makeFromInt(2));
+    chunks.push_back(std::move(chunk));
+  }
+  auto sibling = std::make_shared<ValuesForTesting>(
+      &qec, std::move(chunks),
+      std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}});
+
+  Service::precomputeSiblingResult(sibling, service, true, true);
+  ASSERT_TRUE(sibling->precomputedResultBecauseSiblingOfService().has_value());
+  EXPECT_THROW(sibling->getResult(),
+               ad_utility::detail::AllocationExceedsLimitException);
+  EXPECT_FALSE(sibling->precomputedResultBecauseSiblingOfService().has_value());
+  EXPECT_EQ(
+      sibling->runtimeInfo().details_["lazy-result-materialized-for-parent"],
+      true);
+  EXPECT_EQ(sibling->getResult(false, ComputationMode::ONLY_IF_CACHED),
+            nullptr);
 }
 
 // Test that `makeTreeWithStrippedColumns` returns a `Service` with only the

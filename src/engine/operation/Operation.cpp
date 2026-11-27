@@ -291,12 +291,37 @@ CacheValue Operation::runComputationAndPrepareForCache(
 }
 
 // ________________________________________________________________________
+std::shared_ptr<const Result> Operation::materializeLazyResult(
+    const Result& lazyResult) {
+  // Set before the conversion, so it is also visible if the conversion fails.
+  runtimeInfo().addDetail("lazy-result-materialized-for-parent", true);
+  IdTable idTable{getResultWidth(), allocator()};
+  LocalVocab localVocab{allocator()};
+  for (auto& pair : lazyResult.idTables()) {
+    checkCancellation();
+    idTable.insertAtEnd(pair.idTable_);
+    localVocab.mergeWith(pair.localVocab_);
+  }
+  return makeShared<const Result>(std::move(idTable), lazyResult.sortedBy(),
+                                  std::move(localVocab));
+}
+
+// ________________________________________________________________________
 std::shared_ptr<const Result> Operation::getResult(
     bool isRoot, ComputationMode computationMode) {
   // Use the precomputed Result if it exists.
   if (precomputedResultBecauseSiblingOfService_.has_value()) {
     auto result = std::move(precomputedResultBecauseSiblingOfService_).value();
     precomputedResultBecauseSiblingOfService_.reset();
+    // The precomputed result may be lazy (see
+    // `Service::precomputeSiblingResult`) even if the caller requested a fully
+    // materialized result. Converting it here is not ideal and only required
+    // for correctness: it copies the whole result once more, which is slower
+    // than computing it fully materialized in the first place.
+    if (computationMode == ComputationMode::FULLY_MATERIALIZED &&
+        !result->isFullyMaterialized()) {
+      return materializeLazyResult(*result);
+    }
     return result;
   }
 
@@ -726,7 +751,7 @@ const VariableToColumnMap& Operation::getExternallyVisibleVariableColumns()
 void Operation::setSelectedVariablesForSubquery(
     const std::vector<Variable>& selectedVariables) {
   const auto& internalVariables = getInternallyVisibleVariableColumns();
-  externallyVisibleVariableToColumnMap_.emplace();
+  externallyVisibleVariableToColumnMap_.emplace(allocator());
   auto& externalVariables = externallyVisibleVariableToColumnMap_.value();
   for (const Variable& variable : selectedVariables) {
     if (internalVariables.contains(variable)) {

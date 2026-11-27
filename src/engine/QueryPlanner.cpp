@@ -2519,8 +2519,14 @@ SubtreePlanVec QueryPlanner::createJoinsWithSubstitutes(
   // Join `plan` to `substitute`.
   //
   // NOTE: This also joins on a variable that is possibly undefined in `plan`.
-  // If the filter is the only connection between `a` and `b` in the query
-  // graph, there is no other way to merge them.
+  // This is needed when the filter is the only connection between `a` and `b`
+  // (for example, when `b` is an `OPTIONAL` that shares no variable with the
+  // rest). The `SpatialJoin` drops the rows where the variable is undefined.
+  //
+  // TODO<ullingerc> This is wrong when a pattern outside of `a` and `b` binds
+  // the variable for these rows (for example, when `b` is a `UNION` with the
+  // variable in only one branch, followed by a triple with the variable). It
+  // was already wrong before the substitutes were applied here.
   auto join = [this](const SubtreePlan& substitute, const SubtreePlan& plan) {
     auto newPlans = createJoinCandidates(substitute, plan,
                                          getJoinColumns(substitute, plan));
