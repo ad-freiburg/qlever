@@ -793,7 +793,7 @@ TransitivePathBase::makeTreeWithStrippedColumns(
                          maxDist_, useBinSearch, activeGraphs_, graphVariable_);
 
   // The stripped sideTree has to provide the `requestedVariables`, the join
-  // variables and the graph variables.
+  // variables and the graph variable.
   auto isRealBinding = [this](const TransitivePathSide& s) {
     return s.isVariable() && s.isBoundVariable() &&
            !boundVariableIsForEmptyPath_;
@@ -809,15 +809,9 @@ TransitivePathBase::makeTreeWithStrippedColumns(
     };
     if (lb) varsRequiredFromSubtree.add(joinVar(lhs_));
     if (rb) varsRequiredFromSubtree.add(joinVar(rhs_));
-    if (graphVariable_) {
-      varsRequiredFromSubtree.add(*graphVariable_);
-      varsRequiredFromSubtree.add(internalGraphHelper_);
-    }
-    // Strip the sideTree. For `minDist_ == 0`, `bindSides` has wrapped the
-    // original sideTree into an `EmptyPath` (see `matchWithKnowledgeGraph`).
-    // In this case the original sideTree is stripped instead, because
-    // `bindSides` below wraps it again, and otherwise the result would contain
-    // two `EmptyPath`s.
+    if (graphVariable_) varsRequiredFromSubtree.add(*graphVariable_);
+    // Strip the sideTree. For `minDist_ == 0`, strip the original sideTree
+    // (instead of the `EmptyPath` wrapper).
     const auto& startSide = lb ? lhs_ : rhs_;
     std::shared_ptr<QueryExecutionTree> sideTree = startSide.treeAndCol_->first;
     if (minDist_ == 0) {
