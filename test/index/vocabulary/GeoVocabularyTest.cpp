@@ -344,9 +344,8 @@ TEST(GeoVocabularyTest, ReadVersion5) {
   std::string contents5(reinterpret_cast<const char*>(&version5),
                         sizeof(version5));
   for (size_t i = 0; i < literals.size(); ++i) {
-    std::string record(
-        contents.data() + sizeof(uint64_t) + i * sizeof(GeometryInfo),
-        recordSize);
+    std::string record(contents.data() + sizeof(uint64_t) + i * recordSize,
+                       recordSize);
     if (std::any_of(record.begin(), record.end(),
                     [](char c) { return c != 0; })) {
       std::fill(record.begin() + 28, record.begin() + 32, '\xab');
