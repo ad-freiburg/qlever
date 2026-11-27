@@ -127,7 +127,14 @@ EMSCRIPTEN_BINDINGS(qlever) {
       .constructor<>()
       .function("validate", &qlever::IndexBuilderConfig::validate)
       .property("inputFiles", &qlever::IndexBuilderConfig::inputFiles_)
-      .property("settingsFile", &qlever::IndexBuilderConfig::settingsFile_)
+      .property("settingsJson",
+                optional_override([](const qlever::IndexBuilderConfig& self) {
+                  return self.settingsJson_.dump();
+                }),
+                optional_override([](qlever::IndexBuilderConfig& self,
+                                     const std::string& json) {
+                  self.settingsJson_ = nlohmann::json::parse(json);
+                }))
       .property("keepTemporaryFiles",
                 &qlever::IndexBuilderConfig::keepTemporaryFiles_)
       .property("prefixesForIdEncodedIris",

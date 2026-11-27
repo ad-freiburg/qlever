@@ -425,7 +425,7 @@ void IndexImpl::updateInputFileSpecificationsAndLog(
 // _____________________________________________________________________________
 void IndexImpl::createFromFiles(
     std::vector<Index::InputFileSpecification> files, size_t numThreads) {
-  // The settings file (read by `prepareIndexBuild`) may set
+  // The settings JSON (read by `prepareIndexBuild`) may set
   // `useParallelParser_`, so it must be read before the file specifications
   // are updated.
   prepareIndexBuild();
@@ -484,7 +484,7 @@ void IndexImpl::prepareIndexBuild() {
 
   vocab_.resetToType(vocabularyTypeForIndexBuilding_);
 
-  readIndexBuilderSettingsFromFile();
+  readIndexBuilderSettings();
 }
 
 // _____________________________________________________________________________
@@ -1421,8 +1421,8 @@ bool IndexImpl::addHasWordTriples() const { return addHasWordTriples_; }
 bool& IndexImpl::doNotLoadPermutations() { return doNotLoadPermutations_; }
 
 // ____________________________________________________________________________
-void IndexImpl::setSettingsFile(const std::string& filename) {
-  settingsFileName_ = filename;
+void IndexImpl::setSettingsJson(nlohmann::json settingsJson) {
+  settingsJson_ = std::move(settingsJson);
 }
 
 // ____________________________________________________________________________
@@ -1896,13 +1896,10 @@ ProcessedTriple IndexImpl::processTriple(TurtleTriple&& triple) const {
 }
 
 // ___________________________________________________________________________
-void IndexImpl::readIndexBuilderSettingsFromFile() {
-  nlohmann::json j;  // if we have no settings, we still have to initialize some
-                     // default values
-  if (!settingsFileName_.empty()) {
-    auto f = ad_utility::makeIfstream(settingsFileName_);
-    f >> j;
-  }
+void IndexImpl::readIndexBuilderSettings() {
+  // A copy, because `operator[]` below is not allowed on a `const` JSON for a
+  // missing key. If there are no settings, then default values are used.
+  nlohmann::json j = settingsJson_;
 
   if (j.find("prefixes-external") != j.end()) {
     vocab_.initializeExternalizePrefixes(j["prefixes-external"]);
@@ -1930,7 +1927,7 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
       country = std::string{j["locale"]["country"]};
       ignorePunctuation = bool{j["locale"]["ignore-punctuation"]};
     } else {
-      AD_LOG_INFO << "Locale was not specified in settings file, default is "
+      AD_LOG_INFO << "Locale was not specified in the settings, default is "
                      "en_US"
                   << std::endl;
     }

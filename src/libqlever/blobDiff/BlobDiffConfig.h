@@ -18,13 +18,14 @@
 
 #include "index/vocabulary/VocabularyType.h"
 #include "libqlever/blobDiff/BlobDiff.h"
+#include "util/json.h"
 
 namespace qlever {
 
-// The configuration of the weekly blob diff workflow (the producer of the
-// diffs is added in a follow-up PR).
-// It is read from a YAML file of the following form (all keys of `index`,
-// `blob`, and `geoCompaction` are optional, unknown keys are rejected):
+// The configuration of the weekly blob diff workflow. It is read from a YAML
+// file of the following form (all keys of `index`, `blob`, and `geoCompaction`
+// are optional; unknown keys, duplicate keys, and more than one YAML document
+// are rejected):
 //
 // index:
 //   vocabularyType: in-memory-compressed
@@ -77,7 +78,8 @@ struct BlobDiffConfig {
   // directly into their `Id` (`--encode-as-id`).
   std::vector<std::string> prefixesForIdEncodedIris_;
   // The JSON file with further settings of the index build
-  // (`--settings-file`), no file if empty.
+  // (`--settings-file`), no file if empty. Its content is passed on as
+  // `IndexBuilderConfig::settingsJson_` (see `readSettingsJson`).
   std::string settingsFile_;
 
   // The vocabulary entries that are left out of the blob, see
@@ -92,12 +94,14 @@ struct BlobDiffConfig {
   size_t maxGeoSegments_ = 8;
   double maxDeadShapeRatio_ = 0.3;
 
+  // The queries whose results are pinned, in the order of the config.
   std::vector<NamedQuery> namedQueries_;
 
   // Parse and validate a config from its YAML representation. Throw with a
-  // descriptive message if the YAML is malformed, contains unknown keys, has
-  // duplicate query names, a geo variable that does not start with `?`, a
-  // simplification that is not positive, or an on-disk vocabulary type.
+  // descriptive message if the YAML is malformed, has more than one document,
+  // contains unknown or duplicate keys, has duplicate query names, a geo
+  // variable that is not a valid variable starting with `?`, a value that is
+  // out of range, or an on-disk vocabulary type.
   static BlobDiffConfig fromYaml(std::string_view yaml);
 
   // Read the file `path` and call `fromYaml` on its content.
@@ -106,11 +110,22 @@ struct BlobDiffConfig {
   // Return the config as YAML (the inverse of `fromYaml`).
   std::string toYaml() const;
 
+  // Return the content of the `settingsFile_` as JSON, or an empty JSON object
+  // if there is no settings file. Throw if the file cannot be read or is not
+  // valid JSON.
+  nlohmann::json readSettingsJson() const;
+
   // Return a hex string that identifies all settings that influence the
   // content of the index and of the decompressed blob (everything except the
   // geo compaction thresholds, the number of threads, and the compression
-  // level of the diffs). It is stored in the state of the producer of the
-  // diffs to detect that the config changed between two weeks.
+  // level of the diffs). Throw like `readSettingsJson`.
+  //
+  // NOTE 1: The fingerprint covers the content of the `settingsFile_` (see
+  // `readSettingsJson`), not its path. The content is hashed in its parsed
+  // form, so changes of its formatting do not change the fingerprint.
+  //
+  // NOTE 2: The producer of the diffs stores the fingerprint in its state, to
+  // detect that the config changed between two weeks.
   std::string fingerprint() const;
 };
 

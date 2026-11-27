@@ -212,7 +212,9 @@ class Index {
 
   void setOnDiskBase(const std::string& onDiskBase);
 
-  void setSettingsFile(const std::string& filename);
+  // Set the additional settings of the index build, see
+  // `IndexBuilderConfig::settingsJson_` in `Qlever.h`.
+  void setSettingsJson(nlohmann::json settingsJson);
 
   void setNumTriplesPerBatch(uint64_t numTriplesPerBatch);
 

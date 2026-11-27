@@ -1161,11 +1161,10 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
   }
 }
 
-// Test that `parallel-parsing` in the settings file is respected when building
+// Test that `parallel-parsing` in the settings JSON is respected when building
 // an index from a single input file that does not specify parallel parsing.
-TEST(IndexTest, parallelParsingFromSettingsFile) {
+TEST(IndexTest, parallelParsingFromSettingsJson) {
   std::string basename = gtestCurrentTestName();
-  std::string settingsFilename = basename + ".settings.json";
   absl::Cleanup cleanup = [&basename] { deleteTestIndexFiles(basename); };
   // An input file with a multiline literal, which the parallel parser does not
   // support.
@@ -1173,13 +1172,12 @@ TEST(IndexTest, parallelParsingFromSettingsFile) {
       << "<s> <p> \"\"\"multiline\nliteral\"\"\" .\n";
 
   // Build the index with `parallel-parsing` set to the given value in the
-  // settings file.
+  // settings JSON.
   auto buildIndex = [&](bool parallelParsing) {
-    ad_utility::makeOfstream(settingsFilename)
-        << nlohmann::json{{"parallel-parsing", parallelParsing}};
     Index index = makeIndexWithTestSettings();
     index.setOnDiskBase(basename);
-    index.setSettingsFile(settingsFilename);
+    index.setSettingsJson(
+        nlohmann::json{{"parallel-parsing", parallelParsing}});
     index.createFromFiles(
         {qlever::InputFileSpecification{
             basename + ".ttl", qlever::Filetype::Turtle, std::nullopt}},

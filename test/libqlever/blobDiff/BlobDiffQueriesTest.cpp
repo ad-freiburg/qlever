@@ -39,7 +39,9 @@ auto buildIndexWithCleanup() {
 }
 }  // namespace
 
-// _____________________________________________________________________________
+// Test that `prologueLength` covers the `PREFIX` and `BASE` declarations with
+// the whitespace and comments that follow them, and rejects a malformed
+// prologue.
 TEST(BlobDiffQueries, prologueLength) {
   EXPECT_EQ(prologueLength(""), 0u);
   EXPECT_EQ(prologueLength("SELECT * { ?s ?p ?o }"), 0u);
@@ -68,7 +70,9 @@ TEST(BlobDiffQueries, prologueLength) {
       prologueLength("PREFIX ex: <http://ex.org/> PREFIX broken: <http"));
 }
 
-// _____________________________________________________________________________
+// Test that `withCanonicalSortOrder` wraps a query in a query that sorts by all
+// its variables (the keys of an explicit `INTERNAL SORT BY` first), and rejects
+// the queries that cannot be wrapped like this.
 TEST(BlobDiffQueries, withCanonicalSortOrder) {
   auto [config, cleanup] = buildIndexWithCleanup();
   Qlever qlever{EngineConfig{config}};
@@ -80,9 +84,9 @@ TEST(BlobDiffQueries, withCanonicalSortOrder) {
                              "PREFIX ex: <http://ex/> SELECT ?y ?x WHERE { ?x "
                              "ex:p ?y }"),
       "PREFIX ex: <http://ex/>  SELECT * WHERE { { SELECT ?y ?x WHERE "
-      "{ ?x ex:p ?y } } } INTERNAL SORT BY ?x ?y");
+      "{ ?x ex:p ?y }\n} } INTERNAL SORT BY ?x ?y");
   EXPECT_EQ(withCanonicalSortOrder(qlever, "SELECT * { ?s <p> ?o }"),
-            " SELECT * WHERE { { SELECT * { ?s <p> ?o } } } INTERNAL SORT BY "
+            " SELECT * WHERE { { SELECT * { ?s <p> ?o }\n} } INTERNAL SORT BY "
             "?o ?s");
 
   // The keys of an explicit `INTERNAL SORT BY` come first (deduplicated), the
@@ -91,17 +95,34 @@ TEST(BlobDiffQueries, withCanonicalSortOrder) {
                                    "SELECT ?a ?b ?c { ?a <p> ?b . ?a <p> ?c } "
                                    "INTERNAL SORT BY ?c ?b ?c"),
             " SELECT * WHERE { { SELECT ?a ?b ?c { ?a <p> ?b . ?a <p> ?c } "
-            "INTERNAL SORT BY ?c ?b ?c } } INTERNAL SORT BY ?c ?b ?a");
+            "INTERNAL SORT BY ?c ?b ?c\n} } INTERNAL SORT BY ?c ?b ?a");
   // A semantic `ORDER BY` is not kept.
   EXPECT_EQ(withCanonicalSortOrder(
                 qlever, "SELECT ?x ?y { ?x <p> ?y } ORDER BY DESC(?y)"),
-            " SELECT * WHERE { { SELECT ?x ?y { ?x <p> ?y } ORDER BY DESC(?y) "
-            "} } INTERNAL SORT BY ?x ?y");
+            " SELECT * WHERE { { SELECT ?x ?y { ?x <p> ?y } ORDER BY DESC(?y)"
+            "\n} } INTERNAL SORT BY ?x ?y");
   // The keys of an `INTERNAL SORT BY` have to be selected.
   AD_EXPECT_THROW_WITH_MESSAGE(
       withCanonicalSortOrder(qlever,
                              "SELECT ?x { ?x <p> ?y } INTERNAL SORT BY ?y"),
       HasSubstr("The variable ?y of the `INTERNAL SORT BY` clause"));
+
+  // A comment at the end of the query does not comment out the closing braces
+  // of the wrapping query.
+  auto withComment =
+      withCanonicalSortOrder(qlever, "SELECT ?s { ?s <p> ?o } #");
+  EXPECT_EQ(withComment,
+            " SELECT * WHERE { { SELECT ?s { ?s <p> ?o } #\n} } INTERNAL SORT "
+            "BY ?s");
+  EXPECT_NO_THROW(qlever.parseQuery(withComment));
+
+  // A query with a dataset clause cannot be wrapped.
+  for (std::string_view clause : {"FROM <g>", "FROM NAMED <g>"}) {
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        withCanonicalSortOrder(
+            qlever, absl::StrCat("SELECT ?s ", clause, " { ?s <p> ?o }")),
+        HasSubstr("cannot have a `FROM` or `FROM NAMED` clause"));
+  }
 
   // A query without variables is returned unchanged.
   std::string noVariables = "SELECT * { <a> <p> <b> }";
@@ -113,7 +134,9 @@ TEST(BlobDiffQueries, withCanonicalSortOrder) {
       HasSubstr("Only SELECT queries can be pinned"));
 }
 
-// _____________________________________________________________________________
+// Test that `pinAllQueries` replaces all pinned results by those of the config,
+// each sorted by all its variables (respecting an explicit `INTERNAL SORT BY`),
+// and that an invalid config leaves the pinned results unchanged.
 TEST(BlobDiffQueries, pinAllQueries) {
   auto [indexConfig, cleanup] = buildIndexWithCleanup();
   Qlever qlever{EngineConfig{indexConfig}};
@@ -155,4 +178,20 @@ TEST(BlobDiffQueries, pinAllQueries) {
        std::nullopt, std::nullopt});
   pinAllQueries(qlever, explicitlySorted);
   EXPECT_EQ(readPinned("sorted"), "?s\t?o\n<a>\t<d>\n<c>\t<b>\n");
+
+  // A `geoIndexVar` that is not selected is rejected before any pinned result
+  // is dropped or any query is run, and so is a query that cannot be wrapped.
+  auto invalid = configWithQueries({"valid"});
+  invalid.namedQueries_.push_back(
+      {"geo", "SELECT ?s { ?s <p> ?o }", std::string{"?o"}, std::nullopt});
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      pinAllQueries(qlever, invalid),
+      HasSubstr("The `geoIndexVar` ?o of the named query `geo` is not one of "
+                "its selected variables"));
+  invalid.namedQueries_.back() = {"ask", "ASK { ?s <p> ?o }", std::nullopt,
+                                  std::nullopt};
+  AD_EXPECT_THROW_WITH_MESSAGE(pinAllQueries(qlever, invalid),
+                               HasSubstr("Only SELECT queries can be pinned"));
+  EXPECT_TRUE(qlever.namedResultCache().contains("sorted"));
+  EXPECT_FALSE(qlever.namedResultCache().contains("valid"));
 }

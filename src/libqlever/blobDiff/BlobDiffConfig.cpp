@@ -13,6 +13,13 @@
 #include <absl/strings/str_join.h>
 #include <yaml-cpp/yaml.h>
 
+#include <cmath>
+#include <stdexcept>
+#include <string>
+#include <vector>
+
+#include "backports/StartsWithAndEndsWith.h"
+#include "rdfTypes/Variable.h"
 #include "util/Algorithm.h"
 #include "util/CryptographicHashUtils.h"
 #include "util/File.h"
@@ -33,13 +40,19 @@ bool hasKey(const YAML::Node& node, const std::string& key) {
   return value.IsDefined() && !value.IsNull();
 }
 
-// Throw if `node` is not a map or has a key that is not in `allowedKeys`.
-// `context` describes where `node` is located in the config.
+// Throw if `node` is not a map, has a key that is not in `allowedKeys`, or has
+// a key more than once. `context` describes where `node` is located in the
+// config.
+//
+// NOTE: YAML forbids duplicate keys, but `yaml-cpp` accepts them, and
+// `node[key]` then silently returns the first value. The iteration below,
+// however, visits all entries, including the duplicates.
 void checkKeys(const YAML::Node& node, const std::string& context,
                const std::vector<std::string>& allowedKeys) {
   if (!node.IsMap()) {
     configError(absl::StrCat("`", context, "` has to be a YAML map."));
   }
+  ad_utility::HashSet<std::string> seenKeys;
   for (const auto& entry : node) {
     if (!entry.first.IsScalar()) {
       configError(
@@ -50,6 +63,10 @@ void checkKeys(const YAML::Node& node, const std::string& context,
       configError(absl::StrCat(
           "unknown key `", key, "` in `", context,
           "`. The allowed keys are: ", absl::StrJoin(allowedKeys, ", "), "."));
+    }
+    if (!seenKeys.insert(key).second) {
+      configError(
+          absl::StrCat("the key `", key, "` occurs twice in `", context, "`."));
     }
   }
 }
@@ -130,8 +147,12 @@ BlobDiffConfig parseConfig(const YAML::Node& yaml) {
     checkKeys(geo, "geoCompaction", {"maxSegments", "maxDeadShapeRatio"});
     config.maxGeoSegments_ = getOr<size_t>(geo, "maxSegments", "geoCompaction",
                                            config.maxGeoSegments_);
+    if (config.maxGeoSegments_ == 0) {
+      configError("`geoCompaction.maxSegments` has to be positive.");
+    }
     config.maxDeadShapeRatio_ = getOr<double>(
         geo, "maxDeadShapeRatio", "geoCompaction", config.maxDeadShapeRatio_);
+    // NOTE: The negated form also rejects NaN.
     if (!(config.maxDeadShapeRatio_ >= 0.0 &&
           config.maxDeadShapeRatio_ <= 1.0)) {
       configError("`geoCompaction.maxDeadShapeRatio` has to be in [0, 1].");
@@ -165,11 +186,11 @@ BlobDiffConfig parseConfig(const YAML::Node& yaml) {
     }
     if (hasKey(entry, "geoIndexVar")) {
       auto var = getOr<std::string>(entry, "geoIndexVar", "namedQueries[]", "");
-      if (var.size() < 2 || var[0] != '?') {
+      if (!ql::starts_with(var, "?") || !Variable::isValidVariableName(var)) {
         configError(absl::StrCat("`geoIndexVar` of the named query `",
                                  query.name_,
-                                 "` has to be a variable that starts with `?`, "
-                                 "but is `",
+                                 "` has to be a valid variable that starts "
+                                 "with `?`, but is `",
                                  var, "`."));
       }
       query.geoIndexVar_ = std::move(var);
@@ -177,9 +198,11 @@ BlobDiffConfig parseConfig(const YAML::Node& yaml) {
     if (hasKey(entry, "simplificationMeters")) {
       double meters =
           getOr<double>(entry, "simplificationMeters", "namedQueries[]", 0.0);
-      if (!(meters > 0.0)) {
+      // NOTE: The negated form also rejects NaN.
+      if (!(meters > 0.0) || !std::isfinite(meters)) {
         configError(absl::StrCat("`simplificationMeters` of the named query `",
-                                 query.name_, "` has to be positive."));
+                                 query.name_,
+                                 "` has to be positive and finite."));
       }
       if (!query.geoIndexVar_.has_value()) {
         configError(absl::StrCat("the named query `", query.name_,
@@ -227,6 +250,25 @@ YAML::Node toNode(const BlobDiffConfig& config) {
   return yaml;
 }
 
+// Parse the YAML `input` (a string or a stream), which has to consist of
+// exactly one document. `source` names the `input` in error messages.
+template <typename Input>
+YAML::Node loadSingleDocument(Input& input, std::string_view source) {
+  std::vector<YAML::Node> documents;
+  try {
+    documents = YAML::LoadAll(input);
+  } catch (const YAML::Exception& e) {
+    configError(absl::StrCat(source, " is not valid YAML (", e.what(), ")."));
+  }
+  if (documents.size() != 1) {
+    configError(absl::StrCat(source,
+                             " has to consist of exactly one YAML document, "
+                             "but consists of ",
+                             documents.size(), "."));
+  }
+  return documents.front();
+}
+
 // Return `node` as a YAML string.
 std::string emit(const YAML::Node& node) {
   YAML::Emitter emitter;
@@ -237,39 +279,45 @@ std::string emit(const YAML::Node& node) {
 
 // _____________________________________________________________________________
 BlobDiffConfig BlobDiffConfig::fromYaml(std::string_view yaml) {
-  YAML::Node root;
-  try {
-    root = YAML::Load(std::string{yaml});
-  } catch (const YAML::Exception& e) {
-    configError(absl::StrCat("the config is not valid YAML (", e.what(), ")."));
-  }
-  return parseConfig(root);
+  std::string input{yaml};
+  return parseConfig(loadSingleDocument(input, "the config"));
 }
 
 // _____________________________________________________________________________
 BlobDiffConfig BlobDiffConfig::fromFile(const std::string& path) {
   auto stream = ad_utility::makeIfstream(path);
-  YAML::Node root;
-  try {
-    root = YAML::Load(stream);
-  } catch (const YAML::Exception& e) {
-    configError(absl::StrCat("the file ", path, " is not valid YAML (",
-                             e.what(), ")."));
-  }
-  return parseConfig(root);
+  return parseConfig(
+      loadSingleDocument(stream, absl::StrCat("the file `", path, "`")));
 }
 
 // _____________________________________________________________________________
 std::string BlobDiffConfig::toYaml() const { return emit(toNode(*this)); }
 
 // _____________________________________________________________________________
+nlohmann::json BlobDiffConfig::readSettingsJson() const {
+  if (settingsFile_.empty()) {
+    return nlohmann::json::object();
+  }
+  try {
+    return nlohmann::json::parse(ad_utility::makeIfstream(settingsFile_));
+  } catch (const nlohmann::json::exception& e) {
+    configError(absl::StrCat("the settings file `", settingsFile_,
+                             "` is not valid JSON (", e.what(), ")."));
+  }
+}
+
+// _____________________________________________________________________________
 std::string BlobDiffConfig::fingerprint() const {
   auto yaml = toNode(*this);
+  // Remove the settings that influence neither the content of the index nor
+  // the decompressed blob: the geo compaction thresholds, the number of
+  // threads, and the compression level of the diffs.
   yaml.remove("geoCompaction");
-  // The number of threads does not influence the content of the index, and
-  // the compression level of the diffs does not influence the blobs.
   yaml["index"].remove("numThreads");
   yaml["blob"].remove("diffCompressionLevel");
+  // Replace the path of the settings file by its content.
+  yaml["index"].remove("settingsFile");
+  yaml["index"]["settingsJson"] = readSettingsJson().dump();
   auto digest = ad_utility::HashSha256{}(emit(yaml));
   return absl::StrJoin(digest, "", ad_utility::hexFormatter);
 }

@@ -277,7 +277,7 @@ void Qlever::buildIndex(IndexBuilderConfig config) {
   index.usePatterns() = !config.noPatterns_;
   index.setOnDiskBase(config.baseName_);
   index.setKeepTempFiles(config.keepTemporaryFiles_);
-  index.setSettingsFile(config.settingsFile_);
+  index.setSettingsJson(config.settingsJson_);
   index.loadAllPermutations() = !config.onlyPsoAndPos_;
   index.addHasWordTriples() = config.addHasWordTriples_;
   index.getImpl().setHasWordNormalization(config.hasWordNormalization_);
