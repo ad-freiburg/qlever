@@ -9,11 +9,18 @@
 #include "backports/span.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/operation/Operation.h"
+#include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "util/ContainersWithAllocator.h"
 
 // Forward declaration
 class IndexScan;
+class OptionalJoinConditionFilter;
 class OptionalJoin : public Operation {
+ public:
+  // The FILTERs of the OPTIONAL group that are the condition of the left join,
+  // see `isPartOfOptionalJoinCondition`.
+  using JoinCondition = std::vector<sparqlExpression::SparqlExpressionPimpl>;
+
  private:
   std::shared_ptr<QueryExecutionTree> _left;
   std::shared_ptr<QueryExecutionTree> _right;
@@ -38,11 +45,27 @@ class OptionalJoin : public Operation {
   // Specify whether the join columns should be part of the result.
   bool keepJoinColumns_ = true;
 
+  // A pair of a left and a right row is only part of the result if all
+  // expressions are true for the joined row. A left row without a partner for
+  // which this holds is part of the result once, with UNDEF on the right.
+  JoinCondition condition_;
+
+  // The buffer size of the `AddCombinedRowToIdTable`, can be changed for
+  // testing.
+  size_t rowAdderBufferSize_ = 100'000;
+
  public:
   OptionalJoin(QueryExecutionContext* qec,
                std::shared_ptr<QueryExecutionTree> t1,
                std::shared_ptr<QueryExecutionTree> t2,
-               bool keepJoinColumns = true);
+               bool keepJoinColumns = true, JoinCondition condition = {});
+
+  const JoinCondition& condition() const { return condition_; }
+
+  void setRowAdderBufferSizeForTesting(size_t bufferSize) {
+    AD_CONTRACT_CHECK(bufferSize > 0);
+    rowAdderBufferSize_ = bufferSize;
+  }
 
  private:
   qlm::string getCacheKeyImpl() const override;
@@ -85,7 +108,9 @@ class OptionalJoin : public Operation {
       const Variable& variable) const override;
 
   // Joins two result tables on any number of columns, inserting the special
-  // value `Id::makeUndefined()` for any entries marked as optional.
+  // value `Id::makeUndefined()` for any entries marked as optional. Without
+  // join columns, the `condition_` must not be empty, see
+  // `optionalJoinWithoutJoinColumns`.
   void optionalJoin(
       const IdTableView<0>& left, const IdTableView<0>& right,
       ql::span<const std::array<ColumnIndex, 2>> joinColumns,
@@ -111,7 +136,23 @@ class OptionalJoin : public Operation {
                                    bool requestLaziness);
 
  private:
-  [[nodiscard]] bool isDeterministicImpl() const override { return true; }
+  [[nodiscard]] bool isDeterministicImpl() const override {
+    return ql::ranges::all_of(condition_, [](const auto& expression) {
+      return expression.isDeterministic();
+    });
+  }
+
+  // The part of `optionalJoin` without join columns: every pair of a row of
+  // `left` and a row of `right` is written, and the `condition_` decides which
+  // of these pairs stay in the `result`. The `result` is not sorted.
+  void optionalJoinWithoutJoinColumns(const IdTableView<0>& left,
+                                      const IdTableView<0>& right,
+                                      IdTable* result);
+
+  // Return the filter that applies the `condition_` to the rows that an
+  // `AddCombinedRowToIdTable` writes for this join, or `nullptr` if the
+  // `condition_` is empty.
+  std::unique_ptr<OptionalJoinConditionFilter> makeConditionFilter() const;
 
   std::unique_ptr<Operation> cloneImpl() const override;
 

@@ -818,15 +818,6 @@ class QueryPlanner {
         SubtreePlanVec& candidates, const Variables& variables,
         bool isGraphVariableInScopeOnBothSidesOfMinus);
 
-    // Helper function for `graphPatternOperationVisitor`. The `OptionalJoin`
-    // can't evaluate the `optionalJoinCondition_` of the `candidates` (the
-    // plans of the group of an OPTIONAL) yet. Therefore apply its FILTERs to
-    // the group, like it was done before the condition was determined, and add
-    // a warning for each of them.
-    void applyOptionalJoinConditionToGroup(
-        SubtreePlanVec& candidates,
-        const ad_utility::HashSet<Variable>& variablesOfLeftSideOfOptional);
-
     // This function is called for groups, optional, or minus clauses.
     // The `candidates` are the result of planning the pattern inside the
     // braces. This leads to all of those clauses currently being an

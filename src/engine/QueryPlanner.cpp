@@ -374,9 +374,10 @@ void QueryPlanner::applyRemainingFilters(
     //
     // NOTE: A FILTER of the condition can already be part of a plan if
     // `applyFiltersIfPossible` has replaced it by a `SpatialJoin`. Such a plan
-    // gets neither the FILTER as part of its condition nor a warning, and it
-    // evaluates the FILTER on the content of the group, like before the
-    // condition was determined.
+    // doesn't get the FILTER as part of its condition, and it evaluates the
+    // FILTER on the content of the group, like before the condition was
+    // determined, without a warning. The other plans evaluate it on the joined
+    // rows, so the result depends on the chosen plan.
     //
     // This only happens if the variable of the left side occurs in the group,
     // but might be UNDEF there (for example, from `VALUES ?y { <a> UNDEF }`).
@@ -385,9 +386,9 @@ void QueryPlanner::applyRemainingFilters(
     // other one, and plans with an incomplete `SpatialJoin` never reach the
     // final row of the dynamic programming.
     //
-    // TODO<ninofrey> Such a plan should at least get the warning, and once the
-    // `OptionalJoin` evaluates the condition, the FILTER must not be applied
-    // in the group as well.
+    // TODO<ninofrey> Don't replace a FILTER that uses a variable of the left
+    // side which might be UNDEF in the group by a `SpatialJoin`, so that all
+    // plans evaluate it on the joined rows.
     for (auto& plan : plans) {
       for (const auto& [i, filterAndSubst] :
            ::ranges::views::enumerate(filters)) {
@@ -2422,6 +2423,16 @@ SubtreePlanVec QueryPlanner::createJoinCandidates(
   checkCancellation();
   SubtreePlanVec candidates{allocator()};
 
+  // An OPTIONAL that shares no variable with `a` is only joined here if it
+  // has a condition, see `handleUnconnectedMinusOrOptional`. Then every row of
+  // `a` is compatible with every row of `b`, and the condition decides which
+  // of these pairs are part of the result.
+  if (jcs.empty() && b.type == SubtreePlan::OPTIONAL &&
+      !b.optionalJoinCondition_.empty()) {
+    return singlePlanVec(makeSubtreePlan<OptionalJoin>(
+        _qec, a._qet, b._qet, true, b.optionalJoinCondition_));
+  }
+
   if (jcs.empty()) {
     // The candidates are not connected
     return candidates;
@@ -2461,8 +2472,10 @@ SubtreePlanVec QueryPlanner::createJoinCandidates(
 
   // OPTIONAL JOINS are not symmetric!
   if (b.type == SubtreePlan::OPTIONAL) {
-    // Join the two optional columns using an optional join
-    return singlePlanVec(makeSubtreePlan<OptionalJoin>(_qec, a._qet, b._qet));
+    // Join the two optional columns using an optional join, which evaluates
+    // the condition of the OPTIONAL (see `applyRemainingFilters`).
+    return singlePlanVec(makeSubtreePlan<OptionalJoin>(
+        _qec, a._qet, b._qet, true, b.optionalJoinCondition_));
   }
 
   if (auto opt = createJoinWithPathSearch(a, b, jcs)) {
@@ -3194,33 +3207,6 @@ QueryPlanner::GraphPatternPlanner::getVariablesOfPreviousPatterns() const {
 }
 
 // _____________________________________________________________________________
-void QueryPlanner::GraphPatternPlanner::applyOptionalJoinConditionToGroup(
-    SubtreePlanVec& candidates,
-    const ad_utility::HashSet<Variable>& variablesOfLeftSideOfOptional) {
-  // All plans have the same condition (up to the case in the NOTE in
-  // `applyRemainingFilters`), so the warnings are created for the first one
-  // only.
-  AD_CORRECTNESS_CHECK(!candidates.empty());
-  const auto& firstPlan = candidates.front();
-  for (const auto& expression : firstPlan.optionalJoinCondition_) {
-    planner_.warnings_.push_back(
-        qlever::queryPlanner::getOptionalJoinConditionWarning(
-            expression, variablesOfLeftSideOfOptional,
-            makeIsAlwaysDefined(firstPlan)));
-  }
-  for (auto& plan : candidates) {
-    for (const auto& expression :
-         std::exchange(plan.optionalJoinCondition_, {})) {
-      SubtreePlan newPlan =
-          makeSubtreePlan<Filter>(qec_, plan._qet, expression);
-      mergeSubtreePlanIds(newPlan, newPlan, plan);
-      newPlan.type = plan.type;
-      plan = std::move(newPlan);
-    }
-  }
-}
-
-// _____________________________________________________________________________
 template <typename Variables>
 bool QueryPlanner::GraphPatternPlanner::handleUnconnectedMinusOrOptional(
     SubtreePlanVec& candidates, const Variables& variables,
@@ -3260,6 +3246,23 @@ bool QueryPlanner::GraphPatternPlanner::handleUnconnectedMinusOrOptional(
         "has no effect and is ignored. Use FILTER NOT EXISTS if you want to "
         "remove all results whenever the pattern of the MINUS clause matches.");
     return true;
+  }
+  // If the FILTERs of the OPTIONAL use variables of the preceding patterns,
+  // there is a condition. Then the OPTIONAL is joined like a connected one,
+  // with an `OptionalJoin` without join columns (see `createJoinCandidates`),
+  // which evaluates the condition on all pairs of rows (Cartesian product).
+  // Plans of the group without a condition only exist if a FILTER of the
+  // condition was replaced by a `SpatialJoin` in some of the plans (see
+  // `applyRemainingFilters`), `createJoinCandidates` skips them.
+  if (ql::ranges::any_of(candidates, [](const SubtreePlan& plan) {
+        return !plan.optionalJoinCondition_.empty();
+      })) {
+    planner_.warnings_.emplace_back(
+        "An OPTIONAL clause that shares no variables with the patterns before "
+        "it, but whose FILTER uses variables of these patterns, is evaluated "
+        "by comparing all pairs of rows (Cartesian product). This can be very "
+        "slow for large inputs.");
+    return false;
   }
   // An OPTIONAL clause that doesn't share any variable with the preceding
   // patterns behaves as if it is joined with the neutral element.
@@ -3439,10 +3442,6 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
       for (auto& c : candidates) {
         c.type = SubtreePlan::OPTIONAL;
       }
-      // TODO<ninofrey> Pass the condition to the `OptionalJoin`, which has to
-      // evaluate it on the joined rows.
-      applyOptionalJoinConditionToGroup(candidates,
-                                        variablesOfLeftSideOfOptional.value());
     }
     visitGroupOptionalOrMinus(std::move(candidates));
     if (datasetBackup.has_value()) {

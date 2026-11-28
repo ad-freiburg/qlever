@@ -4,6 +4,7 @@ add_library(engine
         QueryExecutionTree.cpp Result.cpp
         OrderByOnSortedNumericInput.cpp NumericRun.cpp
         QueryPlanner.cpp QueryRewriteUtils.cpp OptionalJoinConditionPlanning.cpp
+        OptionalJoinConditionFilter.cpp
         CheckUsePatternTrick.cpp
         VariableToColumnMap.cpp ExportQueryExecutionTrees.cpp
         LazyGroupBy.cpp GroupByHashMapOptimization.cpp

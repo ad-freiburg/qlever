@@ -16,6 +16,7 @@
 
 #include "backports/concepts.h"
 #include "engine/Result.h"
+#include "engine/RowFilter.h"
 #include "engine/idTable/IdTable.h"
 #include "engine/idTable/IdTableConcepts.h"
 #include "global/Id.h"
@@ -86,6 +87,11 @@ class AddCombinedRowToIdTable {
   using CancellationHandle = ad_utility::SharedCancellationHandle;
   CancellationHandle cancellationHandle_;
 
+  // Optional filter for the written rows, see `RowFilter`. `writtenRows_` is
+  // only a member so that its memory can be reused.
+  RowFilter* rowFilter_ = nullptr;
+  std::vector<WrittenRow> writtenRows_;
+
  public:
   // Construct from the number of join columns, the two inputs, and the output.
   // The `bufferSize` can be configured for testing.
@@ -128,8 +134,18 @@ class AddCombinedRowToIdTable {
     indexBuffer_.reserve(bufferSize);
   }
 
+  // Set the `rowFilter`, see `RowFilter`. It must stay alive as long as rows
+  // are added.
+  void setRowFilter(RowFilter* rowFilter) {
+    AD_CONTRACT_CHECK(rowFilter != nullptr && nextIndex_ == 0 &&
+                      resultTable_.numColumns() > 0);
+    rowFilter_ = rowFilter;
+  }
+
   // Return the number of UNDEF values per column.
   const std::vector<size_t>& numUndefinedPerColumn() {
+    // The numbers are counted before the `rowFilter_` is applied.
+    AD_CONTRACT_CHECK(rowFilter_ == nullptr);
     flush();
     return numUndefinedPerColumn_;
   }
@@ -250,10 +266,27 @@ class AddCombinedRowToIdTable {
     }
   }
 
-  // Move the result out after the last write. The function ensures, that the
-  // `flush()` is called before doing so.
-  IdTable&& resultTable() && {
+  // The caller calls this to promise that none of the left rows from the
+  // previous calls to `addRow(s)` and `addOptionalRow` gets another partner.
+  // Then the buffered rows are written, the `rowFilter_` can append the rows it
+  // held back for these left rows, and these are passed to the blockwise
+  // callback. Without a `rowFilter_` this only writes the buffered rows.
+  void finishPreviousLeftRows() {
     flush();
+    if (rowFilter_ == nullptr) {
+      return;
+    }
+    size_t oldSize = resultTable_.size();
+    rowFilter_->finishPreviousLeftRows(resultTable_, mergedVocab_);
+    if (resultTable_.size() != oldSize) {
+      invokeBlockwiseCallback();
+    }
+  }
+
+  // Move the result out after the last write. The function calls
+  // `finishPreviousLeftRows()` before doing so, which writes the buffered rows.
+  IdTable&& resultTable() && {
+    finishPreviousLeftRows();
     return std::move(resultTable_);
   }
 
@@ -262,7 +295,7 @@ class AddCombinedRowToIdTable {
   // Move both the result table and local vocab out as an IdTableVocabPair.
   // This is a convenience method for the common pattern of moving both out.
   auto toIdTableVocabPair() && {
-    flush();
+    finishPreviousLeftRows();
     return Result::IdTableVocabPair{std::move(resultTable_),
                                     std::move(mergedVocab_)};
   }
@@ -402,10 +435,20 @@ class AddCombinedRowToIdTable {
       ++nextResultColIdx;
     }
 
+    if (rowFilter_ != nullptr) {
+      applyRowFilter(oldSize);
+    }
+
     indexBuffer_.clear();
     optionalIndexBuffer_.clear();
     nextIndex_ = 0;
-    std::invoke(blockwiseCallback_, result, mergedVocab_);
+    invokeBlockwiseCallback();
+  }
+
+ private:
+  // Pass the result to the `blockwiseCallback_`.
+  void invokeBlockwiseCallback() {
+    std::invoke(blockwiseCallback_, resultTable_, mergedVocab_);
     // The current `IdTable`s might still be active, so we have to merge the
     // local vocabs again if all other sets were moved-out.
     if (resultTable_.empty()) {
@@ -433,6 +476,7 @@ class AddCombinedRowToIdTable {
       mergedVocab_.mergeWith(ql::ranges::ref_view{rangeOfNonNullVocabs});
     }
   }
+
   const IdTableView<0>& inputLeft() const {
     return inputLeftAndRight_.value()[0];
   }
@@ -449,6 +493,31 @@ class AddCombinedRowToIdTable {
         resultTable_.numColumns() ==
         inputLeft().numColumns() + inputRight().numColumns() - numJoinColumns_ -
             numJoinColumns_ * static_cast<size_t>(!keepJoinColumns_));
+  }
+
+  // Describe the rows written by the current call to `flush` (which start at
+  // `oldSize`) and pass them to the `rowFilter_`.
+  void applyRowFilter(size_t oldSize) {
+    writtenRows_.resize(nextIndex_);
+    // A left row is identified by the address of the first column of the left
+    // input, see `WrittenRow`.
+    AD_CORRECTNESS_CHECK(inputLeft().numColumns() > 0);
+    const Id* leftInput = inputLeft().getColumn(0).data();
+    for (const auto& [targetIndex, sourceIndices] : indexBuffer_) {
+      writtenRows_[targetIndex] = {leftInput, sourceIndices[0], true};
+    }
+    for (const auto& [targetIndex, sourceIndex] : optionalIndexBuffer_) {
+      writtenRows_[targetIndex] = {leftInput, sourceIndex, false};
+    }
+    // The columns of the left input that are part of the result.
+    std::vector<ColumnIndex> leftColumns;
+    for (size_t col = keepJoinColumns_ ? 0 : numJoinColumns_;
+         col < inputLeft().numColumns(); ++col) {
+      leftColumns.push_back(col);
+    }
+    rowFilter_->filterWrittenRows(resultTable_, oldSize, writtenRows_,
+                                  inputLeft().asColumnSubsetView(leftColumns),
+                                  mergedVocab_);
   }
 };
 }  // namespace ad_utility
