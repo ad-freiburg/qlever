@@ -10,12 +10,15 @@
 #ifndef QLEVER_SRC_ENGINE_IDTABLE_SPLITLAYOUT_IDCOLUMNVECTOR_H
 #define QLEVER_SRC_ENGINE_IDTABLE_SPLITLAYOUT_IDCOLUMNVECTOR_H
 
+#include <initializer_list>
 #include <memory>
 #include <vector>
 
+#include "backports/algorithm.h"
 #include "engine/idTable/splitLayout/IdColumn.h"
 #include "engine/idTable/splitLayout/IdRef.h"
 #include "global/Id.h"
+#include "util/CompilerWarnings.h"
 #include "util/Exception.h"
 
 namespace columnBasedIdTable::splitLayout {
@@ -25,9 +28,9 @@ namespace columnBasedIdTable::splitLayout {
 // array of packed legacy `Id` objects. The split-layout counterpart of the
 // `std::vector<Id>` in `IdTable`.
 //
-// `Allocator` is `IdTable`'s own `Id` allocator; the two underlying arrays
-// use it rebound to `PayloadType`/`DatatypeType`, so both count towards the
-// same memory limit.
+// `Allocator` is an `Id` allocator, in an `IdTable` its own one with a memory
+// limit; the two underlying arrays use it rebound to
+// `PayloadType`/`DatatypeType`, so both count towards the same memory limit.
 template <typename Allocator>
 class IdColumnVector {
  public:
@@ -54,7 +57,10 @@ class IdColumnVector {
   std::vector<Id::DatatypeType, DatatypeAllocator> datatypes_;
 
  public:
-  explicit IdColumnVector(Allocator allocator = Allocator{})
+  // Not `explicit`, so that `{}` is an empty column, like for `std::vector`.
+  IdColumnVector() : IdColumnVector(Allocator{}) {}
+
+  explicit IdColumnVector(Allocator allocator)
       : allocator_{allocator},
         payloads_{PayloadAllocator{allocator}},
         datatypes_{DatatypeAllocator{allocator}} {}
@@ -79,11 +85,30 @@ class IdColumnVector {
     }
   }
 
+  // Construct from a list of `Id`s, like `std::vector<Id>`.
+  IdColumnVector(std::initializer_list<Id> ids,
+                 Allocator allocator = Allocator{})
+      : IdColumnVector(ids.begin(), ids.end(), allocator) {}
+
+  // Compare the elements as `Id`s, like `std::vector<Id>`.
+  friend bool operator==(const IdColumnVector& a, const IdColumnVector& b) {
+    return ql::ranges::equal(a, b, [](Id x, Id y) { return x == y; });
+  }
+  friend bool operator!=(const IdColumnVector& a, const IdColumnVector& b) {
+    return !(a == b);
+  }
+
   [[nodiscard]] Allocator get_allocator() const { return allocator_; }
 
   [[nodiscard]] size_t size() const noexcept { return payloads_.size(); }
   [[nodiscard]] bool empty() const noexcept { return payloads_.empty(); }
 
+  // NOTE: GCC 13 reports false `-Wstringop-overflow` positives for the
+  // reallocation of `datatypes_` ("writing 1 byte into a region of size 0"),
+  // when `reserve` or `resize` is inlined into certain callers. These are
+  // middle-end warnings, so they are suppressed by a region around the two
+  // functions.
+  DISABLE_STRINGOP_OVERFLOW_WARNINGS
   void reserve(size_t n) {
     payloads_.reserve(n);
     datatypes_.reserve(n);
@@ -92,6 +117,7 @@ class IdColumnVector {
     payloads_.resize(n);
     datatypes_.resize(n);
   }
+  GCC_REENABLE_WARNINGS
   void clear() {
     payloads_.clear();
     datatypes_.clear();

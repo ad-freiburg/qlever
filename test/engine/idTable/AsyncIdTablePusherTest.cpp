@@ -26,6 +26,7 @@
 #include "../../util/TestException.h"
 #include "./AsyncPushTestHelpers.h"
 #include "engine/idTable/AsyncIdTablePusher.h"
+#include "engine/idTable/IdColumnByteIO.h"
 
 namespace {
 namespace net = boost::asio;
@@ -247,17 +248,20 @@ TEST(AsyncIdTablePusher, sinkThatRecyclesBlocks) {
   // NOTE: The sink runs on the strand of the pusher, so its state needs no
   // further synchronization.
   IdTable actual{3, alloc};
-  std::set<const Id*> buffers;
+  std::set<const std::byte*> buffers;
   std::optional<IdTableStatic<0>> previous;
   size_t numBlocks = 0;
-  Pusher pusher{ad_utility::testing::multiThreadExecutor(), 3, blocksize, alloc,
-                [&](IdTableStatic<0> block) -> std::optional<IdTableStatic<0>> {
-                  EXPECT_EQ(block.numRows(), blocksize);
-                  ++numBlocks;
-                  buffers.insert(block.getColumn(0).data());
-                  actual.insertAtEnd(block);
-                  return std::exchange(previous, std::move(block));
-                }};
+  Pusher pusher{
+      ad_utility::testing::multiThreadExecutor(), 3, blocksize, alloc,
+      [&](IdTableStatic<0> block) -> std::optional<IdTableStatic<0>> {
+        EXPECT_EQ(block.numRows(), blocksize);
+        ++numBlocks;
+        buffers.insert(ad_utility::idColumnByteIO::chunksOf(block.getColumn(0))
+                           .front()
+                           .data());
+        actual.insertAtEnd(block);
+        return std::exchange(previous, std::move(block));
+      }};
   auto tables = makeTables(8, 3);
   for (auto& future : pushConcurrently(pusher, tables)) {
     future.get();
