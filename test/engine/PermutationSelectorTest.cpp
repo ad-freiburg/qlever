@@ -20,7 +20,7 @@ TEST(PermutationSelectorTest, internalPrefixIsCorrectlyChosen) {
       ad_utility::triple_component::Iri::fromIriref("<abc>")};
   TripleComponent regularLiteral{1};
 
-  for (auto permutation : Permutation::ALL) {
+  for (auto permutation : Permutation::GRAPH_LAST) {
     const auto* permutationPtr = &index.getImpl().getPermutation(permutation);
     for (const auto& triple :
          {SparqlTripleSimple{regularIri, regularIri, regularIri},

@@ -161,7 +161,8 @@ ParsedQuery GraphStoreProtocol::transformDelete(
         AD_CORRECTNESS_CHECK(result.size() == 1);
         const auto& updateMeta = result.at(0);
         AD_CORRECTNESS_CHECK(updateMeta.inUpdate_.has_value());
-        if (updateMeta.inUpdate_->triplesDeleted_ == 0) {
+        if (updateMeta.inUpdate_->triplesDeleted_ == 0 &&
+            !updateMeta.clearedGraphWasNonEmpty_.value_or(false)) {
           response.result(boost::beast::http::status::not_found);
         } else {
           response.result(boost::beast::http::status::ok);

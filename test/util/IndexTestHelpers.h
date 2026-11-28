@@ -100,6 +100,10 @@ struct TestIndexConfig {
   // currently used in `GroupByTest.cpp`.
   std::optional<std::string> turtleInput = std::nullopt;
   bool loadAllPermutations = true;
+  // If set, exactly these permutations are built and loaded (see
+  // `IndexImpl::permutationsToBuildOrLoad`), and `loadAllPermutations` is
+  // ignored.
+  std::optional<std::vector<Permutation::Enum>> permutations = std::nullopt;
   bool usePatterns = true;
   bool usePrefixCompression = true;
   size_t rowsPerBlock = 2;
@@ -166,24 +170,37 @@ struct TestIndexConfig {
   explicit TestIndexConfig(std::string turtleKgInput)
       : turtleInput{std::move(turtleKgInput)} {}
 
+  // Return the permutations to build and load according to `permutations` and
+  // `loadAllPermutations`.
+  std::optional<std::vector<Permutation::Enum>> permutationsToBuildOrLoad()
+      const {
+    if (permutations.has_value()) {
+      return permutations;
+    }
+    if (loadAllPermutations) {
+      return std::nullopt;
+    }
+    return std::vector<Permutation::Enum>{Permutation::PSO, Permutation::POS};
+  }
+
   // Hashing.
   template <typename H>
   friend H AbslHashValue(H h, const TestIndexConfig& c) {
     return H::combine(
-        std::move(h), c.turtleInput, c.loadAllPermutations, c.usePatterns,
-        c.usePrefixCompression, c.rowsPerBlock, c.createTextIndex,
-        c.addWordsFromLiterals, c.contentsOfWordsFileAndDocsfile,
-        c.parserBufferSize, c.scoringMetric, c.bAndKParam, c.indexType,
-        c.encodedPrefixesWithoutAngleBrackets, c.encodedIriPatterns,
-        c.addHasWordTriples, c.hasWordRestrictPredicates, c.secondaryVocabWords,
-        c.numThreads, c.parseInParallel, c.additionalSettings,
-        c.geoPointEncoding.value());
+        std::move(h), c.turtleInput, c.loadAllPermutations, c.permutations,
+        c.usePatterns, c.usePrefixCompression, c.rowsPerBlock,
+        c.createTextIndex, c.addWordsFromLiterals,
+        c.contentsOfWordsFileAndDocsfile, c.parserBufferSize, c.scoringMetric,
+        c.bAndKParam, c.indexType, c.encodedPrefixesWithoutAngleBrackets,
+        c.encodedIriPatterns, c.addHasWordTriples, c.hasWordRestrictPredicates,
+        c.secondaryVocabWords, c.numThreads, c.parseInParallel,
+        c.additionalSettings, c.geoPointEncoding.value());
   }
   QL_DEFINE_DEFAULTED_EQUALITY_OPERATOR_LOCAL(
-      TestIndexConfig, turtleInput, loadAllPermutations, usePatterns,
-      usePrefixCompression, rowsPerBlock, createTextIndex, addWordsFromLiterals,
-      contentsOfWordsFileAndDocsfile, parserBufferSize, scoringMetric,
-      bAndKParam, indexType, vocabularyType,
+      TestIndexConfig, turtleInput, loadAllPermutations, permutations,
+      usePatterns, usePrefixCompression, rowsPerBlock, createTextIndex,
+      addWordsFromLiterals, contentsOfWordsFileAndDocsfile, parserBufferSize,
+      scoringMetric, bAndKParam, indexType, vocabularyType,
       encodedPrefixesWithoutAngleBrackets, encodedIriPatterns,
       addHasWordTriples, hasWordNormalization, hasWordRestrictPredicates,
       secondaryVocabWords, numThreads, parseInParallel, additionalSettings,

@@ -349,11 +349,50 @@ class QueryPlanner {
 
   // Add all the possible index scans for the triple represented by the node.
   // The triple is "ordinary" in the sense that it is neither a text triple with
-  // ql:contains-word nor a special pattern trick triple.
-  template <typename AddedIndexScanFunction, typename AddFilterFunction>
+  // ql:contains-word nor a special pattern trick triple. Plans that are not a
+  // single index scan are added via `addPlan`.
+  template <typename AddedIndexScanFunction, typename AddFilterFunction,
+            typename AddPlanFunction>
   void seedFromOrdinaryTriple(const TripleGraph::Node& node,
                               const AddedIndexScanFunction& addIndexScan,
-                              const AddFilterFunction& addFilter);
+                              const AddFilterFunction& addFilter,
+                              const AddPlanFunction& addPlan);
+
+  // Add an index scan for the `triple` (plus filters) for the case that none
+  // of the permutations that `seedFromOrdinaryTriple` would use is loaded.
+  // The scan is on the loaded permutation for which the longest prefix of its
+  // columns is fixed in the `triple`, the remaining fixed columns and repeated
+  // variables are checked by filters. This can be very slow, so a warning is
+  // added.
+  template <typename AddedIndexScanFunction, typename AddFilterFunction>
+  void seedWithoutSuitablePermutation(
+      const SparqlTripleSimple& triple,
+      const AddedIndexScanFunction& addIndexScan,
+      const AddFilterFunction& addFilter);
+
+  // Add an index scan for the `triple` for each loaded permutation that doesn't
+  // have the graph as its last column, if the graph of the scan is a single
+  // fixed graph (inside of `GRAPH <g>` or with a single `FROM <g>`) or the
+  // graph variable (inside of `GRAPH ?g`, if all graphs are allowed), and the
+  // fixed positions of the `triple` and the graph are a prefix of the columns
+  // of the permutation. For example, `GRAPH <g> { ?s <p> ?o }` can be read from
+  // a single range of `GPSO`, without filtering by the graph. For a few fixed
+  // graphs (`FROM <g1> FROM <g2>`), add the `DISTINCT` of the `UNION` of the
+  // scans for the single graphs via `addPlan`.
+  template <typename AddedIndexScanFunction, typename AddPlanFunction>
+  void seedWithGraphAsKeyColumn(const SparqlTripleSimple& triple,
+                                const AddedIndexScanFunction& addIndexScan,
+                                const AddPlanFunction& addPlan) const;
+
+  // The maximal number of graphs in a `FROM` clause for which the union of
+  // the scans for the single graphs is considered (see
+  // `seedWithGraphAsKeyColumn`).
+  static constexpr size_t MAX_NUM_GRAPHS_FOR_UNION_OF_GRAPH_SCANS = 64;
+
+  // Create a `SparqlFilter` that corresponds to the expression
+  // `variable = constant`.
+  SparqlFilter createEqualFilterWithConstant(
+      const Variable& variable, const TripleComponent& constant) const;
 
   // Helper function used by the seedFromOrdinaryTriple function
   template <typename AddedIndexScanFunction>

@@ -42,9 +42,39 @@ class MaterializedView;
 class Permutation {
  public:
   using KeyOrder = qlever::KeyOrder;
-  /// Identifiers for the six possible permutations.
-  enum struct Enum { PSO, POS, SPO, SOP, OPS, OSP };
-  QLEVER_NESTED_ENUM_SIZE(Enum, 6);
+  // Identifiers for the 24 possible orders of the four columns subject (S),
+  // predicate (P), object (O), and graph (G). The six permutations with the
+  // graph as the last column are named by their first three columns only (for
+  // example, `PSO` is the order P, S, O, G); they come first and keep the
+  // values they had when they were the only permutations. The other 18 are
+  // named by all four columns.
+  enum struct Enum : uint8_t {
+    PSO,
+    POS,
+    SPO,
+    SOP,
+    OPS,
+    OSP,
+    GSPO,
+    GSOP,
+    GPSO,
+    GPOS,
+    GOSP,
+    GOPS,
+    SGPO,
+    SGOP,
+    PGSO,
+    PGOS,
+    OGSP,
+    OGPS,
+    SPGO,
+    SOGP,
+    PSGO,
+    POGS,
+    OSGP,
+    OPGS
+  };
+  QLEVER_NESTED_ENUM_SIZE(Enum, 24);
   // Unfortunately there is a bug in GCC that doesn't allow use to simply use
   // `using enum`.
   static constexpr auto PSO = Enum::PSO;
@@ -53,9 +83,20 @@ class Permutation {
   static constexpr auto SOP = Enum::SOP;
   static constexpr auto OPS = Enum::OPS;
   static constexpr auto OSP = Enum::OSP;
-  static constexpr auto ALL = {Enum::PSO, Enum::POS, Enum::SPO,
-                               Enum::SOP, Enum::OPS, Enum::OSP};
-  static constexpr auto INTERNAL = {Enum::PSO, Enum::POS};
+  // The six permutations with the graph as the last column.
+  static constexpr std::array<Enum, 6> GRAPH_LAST{
+      Enum::PSO, Enum::POS, Enum::SPO, Enum::SOP, Enum::OPS, Enum::OSP};
+  // All 24 permutations, in the order of their values.
+  static constexpr std::array<Enum, 24> ALL = [] {
+    std::array<Enum, 24> result{};
+    for (size_t i = 0; i < result.size(); ++i) {
+      result[i] = static_cast<Enum>(i);
+    }
+    return result;
+  }();
+  // The permutations that may have an internal permutation (see
+  // `internalPermutation`).
+  static constexpr std::array<Enum, 2> INTERNAL{Enum::PSO, Enum::POS};
 
   template <bool isInternal>
   static constexpr const auto& all() {
@@ -78,8 +119,27 @@ class Permutation {
   enum struct Type { NORMAL, INTERNAL, MATERIALIZED_VIEW };
 
   // Convert a permutation to the corresponding string, etc. `PSO` is converted
-  // to "PSO".
+  // to "PSO" and `GSPO` to "GSPO".
   static std::string_view toString(Enum permutation);
+
+  // Inverse of `toString`. Additionally accept the explicit four-letter names
+  // of the permutations that have the graph as the last column (e.g. "PSOG"
+  // for `PSO`). The parsing is case-insensitive. Throw if the `name` does not
+  // denote a permutation.
+  static Enum fromString(std::string_view name);
+
+  // Return the permutation that has the given `keyOrder`.
+  static Enum fromKeyOrder(const KeyOrder& keyOrder);
+
+  // Return true iff the graph is the last column of the `permutation`.
+  static bool hasGraphLast(Enum permutation);
+
+  // Return the twin of the `permutation`, which has the same first and last
+  // column, and the second and third column swapped (e.g. `SOP` for `SPO` and
+  // `GPSO` for `GSPO`). The two are always written together, because the
+  // multiplicities of the third column of a permutation are those of the
+  // second column of its twin.
+  static Enum twin(Enum permutation);
 
   // Return the paths of the files that store `permutation` for the index with
   // the given `onDiskBase` (the permutation file and its `.meta` file). For the
@@ -88,8 +148,8 @@ class Permutation {
   static std::vector<ql::filesystem::path> fileNames(
       Enum permutation, std::string_view onDiskBase);
 
-  // Convert a permutation to the corresponding permutation of [0, 1, 2], etc.
-  // `PSO` is converted to [1, 0, 2].
+  // Convert a permutation to the corresponding permutation of [0, 1, 2, 3]
+  // (S=0, P=1, O=2, G=3), etc. `PSO` is converted to [1, 0, 2, 3].
   static KeyOrder toKeyOrder(Enum permutation);
 
   // Construct a `Permutation`. If the `readableName` is not set,
@@ -334,8 +394,8 @@ class Permutation {
   std::string readableName_;
   // File name suffix for this permutation, e.g., `.pos`.
   std::string fileSuffix_;
-  // The order of the three components (S=0, P=1, O=2) in this permutation,
-  // e.g., `{1, 0, 2}` for `PSO`.
+  // The order of the four components (S=0, P=1, O=2, G=3) in this
+  // permutation, e.g., `{1, 0, 2, 3}` for `PSO`.
   KeyOrder keyOrder_;
   // The metadata for this permutation.
   MetaData meta_;

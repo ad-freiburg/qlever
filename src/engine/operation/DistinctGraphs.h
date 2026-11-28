@@ -85,6 +85,11 @@ class DistinctGraphs : public Operation {
 
   std::unique_ptr<Operation> cloneImpl() const override;
 
+ private:
+  // The permutation from whose blocks the graphs are computed: SPO if it is
+  // loaded, otherwise PSO (which is always loaded).
+  const Permutation& permutation() const;
+
  protected:
   // No column is sorted in result.
   [[nodiscard]] qlm::vector<ColumnIndex> resultSortedOn() const override {

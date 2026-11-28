@@ -25,23 +25,25 @@ using nlohmann::json;
 // _____________________________________________________________________________
 TEST(ResponseJsonTest, composeIndexStats) {
   const Index& index = ad_utility::testing::getQec("<a> <b> <c>")->getIndex();
-  json expectedJson{{"git-hash-index", "git short hash not set"},
-                    {"git-hash-server", "git short hash not set"},
-                    {"version-server", "project version not set"},
-                    {"name-index", ""},
-                    {"name-text-index", ""},
-                    {"num-entity-occurrences", 0},
-                    {"num-objects-internal", 0},
-                    {"num-objects-normal", 1},
-                    {"num-permutations", 6},
-                    {"num-predicates-internal", 1},
-                    {"num-predicates-normal", 1},
-                    {"num-subjects-internal", 0},
-                    {"num-subjects-normal", 1},
-                    {"num-text-records", 0},
-                    {"num-triples-internal", 1},
-                    {"num-triples-normal", 1},
-                    {"num-word-occurrences", 0}};
+  json expectedJson{
+      {"git-hash-index", "git short hash not set"},
+      {"git-hash-server", "git short hash not set"},
+      {"version-server", "project version not set"},
+      {"name-index", ""},
+      {"name-text-index", ""},
+      {"num-entity-occurrences", 0},
+      {"num-objects-internal", 0},
+      {"num-objects-normal", 1},
+      {"num-permutations", 6},
+      {"permutations", {"PSO", "POS", "SPO", "SOP", "OPS", "OSP"}},
+      {"num-predicates-internal", 1},
+      {"num-predicates-normal", 1},
+      {"num-subjects-internal", 0},
+      {"num-subjects-normal", 1},
+      {"num-text-records", 0},
+      {"num-triples-internal", 1},
+      {"num-triples-normal", 1},
+      {"num-word-occurrences", 0}};
   EXPECT_THAT(responseJson::composeIndexStats(index),
               testing::Eq(expectedJson));
 }
