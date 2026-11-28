@@ -171,6 +171,10 @@ class QueryPlanner {
     bool containsFilterSubstitute_ = false;
     bool containsBindSubstitute_ = false;
     Type type = Type::BASIC;
+    // Only for the plans of the group of an OPTIONAL: The FILTERs of the group
+    // that are the condition of the left join and thus have not been applied
+    // to the plan, see `isPartOfOptionalJoinCondition`.
+    std::vector<sparqlExpression::SparqlExpressionPimpl> optionalJoinCondition_;
 
     size_t getCostEstimate() const;
 
@@ -318,7 +322,30 @@ class QueryPlanner {
   // and the functions that call it are `const`.
   mutable size_t numCandidatePlans_ = 0;
 
-  SubtreePlanVec optimize(ParsedQuery::GraphPattern* rootPattern);
+  // Plan the `rootPattern`. If it is the group of an OPTIONAL, then
+  // `variablesOfLeftSideOfOptional` has to contain the variables of the
+  // patterns that precede the OPTIONAL. The FILTERs of the group that are the
+  // condition of the left join are then not applied, but stored in the
+  // `optionalJoinCondition_` of the returned plans.
+  SubtreePlanVec optimize(ParsedQuery::GraphPattern* rootPattern,
+                          const std::optional<ad_utility::HashSet<Variable>>&
+                              variablesOfLeftSideOfOptional = std::nullopt);
+
+  // Apply all FILTERs to the final `plans` of a group that have not been
+  // applied yet, except for the FILTERs that are the condition of an OPTIONAL
+  // (see `optimize`).
+  void applyRemainingFilters(SubtreePlanVec& plans,
+                             const FiltersAndOptionalSubstitutes& filters,
+                             const std::optional<ad_utility::HashSet<Variable>>&
+                                 variablesOfLeftSideOfOptional) const;
+
+  // Return the bit map of the `filters` (same format as
+  // `SubtreePlan::_idsOfIncludedFilters`) that are the condition of the left
+  // join, if `plan` is a final plan of the group of an OPTIONAL, see
+  // `isPartOfOptionalJoinCondition`.
+  uint64_t getIdsOfOptionalJoinConditionFilters(
+      const SubtreePlan& plan, const FiltersAndOptionalSubstitutes& filters,
+      const ad_utility::HashSet<Variable>& variablesOfLeftSideOfOptional) const;
 
   // Add all the possible index scans for the triple represented by the node.
   // The triple is "ordinary" in the sense that it is neither a text triple with
@@ -578,9 +605,14 @@ class QueryPlanner {
     // where we have to make sure that all filters are applied.
     ApplyAllFiltersAndReplaceUnfiltered,
   };
+  // The filters in `idsOfFiltersToSkip` (same format as
+  // `SubtreePlan::_idsOfIncludedFilters`) are not applied, although they have
+  // not been applied yet. This is used for the FILTERs that are the condition
+  // of an OPTIONAL, see `applyRemainingFilters`.
   template <FilterMode mode = FilterMode::KeepUnfiltered>
-  void applyFiltersIfPossible(
-      SubtreePlanVec& row, const FiltersAndOptionalSubstitutes& filters) const;
+  void applyFiltersIfPossible(SubtreePlanVec& row,
+                              const FiltersAndOptionalSubstitutes& filters,
+                              uint64_t idsOfFiltersToSkip = 0) const;
 
   // Apply text limits if possible.
   // A text limit can be applied to a plan if:
@@ -771,7 +803,9 @@ class QueryPlanner {
     // Return the variables of the results of the children of the
     // `rootPattern_` which we have dealt with so far. Such a variable might be
     // undefined in all rows of the result, which is fine, as only the absence
-    // of shared variables leads to a special case.
+    // of shared variables leads to a special case. Inside of `GRAPH ?g {...}`,
+    // this includes `?g` if one of these children is a triple, because its
+    // index scan has a column for `?g`.
     ad_utility::HashSet<Variable> getVariablesOfPreviousPatterns() const;
 
     // Helper function for `visitGroupOptionalOrMinus`. SPARQL queries like
@@ -783,6 +817,15 @@ class QueryPlanner {
     bool handleUnconnectedMinusOrOptional(
         SubtreePlanVec& candidates, const Variables& variables,
         bool isGraphVariableInScopeOnBothSidesOfMinus);
+
+    // Helper function for `graphPatternOperationVisitor`. The `OptionalJoin`
+    // can't evaluate the `optionalJoinCondition_` of the `candidates` (the
+    // plans of the group of an OPTIONAL) yet. Therefore apply its FILTERs to
+    // the group, like it was done before the condition was determined, and add
+    // a warning for each of them.
+    void applyOptionalJoinConditionToGroup(
+        SubtreePlanVec& candidates,
+        const ad_utility::HashSet<Variable>& variablesOfLeftSideOfOptional);
 
     // This function is called for groups, optional, or minus clauses.
     // The `candidates` are the result of planning the pattern inside the
