@@ -24,6 +24,7 @@
 #include "rdfTypes/GeometryInfo.h"
 #include "rdfTypes/Iri.h"
 #include "rdfTypes/Literal.h"
+#include "util/BitUtils.h"
 #include "util/UnitOfMeasurement.h"
 
 // If `filter` is a syntactically valid DE-9IM filter pattern (i.e. exactly 9
@@ -422,6 +423,35 @@ class WktNumGeometries {
     return ValueId::makeFromInt(numGeom.value().numGeometries());
   }
 };
+
+// The mask of the 60 bits of a `GeometryStoreId`.
+constexpr inline uint64_t GEOMETRY_STORE_ID_MASK = bitMaskForLowerBits(60);
+
+// Get the ID of a geometry in the `sj::GeometryStore` of the `GeoVocabulary` as
+// an integer `ValueId`, see `geometryStoreIdFromValueId` for the inverse.
+//
+// NOTE: The ID has 60 bits, which an integer `ValueId` stores exactly. With
+// the legacy `ValueId`, an ID with bit 59 set reads as a negative integer.
+class WktGeometryStoreId {
+ public:
+  ValueId operator()(const std::optional<GeometryStoreId>& id) const {
+    if (!id.has_value()) {
+      return ValueId::makeUndefined();
+    }
+    AD_CORRECTNESS_CHECK(id.value().id_ <= GEOMETRY_STORE_ID_MASK);
+    return ValueId::makeFromInt(static_cast<int64_t>(id.value().id_));
+  }
+};
+
+// Get the ID of a geometry in the `sj::GeometryStore` from a `ValueId` computed
+// by `WktGeometryStoreId`. Return `std::nullopt` if `id` is not an integer (for
+// example `UNDEF` for a geometry that is not in the store).
+inline std::optional<uint64_t> geometryStoreIdFromValueId(ValueId id) {
+  if (id.getDatatype() != Datatype::Int) {
+    return std::nullopt;
+  }
+  return static_cast<uint64_t>(id.getInt()) & GEOMETRY_STORE_ID_MASK;
+}
 
 // Compute the area of a WKT geometry.
 class WktArea {

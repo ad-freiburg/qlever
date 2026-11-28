@@ -83,6 +83,8 @@ SparqlExpression::Ptr makeEnvelopeLowerLeftExpression(
     SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeEnvelopeUpperRightExpression(
     SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeGeometryStoreIdExpression(
+    SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeGeometryTypeExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeCrsTypeExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeNumGeometriesExpression(SparqlExpression::Ptr child);

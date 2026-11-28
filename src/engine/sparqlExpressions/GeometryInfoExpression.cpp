@@ -47,6 +47,10 @@ NARY_EXPRESSION(EnvelopeUpperRightExpression, 1,
                        ad_utility::BoundingBoxCorner::UPPER_RIGHT>,
                    GeometryInfoValueGetter<ad_utility::BoundingBox>>);
 
+NARY_EXPRESSION(GeometryStoreIdExpression, 1,
+                FV<ad_utility::WktGeometryStoreId,
+                   GeometryInfoValueGetter<ad_utility::GeometryStoreId>>);
+
 NARY_EXPRESSION(GeometryTypeExpression, 1,
                 FV<ad_utility::WktGeometryType,
                    GeometryInfoValueGetter<ad_utility::GeometryType>>);
@@ -142,6 +146,12 @@ SparqlExpression::Ptr makeEnvelopeLowerLeftExpression(
 SparqlExpression::Ptr makeEnvelopeUpperRightExpression(
     SparqlExpression::Ptr child) {
   return std::make_unique<EnvelopeUpperRightExpression>(std::move(child));
+}
+
+// _____________________________________________________________________________
+SparqlExpression::Ptr makeGeometryStoreIdExpression(
+    SparqlExpression::Ptr child) {
+  return std::make_unique<GeometryStoreIdExpression>(std::move(child));
 }
 
 }  // namespace sparqlExpression
