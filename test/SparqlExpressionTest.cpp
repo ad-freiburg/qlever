@@ -139,34 +139,15 @@ auto toExpressionResult(T vec) {
   }
 }
 
-// A matcher for `ValueId`s that also handles floating point comparisons
-// (precision issues as well as NaNs) correctly.
-::testing::Matcher<const ValueId&> matchId(Id id) {
-  if (id.getDatatype() != Datatype::Double) {
-    // Everything that is not `Double` must match exactly.
-    return ::testing::Eq(id);
-  } else {
-    // NaN and NaN are considered equal, and we also use `FloatEq` and not
-    // `DoubleEq` because the precision of a `ValueId` is less than 64 bits
-    // because of the datatype bits.
-    testing::Matcher<float> doubleMatcher =
-        ::testing::NanSensitiveFloatEq(static_cast<float>(id.getDouble()));
-    auto doubleMatcherCast =
-        ::testing::MatcherCast<const double&>(doubleMatcher);
-    return ::testing::AllOf(
-        AD_PROPERTY(Id, getDatatype, ::testing::Eq(Datatype::Double)),
-        AD_PROPERTY(Id, getDouble, doubleMatcherCast));
-  }
-}
-
 // Return a matcher that matches a result of an expression that is not a vector.
 // If it is an ID (possibly contained in the `IdOrLocalVocabEntry` variant),
-// then the `matchId` matcher from above is used, else we test for equality.
+// then the `ad_utility::testing::matchId` matcher from above is used, else we
+// test for equality.
 template <typename T>
 requires(!isVectorResult<T>)
 auto nonVectorResultMatcher(const T& expected) {
   if constexpr (std::is_same_v<T, Id>) {
-    return matchId(expected);
+    return ad_utility::testing::matchId(expected);
   } else if constexpr (std::is_same_v<T, IdOrLocalVocabEntry>) {
     return std::visit(
         [](const auto& el) {
@@ -182,8 +163,8 @@ auto nonVectorResultMatcher(const T& expected) {
 
 // Return a matcher, that matches the `expected` expression result. The case of
 // `expected` being a single element or a vector and the case of `expected`
-// storing `Ids` which have to be handled using the `matchId` matcher (see
-// above) are all handled correctly.
+// storing `Ids` which have to be handled using the
+// `ad_utility::testing::matchId` matcher (see above) are all handled correctly.
 auto sparqlExpressionResultMatcher = [](const auto& expected) {
   using Expected = std::decay_t<decltype(expected)>;
   CPP_assert(SingleExpressionResult<Expected>);
@@ -2271,17 +2252,31 @@ TEST(SparqlExpression, geoSparqlExpressions) {
       v,  // POINT(24.3, 26.8)
       geoLit("LINESTRING(2 8, 4 6)"),
       geoLit("POLYGON((2 4, 4 4, 4 2, 2 2, 2 4))"),
+      geoLit("<http://www.opengis.net/def/crs/OGC/1.3/CRS84> POLYGON((2 4, 6 "
+             "4, 4 4, 2 4))"),
+      geoLit("<http://www.opengis.net/def/crs/EPSG/0/4326> POLYGON((4 2, 4 6, "
+             "4 4, 4 2))"),
+      geoLit("<http://www.opengis.net/def/crs/EPSG/0/3857> "
+             "POLYGON((222638.98158654713 445640.10965602624, "
+             "445277.96317309426 445640.10965602624, 445277.96317309426 "
+             "222684.20850554405, 222638.98158654713 222684.20850554405, "
+             "222638.98158654713 445640.10965602624))"),
       lit("BLABLIBLU(1 1, 2 2)"),
       geoLit("BLABLIBLU(1 1, 2 2)"),
       geoLit("LINESTRING(-5000 0, 1 2)"),
   };
-  checkMinX(exampleGeoms, Ids{U, U, D(24.3), D(2), D(2), U, U, U});
-  checkMinY(exampleGeoms, Ids{U, U, D(26.8), D(6), D(2), U, U, U});
-  checkMaxX(exampleGeoms, Ids{U, U, D(24.3), D(4), D(4), U, U, U});
-  checkMaxY(exampleGeoms, Ids{U, U, D(26.8), D(8), D(4), U, U, U});
+  checkMinX(exampleGeoms, Ids{U, U, D(24.3), D(2), D(2), D(2), D(4),
+                              D(222638.9816), U, U, U});
+  checkMinY(exampleGeoms, Ids{U, U, D(26.8), D(6), D(2), D(4), D(2),
+                              D(222684.2085), U, U, U});
+  checkMaxX(exampleGeoms, Ids{U, U, D(24.3), D(4), D(4), D(6), D(4),
+                              D(445277.9632), U, U, U});
+  checkMaxY(exampleGeoms, Ids{U, U, D(26.8), D(8), D(4), D(4), D(6),
+                              D(445640.1097), U, U, U});
 
   auto checkNumGeometries = testUnaryExpression<&makeNumGeometriesExpression>;
-  checkNumGeometries(exampleGeoms, Ids{U, U, I(1), I(1), I(1), U, U, I(1)});
+  checkNumGeometries(exampleGeoms,
+                     Ids{U, U, I(1), I(1), I(1), I(1), I(1), I(1), U, U, I(1)});
   const IdOrLocalVocabEntryVec exampleMultiGeoms{
       geoLit("MULTIPOINT(1 2, 3 4, 5 6, 7 8)"), geoLit("MULTIPOINT(1 2)"),
       geoLit("MULTILINESTRING((1 2, 3 4),(5 6, 7 8, 9 0))"),
@@ -2376,13 +2371,22 @@ TEST(SparqlExpression, geoSparqlExpressions) {
           geoLit("POINT(24.3 26.8)"),
           geoLit("LINESTRING(2 8,4 6)"),
           geoLit("POLYGON((2 2,4 2,4 4,2 4,2 2))"),
+          geoLit("POLYGON((2 4,6 4,4 4,2 4))"),
+          geoLit("<http://www.opengis.net/def/crs/EPSG/0/4326> POLYGON((4 2,4 "
+                 "6,4 4,4 2))"),
+          geoLit("<http://www.opengis.net/def/crs/EPSG/0/3857> "
+                 "POLYGON((222638.981587 222684.208506,445277.963173 "
+                 "222684.208506,445277.963173 445640.109656,222638.981587 "
+                 "445640.109656,222638.981587 222684.208506))"),
           U,
           U,
           geoLit("LINESTRING(-5000 0,1 2)"),
       },
-      exampleGeoms, Ids{I(1), I(1), I(1), I(1), I(1), I(1), I(1), I(1)});
-  checkGeometryN(IdOrLocalVocabEntryVec{U, U, U, U, U, U, U, U}, exampleGeoms,
-                 Ids{I(0), I(0), I(0), I(0), I(0), I(0), I(0), I(0)});
+      exampleGeoms,
+      Ids{I(1), I(1), I(1), I(1), I(1), I(1), I(1), I(1), I(1), I(1), I(1)});
+  checkGeometryN(
+      IdOrLocalVocabEntryVec{U, U, U, U, U, U, U, U, U, U, U}, exampleGeoms,
+      Ids{I(0), I(0), I(0), I(0), I(0), I(0), I(0), I(0), I(0), I(0), I(0)});
   // Extract n-th geometry: Collection types.
   checkGeometryN(
       IdOrLocalVocabEntryVec{
