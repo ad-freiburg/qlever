@@ -61,7 +61,7 @@ inline auto GeoPointId = [](const GeoPoint& v) {
 
 // A matcher for `ValueId`s that also handles floating point comparisons
 // (precision issues as well as NaNs) correctly.
-::testing::Matcher<const ValueId&> matchId(Id id) {
+inline ::testing::Matcher<const ValueId&> matchId(Id id) {
   if (id.getDatatype() != Datatype::Double) {
     // Everything that is not `Double` must match exactly.
     return ::testing::Eq(id);

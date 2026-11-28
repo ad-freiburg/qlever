@@ -2250,17 +2250,31 @@ TEST(SparqlExpression, geoSparqlExpressions) {
       v,  // POINT(24.3, 26.8)
       geoLit("LINESTRING(2 8, 4 6)"),
       geoLit("POLYGON((2 4, 4 4, 4 2, 2 2, 2 4))"),
+      geoLit("<http://www.opengis.net/def/crs/OGC/1.3/CRS84> POLYGON((2 4, 6 "
+             "4, 4 4, 2 4))"),
+      geoLit("<http://www.opengis.net/def/crs/EPSG/0/4326> POLYGON((4 2, 4 6, "
+             "4 4, 4 2))"),
+      geoLit("<http://www.opengis.net/def/crs/EPSG/0/3857> "
+             "POLYGON((222638.98158654713 445640.10965602624, "
+             "445277.96317309426 445640.10965602624, 445277.96317309426 "
+             "222684.20850554405, 222638.98158654713 222684.20850554405, "
+             "222638.98158654713 445640.10965602624))"),
       lit("BLABLIBLU(1 1, 2 2)"),
       geoLit("BLABLIBLU(1 1, 2 2)"),
       geoLit("LINESTRING(-5000 0, 1 2)"),
   };
-  checkMinX(exampleGeoms, Ids{U, U, D(24.3), D(2), D(2), U, U, U});
-  checkMinY(exampleGeoms, Ids{U, U, D(26.8), D(6), D(2), U, U, U});
-  checkMaxX(exampleGeoms, Ids{U, U, D(24.3), D(4), D(4), U, U, U});
-  checkMaxY(exampleGeoms, Ids{U, U, D(26.8), D(8), D(4), U, U, U});
+  checkMinX(exampleGeoms, Ids{U, U, D(24.3), D(2), D(2), D(2), D(4),
+                              D(222638.9816), U, U, U});
+  checkMinY(exampleGeoms, Ids{U, U, D(26.8), D(6), D(2), D(4), D(2),
+                              D(222684.2085), U, U, U});
+  checkMaxX(exampleGeoms, Ids{U, U, D(24.3), D(4), D(4), D(6), D(4),
+                              D(445277.9632), U, U, U});
+  checkMaxY(exampleGeoms, Ids{U, U, D(26.8), D(8), D(4), D(4), D(6),
+                              D(445640.1097), U, U, U});
 
   auto checkNumGeometries = testUnaryExpression<&makeNumGeometriesExpression>;
-  checkNumGeometries(exampleGeoms, Ids{U, U, I(1), I(1), I(1), U, U, I(1)});
+  checkNumGeometries(exampleGeoms,
+                     Ids{U, U, I(1), I(1), I(1), I(1), I(1), I(1), U, U, I(1)});
   const IdOrLocalVocabEntryVec exampleMultiGeoms{
       geoLit("MULTIPOINT(1 2, 3 4, 5 6, 7 8)"), geoLit("MULTIPOINT(1 2)"),
       geoLit("MULTILINESTRING((1 2, 3 4),(5 6, 7 8, 9 0))"),
@@ -2355,13 +2369,22 @@ TEST(SparqlExpression, geoSparqlExpressions) {
           geoLit("POINT(24.3 26.8)"),
           geoLit("LINESTRING(2 8,4 6)"),
           geoLit("POLYGON((2 2,4 2,4 4,2 4,2 2))"),
+          geoLit("POLYGON((2 4,6 4,4 4,2 4))"),
+          geoLit("<http://www.opengis.net/def/crs/EPSG/0/4326> POLYGON((4 2,4 "
+                 "6,4 4,4 2))"),
+          geoLit("<http://www.opengis.net/def/crs/EPSG/0/3857> "
+                 "POLYGON((222638.981587 222684.208506,445277.963173 "
+                 "222684.208506,445277.963173 445640.109656,222638.981587 "
+                 "445640.109656,222638.981587 222684.208506))"),
           U,
           U,
           geoLit("LINESTRING(-5000 0,1 2)"),
       },
-      exampleGeoms, Ids{I(1), I(1), I(1), I(1), I(1), I(1), I(1), I(1)});
-  checkGeometryN(IdOrLocalVocabEntryVec{U, U, U, U, U, U, U, U}, exampleGeoms,
-                 Ids{I(0), I(0), I(0), I(0), I(0), I(0), I(0), I(0)});
+      exampleGeoms,
+      Ids{I(1), I(1), I(1), I(1), I(1), I(1), I(1), I(1), I(1), I(1), I(1)});
+  checkGeometryN(
+      IdOrLocalVocabEntryVec{U, U, U, U, U, U, U, U, U, U, U}, exampleGeoms,
+      Ids{I(0), I(0), I(0), I(0), I(0), I(0), I(0), I(0), I(0), I(0), I(0)});
   // Extract n-th geometry: Collection types.
   checkGeometryN(
       IdOrLocalVocabEntryVec{
