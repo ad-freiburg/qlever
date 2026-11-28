@@ -28,6 +28,7 @@
 #include "index/vocabulary/VocabularyInternalExternal.h"
 #include "util/Algorithm.h"
 #include "util/GTestHelpers.h"
+#include "util/TestException.h"
 
 using namespace ad_utility::vocabulary_merger;
 using namespace vocabularyMergerTestHelpers;
@@ -465,7 +466,7 @@ TEST(MergeVocabulary, exceptionFromWritingThreadIsPropagated) {
   size_t numCalls = 0;
   auto wordCallback = [&numCalls](std::string_view, bool) -> uint64_t {
     ++numCalls;
-    throw std::runtime_error{"The vocabulary could not be written"};
+    throw TestException{"The vocabulary could not be written"};
   };
   // A block writer with small blocks, so that the words form several blocks.
   class SmallBlockWriter
@@ -480,7 +481,7 @@ TEST(MergeVocabulary, exceptionFromWritingThreadIsPropagated) {
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       mergeVocabulary(partialVocabBasename, filenames.numPartialVocabularies_,
                       std::less{}, writer, 1_GB),
-      ::testing::HasSubstr("could not be written"), std::runtime_error);
+      ::testing::HasSubstr("could not be written"), TestException);
   // The first word of the first block threw, and the second block was skipped.
   EXPECT_EQ(numCalls, 1u);
 }

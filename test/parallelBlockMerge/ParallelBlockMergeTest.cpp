@@ -32,6 +32,7 @@
 #include "../util/AsyncTestHelpers.h"
 #include "../util/GTestHelpers.h"
 #include "../util/ParallelBlockMergeTestHelpers.h"
+#include "../util/TestException.h"
 #include "backports/algorithm.h"
 #include "backports/asio.h"
 #include "util/CancellationHandle.h"
@@ -152,7 +153,7 @@ struct InstrumentedInput : public SizeInput {
     }
     --state_->numConcurrentReads_;
     if (state_->throwAtRead_ != 0 && numReads >= state_->throwAtRead_) {
-      throw std::runtime_error{"getBlock failed"};
+      throw TestException{"getBlock failed"};
     }
     return SizeInput::getBlock(runIdx, blockIdx);
   }

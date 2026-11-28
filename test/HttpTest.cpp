@@ -16,6 +16,7 @@
 #include "util/GTestHelpers.h"
 #include "util/Random.h"
 #include "util/RuntimeParametersTestHelpers.h"
+#include "util/TestException.h"
 #include "util/Timer.h"
 #include "util/http/HttpClient.h"
 #include "util/http/HttpServer.h"
@@ -411,7 +412,7 @@ TYPED_TEST(HttpServerBodyTest, ErrorHandlingInSession) {
   }
 
   // Handling of `std::exception`.
-  s = throwAndCaptureLog(std::runtime_error{"The runtime error for testing"});
+  s = throwAndCaptureLog(TestException{"The runtime error for testing"});
   EXPECT_THAT(s, ifLogLevelIsCompiledIn<LogLevel::Enum::ERROR>(
                      HasSubstr("The runtime error for testing")));
 
@@ -662,7 +663,7 @@ TYPED_TEST(HttpServerBodyTest, ExceptionInResponseBody) {
                                    auto...) -> boost::asio::awaitable<void> {
     auto throwingBody = []() -> cppcoro::generator<std::string> {
       co_yield "partial";
-      throw std::runtime_error{"body generation failed"};
+      throw TestException{"body generation failed"};
     };
     co_await send(
         createOkResponse(throwingBody(), req, ad_utility::MediaType::textPlain),

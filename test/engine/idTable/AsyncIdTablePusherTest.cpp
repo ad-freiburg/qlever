@@ -16,7 +16,6 @@
 #include <future>
 #include <optional>
 #include <set>
-#include <stdexcept>
 #include <utility>
 #include <vector>
 
@@ -24,6 +23,7 @@
 #include "../../util/GTestHelpers.h"
 #include "../../util/IdTableHelpers.h"
 #include "../../util/IndexTestHelpers.h"
+#include "../../util/TestException.h"
 #include "./AsyncPushTestHelpers.h"
 #include "engine/idTable/AsyncIdTablePusher.h"
 
@@ -177,9 +177,11 @@ TEST(AsyncIdTablePusher, noAccessWhileInFlight) {
 TEST(AsyncIdTablePusher, exceptionInSink) {
   auto alloc = ad_utility::testing::makeAllocator();
   net::thread_pool pool{4};
-  Pusher pusher{pool.get_executor(), 2, 10, alloc, [](IdTableStatic<0>) {
-                  throw std::runtime_error{"sink failed"};
-                }};
+  // NOTE: The sink throws a `TestException` and not a `std::runtime_error`,
+  // because the exception is passed between threads, see
+  // `test/util/TestException.h` for details.
+  Pusher pusher{pool.get_executor(), 2, 10, alloc,
+                [](IdTableStatic<0>) { throw TestException{"sink failed"}; }};
   auto tables = makeTables(4, 2);
 
   // Every push that is still in flight when the sink throws, and every push
@@ -188,7 +190,7 @@ TEST(AsyncIdTablePusher, exceptionInSink) {
   for (auto& future : pushConcurrently(pusher, tables)) {
     try {
       future.get();
-    } catch (const std::runtime_error& e) {
+    } catch (const TestException& e) {
       EXPECT_STREQ(e.what(), "sink failed");
       ++numFailed;
     }
@@ -196,7 +198,7 @@ TEST(AsyncIdTablePusher, exceptionInSink) {
   EXPECT_GE(numFailed, 1);
   EXPECT_THROW(
       pusher.asyncPushBlock(viewOf(tables.at(0)), net::use_future).get(),
-      std::runtime_error);
+      TestException);
 
   // `finish` resets the exception, so a push that doesn't fill a block
   // succeeds again.

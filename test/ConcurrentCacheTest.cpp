@@ -16,6 +16,7 @@
 #include "util/DefaultValueSizeGetter.h"
 #include "util/GTestHelpers.h"
 #include "util/Parameters.h"
+#include "util/TestException.h"
 #include "util/Timer.h"
 #include "util/jthread.h"
 
@@ -71,7 +72,7 @@ auto wait_and_throw_function(size_t milliseconds,
     if (signal) {
       signal->mayFinishSignal_.wait();
     }
-    throw std::runtime_error("this is bound to fail");
+    throw TestException{"this is bound to fail"};
   };
 }
 
@@ -336,7 +337,7 @@ TEST(ConcurrentCache, abort) {
   ASSERT_EQ(0ul, a.numNonPinnedEntries());
   ASSERT_EQ(0ul, a.numPinnedEntries());
   ASSERT_EQ(0ul, a.getStorage().wlock()->_inProgress.size());
-  ASSERT_THROW(fut.get(), std::runtime_error);
+  ASSERT_THROW(fut.get(), TestException);
 }
 
 TEST(ConcurrentCache, abortPinned) {
@@ -361,7 +362,7 @@ TEST(ConcurrentCache, abortPinned) {
   ASSERT_EQ(0ul, a.numNonPinnedEntries());
   ASSERT_EQ(0ul, a.numPinnedEntries());
   ASSERT_EQ(0ul, a.getStorage().wlock()->_inProgress.size());
-  ASSERT_THROW(fut.get(), std::runtime_error);
+  ASSERT_THROW(fut.get(), TestException);
 }
 
 TEST(ConcurrentCache, cacheStatusToString) {

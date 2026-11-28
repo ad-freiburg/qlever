@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "./util/GTestHelpers.h"
+#include "./util/TestException.h"
 #include "util/TaskQueueOnExecutor.h"
 #include "util/jthread.h"
 
@@ -194,14 +195,14 @@ TEST(TaskQueueOnExecutor, submitPropagatesValuesAndExceptions) {
   auto valueFuture = queue.submit([]() { return 42; });
   auto voidFuture = queue.submit([]() {});
   auto throwingFuture =
-      queue.submit([]() -> int { throw std::runtime_error{"expected"}; });
+      queue.submit([]() -> int { throw TestException{"expected"}; });
 
   ASSERT_TRUE(becomesReady(valueFuture));
   EXPECT_EQ(valueFuture.get(), 42);
   ASSERT_TRUE(becomesReady(voidFuture));
   EXPECT_NO_THROW(voidFuture.get());
   ASSERT_TRUE(becomesReady(throwingFuture));
-  EXPECT_THROW(throwingFuture.get(), std::runtime_error);
+  EXPECT_THROW(throwingFuture.get(), TestException);
   queue.finish();
 }
 

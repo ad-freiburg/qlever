@@ -11,6 +11,7 @@
 #include <ranges>
 
 #include "./util/GTestHelpers.h"
+#include "./util/TestException.h"
 #include "util/ThreadSafeQueue.h"
 #include "util/TypeTraits.h"
 #include "util/jthread.h"
@@ -271,7 +272,7 @@ TEST(ThreadSafeQueue, SafeExceptionHandling) {
           while (push(numPushed++)) {
             // Manually throw an exception if `workerThrows` was specified.
             if (numPushed >= numValues / 2 && workerThrows) {
-              throw std::runtime_error{"Producer died"};
+              throw TestException{"Producer died"};
             }
           }
         } catch (...) {

@@ -26,6 +26,7 @@
 
 #include "../util/AsioTestHelpers.h"
 #include "../util/GTestHelpers.h"
+#include "../util/TestException.h"
 #include "parser/AsyncBlockSource.h"
 #include "util/Exception.h"
 #include "util/File.h"
@@ -103,14 +104,14 @@ std::optional<size_t> findNever([[maybe_unused]] std::string_view sv) {
 
 // A `BlockingBlockSource` whose `getNextBlockImpl` results are scripted in
 // advance, one `Step` per call. A `Step` holding a `qp::ByteBlock` is
-// returned as-is; a `Step` holding a `std::string` is thrown as a
-// `std::runtime_error` with that message. This is used to exercise the
-// error-forwarding paths (`if (ep) ...` checks and the `catch` clause in
+// returned as-is; a `Step` holding a message is thrown as a `TestException`
+// with that message. This is used to exercise the error-forwarding paths
+// (`if (ep) ...` checks and the `catch` clause in
 // `BlockingBlockSource::asyncGetNextBlockImpl`) that a real `FileBlockSource`
 // cannot trigger, because reading from a file never throws in practice.
 class ScriptedBlockSource : public qp::BlockingBlockSource {
  public:
-  using Step = std::variant<qp::ByteBlock, std::string>;
+  using Step = std::variant<qp::ByteBlock, const char*>;
 
   ScriptedBlockSource(const boost::asio::any_io_executor& exec,
                       ad_utility::MemorySize blocksize, std::vector<Step> steps)
@@ -120,8 +121,8 @@ class ScriptedBlockSource : public qp::BlockingBlockSource {
   std::optional<qp::ByteBlock> getNextBlockImpl() override {
     AD_CORRECTNESS_CHECK(nextStep_ < steps_.size());
     Step& step = steps_[nextStep_++];
-    if (auto* message = std::get_if<std::string>(&step)) {
-      throw std::runtime_error{*message};
+    if (auto* message = std::get_if<const char*>(&step)) {
+      throw TestException{*message};
     }
     return std::move(std::get<qp::ByteBlock>(step));
   }
@@ -270,7 +271,7 @@ TEST(BlockingBlockSource, ForwardsExceptionFromGetNextBlockImpl) {
   // dispatch to the `use_future` completion token.
   ScriptedBlockSource buf(
       pool.get_executor(), 4_B,
-      {ScriptedBlockSource::Step{std::string{"boom from getNextBlockImpl"}}});
+      {ScriptedBlockSource::Step{"boom from getNextBlockImpl"}});
   EXPECT_THAT(
       drainBlocks(buf).errorMessage_,
       ::testing::Optional(::testing::HasSubstr("boom from getNextBlockImpl")));
@@ -286,7 +287,7 @@ TEST(AsyncStatementBoundaryBlockSource,
   auto inner = std::make_unique<ScriptedBlockSource>(
       pool.get_executor(), 4_B,
       std::vector<ScriptedBlockSource::Step>{
-          ScriptedBlockSource::Step{std::string{"boom from initial fetch"}}});
+          ScriptedBlockSource::Step{"boom from initial fetch"}});
   qp::AsyncStatementBoundaryBlockSource buf(
       pool.get_executor(), std::move(inner), findXToZ, "a letter from x to z",
       "testInput", false);
@@ -308,7 +309,7 @@ TEST(AsyncStatementBoundaryBlockSource, ForwardsExceptionFromPeek) {
       pool.get_executor(), 4_B,
       std::vector<ScriptedBlockSource::Step>{
           ScriptedBlockSource::Step{qp::ByteBlock{'a', 'b', 'c', 'd'}},
-          ScriptedBlockSource::Step{std::string{"boom from peek"}}});
+          ScriptedBlockSource::Step{"boom from peek"}});
   qp::AsyncStatementBoundaryBlockSource buf(pool.get_executor(),
                                             std::move(inner), findNever,
                                             "never found", "testInput", false);
@@ -330,7 +331,7 @@ TEST(AsyncStatementBoundaryBlockSource,
       std::vector<ScriptedBlockSource::Step>{
           ScriptedBlockSource::Step{qp::ByteBlock{'a', 'b', 'c', 'd'}}});
   auto findThrows = [](std::string_view) -> std::optional<size_t> {
-    throw std::runtime_error{"boom from findEndPosition"};
+    throw TestException{"boom from findEndPosition"};
   };
   qp::AsyncStatementBoundaryBlockSource buf(
       pool.get_executor(), std::move(inner), findThrows, "throwing finder",

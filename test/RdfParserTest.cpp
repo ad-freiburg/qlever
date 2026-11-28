@@ -24,6 +24,7 @@
 #include "./util/GTestHelpers.h"
 #include "./util/IndexTestHelpers.h"
 #include "./util/ParsedQueryTestHelpers.h"
+#include "./util/TestException.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "global/Constants.h"
 #include "global/Id.h"
@@ -2296,7 +2297,7 @@ class ParkingBlockSource : public qlever::parser::AsyncBlockSource {
     }
     for (auto& handler : handlers) {
       std::move(handler)(
-          std::make_exception_ptr(std::runtime_error{"parked block source"}),
+          std::make_exception_ptr(TestException{"parked block source"}),
           std::nullopt);
     }
   }

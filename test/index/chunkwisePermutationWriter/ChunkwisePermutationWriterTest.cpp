@@ -22,6 +22,7 @@
 
 #include "../../util/GTestHelpers.h"
 #include "../../util/PermutationPairTestHelpers.h"
+#include "../../util/TestException.h"
 #include "index/chunkwisePermutationWriter/Options.h"
 
 // The tests of the chunkwise permutation writer that are specific to it: many
@@ -193,11 +194,10 @@ TEST(ChunkwisePermutationWriter, exceptionsPushedByTheMerge) {
   auto [basename, cleanup] =
       permutationFilesWithCleanup(gtestCurrentTestName());
   auto writer = makeWriter(2, basename);
-  for (std::string_view message : {"first failure", "second failure"}) {
+  for (const char* message : {"first failure", "second failure"}) {
     writer
-        ->asyncPushException(
-            std::make_exception_ptr(std::runtime_error{std::string{message}}),
-            net::use_future)
+        ->asyncPushException(std::make_exception_ptr(TestException{message}),
+                             net::use_future)
         .get();
     EXPECT_TRUE(writer->stopRequested());
   }

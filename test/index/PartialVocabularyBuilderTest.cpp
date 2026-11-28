@@ -17,11 +17,11 @@
 #include <mutex>
 #include <optional>
 #include <set>
-#include <stdexcept>
 #include <string>
 #include <vector>
 
 #include "../util/GTestHelpers.h"
+#include "../util/TestException.h"
 #include "../util/TripleComponentTestHelpers.h"
 #include "backports/algorithm.h"
 #include "global/Constants.h"
@@ -44,7 +44,7 @@ using StringTriple = std::array<std::string, NumColumnsIndexBuilding>;
 // An asynchronous "parser" that delivers the given `batches` one after the
 // other, and `nullopt` once they are exhausted. If `failAtBatch` is set, the
 // call that would deliver the batch with that index fails with a
-// `std::runtime_error` instead, and all subsequent calls deliver `nullopt`
+// `TestException` instead, and all subsequent calls deliver `nullopt`
 // (the same contract as the real parsers, see `AsyncRdfParserBase`).
 //
 // The buffers that the callers pass in are not used for the batches (which are
@@ -85,7 +85,7 @@ class MockParser : public AsyncRdfParserBase {
     if (failAtBatch_ == nextBatch_) {
       failed_ = true;
       ++nextBatch_;
-      handler(std::make_exception_ptr(std::runtime_error{"parse error"}),
+      handler(std::make_exception_ptr(TestException{"parse error"}),
               std::nullopt);
       return;
     }
@@ -130,7 +130,7 @@ class MockIndex {
                               const ItemMapAndBuffer& items,
                               std::vector<IdRow>& localIds) {
     if (throwOnWrite_) {
-      throw std::runtime_error{"write error"};
+      throw TestException{"write error"};
     }
     PartialVocabulary vocab;
     ad_utility::HashMap<uint64_t, std::string> wordsByLocalId;
